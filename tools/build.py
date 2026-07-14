@@ -39,12 +39,15 @@ def generate_spec():
         "yaml", "apscheduler", "loguru",
         "watchfiles", "pydantic",
         "cryptography", "aiofiles",
+        "PyQt6", "PyQt6.QtWebEngineWidgets", "PyQt6.QtWebEngineCore",
+        "PyQt6.QtWebChannel", "PyQt6.QtCharts",
     ]
 
     datas = [
         ("src/web/templates", "src/web/templates"),
         ("src/web/static", "src/web/static"),
         ("config", "config"),
+        ("data/prompts", "data/prompts"),
     ]
 
     spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
@@ -54,7 +57,7 @@ from pathlib import Path
 block_cipher = None
 
 a = Analysis(
-    ['src/main.py'],
+    ['main.py'],
     pathex=[str(Path('{ROOT}')), str(Path('{ROOT}/src'))],
     binaries=[],
     datas={datas},

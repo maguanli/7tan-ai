@@ -24,6 +24,7 @@ for mod in ['PyQt6.QtWidgets', 'PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtCharts',
 # ---- 其他必需模块 ----
 hiddenimports += collect_submodules('loguru')
 datas += collect_data_files('loguru')
+hiddenimports += collect_submodules('encodings')
 hiddenimports += ['uvicorn', 'fastapi', 'apscheduler', 'yaml', 'dotenv', 'requests']
 
 # ---- 排除未用的 PyQt6 模块 (Python imports) ----

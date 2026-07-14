@@ -24,20 +24,20 @@ REM ========== 步骤 2: 构建 ==========
 echo.
 echo [2/3] PyInstaller 打包...
 
-REM 备份已有的 dist config
+REM 备份已有的 dist config（放到 dist 外面防止被清掉）
 if exist "dist\7tan-updater\config\config.yaml" (
     echo   [备份] 保留已有配置...
-    copy /Y "dist\7tan-updater\config\config.yaml" "dist\7tan-updater\config\config.yaml.bak" >nul
+    copy /Y "dist\7tan-updater\config\config.yaml" "%TEMP%\7tan-config.yaml.bak" >nul
 )
 
 call .venv\Scripts\python.exe -m PyInstaller 7tan-updater.spec --noconfirm
 
-REM 恢复配置 + 同步 prompts
-if exist "dist\7tan-updater\config\config.yaml.bak" (
+REM 恢复备份的配置
+if exist "%TEMP%\7tan-config.yaml.bak" (
     echo   [恢复] 还原用户配置...
     if not exist "dist\7tan-updater\config" mkdir "dist\7tan-updater\config"
-    copy /Y "dist\7tan-updater\config\config.yaml.bak" "dist\7tan-updater\config\config.yaml" >nul
-    del "dist\7tan-updater\config\config.yaml.bak"
+    copy /Y "%TEMP%\7tan-config.yaml.bak" "dist\7tan-updater\config\config.yaml" >nul
+    del "%TEMP%\7tan-config.yaml.bak"
 )
 if not exist "dist\7tan-updater\data\prompts" mkdir "dist\7tan-updater\data\prompts"
 if exist "data\prompts\system.txt" copy /Y "data\prompts\system.txt" "dist\7tan-updater\data\prompts\system.txt" >nul

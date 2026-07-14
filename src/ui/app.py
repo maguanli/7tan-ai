@@ -1272,8 +1272,28 @@ class BrowserPage(QWidget):
     def _create_web_view(self):
         """创建一个配置好的 QWebEngineView"""
         from PyQt6.QtWebEngineWidgets import QWebEngineView
+        from PyQt6.QtWebEngineCore import QWebEnginePage
+
         view = QWebEngineView()
         view.setStyleSheet("background-color: white; border-radius: 0;")
+
+        # 创建自定义 Page 处理导航（支持链接点击、window.open等）
+        page = view.page()
+        self_view = self
+
+        class _Page(QWebEnginePage):
+            def acceptNavigationRequest(self, url, nav_type, is_main_frame):
+                # 允许所有类型的导航（链接点击、表单提交、重定向等）
+                return True
+
+            def createWindow(self, ww_type):
+                # 网站弹窗/新窗口 → 在当前浏览器开新标签页
+                new_view = self_view._create_web_view()
+                self_view._add_tab(url="about:blank", title="新标签页")
+                return new_view.page()
+
+        custom_page = _Page(page.profile())
+        view.setPage(custom_page)
 
         # 连接信号
         view.urlChanged.connect(lambda u, v=view: self._on_view_url_changed(v, u))

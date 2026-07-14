@@ -65,5 +65,16 @@
     "description": "监控 Steam/Epic/TapTap 等平台游戏价格变动和打折信息。通过搜索获取实时价格。",
     "tools": ["check_price", "price_alert"],
     "icon": "💰"
+  },
+  {
+    "id": "form_enhance",
+    "name": "自动填表增强",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "发布",
+    "description": "智能检测表单所有字段并批量填写。自动匹配字段名称、处理富文本编辑器、下拉选择框。比默认填表更全面准确。",
+    "tools": ["detect_form_fields", "fill_all_fields"],
+    "icon": "📝"
   }
 ]

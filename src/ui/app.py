@@ -2536,17 +2536,21 @@ class SettingsPage(QWidget):
         from src.plugins import get_manager
         mgr = get_manager()
 
-        if keyword:
-            self._plugin_status.setText(f"🌐 正在全网搜索 '{keyword}' ...")
-        else:
-            self._plugin_status.setText("🌐 正在获取在线插件列表...")
-        QApplication.processEvents()  # 刷新 UI
+        msg = f"🌐 正在全网搜索 '{keyword}' ..." if keyword else "🌐 正在获取在线插件列表..."
+        self._plugin_status.setText(msg)
+        QApplication.processEvents()
 
+        results = []
         try:
-            results = mgr.search_online(keyword) if keyword else mgr.search_online("")
+            results = mgr.search_online(keyword)
+            if results:
+                self._plugin_status.setText(f"🌐 搜索完成: 找到 {len(results)} 个插件")
+            else:
+                results = mgr._search_local(keyword)
+                self._plugin_status.setText(f"📭 全网未找到匹配插件，显示本地 {len(results)} 个")
         except Exception as e:
             results = mgr._search_local(keyword)
-            self._plugin_status.setText(f"⚠️ 在线搜索失败，显示本地结果: {e}")
+            self._plugin_status.setText(f"⚠️ 在线仓库暂不可用（{str(e)[:50]}），显示本地 {len(results)} 个")
 
         self._populate_plugin_list(results)
 

@@ -239,45 +239,48 @@ class PluginManager:
         import requests
         import time
 
+        remote_url = self.REMOTE_MANIFEST_URL
         # 优先从配置读取 URL
         try:
             from ..config.loader import load_config
             config = load_config()
             remote_url = config.get("plugins", {}).get("remote_manifest_url", self.REMOTE_MANIFEST_URL)
         except Exception:
-            remote_url = self.REMOTE_MANIFEST_URL
+            pass
 
-        # 缓存 1 小时
+        # 缓存 30 分钟
         cache_file = PLUGIN_DIR / ".remote_cache.json"
-        cache_age = 0
+        cached_data = None
         if cache_file.exists():
             try:
                 cached_data = json.loads(cache_file.read_text(encoding="utf-8"))
                 cache_age = time.time() - cached_data.get("_cached_at", 0)
+                if cache_age > 1800:  # 30 分钟过期
+                    cached_data = None
             except Exception:
-                pass
+                cached_data = None
 
-        remote_manifest = []
-        if cache_age > 0 and cache_age < 3600 and cache_file.exists():
-            try:
-                remote_manifest = json.loads(cache_file.read_text(encoding="utf-8"))
-                remote_manifest = [p for p in remote_manifest if not isinstance(p, str) or not p.startswith("_")]
-            except Exception:
-                pass
-
-        if not remote_manifest:
+        if cached_data:
+            remote_manifest = [p for p in cached_data if isinstance(p, dict) and "id" in p]
+            logger.info(f"📦 使用缓存 ({len(remote_manifest)} 个远程插件)")
+        else:
             try:
                 resp = requests.get(remote_url, timeout=15,
                                    headers={"User-Agent": "7tanAI-PluginManager/1.0"})
                 if resp.status_code == 200:
                     remote_manifest = resp.json()
-                    remote_manifest.append({"_cached_at": time.time()})
-                    cache_file.write_text(json.dumps(remote_manifest, ensure_ascii=False), encoding="utf-8")
-                    remote_manifest = [p for p in remote_manifest if not isinstance(p, str) or not p.startswith("_")]
+                    if not isinstance(remote_manifest, list):
+                        raise ValueError("清单格式错误")
+                    # 缓存
+                    cache_entry = list(remote_manifest)
+                    cache_entry.append({"_cached_at": time.time()})
+                    cache_file.write_text(json.dumps(cache_entry, ensure_ascii=False), encoding="utf-8")
+                    logger.info(f"🌐 远程插件: {len(remote_manifest)} 个")
                 else:
-                    return self._search_local(keyword)
-            except Exception:
-                return self._search_local(keyword)
+                    raise ConnectionError(f"远程返回 {resp.status_code}")
+            except Exception as e:
+                logger.warning(f"远程仓库不可用: {e}")
+                raise ConnectionError(f"远程仓库 '{remote_url}' 不可用 ({e})") from e
 
         # 合并本地 + 远程，去重
         local_ids = {p.get("id") for p in self.get_manifest()}
@@ -286,19 +289,21 @@ class PluginManager:
 
         # 本地插件
         for p in self.get_manifest():
-            if not keyword or keyword.lower() in str(p).lower():
+            if not keyword or keyword.lower() in json.dumps(p, ensure_ascii=False).lower():
                 p["source"] = "local"
                 p["installed"] = p["id"] in installed
                 results.append(p)
 
         # 远程插件（不在本地的）
         for p in remote_manifest:
-            if p.get("id") in local_ids:
+            pid = p.get("id", "")
+            if pid in local_ids:
                 continue
-            if not keyword or keyword.lower() in str(p).lower():
+            if not keyword or keyword.lower() in json.dumps(p, ensure_ascii=False).lower():
                 p["source"] = "remote"
                 p["installed"] = False
-                p["type"] = "remote"
+                if "type" not in p:
+                    p["type"] = "remote"
                 results.append(p)
 
         return results
@@ -386,6 +391,17 @@ class PluginManager:
                 "description": "监控 Steam/Epic/TapTap 等平台游戏价格变动和打折信息。通过搜索获取实时价格。",
                 "tools": ["check_price", "price_alert"],
                 "icon": "💰",
+            },
+            {
+                "id": "form_enhance",
+                "name": "自动填表增强",
+                "version": "1.0.0",
+                "author": "7tanAI Team",
+                "type": "builtin",
+                "category": "发布",
+                "description": "智能检测表单所有字段并批量填写。自动匹配字段名称、处理富文本编辑器、下拉选择框。比默认填表更全面准确。",
+                "tools": ["detect_form_fields", "fill_all_fields"],
+                "icon": "📝",
             },
         ]
 

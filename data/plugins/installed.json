@@ -3,6 +3,7 @@
     "web_search",
     "smart_translate",
     "auto_images",
-    "deep_analysis"
+    "deep_analysis",
+    "form_enhance"
   ]
 }

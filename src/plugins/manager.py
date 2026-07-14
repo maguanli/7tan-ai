@@ -235,78 +235,71 @@ class PluginManager:
     REMOTE_MANIFEST_URL = "https://raw.githubusercontent.com/7tan/7tan-plugins/main/manifest.json"
 
     def search_online(self, keyword: str = "") -> list:
-        """搜索全网插件 — 从远程清单获取，合并本地"""
+        """搜索全网插件 — 通过 DuckDuckGo 搜索 GitHub/PyPI 上的开源工具"""
         import requests
-        import time
+        import re
 
-        remote_url = self.REMOTE_MANIFEST_URL
-        # 优先从配置读取 URL
+        if not keyword:
+            return self._search_local("")
+
         try:
-            from ..config.loader import load_config
-            config = load_config()
-            remote_url = config.get("plugins", {}).get("remote_manifest_url", self.REMOTE_MANIFEST_URL)
-        except Exception:
-            pass
+            search_query = f"site:github.com OR site:pypi.org {keyword} game download tool"
+            resp = requests.get(
+                "https://api.duckduckgo.com/",
+                params={"q": search_query, "format": "json", "no_html": 1},
+                timeout=15,
+                headers={"User-Agent": "7tanAI-PluginManager/1.0"},
+            )
+            data = resp.json()
+            results = []
 
-        # 缓存 30 分钟
-        cache_file = PLUGIN_DIR / ".remote_cache.json"
-        cached_data = None
-        if cache_file.exists():
-            try:
-                cached_data = json.loads(cache_file.read_text(encoding="utf-8"))
-                cache_age = time.time() - cached_data.get("_cached_at", 0)
-                if cache_age > 1800:  # 30 分钟过期
-                    cached_data = None
-            except Exception:
-                cached_data = None
+            # 抽象
+            if data.get("AbstractText") and keyword.lower() in data.get("AbstractText", "").lower():
+                results.append({
+                    "id": f"web_{len(results)}",
+                    "name": data.get("AbstractText", "")[:60],
+                    "version": "?",
+                    "author": "Web",
+                    "type": "remote",
+                    "category": "搜索",
+                    "description": data.get("AbstractText", "")[:100],
+                    "tools": ["(需手动集成)"],
+                    "source_url": data.get("AbstractURL", ""),
+                    "icon": "🌐",
+                })
 
-        if cached_data:
-            remote_manifest = [p for p in cached_data if isinstance(p, dict) and "id" in p]
-            logger.info(f"📦 使用缓存 ({len(remote_manifest)} 个远程插件)")
-        else:
-            try:
-                resp = requests.get(remote_url, timeout=15,
-                                   headers={"User-Agent": "7tanAI-PluginManager/1.0"})
-                if resp.status_code == 200:
-                    remote_manifest = resp.json()
-                    if not isinstance(remote_manifest, list):
-                        raise ValueError("清单格式错误")
-                    # 缓存
-                    cache_entry = list(remote_manifest)
-                    cache_entry.append({"_cached_at": time.time()})
-                    cache_file.write_text(json.dumps(cache_entry, ensure_ascii=False), encoding="utf-8")
-                    logger.info(f"🌐 远程插件: {len(remote_manifest)} 个")
-                else:
-                    raise ConnectionError(f"远程返回 {resp.status_code}")
-            except Exception as e:
-                logger.warning(f"远程仓库不可用: {e}")
-                raise ConnectionError(f"远程仓库 '{remote_url}' 不可用 ({e})") from e
+            for topic in data.get("RelatedTopics", [])[:8]:
+                if isinstance(topic, dict):
+                    text = topic.get("Text", "")
+                    url = topic.get("FirstURL", "")
+                    if text and url:
+                        results.append({
+                            "id": f"web_{len(results)}",
+                            "name": re.sub(r'<[^>]+>', '', text)[:60],
+                            "version": "?",
+                            "author": url.split("/")[2] if "/" in url else "Web",
+                            "type": "remote",
+                            "category": "搜索",
+                            "description": re.sub(r'<[^>]+>', '', text)[:100],
+                            "tools": ["(查看链接了解)"],
+                            "source_url": url,
+                            "icon": "🔗",
+                        })
 
-        # 合并本地 + 远程，去重
-        local_ids = {p.get("id") for p in self.get_manifest()}
-        installed = set(self.get_installed())
-        results = []
+            if not results:
+                return self._search_local(keyword)
 
-        # 本地插件
-        for p in self.get_manifest():
-            if not keyword or keyword.lower() in json.dumps(p, ensure_ascii=False).lower():
-                p["source"] = "local"
-                p["installed"] = p["id"] in installed
-                results.append(p)
+            # 合并本地结果
+            local = self._search_local(keyword)
+            local_ids = {p.get("id") for p in local}
+            for r in results:
+                if r["id"] not in local_ids:
+                    local.append(r)
 
-        # 远程插件（不在本地的）
-        for p in remote_manifest:
-            pid = p.get("id", "")
-            if pid in local_ids:
-                continue
-            if not keyword or keyword.lower() in json.dumps(p, ensure_ascii=False).lower():
-                p["source"] = "remote"
-                p["installed"] = False
-                if "type" not in p:
-                    p["type"] = "remote"
-                results.append(p)
-
-        return results
+            return local
+        except Exception as e:
+            logger.warning(f"在线搜索失败: {e}")
+            return self._search_local(keyword)
 
     def _search_local(self, keyword: str = "") -> list:
         """仅本地搜索"""
@@ -359,16 +352,15 @@ class PluginManager:
                 "icon": "🖼️",
             },
             {
-                "id": "video_download",
-                "name": "视频下载",
+                "id": "form_enhance",
+                "name": "自动填表增强",
                 "version": "1.0.0",
-                "author": "yt-dlp Community",
-                "type": "remote",
-                "category": "媒体",
-                "description": "下载 YouTube/B站/抖音 游戏宣传视频，自动提取封面。需安装 yt-dlp 依赖。",
-                "tools": ["download_video", "extract_thumbnail"],
-                "source_url": "",
-                "icon": "🎬",
+                "author": "7tanAI Team",
+                "type": "builtin",
+                "category": "发布",
+                "description": "智能检测表单所有字段并批量填写。自动匹配字段名称、处理富文本编辑器、下拉选择框。",
+                "tools": ["detect_form_fields", "fill_all_fields"],
+                "icon": "📝",
             },
             {
                 "id": "smart_translate",
@@ -393,15 +385,15 @@ class PluginManager:
                 "icon": "💰",
             },
             {
-                "id": "form_enhance",
-                "name": "自动填表增强",
+                "id": "ocr_reader",
+                "name": "页面内容提取",
                 "version": "1.0.0",
                 "author": "7tanAI Team",
                 "type": "builtin",
-                "category": "发布",
-                "description": "智能检测表单所有字段并批量填写。自动匹配字段名称、处理富文本编辑器、下拉选择框。比默认填表更全面准确。",
-                "tools": ["detect_form_fields", "fill_all_fields"],
-                "icon": "📝",
+                "category": "工具",
+                "description": "从页面提取标题和完整文字内容，用于分析游戏详情、版本更新日志等。",
+                "tools": ["ocr_screenshot"],
+                "icon": "📄",
             },
         ]
 

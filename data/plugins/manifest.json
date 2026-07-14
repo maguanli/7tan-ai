@@ -33,16 +33,15 @@
     "icon": "🖼️"
   },
   {
-    "id": "video_download",
-    "name": "视频下载",
+    "id": "form_enhance",
+    "name": "自动填表增强",
     "version": "1.0.0",
-    "author": "yt-dlp Community",
-    "type": "remote",
-    "category": "媒体",
-    "description": "下载 YouTube/B站/抖音 游戏宣传视频，自动提取封面。需安装 yt-dlp 依赖。",
-    "tools": ["download_video", "extract_thumbnail"],
-    "source_url": "",
-    "icon": "🎬"
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "发布",
+    "description": "智能检测表单所有字段并批量填写。自动匹配字段名称、处理富文本编辑器、下拉选择框。",
+    "tools": ["detect_form_fields", "fill_all_fields"],
+    "icon": "📝"
   },
   {
     "id": "smart_translate",
@@ -67,14 +66,14 @@
     "icon": "💰"
   },
   {
-    "id": "form_enhance",
-    "name": "自动填表增强",
+    "id": "ocr_reader",
+    "name": "页面内容提取",
     "version": "1.0.0",
     "author": "7tanAI Team",
     "type": "builtin",
-    "category": "发布",
-    "description": "智能检测表单所有字段并批量填写。自动匹配字段名称、处理富文本编辑器、下拉选择框。比默认填表更全面准确。",
-    "tools": ["detect_form_fields", "fill_all_fields"],
-    "icon": "📝"
+    "category": "工具",
+    "description": "从页面提取标题和完整文字内容，用于分析游戏详情、版本更新日志等。",
+    "tools": ["ocr_screenshot"],
+    "icon": "📄"
   }
 ]

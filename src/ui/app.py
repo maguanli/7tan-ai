@@ -1227,10 +1227,10 @@ class BrowserPage(QWidget):
         """)
         url_layout.addWidget(go_btn)
 
-        # 🔲 独立窗口按钮
-        detach_btn = QPushButton("🔲")
+        # 弹出独立窗口按钮
+        detach_btn = QPushButton("弹出")
         detach_btn.setToolTip("将当前标签页弹出为独立窗口")
-        detach_btn.setFixedWidth(36)
+        detach_btn.setFixedWidth(50)
         detach_btn.clicked.connect(self._detach_current_tab)
         detach_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1238,8 +1238,8 @@ class BrowserPage(QWidget):
                 color: {THEME['text_secondary']};
                 border: 1px solid {THEME['border']};
                 border-radius: 6px;
-                font-size: 14px;
-                padding: 4px;
+                font-size: 12px;
+                padding: 4px 8px;
             }}
             QPushButton:hover {{
                 background: {THEME['accent']};
@@ -1248,23 +1248,23 @@ class BrowserPage(QWidget):
         """)
         url_layout.addWidget(detach_btn)
 
-        # 🪟 新窗口按钮
-        new_win_btn = QPushButton("🪟")
+        # 新窗口按钮
+        new_win_btn = QPushButton("新窗口")
         new_win_btn.setToolTip("打开新浏览器窗口 (Ctrl+N)")
-        new_win_btn.setFixedWidth(36)
+        new_win_btn.setFixedWidth(60)
         new_win_btn.clicked.connect(self._open_new_window)
         new_win_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {THEME['bg_input']};
-                color: {THEME['text_secondary']};
-                border: 1px solid {THEME['border']};
-                border-radius: 6px;
-                font-size: 14px;
-                padding: 4px;
-            }}
-            QPushButton:hover {{
                 background: {THEME['accent2']};
                 color: #fff;
+                border: none;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 4px 8px;
+            }}
+            QPushButton:hover {{
+                background: {THEME['accent2']}dd;
             }}
         """)
         url_layout.addWidget(new_win_btn)

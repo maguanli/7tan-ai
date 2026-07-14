@@ -4,6 +4,7 @@
     "smart_translate",
     "auto_images",
     "deep_analysis",
-    "form_enhance"
+    "form_enhance",
+    "ocr_reader"
   ]
 }

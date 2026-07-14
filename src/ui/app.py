@@ -963,7 +963,7 @@ class SourcesPage(QWidget):
 
 # ===== 独立浏览器窗口 =====
 class DetachedBrowserWindow(QMainWindow):
-    """弹出式独立浏览器窗口"""
+    """弹出式独立浏览器窗口 — 带工具栏和关闭按钮"""
 
     def __init__(self, url: str = "about:blank", title: str = "独立窗口"):
         super().__init__()
@@ -973,11 +973,110 @@ class DetachedBrowserWindow(QMainWindow):
 
         from PyQt6.QtWebEngineWidgets import QWebEngineView
 
+        # ===== 顶部工具栏 =====
+        toolbar = QToolBar()
+        toolbar.setMovable(False)
+        toolbar.setStyleSheet(f"""
+            QToolBar {{
+                background: {THEME['bg_dark']};
+                border-bottom: 1px solid {THEME['border']};
+                padding: 4px 8px;
+                spacing: 6px;
+            }}
+        """)
+
+        # 后退
+        back_btn = QPushButton("⬅")
+        back_btn.setFixedSize(32, 28)
+        back_btn.setToolTip("后退")
+        back_btn.setStyleSheet(f"QPushButton {{ background:{THEME['bg_input']}; color:{THEME['text_secondary']}; border:1px solid {THEME['border']}; border-radius:6px; font-size:14px; }} QPushButton:hover {{ background:{THEME['accent']}; color:#000; }}")
+        toolbar.addWidget(back_btn)
+
+        # 前进
+        fwd_btn = QPushButton("➡")
+        fwd_btn.setFixedSize(32, 28)
+        fwd_btn.setToolTip("前进")
+        fwd_btn.setStyleSheet(f"QPushButton {{ background:{THEME['bg_input']}; color:{THEME['text_secondary']}; border:1px solid {THEME['border']}; border-radius:6px; font-size:14px; }} QPushButton:hover {{ background:{THEME['accent']}; color:#000; }}")
+        toolbar.addWidget(fwd_btn)
+
+        # 刷新
+        refresh_btn = QPushButton("🔄")
+        refresh_btn.setFixedSize(32, 28)
+        refresh_btn.setToolTip("刷新")
+        refresh_btn.setStyleSheet(f"QPushButton {{ background:{THEME['bg_input']}; color:{THEME['text_secondary']}; border:1px solid {THEME['border']}; border-radius:6px; font-size:14px; }} QPushButton:hover {{ background:{THEME['accent']}; color:#000; }}")
+        toolbar.addWidget(refresh_btn)
+
+        # URL 输入框
+        self._win_url = QLineEdit()
+        self._win_url.setPlaceholderText("输入网址，按回车打开…")
+        self._win_url.setStyleSheet(f"""
+            QLineEdit {{
+                background: {THEME['bg_input']};
+                color: {THEME['text_primary']};
+                border: 1px solid {THEME['border']};
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-size: 13px;
+            }}
+        """)
+        toolbar.addWidget(self._win_url)
+
+        # 右侧弹簧 + 关闭按钮
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        toolbar.addWidget(spacer)
+
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(32, 28)
+        close_btn.setToolTip("关闭窗口 (Ctrl+W)")
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {THEME['text_secondary']};
+                border: 1px solid {THEME['border']};
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: {THEME['danger']};
+                color: white;
+                border-color: {THEME['danger']};
+            }}
+        """)
+        close_btn.clicked.connect(self.close)
+        toolbar.addWidget(close_btn)
+
+        self.addToolBar(toolbar)
+
+        # ===== 浏览器视图 =====
         self._view = QWebEngineView()
         self._view.setStyleSheet("background-color: white;")
         self._view.urlChanged.connect(lambda u: self.setWindowTitle(f"🌐 {u.toString()[:60]}"))
         self._view.titleChanged.connect(lambda t: self.setWindowTitle(f"🌐 {t}"))
+        self._view.urlChanged.connect(lambda u: self._win_url.setText(u.toString()))
+        self._view.loadStarted.connect(lambda: self._win_url.setStyleSheet(
+            self._win_url.styleSheet().replace("1px solid " + THEME['border'],
+                                                "1px solid " + THEME['accent'])
+        ))
+        self._view.loadFinished.connect(lambda ok: self._win_url.setStyleSheet(
+            self._win_url.styleSheet().replace("1px solid " + THEME['accent'],
+                                                "1px solid " + THEME['border'])
+        ))
         self.setCentralWidget(self._view)
+
+        # 工具栏按钮绑定
+        back_btn.clicked.connect(self._view.back)
+        fwd_btn.clicked.connect(self._view.forward)
+        refresh_btn.clicked.connect(self._view.reload)
+        self._win_url.returnPressed.connect(lambda: self._view.load(QUrl(self._win_url.text())))
+
+        # 快捷键
+        from PyQt6.QtGui import QShortcut, QKeySequence
+        close_sc = QShortcut(QKeySequence("Ctrl+W"), self)
+        close_sc.activated.connect(self.close)
+        focus_url_sc = QShortcut(QKeySequence("Ctrl+L"), self)
+        focus_url_sc.activated.connect(lambda: self._win_url.setFocus())
 
         # 注册到 browser_tools
         import src.tools.browser_tools as bt
@@ -986,7 +1085,7 @@ class DetachedBrowserWindow(QMainWindow):
         if url and url != "about:blank":
             self._view.load(QUrl(url))
         else:
-            self._view.setHtml("<h2 style='color:#aaa;text-align:center;margin-top:100px'>🌐 输入网址开始浏览</h2>")
+            self._view.setHtml("<h2 style='color:#aaa;text-align:center;margin-top:100px'>🌐 新窗口 — 输入网址开始浏览</h2>")
 
     @property
     def view(self):

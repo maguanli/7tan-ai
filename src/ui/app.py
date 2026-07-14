@@ -1283,16 +1283,7 @@ class BrowserPage(QWidget):
     def _create_web_view(self):
         """创建一个配置好的 QWebEngineView"""
         from PyQt6.QtWebEngineWidgets import QWebEngineView
-        from PyQt6.QtWebEngineCore import QWebEnginePage
-
-        # 自定义 Page：target=_blank 链接在当前标签打开
-        class _NavPage(QWebEnginePage):
-            def createWindow(self, _type):
-                return self  # 弹窗/新窗口 → 当前页面处理
-
-        page = _NavPage()
         view = QWebEngineView()
-        view.setPage(page)
 
         # 连接信号
         view.urlChanged.connect(lambda u, v=view: self._on_view_url_changed(v, u))
@@ -1478,6 +1469,31 @@ class BrowserPage(QWidget):
             history = view.history()
             self._back_btn.setEnabled(history.canGoBack())
             self._forward_btn.setEnabled(history.canGoForward())
+
+        # 注入 JS 修复链接：target=_blank → _self, JS链接 → 真实URL
+        if ok:
+            fix_js = """
+            (function() {
+                // 1. 所有 target=_blank 改为 _self
+                document.querySelectorAll('a[target="_blank"]').forEach(function(a) {
+                    a.target = '_self';
+                });
+                // 2. javascript:void(0) 链接提取真实 URL
+                document.querySelectorAll('a').forEach(function(a) {
+                    if (a.href === 'javascript:void(0)' || a.href === 'javascript:void(0);') {
+                        var onclick = a.getAttribute('onclick') || '';
+                        var m = onclick.match(/(?:location\\.href|window\\.open|window\\.location)\\s*[=\\(]\\s*['"]([^'"]+)['"]/);
+                        if (m) a.href = m[1];
+                    }
+                });
+                // 3. 阻止 window.open 弹窗，改为当前页跳转
+                window.open = function(url) { if (url) location.href = url; return null; };
+            })();
+            """
+            try:
+                view.page().runJavaScript(fix_js)
+            except Exception:
+                pass
 
     # ===== 导航操作 =====
 

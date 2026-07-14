@@ -649,7 +649,8 @@ class ChatPage(QWidget):
         session_id = item.data(Qt.ItemDataRole.UserRole)
         if not session_id:
             return
-        dialog.close()
+        # 先关闭弹窗（用 accept 安全退出事件循环）
+        dialog.accept()
 
         # 加载消息
         worker = ApiWorker("GET", f"{API_BASE}/api/chat/history?session_id={session_id}")
@@ -660,20 +661,24 @@ class ChatPage(QWidget):
 
     def _on_history_loaded(self, session_id, data):
         """加载历史消息到聊天区"""
-        messages = data.get("messages", [])
-        self._current_session_id = session_id
-        # 清空
-        while self._messages_layout.count() > 1:
-            item = self._messages_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        # 恢复消息
-        for msg in messages:
-            role = msg.get("role", "system")
-            content = msg.get("content", "")
-            self._add_message(role, content)
-        self._session_combo.setItemText(0, f"对话 {session_id[:6]}...")
-        self._add_message("system", f"📋 已加载历史对话 (会话: {session_id[:8]})")
+        try:
+            messages = data.get("messages", [])
+            self._current_session_id = session_id
+            # 清空
+            while self._messages_layout.count() > 1:
+                item = self._messages_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            # 恢复消息
+            for msg in messages:
+                role = msg.get("role", "system")
+                content = msg.get("content", "")
+                if content:
+                    self._add_message(role, content)
+            self._session_combo.setItemText(0, f"对话 {session_id[:6]}...")
+            self._add_message("system", f"📋 已加载历史对话 ({len(messages)} 条消息)")
+        except Exception as e:
+            self._add_message("error", f"❌ 显示对话失败: {e}")
 
     def _keep_worker(self, worker):
         """保持 worker 引用防止 GC — 完成后自动清理"""

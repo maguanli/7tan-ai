@@ -2024,10 +2024,44 @@ class SettingsPage(QWidget):
         for w in [self._oss_bucket, self._oss_endpoint, self._oss_key, self._oss_secret]:
             w.setMinimumHeight(32)
 
+        # AccessKey 显示/隐藏按钮
+        self._oss_key_toggle = QPushButton("显示")
+        self._oss_key_toggle.setFixedSize(42, 32)
+        self._oss_key_toggle.setToolTip("显示/隐藏 AccessKey")
+        self._oss_key_toggle.setCheckable(True)
+        self._oss_key_toggle.clicked.connect(self._toggle_oss_key_visibility)
+        self._oss_key_toggle.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['bg_input']}; border: 1px solid {THEME['border']};
+                border-radius: 6px; color: {THEME['text_secondary']}; font-size: 11px; padding: 2px 6px; }}
+            QPushButton:checked {{ background: {THEME['accent']}; color: #000; font-weight: bold; }}
+            QPushButton:hover {{ border-color: {THEME['accent']}; }}
+        """)
+        key_row = QHBoxLayout()
+        key_row.setSpacing(6)
+        key_row.addWidget(self._oss_key, 1)
+        key_row.addWidget(self._oss_key_toggle)
+
+        # SecretKey 显示/隐藏按钮
+        self._oss_secret_toggle = QPushButton("显示")
+        self._oss_secret_toggle.setFixedSize(42, 32)
+        self._oss_secret_toggle.setToolTip("显示/隐藏 SecretKey")
+        self._oss_secret_toggle.setCheckable(True)
+        self._oss_secret_toggle.clicked.connect(self._toggle_oss_secret_visibility)
+        self._oss_secret_toggle.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['bg_input']}; border: 1px solid {THEME['border']};
+                border-radius: 6px; color: {THEME['text_secondary']}; font-size: 11px; padding: 2px 6px; }}
+            QPushButton:checked {{ background: {THEME['accent']}; color: #000; font-weight: bold; }}
+            QPushButton:hover {{ border-color: {THEME['accent']}; }}
+        """)
+        secret_row = QHBoxLayout()
+        secret_row.setSpacing(6)
+        secret_row.addWidget(self._oss_secret, 1)
+        secret_row.addWidget(self._oss_secret_toggle)
+
         form.addRow("Bucket:", self._oss_bucket)
         form.addRow("Endpoint:", self._oss_endpoint)
-        form.addRow("AccessKey:", self._oss_key)
-        form.addRow("SecretKey:", self._oss_secret)
+        form.addRow("AccessKey:", key_row)
+        form.addRow("SecretKey:", secret_row)
         layout.addWidget(group)
 
         layout.addStretch()
@@ -2210,6 +2244,10 @@ class SettingsPage(QWidget):
         self._oss_endpoint.setText(oss.get("endpoint", oss.get("region", "")))
         self._oss_key.setText(oss.get("access_key", ""))
         self._oss_secret.setText(oss.get("secret_key", ""))
+        # 重置 OSS 密钥显示/隐藏按钮
+        self._oss_key_toggle.setChecked(False)
+        self._oss_secret_toggle.setChecked(False)
+        self._oss_secret.setEchoMode(QLineEdit.EchoMode.Password)
 
     def _save_ai_config(self):
         """只保存当前编辑的 AI 模型配置（不发送其他配置，防止跨配置污染）"""
@@ -2261,6 +2299,30 @@ class SettingsPage(QWidget):
         if self._site_pass.text() and self._site_pass.text() != "••••••••":
             payload["site_7tan"]["password"] = self._site_pass.text()
         self._post_json("PUT", "/api/settings", payload, ok_msg="站点设置已保存！")
+
+    def _toggle_oss_key_visibility(self, checked):
+        if checked:
+            from src.config.loader import load_config
+            config = load_config()
+            real_key = config.get("oss", {}).get("access_key", "")
+            if real_key:
+                self._oss_key.setText(real_key)
+            self._oss_key_toggle.setText("隐藏")
+        else:
+            self._oss_key_toggle.setText("显示")
+
+    def _toggle_oss_secret_visibility(self, checked):
+        if checked:
+            from src.config.loader import load_config
+            config = load_config()
+            real_secret = config.get("oss", {}).get("secret_key", "")
+            if real_secret:
+                self._oss_secret.setText(real_secret)
+            self._oss_secret.setEchoMode(QLineEdit.EchoMode.Normal)
+            self._oss_secret_toggle.setText("隐藏")
+        else:
+            self._oss_secret.setEchoMode(QLineEdit.EchoMode.Password)
+            self._oss_secret_toggle.setText("显示")
 
     def _save_oss_config(self):
         """只保存 OSS 设置"""

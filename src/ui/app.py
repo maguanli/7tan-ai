@@ -1090,6 +1090,27 @@ class BrowserPage(QWidget):
             }}
         """)
         url_layout.addWidget(detach_btn)
+
+        # 🪟 新窗口按钮
+        new_win_btn = QPushButton("🪟")
+        new_win_btn.setToolTip("打开新浏览器窗口 (Ctrl+N)")
+        new_win_btn.setFixedWidth(36)
+        new_win_btn.clicked.connect(self._open_new_window)
+        new_win_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['bg_input']};
+                color: {THEME['text_secondary']};
+                border: 1px solid {THEME['border']};
+                border-radius: 6px;
+                font-size: 14px;
+                padding: 4px;
+            }}
+            QPushButton:hover {{
+                background: {THEME['accent2']};
+                color: #fff;
+            }}
+        """)
+        url_layout.addWidget(new_win_btn)
         layout.addLayout(url_layout)
 
         # ===== 标签页栏 =====
@@ -1136,22 +1157,21 @@ class BrowserPage(QWidget):
         """)
 
         # "+" 新标签按钮 — 放在 tab bar 右侧
-        self._new_tab_btn = QPushButton("+")
-        self._new_tab_btn.setFixedSize(28, 28)
-        self._new_tab_btn.setToolTip("新建标签页")
+        self._new_tab_btn = QPushButton("＋")
+        self._new_tab_btn.setFixedSize(32, 32)
+        self._new_tab_btn.setToolTip("新建标签页 (Ctrl+T)")
         self._new_tab_btn.setStyleSheet(f"""
             QPushButton {{
-                background: {THEME['bg_input']};
-                color: {THEME['text_secondary']};
-                border: 1px solid {THEME['border']};
-                border-radius: 14px;
-                font-size: 16px;
+                background: {THEME['accent']};
+                color: #000;
+                border: none;
+                border-radius: 16px;
+                font-size: 18px;
                 font-weight: bold;
                 padding: 0;
             }}
             QPushButton:hover {{
-                background: {THEME['accent']};
-                color: #000;
+                background: {THEME['accent']}dd;
             }}
         """)
         self._new_tab_btn.clicked.connect(self._add_tab)
@@ -1160,7 +1180,7 @@ class BrowserPage(QWidget):
         layout.addWidget(self._tab_widget, 1)
 
         # 状态栏
-        self._status = QLabel("🟢 就绪 — 输入网址按回车打开")
+        self._status = QLabel("🟢 就绪 | Ctrl+T 新标签 | Ctrl+W 关标签 | Ctrl+N 新窗口 | 输入网址按回车打开")
         self._status.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 11px;")
         layout.addWidget(self._status)
 
@@ -1171,6 +1191,44 @@ class BrowserPage(QWidget):
 
         # 创建第一个标签页
         self._add_tab(url="about:blank", title="新标签页")
+
+        # ===== 全局快捷键（使用 QShortcut 确保任何时候都生效）=====
+        from PyQt6.QtGui import QShortcut, QKeySequence
+
+        new_tab_sc = QShortcut(QKeySequence("Ctrl+T"), self)
+        new_tab_sc.activated.connect(lambda: self._add_tab())
+        new_tab_sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+
+        close_tab_sc = QShortcut(QKeySequence("Ctrl+W"), self)
+        close_tab_sc.activated.connect(self._close_current_tab)
+        close_tab_sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+
+        new_win_sc = QShortcut(QKeySequence("Ctrl+N"), self)
+        new_win_sc.activated.connect(self._open_new_window)
+        new_win_sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+
+        focus_url_sc = QShortcut(QKeySequence("Ctrl+L"), self)
+        focus_url_sc.activated.connect(lambda: self._url_input.setFocus())
+        focus_url_sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+
+    # ===== 键盘快捷键辅助方法 =====
+
+    def _close_current_tab(self):
+        """关闭当前标签页（Ctrl+W）"""
+        idx = self._tab_widget.currentIndex()
+        if idx >= 0 and len(self._tabs) > 1:
+            self._close_tab(idx)
+
+    # ===== 新窗口 =====
+
+    def _open_new_window(self):
+        """打开一个新的独立浏览器窗口 (Ctrl+N)"""
+        win = DetachedBrowserWindow(url="about:blank", title="新窗口")
+        # 保存引用防止 GC
+        if not hasattr(self, '_detached_windows'):
+            self._detached_windows = []
+        self._detached_windows.append(win)
+        win.show()
 
     # ===== 标签页管理 =====
 

@@ -1272,28 +1272,37 @@ class BrowserPage(QWidget):
     def _create_web_view(self):
         """创建一个配置好的 QWebEngineView"""
         from PyQt6.QtWebEngineWidgets import QWebEngineView
-        from PyQt6.QtWebEngineCore import QWebEnginePage
+        from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
 
         view = QWebEngineView()
         view.setStyleSheet("background-color: white; border-radius: 0;")
 
-        # 创建自定义 Page 处理导航（支持链接点击、window.open等）
-        page = view.page()
+        # 启用 JavaScript 和本地存储（很多网站依赖）
+        profile = QWebEngineProfile.defaultProfile()
+        settings = profile.settings()
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard, True)
+
         self_view = self
 
         class _Page(QWebEnginePage):
+            def __init__(self, profile):
+                super().__init__(profile)
+
             def acceptNavigationRequest(self, url, nav_type, is_main_frame):
-                # 允许所有类型的导航（链接点击、表单提交、重定向等）
                 return True
 
             def createWindow(self, ww_type):
-                # 网站弹窗/新窗口 → 在当前浏览器开新标签页
                 new_view = self_view._create_web_view()
+                idx = self_view._tab_widget.currentIndex()
                 self_view._add_tab(url="about:blank", title="新标签页")
                 return new_view.page()
 
-        custom_page = _Page(page.profile())
-        view.setPage(custom_page)
+        page = _Page(profile)
+        view.setPage(page)
 
         # 连接信号
         view.urlChanged.connect(lambda u, v=view: self._on_view_url_changed(v, u))

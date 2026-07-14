@@ -230,6 +230,90 @@ class PluginManager:
             return "installed"
         return "available"
 
+    # === 全网搜索 ===
+
+    REMOTE_MANIFEST_URL = "https://raw.githubusercontent.com/7tan/7tan-plugins/main/manifest.json"
+
+    def search_online(self, keyword: str = "") -> list:
+        """搜索全网插件 — 从远程清单获取，合并本地"""
+        import requests
+        import time
+
+        # 优先从配置读取 URL
+        try:
+            from ..config.loader import load_config
+            config = load_config()
+            remote_url = config.get("plugins", {}).get("remote_manifest_url", self.REMOTE_MANIFEST_URL)
+        except Exception:
+            remote_url = self.REMOTE_MANIFEST_URL
+
+        # 缓存 1 小时
+        cache_file = PLUGIN_DIR / ".remote_cache.json"
+        cache_age = 0
+        if cache_file.exists():
+            try:
+                cached_data = json.loads(cache_file.read_text(encoding="utf-8"))
+                cache_age = time.time() - cached_data.get("_cached_at", 0)
+            except Exception:
+                pass
+
+        remote_manifest = []
+        if cache_age > 0 and cache_age < 3600 and cache_file.exists():
+            try:
+                remote_manifest = json.loads(cache_file.read_text(encoding="utf-8"))
+                remote_manifest = [p for p in remote_manifest if not isinstance(p, str) or not p.startswith("_")]
+            except Exception:
+                pass
+
+        if not remote_manifest:
+            try:
+                resp = requests.get(remote_url, timeout=15,
+                                   headers={"User-Agent": "7tanAI-PluginManager/1.0"})
+                if resp.status_code == 200:
+                    remote_manifest = resp.json()
+                    remote_manifest.append({"_cached_at": time.time()})
+                    cache_file.write_text(json.dumps(remote_manifest, ensure_ascii=False), encoding="utf-8")
+                    remote_manifest = [p for p in remote_manifest if not isinstance(p, str) or not p.startswith("_")]
+                else:
+                    return self._search_local(keyword)
+            except Exception:
+                return self._search_local(keyword)
+
+        # 合并本地 + 远程，去重
+        local_ids = {p.get("id") for p in self.get_manifest()}
+        installed = set(self.get_installed())
+        results = []
+
+        # 本地插件
+        for p in self.get_manifest():
+            if not keyword or keyword.lower() in str(p).lower():
+                p["source"] = "local"
+                p["installed"] = p["id"] in installed
+                results.append(p)
+
+        # 远程插件（不在本地的）
+        for p in remote_manifest:
+            if p.get("id") in local_ids:
+                continue
+            if not keyword or keyword.lower() in str(p).lower():
+                p["source"] = "remote"
+                p["installed"] = False
+                p["type"] = "remote"
+                results.append(p)
+
+        return results
+
+    def _search_local(self, keyword: str = "") -> list:
+        """仅本地搜索"""
+        installed = set(self.get_installed())
+        results = []
+        for p in self.get_manifest():
+            if not keyword or keyword.lower() in str(p).lower():
+                p["source"] = "local"
+                p["installed"] = p["id"] in installed
+                results.append(p)
+        return results
+
     # === 默认清单 ===
 
     @staticmethod

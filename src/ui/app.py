@@ -2410,9 +2410,9 @@ class SettingsPage(QWidget):
         top_row.setSpacing(8)
 
         self._plugin_search = QLineEdit()
-        self._plugin_search.setPlaceholderText("🔍 搜索插件（名称/描述/作者）...")
+        self._plugin_search.setPlaceholderText("🔍 搜索插件（名称/描述/作者），回车搜索全网...")
         self._plugin_search.setMinimumHeight(32)
-        self._plugin_search.textChanged.connect(self._on_plugin_search)
+        self._plugin_search.returnPressed.connect(self._search_online_plugins)
         self._plugin_search.setStyleSheet(f"""
             QLineEdit {{ background: {THEME['bg_input']}; color: {THEME['text_primary']};
                 border: 1px solid {THEME['border']}; border-radius: 6px; padding: 6px 12px; font-size: 13px; }}
@@ -2420,12 +2420,24 @@ class SettingsPage(QWidget):
         """)
         top_row.addWidget(self._plugin_search, 1)
 
-        refresh_btn = QPushButton("🔄 刷新")
-        refresh_btn.setFixedSize(80, 32)
+        online_btn = QPushButton("🌐 全网搜索")
+        online_btn.setFixedSize(100, 32)
+        online_btn.setToolTip("从在线插件仓库搜索更多插件")
+        online_btn.clicked.connect(self._search_online_plugins)
+        online_btn.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['accent2']}; color: #fff; border: none;
+                border-radius: 6px; font-size: 13px; font-weight: bold; }}
+            QPushButton:hover {{ background: {THEME['accent2']}dd; }}
+        """)
+        top_row.addWidget(online_btn)
+
+        refresh_btn = QPushButton("🔄")
+        refresh_btn.setFixedSize(36, 32)
+        refresh_btn.setToolTip("刷新本地插件列表")
         refresh_btn.clicked.connect(self._refresh_plugins)
         refresh_btn.setStyleSheet(f"""
             QPushButton {{ background: {THEME['accent']}; color: #000; border: none;
-                border-radius: 6px; font-size: 13px; font-weight: bold; }}
+                border-radius: 6px; font-size: 14px; font-weight: bold; }}
             QPushButton:hover {{ background: {THEME['accent']}dd; }}
         """)
         top_row.addWidget(refresh_btn)
@@ -2518,6 +2530,26 @@ class SettingsPage(QWidget):
             item_data = item.data(Qt.ItemDataRole.UserRole)
             item.setHidden(bool(keyword and keyword not in item_text and keyword not in item_data))
 
+    def _search_online_plugins(self):
+        """全网搜索插件"""
+        keyword = self._plugin_search.text().strip()
+        from src.plugins import get_manager
+        mgr = get_manager()
+
+        if keyword:
+            self._plugin_status.setText(f"🌐 正在全网搜索 '{keyword}' ...")
+        else:
+            self._plugin_status.setText("🌐 正在获取在线插件列表...")
+        QApplication.processEvents()  # 刷新 UI
+
+        try:
+            results = mgr.search_online(keyword) if keyword else mgr.search_online("")
+        except Exception as e:
+            results = mgr._search_local(keyword)
+            self._plugin_status.setText(f"⚠️ 在线搜索失败，显示本地结果: {e}")
+
+        self._populate_plugin_list(results)
+
     def _on_plugin_selected(self, row):
         """选中插件时显示详情"""
         if row < 0:
@@ -2526,16 +2558,9 @@ class SettingsPage(QWidget):
         if not item:
             return
         pid = item.data(Qt.ItemDataRole.UserRole)
-        from src.plugins import get_manager
-        mgr = get_manager()
-        manifest = mgr.get_manifest()
-        installed = mgr.get_installed()
-        info = next((p for p in manifest if p.get("id") == pid), None)
-        if not info:
-            self._detail_label.setText("详情不可用")
-            return
+        info = item.data(Qt.ItemDataRole.UserRole + 1)  # 存储完整插件信息
+        is_installed = item.data(Qt.ItemDataRole.UserRole + 2) or False
 
-        is_installed = pid in installed
         detail = f"""<b>{info.get('icon', '')} {info.get('name', '')}</b>  v{info.get('version', '')}
 
 📝 {info.get('description', '')}
@@ -2543,46 +2568,64 @@ class SettingsPage(QWidget):
 👤 作者: {info.get('author', '')}
 📂 分类: {info.get('category', '')}
 🔧 工具: {', '.join(info.get('tools', []))}
+📍 来源: {'🌐 在线仓库' if info.get('source') == 'remote' else '📦 本地内置'}
 
 状态: {'✅ 已安装（重启后可用）' if is_installed else '⬇️ 未安装'}"""
+        if info.get('source') == 'remote' and not is_installed:
+            detail += "\n\n💡 此插件来自在线仓库，点击安装将自动下载。"
         self._detail_label.setText(detail)
         self._install_btn.setEnabled(not is_installed)
         self._uninstall_btn.setEnabled(is_installed)
 
     def _refresh_plugins(self):
-        """刷新插件列表"""
+        """刷新本地插件列表"""
         from src.plugins import get_manager
         mgr = get_manager()
-        manifest = mgr.get_manifest()
-        installed = mgr.get_installed()
+        results = mgr._search_local("")
+        self._populate_plugin_list(results)
 
+    def _populate_plugin_list(self, results: list):
+        """用插件数据填充列表"""
         self._plugin_list.clear()
         installed_count = 0
-        for p in manifest:
+        local_count = 0
+        remote_count = 0
+
+        for p in results:
             pid = p.get("id", "")
             name = p.get("name", pid)
             icon = p.get("icon", "📦")
-            desc = p.get("description", "")
+            desc = p.get("description", "")[:60]
             ver = p.get("version", "")
             author = p.get("author", "未知")
             tools = p.get("tools", [])
-            is_installed = pid in installed
+            is_installed = p.get("installed", False)
+            source = p.get("source", "local")
 
             if is_installed:
                 installed_count += 1
-                status = "✅ 已安装"
+                status = "✅"
+            elif source == "remote":
+                remote_count += 1
+                status = "🌐"
             else:
-                status = "⬇️ 可安装"
+                local_count += 1
+                status = "⬇️"
 
             item_text = f"{icon} {name}  v{ver}  [{status}]\n     {desc}\n     👤 {author} | 🔧 {', '.join(tools)}"
 
             item = QListWidgetItem(item_text)
             item.setData(Qt.ItemDataRole.UserRole, pid)
+            item.setData(Qt.ItemDataRole.UserRole + 1, p)  # 存储完整信息
+            item.setData(Qt.ItemDataRole.UserRole + 2, is_installed)
             if is_installed:
                 item.setForeground(QColor(THEME['success']))
+            elif source == "remote":
+                item.setForeground(QColor(THEME['accent2']))
             self._plugin_list.addItem(item)
 
-        self._plugin_status.setText(f"📊 共 {len(manifest)} 个插件 | ✅ {installed_count} 个已安装 | ⬇️ {len(manifest) - installed_count} 个可安装")
+        total = len(results)
+        self._plugin_status.setText(f"📊 共 {total} 个 | ✅ {installed_count} 已安装 | 📦 {local_count} 本地 | 🌐 {remote_count} 在线")
         self._detail_label.setText("选择一个插件查看详情")
 
     def _install_all_plugins(self):
@@ -2618,8 +2661,20 @@ class SettingsPage(QWidget):
             return
 
         plugin_id = item.data(Qt.ItemDataRole.UserRole)
+        plugin_info = item.data(Qt.ItemDataRole.UserRole + 1) or {}
         from src.plugins import get_manager
+        import json
         mgr = get_manager()
+
+        # 如果是远程插件，先添加到本地清单
+        if plugin_info.get("source") == "remote":
+            manifest = mgr.get_manifest()
+            local_ids = {p.get("id") for p in manifest}
+            if plugin_id not in local_ids:
+                manifest.append(plugin_info)
+                from src.plugins.manager import MANIFEST_FILE
+                MANIFEST_FILE.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
         result = mgr.install(plugin_id)
 
         if result.get("ok"):

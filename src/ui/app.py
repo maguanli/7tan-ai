@@ -2398,70 +2398,156 @@ class SettingsPage(QWidget):
     def _build_plugin_tab(self):
         layout = QVBoxLayout(self._plugin_tab)
         layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(14)
+        layout.setSpacing(12)
 
         subtitle = QLabel("选择安装需要的功能插件，安装后 AI 将获得新能力。已安装的插件在启动时自动加载。")
         subtitle.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
         subtitle.setWordWrap(True)
         layout.addWidget(subtitle)
 
-        # 刷新按钮
-        refresh_btn = QPushButton("🔄 刷新插件列表")
-        refresh_btn.setFixedHeight(32)
+        # 搜索 + 刷新行
+        top_row = QHBoxLayout()
+        top_row.setSpacing(8)
+
+        self._plugin_search = QLineEdit()
+        self._plugin_search.setPlaceholderText("🔍 搜索插件（名称/描述/作者）...")
+        self._plugin_search.setMinimumHeight(32)
+        self._plugin_search.textChanged.connect(self._on_plugin_search)
+        self._plugin_search.setStyleSheet(f"""
+            QLineEdit {{ background: {THEME['bg_input']}; color: {THEME['text_primary']};
+                border: 1px solid {THEME['border']}; border-radius: 6px; padding: 6px 12px; font-size: 13px; }}
+            QLineEdit:focus {{ border-color: {THEME['accent']}; }}
+        """)
+        top_row.addWidget(self._plugin_search, 1)
+
+        refresh_btn = QPushButton("🔄 刷新")
+        refresh_btn.setFixedSize(80, 32)
         refresh_btn.clicked.connect(self._refresh_plugins)
         refresh_btn.setStyleSheet(f"""
             QPushButton {{ background: {THEME['accent']}; color: #000; border: none;
-                border-radius: 6px; font-size: 13px; font-weight: bold; padding: 6px 14px; }}
+                border-radius: 6px; font-size: 13px; font-weight: bold; }}
             QPushButton:hover {{ background: {THEME['accent']}dd; }}
         """)
-        layout.addWidget(refresh_btn)
+        top_row.addWidget(refresh_btn)
+        layout.addLayout(top_row)
 
         # 插件列表
         self._plugin_list = QListWidget()
         self._plugin_list.setMinimumHeight(300)
+        self._plugin_list.currentRowChanged.connect(self._on_plugin_selected)
         self._plugin_list.setStyleSheet(f"""
             QListWidget {{ background: {THEME['bg_card']}; color: {THEME['text_primary']};
                 border: 1px solid {THEME['border']}; border-radius: 8px; font-size: 13px; }}
-            QListWidget::item {{ padding: 12px 16px; border-bottom: 1px solid {THEME['border']}; }}
+            QListWidget::item {{ padding: 14px 18px; border-bottom: 1px solid {THEME['border']}; }}
             QListWidget::item:hover {{ background: {THEME['hover']}; }}
             QListWidget::item:selected {{ background: {THEME['accent']}33; }}
         """)
         layout.addWidget(self._plugin_list, 1)
 
+        # 详情区
+        detail_group = QGroupBox("插件详情")
+        detail_group.setStyleSheet(f"""
+            QGroupBox {{ color: {THEME['text_primary']}; font-weight: bold; font-size: 13px;
+                border: 1px solid {THEME['border']}; border-radius: 8px; margin-top: 8px; padding-top: 18px; }}
+            QGroupBox::title {{ subcontrol-origin: margin; left: 14px; padding: 0 8px; }}
+        """)
+        detail_layout = QVBoxLayout(detail_group)
+        detail_layout.setSpacing(6)
+        self._detail_label = QLabel("选择一个插件查看详情")
+        self._detail_label.setWordWrap(True)
+        self._detail_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px; padding: 4px;")
+        self._detail_label.setMinimumHeight(60)
+        detail_layout.addWidget(self._detail_label)
+        layout.addWidget(detail_group)
+
         # 按钮行
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
 
-        self._install_btn = QPushButton("📥 安装选中插件")
+        self._install_btn = QPushButton("📥 安装")
         self._install_btn.setFixedHeight(36)
+        self._install_btn.setFixedWidth(100)
         self._install_btn.clicked.connect(self._install_plugin)
         self._install_btn.setStyleSheet(f"""
             QPushButton {{ background: {THEME['success']}; color: #fff; border: none;
-                border-radius: 8px; font-size: 14px; font-weight: bold; padding: 8px 20px; }}
+                border-radius: 8px; font-size: 14px; font-weight: bold; }}
             QPushButton:hover {{ background: #059669; }}
         """)
         btn_row.addWidget(self._install_btn)
 
-        self._uninstall_btn = QPushButton("🗑️ 卸载选中插件")
+        self._uninstall_btn = QPushButton("🗑️ 卸载")
         self._uninstall_btn.setFixedHeight(36)
+        self._uninstall_btn.setFixedWidth(100)
         self._uninstall_btn.clicked.connect(self._uninstall_plugin)
         self._uninstall_btn.setStyleSheet(f"""
             QPushButton {{ background: {THEME['danger']}; color: #fff; border: none;
-                border-radius: 8px; font-size: 14px; font-weight: bold; padding: 8px 20px; }}
+                border-radius: 8px; font-size: 14px; font-weight: bold; }}
             QPushButton:hover {{ background: #dc2626; }}
         """)
         btn_row.addWidget(self._uninstall_btn)
 
         btn_row.addStretch()
+
+        # 一键安装全部
+        install_all_btn = QPushButton("⚡ 一键安装全部")
+        install_all_btn.setFixedHeight(36)
+        install_all_btn.setFixedWidth(130)
+        install_all_btn.clicked.connect(self._install_all_plugins)
+        install_all_btn.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['accent2']}; color: #fff; border: none;
+                border-radius: 8px; font-size: 13px; font-weight: bold; }}
+            QPushButton:hover {{ background: {THEME['accent2']}dd; }}
+        """)
+        btn_row.addWidget(install_all_btn)
         layout.addLayout(btn_row)
 
-        # 状态
+        # 状态栏
         self._plugin_status = QLabel("")
         self._plugin_status.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
         layout.addWidget(self._plugin_status)
 
         # 初始加载
         self._refresh_plugins()
+
+    def _on_plugin_search(self, text):
+        """搜索过滤插件列表"""
+        keyword = text.lower().strip()
+        for i in range(self._plugin_list.count()):
+            item = self._plugin_list.item(i)
+            item_text = item.text().lower()
+            item_data = item.data(Qt.ItemDataRole.UserRole)
+            item.setHidden(bool(keyword and keyword not in item_text and keyword not in item_data))
+
+    def _on_plugin_selected(self, row):
+        """选中插件时显示详情"""
+        if row < 0:
+            return
+        item = self._plugin_list.item(row)
+        if not item:
+            return
+        pid = item.data(Qt.ItemDataRole.UserRole)
+        from src.plugins import get_manager
+        mgr = get_manager()
+        manifest = mgr.get_manifest()
+        installed = mgr.get_installed()
+        info = next((p for p in manifest if p.get("id") == pid), None)
+        if not info:
+            self._detail_label.setText("详情不可用")
+            return
+
+        is_installed = pid in installed
+        detail = f"""<b>{info.get('icon', '')} {info.get('name', '')}</b>  v{info.get('version', '')}
+
+📝 {info.get('description', '')}
+
+👤 作者: {info.get('author', '')}
+📂 分类: {info.get('category', '')}
+🔧 工具: {', '.join(info.get('tools', []))}
+
+状态: {'✅ 已安装（重启后可用）' if is_installed else '⬇️ 未安装'}"""
+        self._detail_label.setText(detail)
+        self._install_btn.setEnabled(not is_installed)
+        self._uninstall_btn.setEnabled(is_installed)
 
     def _refresh_plugins(self):
         """刷新插件列表"""
@@ -2471,18 +2557,24 @@ class SettingsPage(QWidget):
         installed = mgr.get_installed()
 
         self._plugin_list.clear()
+        installed_count = 0
         for p in manifest:
             pid = p.get("id", "")
             name = p.get("name", pid)
             icon = p.get("icon", "📦")
             desc = p.get("description", "")
             ver = p.get("version", "")
-            author = p.get("author", "")
+            author = p.get("author", "未知")
             tools = p.get("tools", [])
             is_installed = pid in installed
 
-            status = "✅ 已安装" if is_installed else "⬇️ 可安装"
-            item_text = f"{icon}  {name}  v{ver}  [{status}]\n     {desc}\n     作者: {author} | 工具: {', '.join(tools)}"
+            if is_installed:
+                installed_count += 1
+                status = "✅ 已安装"
+            else:
+                status = "⬇️ 可安装"
+
+            item_text = f"{icon} {name}  v{ver}  [{status}]\n     {desc}\n     👤 {author} | 🔧 {', '.join(tools)}"
 
             item = QListWidgetItem(item_text)
             item.setData(Qt.ItemDataRole.UserRole, pid)
@@ -2490,7 +2582,33 @@ class SettingsPage(QWidget):
                 item.setForeground(QColor(THEME['success']))
             self._plugin_list.addItem(item)
 
-        self._plugin_status.setText(f"共 {len(manifest)} 个插件，{len(installed)} 个已安装")
+        self._plugin_status.setText(f"📊 共 {len(manifest)} 个插件 | ✅ {installed_count} 个已安装 | ⬇️ {len(manifest) - installed_count} 个可安装")
+        self._detail_label.setText("选择一个插件查看详情")
+
+    def _install_all_plugins(self):
+        """一键安装全部插件"""
+        from src.plugins import get_manager
+        mgr = get_manager()
+        manifest = mgr.get_manifest()
+        installed = mgr.get_installed()
+
+        ok_count = 0
+        fail_count = 0
+        for p in manifest:
+            pid = p.get("id", "")
+            if pid in installed:
+                continue
+            result = mgr.install(pid)
+            if result.get("ok"):
+                ok_count += 1
+            else:
+                fail_count += 1
+
+        msg = f"安装完成: ✅ {ok_count} 个成功"
+        if fail_count > 0:
+            msg += f", ❌ {fail_count} 个失败"
+        QMessageBox.information(self, "批量安装", msg)
+        self._refresh_plugins()
 
     def _install_plugin(self):
         """安装选中插件"""

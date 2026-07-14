@@ -1283,8 +1283,16 @@ class BrowserPage(QWidget):
     def _create_web_view(self):
         """创建一个配置好的 QWebEngineView"""
         from PyQt6.QtWebEngineWidgets import QWebEngineView
+        from PyQt6.QtWebEngineCore import QWebEnginePage
+
+        # 自定义 Page：target=_blank 链接在当前标签打开
+        class _NavPage(QWebEnginePage):
+            def createWindow(self, _type):
+                return self  # 弹窗/新窗口 → 当前页面处理
+
+        page = _NavPage()
         view = QWebEngineView()
-        # 不对 QWebEngineView 设置 QSS — 会干扰 Chromium 的渲染和事件处理
+        view.setPage(page)
 
         # 连接信号
         view.urlChanged.connect(lambda u, v=view: self._on_view_url_changed(v, u))

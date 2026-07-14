@@ -2235,6 +2235,7 @@ class SettingsPage(QWidget):
         self._site_url.setText(site.get("base_url", ""))
         self._site_user.setText(site.get("username", ""))
         self._publish_interval.setValue(site.get("publish_delay_min", 30))
+        self._site_pass.setText(site.get("password", ""))
         # 重置密码显示/隐藏按钮状态
         self._site_pass_toggle.setChecked(False)
         self._site_pass.setEchoMode(QLineEdit.EchoMode.Password)

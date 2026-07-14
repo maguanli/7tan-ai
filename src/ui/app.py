@@ -1801,25 +1801,26 @@ class SettingsPage(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
 
-        def _make_icon_btn(text, tooltip, bg_color, hover_color):
+        def _make_btn(text, tooltip, bg_color, hover_color):
             btn = QPushButton(text)
             btn.setToolTip(tooltip)
-            btn.setFixedSize(36, 36)
+            btn.setFixedHeight(34)
+            btn.setMinimumWidth(80)
             btn.setStyleSheet(f"""
-                QPushButton {{ background: {bg_color}; color: white; border-radius: 18px; font-size: 14px; border: none; }}
+                QPushButton {{ background: {bg_color}; color: white; border-radius: 8px; font-size: 13px; border: none; padding: 6px 12px; }}
                 QPushButton:hover {{ background: {hover_color}; }}
             """)
             return btn
 
-        add_btn = _make_icon_btn("＋", "新建模型配置", THEME['success'], "#059669")
+        add_btn = _make_btn("＋ 新建", "新建模型配置", THEME['success'], "#059669")
         add_btn.clicked.connect(self._add_config)
         btn_row.addWidget(add_btn)
 
-        del_btn = _make_icon_btn("✕", "删除选中配置", THEME['danger'], "#dc2626")
+        del_btn = _make_btn("✕ 删除", "删除选中配置", THEME['danger'], "#dc2626")
         del_btn.clicked.connect(self._delete_config)
         btn_row.addWidget(del_btn)
 
-        active_btn = _make_icon_btn("⭐", "设为当前使用的模型", THEME['warning'], "#d97706")
+        active_btn = _make_btn("⭐ 启用", "设为当前使用的模型", THEME['warning'], "#d97706")
         active_btn.clicked.connect(self._set_active_config)
         btn_row.addWidget(active_btn)
 

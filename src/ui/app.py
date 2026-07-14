@@ -1855,7 +1855,7 @@ class SettingsPage(QWidget):
 
         self._ai_model = QComboBox()
         self._ai_model.setEditable(True)
-        self._ai_model.addItems(["deepseek-chat", "deepseek-reasoner", "gpt-4o", "gpt-4o-mini", "claude-3.5-sonnet", "qwen-max", "glm-4-plus"])
+        self._ai_model.addItems(["deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner", "gpt-4o", "gpt-4o-mini", "qwen-max", "glm-4-plus"])
         self._ai_model.setMinimumHeight(32)
 
         self._ai_key = QLineEdit()
@@ -1864,15 +1864,15 @@ class SettingsPage(QWidget):
         self._ai_key.setMinimumHeight(32)
 
         # API Key 显示/隐藏切换按钮
-        self._ai_key_toggle = QPushButton("👁")
-        self._ai_key_toggle.setFixedSize(36, 32)
+        self._ai_key_toggle = QPushButton("显示")
+        self._ai_key_toggle.setFixedSize(42, 32)
         self._ai_key_toggle.setToolTip("显示/隐藏 API Key")
         self._ai_key_toggle.setCheckable(True)
         self._ai_key_toggle.clicked.connect(self._toggle_api_key_visibility)
         self._ai_key_toggle.setStyleSheet(f"""
             QPushButton {{ background: {THEME['bg_input']}; border: 1px solid {THEME['border']};
-                border-radius: 6px; color: {THEME['text_secondary']}; font-size: 16px; }}
-            QPushButton:checked {{ background: {THEME['accent']}; color: #000; }}
+                border-radius: 6px; color: {THEME['text_secondary']}; font-size: 11px; padding: 2px 6px; }}
+            QPushButton:checked {{ background: {THEME['accent']}; color: #000; font-weight: bold; }}
             QPushButton:hover {{ border-color: {THEME['accent']}; }}
         """)
 
@@ -2033,13 +2033,25 @@ class SettingsPage(QWidget):
             self._ai_base.setText(default_url)
 
     def _toggle_api_key_visibility(self, checked):
-        """切换 API Key 显示/隐藏"""
+        """切换 API Key 显示/隐藏 — 显示时从本地配置加载真实密钥"""
         if checked:
+            # 从本地配置文件获取真实密钥（绕过脱敏）
+            from src.config.loader import load_config
+            config = load_config()
+            key_name = self._config_list.currentItem().data(Qt.ItemDataRole.UserRole)
+            real_key = config.get("ai", {}).get("configs", {}).get(key_name, {}).get("api_key", "")
+            if real_key:
+                self._ai_key.setText(real_key)
             self._ai_key.setEchoMode(QLineEdit.EchoMode.Normal)
-            self._ai_key_toggle.setText("🙈")
+            self._ai_key_toggle.setText("隐藏")
         else:
+            # 恢复脱敏显示
+            item = self._config_list.currentItem()
+            if item:
+                cfg = self._ai_configs.get(item.data(Qt.ItemDataRole.UserRole), {})
+                self._ai_key.setText(cfg.get("api_key", ""))
             self._ai_key.setEchoMode(QLineEdit.EchoMode.Password)
-            self._ai_key_toggle.setText("👁")
+            self._ai_key_toggle.setText("显示")
 
     def _on_config_selected(self, row):
         if self._suppress_change:

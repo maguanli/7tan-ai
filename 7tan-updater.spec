@@ -9,6 +9,9 @@ from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 datas = [
     ('data/prompts', 'data/prompts'),
+    ('config/config.yaml', 'config'),
+    ('config/sensitive_words.txt', 'config'),
+    ('.env.example', '.'),
 ]
 binaries = []
 hiddenimports = []

@@ -1855,7 +1855,7 @@ class SettingsPage(QWidget):
 
         self._ai_model = QComboBox()
         self._ai_model.setEditable(True)
-        self._ai_model.addItems(["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat", "gpt-4o", "gpt-4o-mini", "GLM-5.2", "qwen-max", "glm-4-plus"])
+        self._ai_model.addItems(["deepseek-chat", "deepseek-reasoner", "gpt-4o", "gpt-4o-mini", "claude-3.5-sonnet", "qwen-max", "glm-4-plus"])
         self._ai_model.setMinimumHeight(32)
 
         self._ai_key = QLineEdit()
@@ -2060,6 +2060,7 @@ class SettingsPage(QWidget):
     def _refresh_config_list(self):
         self._suppress_change = True
         current_key = self._config_list.currentItem().data(Qt.ItemDataRole.UserRole) if self._config_list.currentItem() else None
+        self._config_list.blockSignals(True)
         self._config_list.clear()
         for key, cfg in self._ai_configs.items():
             label = f"⭐ {key}" if key == self._active_config else f"  {key}"
@@ -2068,10 +2069,10 @@ class SettingsPage(QWidget):
             self._config_list.addItem(item)
             if key == current_key:
                 self._config_list.setCurrentItem(item)
+        self._config_list.blockSignals(False)
+        # 如果列表为空，不创建兜底默认配置（避免覆盖真实数据）
         if self._config_list.count() == 0:
-            self._ai_configs = {
-                "deepseek": {"provider": "deepseek", "model": "deepseek-v4-pro", "base_url": "https://api.deepseek.com/v1", "api_key": ""}
-            }
+            self._ai_configs = {"deepseek": {"provider": "deepseek", "model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1", "api_key": ""}}
             self._active_config = "deepseek"
             self._refresh_config_list()
         self._suppress_change = False
@@ -2148,10 +2149,10 @@ class SettingsPage(QWidget):
         self._active_config = ai.get("active", next(iter(self._ai_configs.keys())) if self._ai_configs else "deepseek")
 
         if not self._ai_configs:
-            self._ai_configs = {"deepseek": {"provider": "deepseek", "model": "deepseek-v4-pro", "base_url": "https://api.deepseek.com/v1", "api_key": ""}}
+            self._ai_configs = {"deepseek": {"provider": "deepseek", "model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1", "api_key": ""}}
             self._active_config = "deepseek"
 
-        self._suppress_change = True
+        self._config_list.blockSignals(True)
         self._config_list.clear()
         for key in self._ai_configs:
             label = f"⭐ {key}" if key == self._active_config else f"  {key}"
@@ -2159,7 +2160,11 @@ class SettingsPage(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, key)
             self._config_list.addItem(item)
         self._config_list.setCurrentRow(0)
+        self._config_list.blockSignals(False)
         self._suppress_change = False
+
+        # 手动触发选中事件，填充表单（因为 blockSignals 阻止了信号）
+        self._on_config_selected(0)
 
         site = settings.get("site_7tan", {})
         self._site_url.setText(site.get("base_url", ""))

@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy,
     QLineEdit, QTextEdit, QComboBox, QSpinBox, QCheckBox,
     QSplitter, QMessageBox, QProgressBar, QGridLayout, QGroupBox,
-    QFormLayout, QTabWidget, QListWidget, QListWidgetItem,
+    QFormLayout, QTabWidget, QTabBar, QListWidget, QListWidgetItem,
     QAbstractItemView, QMenu, QDialog, QDialogButtonBox,
     QPlainTextEdit, QStatusBar, QInputDialog,
 )
@@ -1205,11 +1205,11 @@ class BrowserPage(QWidget):
                 color: {THEME['text_primary']};
             }}
             QTabBar::close-button {{
-                image: none;
-                background: transparent;
+                margin: 3px;
+                padding: 0px;
             }}
             QTabBar::close-button:hover {{
-                background: {THEME['danger']}66;
+                background: {THEME['danger']};
                 border-radius: 4px;
             }}
         """)
@@ -1277,6 +1277,15 @@ class BrowserPage(QWidget):
         if idx >= 0 and len(self._tabs) > 1:
             self._close_tab(idx)
 
+    def _close_tab_for_view(self, view):
+        """根据 QWebEngineView 关闭对应的标签页"""
+        # 查找 view 对应的 index
+        for i, tab in enumerate(self._tabs):
+            if tab["view"] is view:
+                if len(self._tabs) > 1:
+                    self._close_tab(i)
+                return
+
     # ===== 标签页管理 =====
 
     def _create_web_view(self):
@@ -1302,6 +1311,28 @@ class BrowserPage(QWidget):
 
         self._tab_widget.setCurrentIndex(idx)
         self._update_tab_visibility()
+
+        # 添加自定义关闭按钮 (✕)
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(18, 18)
+        close_btn.setToolTip("关闭标签页")
+        close_btn.clicked.connect(lambda checked, v=view: self._close_tab_for_view(v))
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {THEME['text_muted']};
+                border: none;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: bold;
+                padding: 0;
+            }}
+            QPushButton:hover {{
+                background: {THEME['danger']};
+                color: #fff;
+            }}
+        """)
+        self._tab_widget.tabBar().setTabButton(idx, QTabBar.ButtonPosition.RightSide, close_btn)
 
         # 立即设为当前 view（不等 currentChanged 信号，避免初始化时未触发）
         self._current_view = view

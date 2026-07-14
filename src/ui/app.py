@@ -17,11 +17,11 @@ from PyQt6.QtWidgets import (
     QSplitter, QMessageBox, QProgressBar, QGridLayout, QGroupBox,
     QFormLayout, QTabWidget, QTabBar, QListWidget, QListWidgetItem,
     QAbstractItemView, QMenu, QDialog, QDialogButtonBox,
-    QPlainTextEdit, QStatusBar, QInputDialog,
+    QPlainTextEdit, QStatusBar, QInputDialog, QCompleter,
 )
 from PyQt6.QtGui import (
     QFont, QColor, QPalette, QIcon, QAction, QPixmap, QPainter,
-    QBrush, QLinearGradient, QCursor, QFontDatabase,
+    QBrush, QLinearGradient, QCursor, QFontDatabase, QStandardItemModel, QStandardItem,
 )
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, QTimer, QSize, QUrl, QObject,
@@ -1123,6 +1123,20 @@ class BrowserPage(QWidget):
             QLineEdit:focus {{
                 border-color: {THEME['accent']};
             }}
+            QCompleter {{
+                background: {THEME['bg_card']};
+                border: 1px solid {THEME['border']};
+                border-radius: 6px;
+            }}
+            QCompleter::item {{
+                padding: 6px 12px;
+                color: {THEME['text_primary']};
+                font-size: 12px;
+            }}
+            QCompleter::item:selected {{
+                background: {THEME['accent']};
+                color: #000;
+            }}
         """)
         url_layout.addWidget(self._url_input, 1)
 
@@ -1183,6 +1197,19 @@ class BrowserPage(QWidget):
         """)
         url_layout.addWidget(new_win_btn)
         layout.addLayout(url_layout)
+
+        # ===== URL 历史记录 (QCompleter) =====
+        self._url_history = []
+        self._url_completer = QCompleter()
+        self._url_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self._url_completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self._url_completer.setMaxVisibleItems(10)
+        self._url_model = QStandardItemModel()
+        self._url_completer.setModel(self._url_model)
+        self._url_completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        self._url_input.setCompleter(self._url_completer)
+        # 加载历史记录
+        self._load_url_history()
 
         # ===== 标签页栏 =====
         self._tab_widget = QTabWidget()
@@ -1527,8 +1554,56 @@ class BrowserPage(QWidget):
         try:
             self._status.setText(f"⏳ 正在加载 {url[:60]}…")
             self._current_view.load(QUrl(url))
+            # 记录到历史
+            self._add_url_history(url)
         except Exception as e:
             self._status.setText(f"❌ 加载失败: {e}")
+
+    # ===== URL 历史记录管理 =====
+
+    def _get_history_file(self):
+        """历史记录文件路径"""
+        import os
+        return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "url_history.txt")
+
+    def _load_url_history(self):
+        """从文件加载历史记录到 completer"""
+        import os
+        try:
+            path = self._get_history_file()
+            if not os.path.exists(path):
+                return
+            with open(path, "r", encoding="utf-8") as f:
+                urls = [line.strip() for line in f if line.strip()]
+            self._url_history = urls[:100]  # 最多 100 条
+            self._url_model.clear()
+            for u in self._url_history:
+                self._url_model.appendRow(QStandardItem(u))
+        except Exception:
+            pass
+
+    def _add_url_history(self, url):
+        """添加 URL 到历史记录"""
+        # 去重：移除已有的相同 URL
+        if url in self._url_history:
+            self._url_history.remove(url)
+        # 添加到最前面
+        self._url_history.insert(0, url)
+        # 限制 100 条
+        self._url_history = self._url_history[:100]
+        # 更新 completer model
+        self._url_model.clear()
+        for u in self._url_history:
+            self._url_model.appendRow(QStandardItem(u))
+        # 保存到文件
+        try:
+            import os
+            path = self._get_history_file()
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("\n".join(self._url_history))
+        except Exception:
+            pass
 
     def _refresh_current(self):
         if self._current_view:

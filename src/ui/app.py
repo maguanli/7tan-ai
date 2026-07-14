@@ -2005,9 +2005,9 @@ class SettingsPage(QWidget):
         self._suppress_change = False
 
         site = settings.get("site_7tan", {})
-        self._site_url.setText(site.get("url", site.get("base_url", "")))
+        self._site_url.setText(site.get("base_url", ""))
         self._site_user.setText(site.get("username", ""))
-        self._publish_interval.setValue(site.get("publish_interval", site.get("publish_delay_min", 30)))
+        self._publish_interval.setValue(site.get("publish_delay_min", 30))
 
         oss = settings.get("oss", {})
         self._oss_bucket.setText(oss.get("bucket", ""))
@@ -2016,7 +2016,7 @@ class SettingsPage(QWidget):
         self._oss_secret.setText(oss.get("secret_key", ""))
 
     def _save_ai_config(self):
-        """只保存当前编辑的 AI 模型配置"""
+        """只保存当前编辑的 AI 模型配置（不发送其他配置，防止跨配置污染）"""
         item = self._config_list.currentItem()
         if not item:
             QMessageBox.warning(self, "提示", "请先在左侧选择一个配置。")
@@ -2029,10 +2029,11 @@ class SettingsPage(QWidget):
             "api_key": self._ai_key.text() if self._ai_key.text() and self._ai_key.text() != "••••••••"
                       else self._ai_configs.get(key, {}).get("api_key", ""),
         }
+        # 只发送当前编辑的配置，避免其他模型的配置被覆盖
         payload = {
             "ai": {
                 "active": self._active_config,
-                "configs": self._ai_configs,
+                "configs": {key: self._ai_configs[key]},
             }
         }
         self._post_json("PUT", "/api/settings", payload, ok_msg=f"模型「{key}」已保存！")
@@ -2042,9 +2043,8 @@ class SettingsPage(QWidget):
         payload = {
             "site_7tan": {
                 "base_url": self._site_url.text(),
-                "url": self._site_url.text(),
+                "login_url": self._site_url.text() + "/login.php",
                 "username": self._site_user.text(),
-                "publish_interval": self._publish_interval.value(),
                 "publish_delay_min": self._publish_interval.value(),
             },
         }

@@ -104,11 +104,41 @@ def create_default_config(config_path: Path = None):
     logger.info(f"📝 已创建默认配置文件: {config_path}")
 
 
+def _restore_env_vars(config: dict) -> dict:
+    """递归将已解析的环境变量值还原为 ${VAR} 引用
+
+    扫描所有环境变量，建立「值 → ${VAR_NAME}」反向映射。
+    保存配置时调用，确保 API Key / 密码等敏感信息以 ${VAR} 形式写入，
+    避免明文硬编码到 config.yaml。
+    """
+    # 建立反向映射：环境变量值 → ${VAR_NAME}
+    # 只映射长度 >= 6 的值，避免太短的常见值（如 "true", "1"）误匹配
+    env_map = {}
+    for key, value in os.environ.items():
+        if value and len(value) >= 6:
+            env_map[value] = f"${{{key}}}"
+
+    def _restore(value: Any) -> Any:
+        if isinstance(value, str) and value in env_map:
+            return env_map[value]
+        elif isinstance(value, dict):
+            return {k: _restore(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [_restore(v) for v in value]
+        return value
+
+    return _restore(config)
+
+
 def save_config(config: dict, config_path: Path = None):
-    """保存配置到 YAML 文件"""
+    """保存配置到 YAML 文件，自动还原环境变量引用"""
     if config_path is None:
         config_path = CONFIG_PATH
     config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # ⚠️ 关键：将已解析的 env var 值还原为 ${VAR} 引用再写入
+    config = _restore_env_vars(config)
+
     with open(config_path, "w", encoding="utf-8") as f:
         yaml.dump(config, f, allow_unicode=True, default_flow_style=False, indent=2)
 

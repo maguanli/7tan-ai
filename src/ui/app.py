@@ -204,7 +204,7 @@ class ApiWorker(QThread):
             if self._method == "GET":
                 resp = requests.get(self._url, timeout=30)
             elif self._method == "POST":
-                resp = requests.post(self._url, json=self._data, timeout=180)
+                resp = requests.post(self._url, json=self._data, timeout=1800)
             elif self._method == "PUT":
                 resp = requests.put(self._url, json=self._data, timeout=30)
             elif self._method == "DELETE":

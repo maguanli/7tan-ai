@@ -151,15 +151,42 @@ class BrowserBridge(QObject):
         )[:max_chars]
 
     def get_page_links(self, max_links: int = 30) -> list:
-        """获取页面链接列表（线程安全）"""
+        """获取页面链接列表 — 包含 onclick 提取的 URL（线程安全）"""
         import json
-        js = """
-        JSON.stringify(Array.from(document.querySelectorAll('a[href]'))
-            .map(a => ({text: a.innerText.trim().substring(0,50), href: a.href}))
-            .filter(l => l.href && !l.href.startsWith('javascript'))
-            .slice(0, """ + str(max_links) + """))
+        js = f"""
+        (function() {{
+            var links = [];
+            // 1. 标准 <a href> 链接
+            Array.from(document.querySelectorAll('a[href]')).forEach(function(a) {{
+                var href = a.href || '';
+                var text = (a.innerText || '').trim().substring(0, 50);
+                if (href && !href.startsWith('javascript:')) {{
+                    links.push({{text: text, href: href}});
+                }}
+            }});
+            // 2. 带 onclick 的元素 — 提取 URL
+            Array.from(document.querySelectorAll('[onclick]')).forEach(function(el) {{
+                var onclick = (el.getAttribute('onclick') || '').trim();
+                var m = onclick.match(/(?:location\\.href|window\\.open|window\\.location|open)\\s*[=\\(]\\s*['"]([^'"]+)['"]/);
+                if (!m) m = onclick.match(/(?:href|src)\\s*=\\s*['"]([^'"]+)['"]/);
+                if (!m) m = onclick.match(/(https?:\\/\\/[^\\s'\"]+)/);
+                if (m) {{
+                    var text = (el.innerText || '').trim().substring(0, 50) || 'onclick';
+                    links.push({{text: text, href: m[1]}});
+                }}
+            }});
+            // 3. <button> 或 <div> 里的 data-url / data-href
+            Array.from(document.querySelectorAll('[data-url],[data-href],[data-download]')).forEach(function(el) {{
+                var url = el.getAttribute('data-url') || el.getAttribute('data-href') || el.getAttribute('data-download');
+                if (url) {{
+                    var text = (el.innerText || '').trim().substring(0, 50) || 'data-url';
+                    links.push({{text: text, href: url}});
+                }}
+            }});
+            return JSON.stringify(links.slice(0, {max_links}));
+        }})()
         """
-        result = self.execute_js(js, timeout=3.0)
+        result = self.execute_js(js, timeout=5.0)
         try:
             return json.loads(result)
         except Exception:

@@ -69,13 +69,19 @@ def browse_page(url: str, wait_seconds: int = 3) -> str:
         bridge.navigate(url, wait_seconds)
         title = bridge.get_page_title()
         text = bridge.get_page_text(10000)       # 读取更多文本 (之前 5000)
-        link_list = bridge.get_page_links(100)    # 读取更多链接 (之前 30)
+        link_list = bridge.get_page_links(200)    # 提取200个链接（含onclick/data-url）
         image_list = bridge.get_page_images(50)
 
         result = f"📄 页面标题: {title}\n\n📝 页面内容 (前10000字):\n{text[:10000]}\n"
         result += f"\n🔗 全部链接 ({len(link_list)}个):\n"
-        for link in link_list[:50]:               # 显示前 50 个 (之前 20)
-            result += f"  - {link.get('text', '') or '(无文字)'}: {link.get('href', '')}\n"
+        for link in link_list[:80]:               # 显示前 80 个
+            href = link.get('href', '')
+            text = link.get('text', '') or '(无文字)'
+            # 高亮下载链接
+            is_dl = any(k in href.lower() for k in ['.apk', '.ipa', '.zip', '.rar', '.7z', '.exe',
+                       'download', 'down', 'apk'])
+            prefix = "📦 " if is_dl else "  - "
+            result += f"{prefix}{text}: {href}\n"
         result += f"\n🖼️ 图片 ({len(image_list)}个, 显示前25):\n"
         for img in image_list[:25]:               # 显示前 25 个 (之前 20)
             size_info = f" ({img.get('width','?')}x{img.get('height','?')})" if img.get('width') else ""
@@ -104,6 +110,87 @@ def browse_page(url: str, wait_seconds: int = 3) -> str:
             return result
         except Exception as e:
             return f"❌ 无法访问 {url}: {e}"
+
+
+@register_tool(
+    name="find_download_links",
+    description="在当前浏览的页面中查找下载链接。自动识别游戏包(APK/IPA/ZIP/RAR/EXE等)的下载地址。用于从游戏下载站定位真正的下载URL。",
+    parameters={
+        "type": "object",
+        "properties": {},
+        "required": []
+    },
+    category="browser",
+    requires_browser=True,
+)
+def find_download_links() -> str:
+    """在当前页面中智能搜索下载链接"""
+    if _web_view is None:
+        return "❌ 浏览器未就绪"
+
+    bridge = _get_bridge()
+    # 获取所有链接
+    link_list = bridge.get_page_links(200)
+
+    # 下载文件扩展名
+    download_exts = ['.apk', '.ipa', '.zip', '.rar', '.7z', '.exe', '.msi',
+                     '.dmg', '.tar.gz', '.tar.xz', '.gz', '.bz2', '.xz']
+
+    # 下载关键词
+    download_keywords = ['download', '下载', '立即下载', '本地下载', '高速下载',
+                         '安卓下载', '苹果下载', 'android', 'ios', 'apk',
+                         'down', 'dl', 'getfile']
+
+    # 第一轮：精确匹配文件扩展名
+    exact_matches = []
+    # 第二轮：链接文本或URL含下载关键词
+    keyword_matches = []
+    # 第三轮：其他链接
+    other_links = []
+
+    for link in link_list:
+        href = link.get('href', '').lower()
+        text = (link.get('text', '') or '').lower()
+        full = href + ' ' + text
+
+        is_exact = any(ext in href for ext in download_exts)
+        is_keyword = any(kw in full for kw in download_keywords)
+
+        if is_exact:
+            exact_matches.append(link)
+        elif is_keyword:
+            keyword_matches.append(link)
+        else:
+            other_links.append(link)
+
+    result = "🔍 页面下载链接分析:\n\n"
+
+    if exact_matches:
+        result += f"✅ 精确匹配 ({len(exact_matches)}个) — 最可能是下载链接:\n"
+        for link in exact_matches:
+            result += f"  📦 {link.get('text', '') or '(无文字)'}\n"
+            result += f"     URL: {link.get('href', '')}\n"
+        result += "\n"
+
+    if keyword_matches:
+        result += f"⚠️ 关键词匹配 ({len(keyword_matches)}个) — 可能是下载链接:\n"
+        for link in keyword_matches:
+            result += f"  🔗 {link.get('text', '') or '(无文字)'}\n"
+            result += f"     URL: {link.get('href', '')}\n"
+        result += "\n"
+
+    if not exact_matches and not keyword_matches:
+        result += "❌ 未找到明显的下载链接。\n"
+        if other_links:
+            result += f"\n📋 页面其他链接 ({len(other_links)}个, 显示前20):\n"
+            for link in other_links[:20]:
+                text = link.get('text', '') or '(无文字)'
+                if len(text) > 40:
+                    text = text[:40] + '...'
+                result += f"  - {text}\n    {link.get('href', '')}\n"
+
+    result += f"\n💡 提示: 如果下载地址仍未出现，可能需要先点击页面上的下载按钮来触发真实的下载链接。"
+    return result
 
 
 @register_tool(

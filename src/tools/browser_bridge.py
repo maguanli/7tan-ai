@@ -204,12 +204,18 @@ class BrowserBridge(QObject):
 
     def click(self, selector: str, text: str = None) -> str:
         """
-        点击页面元素（线程安全）。
+        点击页面元素（线程安全），支持 :has-text() 伪选择器和文本匹配。
 
         Args:
-            selector: CSS 选择器
-            text: 按文本匹配（可选）
+            selector: CSS 选择器，支持 :has-text("xxx") 扩展语法
+            text: 按文本匹配（可选），会查找 innerText 包含该文本的元素
+
+        Returns:
+            str: 点击结果描述
         """
+        self._js_done.clear()
+        self._pending_js_result = None
+
         from PyQt6.QtCore import QMetaObject, Qt, Q_ARG
         QMetaObject.invokeMethod(
             self, "_click_impl",
@@ -217,14 +223,107 @@ class BrowserBridge(QObject):
             Q_ARG(str, selector),
             Q_ARG(str, text or "")
         )
-        return f"✅ 已点击: {selector}"
+
+        # 等待 JS 回调返回结果
+        if not self._js_done.wait(8.0):
+            logger.warning(f"⏰ [Bridge] 点击超时: {selector}")
+            return f"⏰ 点击超时: {selector}"
+        return self._pending_js_result or f"已点击: {selector}"
 
     @pyqtSlot(str, str)
     def _click_impl(self, selector: str, text: str):
-        """在主线程执行点击"""
-        js = f"document.querySelector('{selector}').click()"
-        self._web_view.page().runJavaScript(js)
-        logger.debug(f"🖱️ [Bridge] 点击: {selector}")
+        """在主线程执行点击，支持按文本内容匹配"""
+        js_escaped_selector = selector.replace("\\", "\\\\").replace("'", "\\'")
+        text_escaped = text.replace("\\", "\\\\").replace("'", "\\'") if text else ""
+
+        if text:
+            # 按 selector + 包含的文本查找
+            js = f"""
+(function() {{
+    var selector = '{js_escaped_selector}';
+    var searchText = '{text_escaped}';
+    var elements;
+
+    // 处理 :has-text() 伪选择器（非标准 CSS，转为 JS 筛选）
+    var hasTextMatch = selector.match(/^(.+?):has-text\\(["'](.+?)["']\\)$/);
+    if (hasTextMatch) {{
+        selector = hasTextMatch[1];
+        searchText = hasTextMatch[2];
+    }}
+
+    try {{
+        elements = document.querySelectorAll(selector);
+    }} catch(e) {{
+        return 'selector_error: ' + e.message;
+    }}
+
+    for (var i = 0; i < elements.length; i++) {{
+        var el = elements[i];
+        var elText = (el.innerText || el.textContent || el.value || '').trim();
+        if (elText.indexOf(searchText) !== -1) {{
+            el.scrollIntoView({{block: 'center', behavior: 'instant'}});
+            el.click();
+            return 'clicked: ' + el.tagName + ' text="' + elText.substring(0,50) + '"';
+        }}
+    }}
+
+    // 回退：如果没找到文本匹配，尝试只按 selector 点击第一个
+    if (elements.length > 0) {{
+        elements[0].scrollIntoView({{block: 'center', behavior: 'instant'}});
+        elements[0].click();
+        return 'clicked_fallback: ' + elements[0].tagName + ' (no text match for "' + searchText + '")';
+    }}
+
+    return 'not_found: no element matches "' + selector + '"';
+}})()
+"""
+        else:
+            # 纯选择器匹配，但同样支持 :has-text()
+            js = f"""
+(function() {{
+    var selector = '{js_escaped_selector}';
+
+    var hasTextMatch = selector.match(/^(.+?):has-text\\(["'](.+?)["']\\)$/);
+    if (hasTextMatch) {{
+        selector = hasTextMatch[1];
+        var searchText = hasTextMatch[2];
+        try {{
+            var elements = document.querySelectorAll(selector);
+        }} catch(e) {{
+            return 'selector_error: ' + e.message;
+        }}
+        for (var i = 0; i < elements.length; i++) {{
+            var el = elements[i];
+            var elText = (el.innerText || el.textContent || el.value || '').trim();
+            if (elText.indexOf(searchText) !== -1) {{
+                el.scrollIntoView({{block: 'center', behavior: 'instant'}});
+                el.click();
+                return 'clicked: ' + el.tagName + ' text="' + elText.substring(0,50) + '"';
+            }}
+        }}
+        return 'not_found: no element with text "' + searchText + '" under "' + selector + '"';
+    }}
+
+    try {{
+        var el = document.querySelector(selector);
+    }} catch(e) {{
+        return 'selector_error: ' + e.message;
+    }}
+    if (!el) return 'not_found: "' + selector + '"';
+    el.scrollIntoView({{block: 'center', behavior: 'instant'}});
+    el.click();
+    return 'clicked: ' + el.tagName;
+}})()
+"""
+
+        def _on_click_done(val):
+            result = str(val) if val is not None else "clicked"
+            logger.debug(f"🖱️ [Bridge] 点击结果: {result}")
+            self._pending_js_result = result
+            self._js_done.set()
+        self._web_view.page().runJavaScript(js, _on_click_done)
+        # 超时保护
+        QTimer.singleShot(8000, lambda: self._js_done.is_set() or self._js_done.set())
 
     @property
     def is_available(self) -> bool:

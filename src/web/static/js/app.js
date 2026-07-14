@@ -186,8 +186,13 @@ const App = {
             },
 
             mounted() {
-                // 加载会话列表
-                Actions.fetchSessions();
+                // 加载会话列表，并自动恢复最近会话的对话内容
+                Actions.fetchSessions().then(() => {
+                    if (Store.sessions.length > 0 && !Store.currentSessionId) {
+                        const latest = Store.sessions[0];
+                        Actions.loadSession(latest.session_id);
+                    }
+                });
                 // 定期刷新
                 this._refreshTimer = setInterval(() => {
                     if (Router.current.value === 'dashboard') {

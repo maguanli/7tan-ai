@@ -35,12 +35,13 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
                     resource_type: str = "game") -> str:
     """
     自动发布到7坛后台。
-    使用 BrowserBridge 线程安全操作浏览器，通过 CSS 选择器填写表单。
-    AI 在调用前应先用 browse_page 了解7坛后台的发帖表单结构。
+    智能导航：登录 → 读取页面链接 → 找到「安卓游戏」→ 找到「发布」按钮 → 填写表单 → 提交。
+    使用 BrowserBridge 线程安全操作浏览器。
     """
     import time as _time
+    import json as _json
     from .browser_bridge import get_bridge
-    from .browser_tools import login_7tan, browse_page, click_element
+    from .browser_tools import login_7tan
     from ..config.loader import load_config
 
     config = load_config()
@@ -49,79 +50,212 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
         return "❌ 浏览器未启动，请先打开浏览器页面"
 
     try:
-        # 确保登录
+        admin_url = config.get("site_7tan", {}).get("base_url", "https://img.7tan.cn")
+        steps = []
+        
+        # ===== 步骤 1: 登录 =====
         login_result = login_7tan(
             config.get("site_7tan", {}).get("username", ""),
             config.get("site_7tan", {}).get("password", "")
         )
+        steps.append(f"🔐 登录: {login_result[:80]}")
 
-        # 访问管理后台发布页
-        admin_url = config.get("site_7tan", {}).get("base_url", "https://img.7tan.cn")
+        # ===== 步骤 2: 浏览管理后台首页，读取所有链接 =====
         bridge.navigate(f"{admin_url}/admin", wait_seconds=5.0)
-
-        # 查找并点击"发布"或"新增"按钮
-        publish_btn_selectors = [
-            'a:has-text("发布")', 'a:has-text("新增")', 'a:has-text("添加")',
-            'button:has-text("发布")', 'button:has-text("新增")',
-            '.publish-btn', '#publish-btn',
-        ]
-
-        clicked = False
-        for sel in publish_btn_selectors:
-            try:
-                bridge.click(sel)
-                _time.sleep(3)
-                clicked = True
-                logger.info(f"✅ 点击了发布按钮: {sel}")
+        _time.sleep(2)
+        
+        all_links = bridge.get_page_links(100)  # 读取最多 100 个链接
+        page_text = bridge.get_page_text(8000)   # 读取更多文本
+        page_title = bridge.get_page_title()
+        steps.append(f"📄 进入后台: {page_title} ({len(all_links)}个链接)")
+        
+        # ===== 步骤 3: 在链接和文本中搜索「安卓游戏」入口 =====
+        android_link = None
+        android_keywords = ["安卓游戏", "安卓", "Android", "android", "手游", "发布安卓"]
+        
+        # 3a: 首先在链接文本中搜索
+        for link in all_links:
+            link_text = link.get("text", "")
+            link_href = link.get("href", "")
+            for kw in android_keywords:
+                if kw.lower() in link_text.lower() or kw.lower() in link_href.lower():
+                    android_link = link
+                    break
+            if android_link:
                 break
-            except Exception:
-                continue
-
-        if not clicked:
-            bridge.navigate(f"{admin_url}/admin/post.php?action=new", wait_seconds=5.0)
-
+        
+        # 3b: 如果链接没找到，在页面文本中搜索「安卓游戏」附近的链接
+        if not android_link:
+            for kw in android_keywords:
+                if kw in page_text:
+                    # 找到了文本中有「安卓游戏」，尝试用选择器点击
+                    nav_selectors = [
+                        f'a:has-text("{kw}")',
+                        f'li:has-text("{kw}") a',
+                        f'.sidebar a:has-text("{kw}")',
+                        f'.nav a:has-text("{kw}")',
+                        f'[class*="menu"] a:has-text("{kw}")',
+                        f'[class*="nav"] a:has-text("{kw}")',
+                    ]
+                    for sel in nav_selectors:
+                        result = bridge.click(sel)
+                        if "not_found" not in result and "超时" not in result:
+                            android_link = {"text": kw, "href": sel, "clicked": True}
+                            steps.append(f"🔗 通过文本匹配点击了「{kw}」")
+                            break
+                    if android_link:
+                        break
+        
+        # 3c: 如果还没找到，输出所有链接让 AI 判断
+        if not android_link:
+            links_summary = "\n".join([
+                f"  [{i}] {l.get('text','(空)')[:60]} → {l.get('href','')[:80]}"
+                for i, l in enumerate(all_links[:50])
+            ])
+            steps.append(f"⚠️ 未找到「安卓游戏」入口，页面链接如下:\n{links_summary}")
+            return "❌ 未找到「安卓游戏」入口。" + "\n".join(steps) + \
+                   "\n\n💡 建议：先用 browse_page 仔细查看后台页面结构，告诉我「安卓游戏」的链接文字或 URL。"
+        
+        # ===== 步骤 4: 点击「安卓游戏」进入列表页 =====
+        if not android_link.get("clicked"):
+            href = android_link.get("href", "")
+            text = android_link.get("text", "")
+            steps.append(f"🔗 找到入口: 「{text}」→ {href}")
+            
+            # 如果是相对路径或完整 URL
+            if href.startswith("http"):
+                bridge.navigate(href, wait_seconds=4.0)
+            elif href.startswith("/") or href.startswith("?"):
+                bridge.navigate(f"{admin_url}{href}", wait_seconds=4.0)
+            elif href:
+                bridge.navigate(f"{admin_url}/admin/{href}", wait_seconds=4.0)
+            else:
+                # 用选择器点击
+                click_result = bridge.click(f'a:has-text("{text}")')
+                steps.append(f"   点击结果: {click_result}")
+        
+        _time.sleep(3)
+        
+        # ===== 步骤 5: 在安卓游戏页面找「发布」按钮 =====
+        android_page_text = bridge.get_page_text(5000)
+        android_page_links = bridge.get_page_links(60)
+        android_page_title = bridge.get_page_title()
+        steps.append(f"📱 安卓游戏页面: {android_page_title}")
+        
+        # 搜索「发布」相关按钮
+        publish_keywords = ["发布安卓", "发布游戏", "发布", "新增", "添加游戏", "添加"]
+        clicked_publish = False
+        
+        for kw in publish_keywords:
+            publish_selectors = [
+                f'a:has-text("{kw}")',
+                f'button:has-text("{kw}")',
+                f'span:has-text("{kw}")',
+                f'.btn:has-text("{kw}")',
+                f'[class*="btn"]:has-text("{kw}")',
+            ]
+            for sel in publish_selectors:
+                result = bridge.click(sel)
+                if "not_found" not in result and "超时" not in result:
+                    steps.append(f"✅ 点击发布按钮: {result}")
+                    clicked_publish = True
+                    break
+            if clicked_publish:
+                break
+        
+        # 也尝试在链接列表中找发布入口
+        if not clicked_publish:
+            for link in android_page_links:
+                link_text = link.get("text", "")
+                link_href = link.get("href", "")
+                for kw in publish_keywords:
+                    if kw in link_text:
+                        if link_href.startswith("http"):
+                            bridge.navigate(link_href, wait_seconds=4.0)
+                        else:
+                            bridge.click(f'a:has-text("{link_text}")')
+                        steps.append(f"✅ 通过链接进入发布页: 「{link_text}」")
+                        clicked_publish = True
+                        break
+                if clicked_publish:
+                    break
+        
+        if not clicked_publish:
+            # 最后尝试直接 URL
+            for fallback_path in [
+                f"{admin_url}/admin/post.php?action=new",
+                f"{admin_url}/admin/post.php?action=add",
+                f"{admin_url}/admin/publish.php",
+            ]:
+                bridge.navigate(fallback_path, wait_seconds=4.0)
+                fb_text = bridge.get_page_text(500)
+                if "标题" in fb_text or "title" in fb_text.lower() or "发布" in fb_text:
+                    steps.append(f"🔄 通过 URL 回退进入发布页: {fallback_path}")
+                    clicked_publish = True
+                    break
+        
+        if not clicked_publish:
+            page_links_summary = "\n".join([
+                f"  [{i}] {l.get('text','(空)')[:60]} → {l.get('href','')[:80]}"
+                for i, l in enumerate(android_page_links[:30])
+            ])
+            steps.append(f"⚠️ 在安卓游戏页面未找到发布按钮，当前页面链接:\n{page_links_summary}")
+            return "❌ 未找到发布入口。" + "\n".join(steps) + \
+                   "\n\n💡 建议：先用 browse_page 查看安卓游戏页面内容，确认发布按钮的位置。"
+        
         _time.sleep(2)
 
-        # 填写表单（用 Bridge 执行 JS 填充）
+        # ===== 步骤 6: 填写表单 =====
         _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
                               logo_path, screenshot_paths, resource_type)
+        steps.append("📝 表单已填写")
 
-        # 随机延迟
-        delay = random.uniform(
-            config.get("site_7tan", {}).get("publish_delay_min", 30),
-            config.get("site_7tan", {}).get("publish_delay_max", 120),
-        )
-        logger.info(f"⏳ 随机延迟 {delay:.0f} 秒后提交...")
-        _time.sleep(min(delay, 5))
-
-        # 提交
-        submit_selectors = [
-            'button[type="submit"]', 'button:has-text("提交")',
-            'button:has-text("发布")', 'input[type="submit"]',
-            '.submit-btn', '#submit-btn',
-        ]
-        for sel in submit_selectors:
-            try:
-                bridge.click(sel)
-                _time.sleep(3)
+        # ===== 步骤 7: 提交 =====
+        _time.sleep(1)
+        submit_keywords = ["提交", "发布", "保存", "确认"]
+        submitted = False
+        for kw in submit_keywords:
+            submit_selectors = [
+                f'button[type="submit"]:has-text("{kw}")',
+                f'button:has-text("{kw}")',
+                f'input[type="submit"]:has-text("{kw}")',
+                f'a:has-text("{kw}")',
+                '.submit-btn', '#submit-btn',
+            ]
+            for sel in submit_selectors:
+                result = bridge.click(sel)
+                if "not_found" not in result and "超时" not in result:
+                    steps.append(f"🚀 提交: {result}")
+                    submitted = True
+                    break
+            if submitted:
                 break
-            except Exception:
-                continue
+        
+        if not submitted:
+            # 万能回退：找 form 中任意 submit 按钮
+            for sel in ['button[type="submit"]', 'input[type="submit"]', 'form button:last-child']:
+                result = bridge.click(sel)
+                if "not_found" not in result:
+                    steps.append(f"🚀 回退提交: {result}")
+                    submitted = True
+                    break
 
         _time.sleep(3)
 
-        # 验证结果
+        # ===== 步骤 8: 验证结果 =====
         current_title = bridge.get_page_title()
         page_text = bridge.get_page_text(500)
-        if "成功" in page_text or "success" in current_title.lower():
-            logger.info(f"✅ 发布成功: {title}")
-            return f"✅ 发布成功!\n  标题: {title}"
+        if any(w in page_text for w in ["成功", "发布成功", "操作成功", "success"]):
+            steps.append("✅ 发布成功!")
+            return "✅ 发布成功!\n  标题: " + title + "\n\n" + "\n".join(steps)
         else:
-            return f"⚠️ 发布已提交，请手动验证。标题: {title}"
+            steps.append("⚠️ 发布已提交，请手动验证")
+            return "⚠️ 发布已提交，请手动验证。" + "\n\n" + "\n".join(steps)
 
     except Exception as e:
         logger.error(f"❌ 发布失败: {e}")
-        return f"❌ 发布失败: {e}"
+        import traceback
+        return f"❌ 发布失败: {e}\n{traceback.format_exc()}"
 
 
 def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,

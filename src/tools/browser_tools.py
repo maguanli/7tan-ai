@@ -68,16 +68,16 @@ def browse_page(url: str, wait_seconds: int = 3) -> str:
         bridge = _get_bridge()
         bridge.navigate(url, wait_seconds)
         title = bridge.get_page_title()
-        text = bridge.get_page_text(5000)
-        link_list = bridge.get_page_links(30)
-        image_list = bridge.get_page_images(40)
+        text = bridge.get_page_text(10000)       # 读取更多文本 (之前 5000)
+        link_list = bridge.get_page_links(100)    # 读取更多链接 (之前 30)
+        image_list = bridge.get_page_images(50)
 
-        result = f"📄 页面标题: {title}\n\n📝 页面内容摘要:\n{text[:5000]}\n"
-        result += f"\n🔗 链接 ({len(link_list)}个):\n"
-        for link in link_list[:20]:
+        result = f"📄 页面标题: {title}\n\n📝 页面内容 (前10000字):\n{text[:10000]}\n"
+        result += f"\n🔗 全部链接 ({len(link_list)}个):\n"
+        for link in link_list[:50]:               # 显示前 50 个 (之前 20)
             result += f"  - {link.get('text', '') or '(无文字)'}: {link.get('href', '')}\n"
-        result += f"\n🖼️ 图片 ({len(image_list)}个):\n"
-        for img in image_list[:20]:
+        result += f"\n🖼️ 图片 ({len(image_list)}个, 显示前25):\n"
+        for img in image_list[:25]:               # 显示前 25 个 (之前 20)
             size_info = f" ({img.get('width','?')}x{img.get('height','?')})" if img.get('width') else ""
             alt = img.get('alt', '') or img.get('title', '') or '(无描述)'
             cls_hint = ""

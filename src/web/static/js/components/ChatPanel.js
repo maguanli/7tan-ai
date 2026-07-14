@@ -63,7 +63,7 @@ const ChatPanel = {
 
     <div class="chat-input-row">
         <input class="input-field" v-model="input"
-               @keyup.enter="send" placeholder="输入任务指令..."
+               @keydown.enter.prevent="onEnterKey" placeholder="输入任务指令..."
                :disabled="Store.chatLoading">
         <button class="btn-primary" @click="send"
                 :disabled="Store.chatLoading || !input.trim()">
@@ -93,8 +93,14 @@ const ChatPanel = {
             Actions.addChatMessage({ role: 'user', content: msg });
             input.value = '';
             Store.chatLoading = true;
-            App.wsSend({ type: 'chat', message: msg });
+            App.wsSend({ type: 'chat', message: msg, session_id: Store.currentSessionId });
             Vue.nextTick(() => _scrollBottom());
+        }
+
+        function onEnterKey(e) {
+            // 兼容输入法：如果正在用中文输入法组合文字，不发送
+            if (e.isComposing) return;
+            send();
         }
 
         function quickSend(msg) {
@@ -112,6 +118,6 @@ const ChatPanel = {
             }
         }
 
-        return { Store, Actions, chatBox, input, suggestions, send, quickSend, loadSession };
+        return { Store, Actions, chatBox, input, suggestions, send, onEnterKey, quickSend, loadSession };
     },
 };

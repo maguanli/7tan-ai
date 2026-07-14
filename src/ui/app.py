@@ -877,7 +877,7 @@ class SourcesPage(QWidget):
 
 # ===== 浏览器页面 =====
 class BrowserPage(QWidget):
-    """内置浏览器 — 使用 PyQt6 QWebEngineView 原生渲染网页"""
+    """内置浏览器 — 多标签页，使用 PyQt6 QWebEngineView 原生渲染网页"""
 
     def __init__(self):
         super().__init__()
@@ -892,7 +892,80 @@ class BrowserPage(QWidget):
         title.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {THEME['text_primary']};")
         layout.addWidget(title)
 
-        # URL 输入栏
+        # ===== 标签页栏 =====
+        self._tab_widget = QTabWidget()
+        self._tab_widget.setTabsClosable(True)
+        self._tab_widget.setMovable(True)
+        self._tab_widget.setDocumentMode(True)
+        self._tab_widget.tabCloseRequested.connect(self._close_tab)
+        self._tab_widget.currentChanged.connect(self._on_tab_changed)
+        self._tab_widget.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: 1px solid {THEME['border']};
+                border-radius: 0 0 8px 8px;
+                background: {THEME['bg_card']};
+            }}
+            QTabBar::tab {{
+                background: {THEME['bg_dark']};
+                color: {THEME['text_secondary']};
+                padding: 8px 16px;
+                border: 1px solid {THEME['border']};
+                border-bottom: none;
+                margin-right: 2px;
+                border-radius: 6px 6px 0 0;
+                min-width: 80px;
+                max-width: 180px;
+            }}
+            QTabBar::tab:selected {{
+                background: {THEME['bg_card']};
+                color: {THEME['accent']};
+                font-weight: bold;
+            }}
+            QTabBar::tab:hover {{
+                background: {THEME['hover']};
+                color: {THEME['text_primary']};
+            }}
+            QTabBar::close-button {{
+                image: none;
+                background: transparent;
+            }}
+            QTabBar::close-button:hover {{
+                background: {THEME['danger']}66;
+                border-radius: 4px;
+            }}
+            QTabBar::tab:only-one {{
+                /* 只有一个标签时隐藏关闭按钮 */
+                /* Note: Qt doesn't natively support :only-one; use code logic */
+            }}
+        """)
+
+        # "+" 新标签按钮 — 放在 tab bar 右侧
+        self._new_tab_btn = QPushButton("+")
+        self._new_tab_btn.setFixedSize(28, 28)
+        self._new_tab_btn.setToolTip("新建标签页")
+        self._new_tab_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['bg_input']};
+                color: {THEME['text_secondary']};
+                border: 1px solid {THEME['border']};
+                border-radius: 14px;
+                font-size: 16px;
+                font-weight: bold;
+                padding: 0;
+            }}
+            QPushButton:hover {{
+                background: {THEME['accent']};
+                color: #000;
+            }}
+        """)
+        self._new_tab_btn.clicked.connect(self._add_tab)
+
+        # 把 + 按钮放到 tab bar 的右上角
+        self._tab_widget.setCornerWidget(self._new_tab_btn, Qt.Corner.TopRightCorner)
+
+        layout.addWidget(self._tab_widget)
+
+        # ===== URL 输入栏 =====
         url_layout = QHBoxLayout()
         self._url_input = QLineEdit()
         self._url_input.setPlaceholderText("输入网页地址...")
@@ -904,47 +977,165 @@ class BrowserPage(QWidget):
         url_layout.addWidget(go_btn)
 
         refresh_btn = QPushButton("🔄 刷新")
-        refresh_btn.clicked.connect(lambda: self._web_view.reload())
+        refresh_btn.clicked.connect(self._refresh_current)
         url_layout.addWidget(refresh_btn)
 
         self._back_btn = QPushButton("⬅ 后退")
         self._back_btn.setToolTip("回到上一页")
-        self._back_btn.clicked.connect(lambda: self._web_view.back())
+        self._back_btn.clicked.connect(self._back_current)
         self._back_btn.setEnabled(False)
         url_layout.addWidget(self._back_btn)
 
         self._forward_btn = QPushButton("前进 ➡")
         self._forward_btn.setToolTip("前进到下一页")
-        self._forward_btn.clicked.connect(lambda: self._web_view.forward())
+        self._forward_btn.clicked.connect(self._forward_current)
         self._forward_btn.setEnabled(False)
         url_layout.addWidget(self._forward_btn)
         layout.addLayout(url_layout)
-
-        # Web 引擎视图 — 真正的浏览器内核
-        self._web_view = QWebEngineView()
-        self._web_view.setStyleSheet(f"background-color: white; border-radius: 8px;")
-        # 注册到全局，供 browser_tools 等模块使用
-        import src.tools.browser_tools as bt
-        bt.register_web_view(self._web_view)
-        layout.addWidget(self._web_view, 1)
 
         # 状态栏
         self._status = QLabel("🟢 就绪 — 输入网址按回车")
         self._status.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 11px;")
         layout.addWidget(self._status)
 
-        # 监听 URL 变化更新地址栏
-        self._web_view.urlChanged.connect(lambda u: self._url_input.setText(u.toString()))
-        self._web_view.titleChanged.connect(lambda t: self._status.setText(f"📄 {t}"))
-        self._web_view.loadStarted.connect(lambda: self._status.setText("⏳ 加载中..."))
-        self._web_view.loadFinished.connect(self._on_load_finished)
+        # ===== 内部数据结构 =====
+        # _tabs: [{'view': QWebEngineView, 'title': str, 'url': str}]
+        self._tabs = []
+        self._current_view = None
 
-    def _on_load_finished(self, ok):
-        self._status.setText("✅ 加载完成" if ok else "❌ 加载失败")
-        # 更新前进/后退按钮状态
-        history = self._web_view.history()
+        # 创建第一个标签页
+        self._add_tab(url="about:blank", title="新标签页")
+
+    # ===== 标签页管理 =====
+
+    def _create_web_view(self):
+        """创建一个配置好的 QWebEngineView"""
+        from PyQt6.QtWebEngineWidgets import QWebEngineView
+        view = QWebEngineView()
+        view.setStyleSheet("background-color: white; border-radius: 0;")
+
+        # 连接信号
+        view.urlChanged.connect(lambda u, v=view: self._on_view_url_changed(v, u))
+        view.titleChanged.connect(lambda t, v=view: self._on_view_title_changed(v, t))
+        view.loadStarted.connect(lambda v=view: self._on_view_load_started(v))
+        view.loadFinished.connect(lambda ok, v=view: self._on_view_load_finished(v, ok))
+        return view
+
+    def _add_tab(self, url="about:blank", title="新标签页"):
+        """添加新标签页"""
+        from PyQt6.QtWebEngineWidgets import QWebEngineView
+        view = self._create_web_view()
+
+        idx = self._tab_widget.addTab(view, title)
+        tab_data = {"view": view, "title": title, "url": url}
+        self._tabs.insert(idx, tab_data)
+
+        self._tab_widget.setCurrentIndex(idx)
+        self._update_tab_visibility()
+
+        if url and url != "about:blank":
+            view.load(QUrl(url))
+
+    def _close_tab(self, idx):
+        """关闭标签页"""
+        if len(self._tabs) <= 1:
+            return  # 至少保留一个标签页
+
+        tab = self._tabs[idx]
+        view = tab["view"]
+
+        # 断开信号防止残留
+        try:
+            view.urlChanged.disconnect()
+            view.titleChanged.disconnect()
+            view.loadStarted.disconnect()
+            view.loadFinished.disconnect()
+        except Exception:
+            pass
+
+        # 如果是当前活跃的 view，先取消注册
+        if view is self._current_view:
+            self._current_view = None
+
+        view.deleteLater()
+        self._tab_widget.removeTab(idx)
+        self._tabs.pop(idx)
+        self._update_tab_visibility()
+
+    def _update_tab_visibility(self):
+        """只有一个标签时去掉关闭按钮"""
+        if self._tab_widget.count() <= 1:
+            self._tab_widget.setTabsClosable(False)
+        else:
+            self._tab_widget.setTabsClosable(True)
+
+    # ===== 标签切换 =====
+
+    def _on_tab_changed(self, idx):
+        """切换标签页时更新 URL 栏并注册新 view"""
+        if idx < 0 or idx >= len(self._tabs):
+            return
+
+        tab = self._tabs[idx]
+        view = tab["view"]
+        self._current_view = view
+
+        # 更新 URL 栏
+        current_url = tab.get("url", "")
+        if current_url == "about:blank":
+            current_url = ""
+        self._url_input.setText(current_url)
+
+        # 更新标题
+        title_text = tab.get("title", "新标签页")
+        self._status.setText(f"📄 {title_text}")
+
+        # 更新前进/后退按钮
+        history = view.history()
         self._back_btn.setEnabled(history.canGoBack())
         self._forward_btn.setEnabled(history.canGoForward())
+
+        # 注册到全局，供 browser_tools 使用
+        import src.tools.browser_tools as bt
+        bt.register_web_view(view)
+
+    # ===== View 信号处理 =====
+
+    def _on_view_url_changed(self, view, url):
+        url_str = url.toString()
+        # 更新对应 tab 的 url
+        for tab in self._tabs:
+            if tab["view"] is view:
+                tab["url"] = url_str
+                break
+        # 如果是当前 tab，更新 URL 栏
+        if view is self._current_view:
+            self._url_input.setText(url_str)
+
+    def _on_view_title_changed(self, view, title):
+        # 更新对应 tab 的标题
+        for i, tab in enumerate(self._tabs):
+            if tab["view"] is view:
+                tab["title"] = title
+                short_title = title[:25] + ("…" if len(title) > 25 else "") if title else "新标签页"
+                self._tab_widget.setTabText(i, short_title)
+                break
+        # 如果是当前 tab，更新状态栏
+        if view is self._current_view:
+            self._status.setText(f"📄 {title}")
+
+    def _on_view_load_started(self, view):
+        if view is self._current_view:
+            self._status.setText("⏳ 加载中...")
+
+    def _on_view_load_finished(self, view, ok):
+        if view is self._current_view:
+            self._status.setText("✅ 加载完成" if ok else "❌ 加载失败")
+            history = view.history()
+            self._back_btn.setEnabled(history.canGoBack())
+            self._forward_btn.setEnabled(history.canGoForward())
+
+    # ===== 导航操作 =====
 
     def _browse(self):
         url = self._url_input.text().strip()
@@ -953,7 +1144,20 @@ class BrowserPage(QWidget):
         if not url.startswith("http"):
             url = "https://" + url
             self._url_input.setText(url)
-        self._web_view.load(QUrl(url))
+        if self._current_view:
+            self._current_view.load(QUrl(url))
+
+    def _refresh_current(self):
+        if self._current_view:
+            self._current_view.reload()
+
+    def _back_current(self):
+        if self._current_view:
+            self._current_view.back()
+
+    def _forward_current(self):
+        if self._current_view:
+            self._current_view.forward()
 
 
 # ===== AI 工作台（浏览器 + 对话 左右分屏） =====

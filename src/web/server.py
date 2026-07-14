@@ -4,7 +4,6 @@ Web 服务器 — FastAPI + WebSocket + REST API
 """
 import sys
 import asyncio
-import concurrent.futures
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -149,19 +148,23 @@ async def _handle_ws_message(ws: WebSocket, client_id: str, data: dict):
 
 
 async def _handle_chat(ws: WebSocket, client_id: str, data: dict):
-    """处理 AI 对话"""
+    """处理 AI 对话 — 复用已有 session 或创建新的"""
     message = data.get("message", "")
     model = data.get("model")
+    session_id = data.get("session_id")  # 前端可能传入已有 session_id
 
     from ..agent.conversation import create_session, save_message
-    session_id = create_session()
+
+    # 如果没有传入 session_id 则创建新会话
+    if not session_id:
+        session_id = create_session()
 
     # 保存用户消息到数据库
     save_message(session_id, "user", message)
 
     await ws.send_json({"type": "chat_start", "session_id": session_id})
 
-    # 后台线程运行 Agent
+    # 使用模块级线程池（避免局部 executor 被 GC）
     loop = asyncio.get_event_loop()
 
     def run_and_report():
@@ -194,8 +197,9 @@ async def _handle_chat(ws: WebSocket, client_id: str, data: dict):
                 loop,
             )
 
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    executor.submit(run_and_report)
+    # 使用模块级线程池（与 api_chat.py 共享）
+    from .routes.api_chat import _chat_executor
+    _chat_executor.submit(run_and_report)
 
 
 async def _handle_get_chat_history(ws: WebSocket, data: dict):

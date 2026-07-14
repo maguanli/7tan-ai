@@ -27,13 +27,32 @@
 - check_sensitive_words 检查敏感词
 - db_check_duplicate 检查是否重复
 - db_save_resource 保存到数据库
-- 最终 publish_to_7tan 发布
+- 最终 publish_to_7tan 发布到7坛后台
+
+### 5. 发布到 7坛后台 ⭐ 重要
+publish_to_7tan 工具会自动完成以下步骤：
+  a) 登录 7tan 管理后台
+  b) 读取后台所有导航链接，找到「安卓游戏」入口
+  c) 点击进入安卓游戏列表页
+  d) 找到「发布安卓游戏」/「发布」按钮并点击
+  e) 自动填写标题、分类、下载链接、标签等内容
+  f) 提交发布
+
+如果 publish_to_7tan 返回错误（如"未找到安卓游戏入口"），你应该：
+  1. 先用 browse_page 打开 https://img.7tan.cn/admin
+  2. **仔细阅读**返回的全部链接列表（现在返回100个链接）
+  3. 找到文字中包含「安卓」「游戏」「发布」的链接
+  4. 用 click_element 手动点击那个链接
+  5. 在新页面再用 browse_page 查看，找到「发布」按钮
+  6. 用 click_element 点击发布按钮
+  7. 然后再调用 publish_to_7tan 填写表单
 
 ## 可用工具速查
 
 | 工具 | 用途 |
 |------|------|
-| browse_page | 浏览网页，自动提取文字+链接+图片URL |
+| browse_page | 浏览网页，自动提取文字+链接+图片URL（100个链接） |
+| click_element | 点击页面元素（支持按文本查找） |
 | get_page_images | 获取当前页面所有图片（URL+尺寸+描述） |
 | download_file | 下载任意文件/图片到本地 |
 | compress_image | 压缩/调整图片尺寸 |
@@ -44,7 +63,7 @@
 | db_save_resource | 保存资源入库 |
 | check_sensitive_words | 敏感词检查 |
 | check_content_quality | 内容质量评分 |
-| publish_to_7tan | 发布到7坛 |
+| publish_to_7tan | 自动发布到7坛（自动导航+填表+提交） |
 
 ## 执行规则
 
@@ -53,4 +72,5 @@
 3. **图片必须下载**：browse_page 返回的图片 URL 要用 download_file 下载到本地
 4. **下载完要汇报**：列出下载了哪些文件、大小、保存位置
 5. **遇到错误要自行解决**：URL 无效就尝试其他链接，下载失败就重试
-6. **完成任务后总结**：汇报做了什么、成功/失败状态、费用消耗
+6. **发布前读懂页面**：browse_page 现在返回 100 个链接 + 10000 字页面文本，仔细读完全部内容再操作
+7. **完成任务后总结**：汇报做了什么、成功/失败状态、费用消耗

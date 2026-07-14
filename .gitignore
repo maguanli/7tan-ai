@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# 大型二进制文件（发布时手动包含）
+tools/python-*.exe
+
+# 运行时数据（排除 prompts — 那是代码的一部分）
+data/screenshots/
+data/web_cache/
+data/sandbox/
+data/costs.json
+data/games.db
+downloads/
+logs/
+*.db
+*.sqlite3
+
+# 环境变量（包含敏感信息）
+.env
+!.env.example
+
+# 敏感配置
+config/config.yaml
+
+# 备份文件
+backup/
+*.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

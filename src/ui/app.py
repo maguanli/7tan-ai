@@ -294,8 +294,22 @@ class Sidebar(QFrame):
 
         for key, icon, label in nav_items:
             btn = QPushButton(f"  {icon}  {label}")
-            btn.setProperty("flat", "true")
             btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    color: {THEME['text_secondary']};
+                    padding: 10px 16px;
+                    border-radius: 6px;
+                    text-align: left;
+                    font-weight: normal;
+                    border: none;
+                }}
+                QPushButton:hover {{
+                    background-color: {THEME['hover']};
+                    color: {THEME['text_primary']};
+                }}
+            """)
             btn.clicked.connect(lambda checked, k=key: self._on_click(k))
             self._buttons[key] = btn
             layout.addWidget(btn)
@@ -313,10 +327,37 @@ class Sidebar(QFrame):
         self.page_changed.emit(key)
 
     def set_active(self, key):
+        btn_active_style = f"""
+            QPushButton {{
+                background-color: {THEME['accent']};
+                color: #000;
+                font-weight: bold;
+                padding: 10px 16px;
+                border-radius: 6px;
+                text-align: left;
+                border: none;
+            }}
+        """
+        btn_inactive_style = f"""
+            QPushButton {{
+                background: transparent;
+                color: {THEME['text_secondary']};
+                padding: 10px 16px;
+                border-radius: 6px;
+                text-align: left;
+                font-weight: normal;
+                border: none;
+            }}
+            QPushButton:hover {{
+                background-color: {THEME['hover']};
+                color: {THEME['text_primary']};
+            }}
+        """
         for k, btn in self._buttons.items():
-            btn.setProperty("active", "true" if k == key else "false")
-            btn.style().unpolish(btn)
-            btn.style().polish(btn)
+            if k == key:
+                btn.setStyleSheet(btn_active_style)
+            else:
+                btn.setStyleSheet(btn_inactive_style)
         self._active_key = key
 
 

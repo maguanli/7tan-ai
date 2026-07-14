@@ -40,3 +40,5 @@ backup/
 # OS
 .DS_Store
 Thumbs.db
+data/*.db-shm
+data/*.db-wal

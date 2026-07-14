@@ -1515,23 +1515,28 @@ class BrowserPage(QWidget):
             url = "https://" + url
             self._url_input.setText(url)
 
-        # 如果没有当前 view，尝试从第一个标签获取或创建新标签
-        if self._current_view is None:
-            if self._tabs:
-                self._current_view = self._tabs[0]["view"]
-                self._tab_widget.setCurrentIndex(0)
-            else:
-                self._add_tab(url=url, title="新标签页")
-                return
+        # 确保有可用的 view
+        if self._current_view is None or not self._tabs:
+            self._add_tab(url=url, title=url[:30])
+            return
 
-        # 更新当前标签的 url 追踪
+        # 验证 _current_view 仍然有效
+        view_valid = False
         for tab in self._tabs:
             if tab["view"] is self._current_view:
                 tab["url"] = url
+                view_valid = True
                 break
 
-        self._status.setText(f"⏳ 正在加载 {url}…")
-        self._current_view.load(QUrl(url))
+        if not view_valid:
+            self._add_tab(url=url, title=url[:30])
+            return
+
+        try:
+            self._status.setText(f"⏳ 正在加载 {url[:60]}…")
+            self._current_view.load(QUrl(url))
+        except Exception as e:
+            self._status.setText(f"❌ 加载失败: {e}")
 
     def _refresh_current(self):
         if self._current_view:

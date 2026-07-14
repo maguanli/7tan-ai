@@ -1149,11 +1149,11 @@ class BrowserPage(QWidget):
         """)
         url_layout.addWidget(detach_btn)
 
-        # 新窗口按钮
-        new_win_btn = QPushButton("新窗口")
-        new_win_btn.setToolTip("打开新浏览器窗口 (Ctrl+N)")
+        # 新标签页按钮
+        new_win_btn = QPushButton("新标签")
+        new_win_btn.setToolTip("新建标签页 (Ctrl+T)")
         new_win_btn.setFixedWidth(60)
-        new_win_btn.clicked.connect(self._open_new_window)
+        new_win_btn.clicked.connect(lambda: self._add_tab())
         new_win_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {THEME['accent2']};
@@ -1238,7 +1238,7 @@ class BrowserPage(QWidget):
         layout.addWidget(self._tab_widget, 1)
 
         # 状态栏
-        self._status = QLabel("🟢 就绪 | Ctrl+T 新标签 | Ctrl+W 关标签 | Ctrl+N 新窗口 | 输入网址按回车打开")
+        self._status = QLabel("🟢 就绪 | Ctrl+T 新标签 | Ctrl+W 关标签 | Ctrl+L 地址栏 | 输入网址按回车打开")
         self._status.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 11px;")
         layout.addWidget(self._status)
 
@@ -1257,13 +1257,13 @@ class BrowserPage(QWidget):
         new_tab_sc.activated.connect(lambda: self._add_tab())
         new_tab_sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
 
+        new_tab_n = QShortcut(QKeySequence("Ctrl+N"), self)
+        new_tab_n.activated.connect(lambda: self._add_tab())
+        new_tab_n.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+
         close_tab_sc = QShortcut(QKeySequence("Ctrl+W"), self)
         close_tab_sc.activated.connect(self._close_current_tab)
         close_tab_sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-
-        new_win_sc = QShortcut(QKeySequence("Ctrl+N"), self)
-        new_win_sc.activated.connect(self._open_new_window)
-        new_win_sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
 
         focus_url_sc = QShortcut(QKeySequence("Ctrl+L"), self)
         focus_url_sc.activated.connect(lambda: self._url_input.setFocus())
@@ -1276,17 +1276,6 @@ class BrowserPage(QWidget):
         idx = self._tab_widget.currentIndex()
         if idx >= 0 and len(self._tabs) > 1:
             self._close_tab(idx)
-
-    # ===== 新窗口 =====
-
-    def _open_new_window(self):
-        """打开一个新的独立浏览器窗口 (Ctrl+N)"""
-        win = DetachedBrowserWindow(url="about:blank", title="新窗口")
-        # 保存引用防止 GC
-        if not hasattr(self, '_detached_windows'):
-            self._detached_windows = []
-        self._detached_windows.append(win)
-        win.show()
 
     # ===== 标签页管理 =====
 

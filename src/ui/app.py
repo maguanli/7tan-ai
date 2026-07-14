@@ -486,6 +486,26 @@ class ChatPage(QWidget):
         new_btn.setFixedWidth(100)
         new_btn.clicked.connect(self._new_session)
         toolbar.addWidget(new_btn)
+
+        history_btn = QPushButton("📋 历史对话")
+        history_btn.setFixedWidth(110)
+        history_btn.setToolTip("查看和管理历史对话记录")
+        history_btn.clicked.connect(self._show_history)
+        history_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['bg_input']};
+                color: {THEME['text_secondary']};
+                border: 1px solid {THEME['border']};
+                border-radius: 6px;
+                padding: 6px 12px;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{
+                background: {THEME['accent']};
+                color: #000;
+            }}
+        """)
+        toolbar.addWidget(history_btn)
         toolbar.addStretch()
         layout.addLayout(toolbar)
 
@@ -545,12 +565,115 @@ class ChatPage(QWidget):
 
     def _new_session(self):
         self._current_session_id = None
-        # 清空消息
+        self._session_combo.setCurrentIndex(0)
         while self._messages_layout.count() > 1:
             item = self._messages_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         self._add_message("system", "新对话已开始，输入指令开始操作吧 👋")
+
+    def _show_history(self):
+        """显示历史对话列表弹窗"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("📋 历史对话")
+        dialog.resize(500, 420)
+        dialog.setStyleSheet(f"""
+            QDialog {{ background: {THEME['bg_dark']}; color: {THEME['text_primary']}; }}
+            QListWidget {{ background: {THEME['bg_card']}; color: {THEME['text_primary']}; 
+                border: 1px solid {THEME['border']}; border-radius: 8px; font-size: 13px; padding: 4px; }}
+            QListWidget::item {{ padding: 10px 14px; border-bottom: 1px solid {THEME['border']}; }}
+            QListWidget::item:hover {{ background: {THEME['hover']}; }}
+            QListWidget::item:selected {{ background: {THEME['accent']}; color: #000; }}
+            QPushButton {{ border-radius: 6px; padding: 8px 16px; font-size: 13px; }}
+        """)
+
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(12)
+
+        title = QLabel("最近对话记录 — 点击可继续对话")
+        title.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
+        layout.addWidget(title)
+
+        # 加载图标
+        loading_label = QLabel("⏳ 加载中...")
+        loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        loading_label.setStyleSheet(f"color: {THEME['text_muted']}; padding: 40px;")
+        layout.addWidget(loading_label)
+
+        list_widget = QListWidget()
+        list_widget.hide()
+        layout.addWidget(list_widget)
+
+        # 按钮行
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(dialog.close)
+        close_btn.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['bg_input']}; color: {THEME['text_secondary']}; border: 1px solid {THEME['border']}; }}
+            QPushButton:hover {{ background: {THEME['hover']}; color: {THEME['text_primary']}; }}
+        """)
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+
+        # 异步加载
+        def on_load(data):
+            loading_label.hide()
+            list_widget.show()
+            sessions = data.get("sessions", [])
+            if not sessions:
+                list_widget.addItem("暂无历史对话记录")
+                return
+            for s in sessions:
+                item_text = f"{s.get('title', '对话')[:40]}\n  {s.get('updated_at', '')}"
+                item = QListWidgetItem(item_text)
+                item.setData(Qt.ItemDataRole.UserRole, s.get("session_id", ""))
+                list_widget.addItem(item)
+
+        def on_error(e):
+            loading_label.setText(f"❌ 加载失败: {e}")
+
+        worker = ApiWorker("GET", f"{API_BASE}/api/chat/history")
+        worker.finished.connect(on_load)
+        worker.error.connect(on_error)
+        worker.start()
+        self._keep_worker(worker)
+
+        # 点击加载对话
+        list_widget.itemDoubleClicked.connect(lambda item: self._load_session(item, dialog))
+
+        dialog.exec()
+
+    def _load_session(self, item, dialog):
+        """加载选中的历史对话"""
+        session_id = item.data(Qt.ItemDataRole.UserRole)
+        if not session_id:
+            return
+        dialog.close()
+
+        # 加载消息
+        worker = ApiWorker("GET", f"{API_BASE}/api/chat/history?session_id={session_id}")
+        worker.finished.connect(lambda data: self._on_history_loaded(session_id, data))
+        worker.error.connect(lambda e: self._add_message("error", f"❌ 加载对话失败: {e}"))
+        worker.start()
+        self._keep_worker(worker)
+
+    def _on_history_loaded(self, session_id, data):
+        """加载历史消息到聊天区"""
+        messages = data.get("messages", [])
+        self._current_session_id = session_id
+        # 清空
+        while self._messages_layout.count() > 1:
+            item = self._messages_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        # 恢复消息
+        for msg in messages:
+            role = msg.get("role", "system")
+            content = msg.get("content", "")
+            self._add_message(role, content)
+        self._session_combo.setItemText(0, f"对话 {session_id[:6]}...")
+        self._add_message("system", f"📋 已加载历史对话 (会话: {session_id[:8]})")
 
     def _keep_worker(self, worker):
         """保持 worker 引用防止 GC — 完成后自动清理"""

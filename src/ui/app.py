@@ -1023,7 +1023,7 @@ class SourcesPage(QWidget):
 class DetachedBrowserWindow(QMainWindow):
     """弹出式独立浏览器窗口"""
 
-    def __init__(self, url: str = "about:blank", title: str = "独立窗口"):
+    def __init__(self, url: str = "about:blank", title: str = "独立窗口", view=None):
         super().__init__()
         self.setWindowTitle(f"🌐 {title}")
         self.resize(1024, 700)
@@ -1031,20 +1031,22 @@ class DetachedBrowserWindow(QMainWindow):
 
         from PyQt6.QtWebEngineWidgets import QWebEngineView
 
-        self._view = QWebEngineView()
-        self._view.setStyleSheet("background-color: white;")
+        if view is not None:
+            self._view = view
+            # view 已有页面内容，仅连接信号，不重新加载
+        else:
+            self._view = QWebEngineView()
+            self._view.setStyleSheet("background-color: white;")
+            import src.tools.browser_tools as bt
+            bt.register_web_view(self._view)
+            if url and url != "about:blank":
+                self._view.load(QUrl(url))
+            else:
+                self._view.setHtml("<h2 style='color:#aaa;text-align:center;margin-top:100px'>🌐 新窗口 — 输入网址开始浏览</h2>")
+
         self._view.urlChanged.connect(lambda u: self.setWindowTitle(f"🌐 {u.toString()[:60]}"))
         self._view.titleChanged.connect(lambda t: self.setWindowTitle(f"🌐 {t}"))
         self.setCentralWidget(self._view)
-
-        # 注册到 browser_tools
-        import src.tools.browser_tools as bt
-        bt.register_web_view(self._view)
-
-        if url and url != "about:blank":
-            self._view.load(QUrl(url))
-        else:
-            self._view.setHtml("<h2 style='color:#aaa;text-align:center;margin-top:100px'>🌐 新窗口 — 输入网址开始浏览</h2>")
 
     @property
     def view(self):
@@ -1399,16 +1401,9 @@ class BrowserPage(QWidget):
             else:
                 self._current_view = None
 
-        # 创建独立窗口
-        win = DetachedBrowserWindow(url=url, title=title)
-        old_view = win.centralWidget()
-        win.takeCentralWidget()
-        if old_view:
-            old_view.deleteLater()
-        win.setCentralWidget(view)
+        # 创建独立窗口（传入已有 view，不复用新建逻辑）
+        win = DetachedBrowserWindow(url=url, title=title, view=view)
         win.setWindowTitle(f"🌐 {title}")
-        if url and url != "about:blank":
-            view.load(QUrl(url))
         win.show()
 
         # 跟踪窗口防止 GC

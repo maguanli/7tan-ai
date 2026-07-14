@@ -1,13 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
 # ============================================================
-# 7tan-updater PyInstaller Spec (Build #11 - 精简版)
+# 7tan-updater PyInstaller Spec (Build #12 - 精简版)
 # 策略：排除未用模块 + 构建后脚本清理多余 DLL
+# 构建命令（必须带 distpath/workpath 否则跑到 C 盘）：
+#   python -m PyInstaller 7tan-updater.spec --noconfirm --distpath dist --workpath build
 # ============================================================
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 datas = [
-    ('src/web/static', 'src/web/static'),
-    ('src/web/templates', 'src/web/templates'),
     ('data/prompts', 'data/prompts'),
 ]
 binaries = []
@@ -25,7 +25,7 @@ for mod in ['PyQt6.QtWidgets', 'PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtCharts',
 hiddenimports += collect_submodules('loguru')
 datas += collect_data_files('loguru')
 hiddenimports += collect_submodules('encodings')
-hiddenimports += ['uvicorn', 'fastapi', 'apscheduler', 'yaml', 'dotenv', 'requests']
+hiddenimports += ['uvicorn', 'fastapi', 'apscheduler', 'yaml', 'dotenv', 'requests', 'openai']
 
 # ---- 排除未用的 PyQt6 模块 (Python imports) ----
 excluded_modules = [

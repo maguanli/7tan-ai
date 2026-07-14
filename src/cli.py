@@ -1,7 +1,6 @@
 """
 CLI 参数解析模块 — 统一命令行入口
-支持: --web / --cli / --daemon / --headless / --port / --no-browser
-详见架构文档 §21.10
+支持: --desktop / --cli / --daemon / --headless / --port
 """
 import argparse
 import sys
@@ -11,14 +10,13 @@ from dataclasses import dataclass, field
 @dataclass
 class CliArgs:
     """命令行参数数据类"""
-    command: str = "web"            # web / cli / run / setup / integrity / scheduler
+    command: str = "desktop"         # desktop / cli / run / setup / integrity / scheduler
     task: list = field(default_factory=list)
     model: str = None
     port: int = 9800
     daemon: bool = False            # 守护进程模式
-    headless: bool = False          # 无头浏览器模式
-    no_browser: bool = False        # 不自动打开浏览器
-    host: str = "0.0.0.0"          # Web 服务绑定地址
+    headless: bool = False          # 无头模式
+    host: str = "0.0.0.0"          # API 服务绑定地址
     config: str = None              # 自定义配置文件路径
     log_level: str = "INFO"         # 日志级别
 
@@ -28,12 +26,11 @@ def parse_args(args: list = None) -> CliArgs:
     解析命令行参数
 
     用法:
-        7tan-updater.exe                              # 默认 Web UI
-        7tan-updater.exe --web                        # 启动 Web UI
+        7tan-updater.exe                              # 默认桌面应用
+        7tan-updater.exe --desktop                    # 启动桌面应用
         7tan-updater.exe --cli                        # 命令行对话
         7tan-updater.exe --daemon --headless          # 服务器后台
-        7tan-updater.exe --web --port 8080            # 自定义端口
-        7tan-updater.exe --web --no-browser           # 不打开浏览器
+        7tan-updater.exe --desktop --port 8080        # 自定义端口
         7tan-updater.exe --run "爬取3DM游戏"           # 单次任务
         7tan-updater.exe --setup                      # 配置向导
         7tan-updater.exe --integrity                  # 完整性校验
@@ -44,23 +41,23 @@ def parse_args(args: list = None) -> CliArgs:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  7tan-updater.exe                                # Web UI 模式 (默认)
-  7tan-updater.exe --web                          # Web UI 模式
+  7tan-updater.exe                                # 桌面应用 (默认)
+  7tan-updater.exe --desktop                      # 桌面应用模式
   7tan-updater.exe --cli                          # 命令行对话
   7tan-updater.exe --run "爬取3DM最新游戏"         # 执行单次任务
   7tan-updater.exe --setup                        # 重新初始化配置
   7tan-updater.exe --integrity                    # 生成/校验完整性
   7tan-updater.exe --scheduler                    # 仅运行调度器
-  7tan-updater.exe --web --daemon --headless      # 服务器后台模式
-  7tan-updater.exe --web --port 8080 --no-browser # 自定义端口
+  7tan-updater.exe --desktop --daemon --headless  # 服务器后台模式
+  7tan-updater.exe --desktop --port 8080          # 自定义端口
         """,
     )
 
     # 运行模式 (互斥组)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
-        "--web", action="store_const", const="web", dest="command",
-        help="启动 Web UI 管理模式 (默认)",
+        "--desktop", action="store_const", const="desktop", dest="command",
+        help="启动桌面应用 (默认)",
     )
     mode.add_argument(
         "--cli", action="store_const", const="cli", dest="command",
@@ -94,13 +91,13 @@ def parse_args(args: list = None) -> CliArgs:
         "--port", "-p",
         type=int,
         default=9800,
-        help="Web 服务器端口 (默认: 9800)",
+        help="API 服务器端口 (默认: 9800)",
     )
     parser.add_argument(
         "--host",
         type=str,
         default="0.0.0.0",
-        help="Web 服务器绑定地址 (默认: 0.0.0.0)",
+        help="API 服务器绑定地址 (默认: 0.0.0.0)",
     )
     parser.add_argument(
         "--daemon", "-d",
@@ -112,13 +109,7 @@ def parse_args(args: list = None) -> CliArgs:
         "--headless",
         action="store_true",
         default=False,
-        help="无头浏览器模式（服务器环境使用）",
-    )
-    parser.add_argument(
-        "--no-browser",
-        action="store_true",
-        default=False,
-        help="启动 Web 服务但不自动打开浏览器",
+        help="无头模式（服务器环境使用）",
     )
     parser.add_argument(
         "--config", "-c",
@@ -156,7 +147,6 @@ def parse_args(args: list = None) -> CliArgs:
         model=parsed.model,
         daemon=parsed.daemon,
         headless=parsed.headless,
-        no_browser=parsed.no_browser,
         config=parsed.config,
         log_level=parsed.log_level,
     )
@@ -169,14 +159,16 @@ def parse_args(args: list = None) -> CliArgs:
     elif parsed.command:
         cli.command = parsed.command
     elif parsed.legacy_command and parsed.legacy_command in (
-        "cli", "web", "run", "setup", "integrity", "scheduler"
+        "cli", "desktop", "web", "run", "setup", "integrity", "scheduler"
     ):
-        # 兼容旧式: python main.py web
+        # 兼容旧式: python main.py desktop / web
         cli.command = parsed.legacy_command
+        if cli.command == "web":
+            cli.command = "desktop"  # "web" 重定向到 "desktop"
         if parsed.legacy_command == "run":
             cli.task = list(parsed.legacy_task)
     else:
-        cli.command = "web"  # 默认 Web UI
+        cli.command = "desktop"  # 默认桌面应用
 
     # headless 强依赖 daemon
     if cli.headless and not cli.daemon:

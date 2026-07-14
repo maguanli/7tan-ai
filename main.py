@@ -4,8 +4,7 @@
 绿色免安装 AI 编辑器，自动抓取→改写→发布游戏/软件资源
 
 用法:
-    python main.py                  # 交互式 CLI
-    python main.py web              # 启动 Web 界面
+    python main.py                  # 启动桌面应用
     python main.py run "任务描述"    # 执行单次任务
     python main.py setup            # 重新运行初始化向导
 """
@@ -59,7 +58,7 @@ def main():
     # 确保已初始化（GUI 模式下静默生成默认配置，不弹 CLI 引导）
     from src.config.loader import ensure_initialized
     mode = args.command
-    ensure_initialized(interactive=(mode not in ("web", "scheduler")))
+    ensure_initialized(interactive=(mode not in ("desktop", "scheduler")))
 
     # 初始化数据库
     from src.database.db import init_db
@@ -67,8 +66,8 @@ def main():
 
     # 路由到对应模式
     mode = args.command
-    if mode == "web":
-        run_web(args)
+    if mode == "desktop":
+        run_desktop(args)
     elif mode == "run":
         run_task(args)
     elif mode == "setup":
@@ -81,8 +80,8 @@ def main():
         run_cli(args)
 
 
-def run_web(args):
-    """启动原生桌面应用 — PyQt6 全原生控件，GUI 先行，后端异步初始化"""
+def run_desktop(args):
+    """启动原生桌面应用 — PyQt6 全原生控件，后端异步初始化"""
     import threading
     from src.scheduler.scheduler import start_scheduler
     from src.config.loader import load_config

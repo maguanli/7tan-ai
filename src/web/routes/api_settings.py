@@ -30,6 +30,13 @@ async def get_settings():
     # 脱敏 AI 配置中的 api_key
     ai = config.get("ai", {})
     if "configs" in ai:
+        # 检查 active 是否指向有效配置，不匹配时自动修复
+        active = ai.get("active", "")
+        if active not in ai["configs"] or not ai["configs"].get(active):
+            # 回退到第一个可用配置
+            available = [k for k, v in ai["configs"].items() if v and isinstance(v, dict)]
+            if available and active not in ai["configs"]:
+                ai["active"] = available[0]
         for key, cfg in ai["configs"].items():
             if "api_key" in cfg and cfg["api_key"] and len(str(cfg["api_key"])) > 6:
                 cfg["api_key"] = _mask_secret(str(cfg["api_key"]))
@@ -68,6 +75,18 @@ async def update_settings(updates: dict):
                     base[key] = value
 
         deep_merge(config, updates)
+        logger.info(f"⚙️ 配置合并完成，准备保存 (keys: {list(updates.keys())})")
+
+        # 自动修复：如果 active 指向的配置不存在，回退到第一个可用配置
+        ai_cfg = config.get("ai", {})
+        if "configs" in ai_cfg and "active" in ai_cfg:
+            active = ai_cfg["active"]
+            if active not in ai_cfg["configs"] or not ai_cfg["configs"].get(active):
+                available = [k for k, v in ai_cfg["configs"].items() if v and isinstance(v, dict)]
+                if available:
+                    ai_cfg["active"] = available[0]
+                    logger.info(f"🔧 自动修正 ai.active: '{active}' → '{available[0]}'")
+
         save_config(config)
 
         # 清除模型缓存，下次请求使用新配置

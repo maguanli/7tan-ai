@@ -1,0 +1,23 @@
+﻿[32m2026-07-14 17:03:04[0m | [1mINFO    [0m | [36msrc.database.db[0m:[36minit_db[0m:[36m312[0m | [1m鉁?鏁版嵁搴撳垵濮嬪寲瀹屾垚[0m
+[32m2026-07-14 17:03:05[0m | [1mINFO    [0m | [36msrc.scheduler.scheduler[0m:[36m_add_cron_jobs[0m:[36m87[0m | [1m馃搮 瀹氭椂浠诲姟: 姣忔棩鏃╅棿鏇存柊 (0 8 * * *) -> 姣忔棩鏃╅棿鏇存柊[0m
+[32m2026-07-14 17:03:05[0m | [1mINFO    [0m | [36msrc.scheduler.scheduler[0m:[36m_add_cron_jobs[0m:[36m87[0m | [1m馃搮 瀹氭椂浠诲姟: 姣忔棩鍗堥棿鏇存柊 (0 12 * * *) -> 姣忔棩鍗堥棿鏇存柊[0m
+[32m2026-07-14 17:03:05[0m | [1mINFO    [0m | [36msrc.scheduler.scheduler[0m:[36m_add_cron_jobs[0m:[36m87[0m | [1m馃搮 瀹氭椂浠诲姟: 姣忔棩鏅氶棿鏇存柊 (0 18 * * *) -> 姣忔棩鏅氶棿鏇存柊[0m
+[32m2026-07-14 17:03:05[0m | [1mINFO    [0m | [36msrc.scheduler.scheduler[0m:[36mstart_scheduler[0m:[36m52[0m | [1m鈴?璋冨害鍣ㄥ凡鍚姩[0m
+[32m2026-07-14 17:03:05[0m | [1mINFO    [0m | [36m__main__[0m:[36mrun_desktop[0m:[36m105[0m | [1m鈴?绛夊緟鍚庣鏈嶅姟灏辩华...[0m
+[32m2026-07-14 17:03:06[0m | [1mINFO    [0m | [36msrc.web.server[0m:[36mstart_server[0m:[36m291[0m | [1m馃寪 鍚姩 API 鏈嶅姟鍣? http://127.0.0.1:9800[0m
+[32m2026-07-14 17:03:06[0m | [1mINFO    [0m | [36msrc.web.server[0m:[36mstartup[0m:[36m67[0m | [1m馃寪 API 鏈嶅姟鍣ㄥ惎鍔ㄤ簬 http://localhost:9800[0m
+[32m2026-07-14 17:03:06[0m | [1mINFO    [0m | [36m__main__[0m:[36mrun_desktop[0m:[36m110[0m | [1m鉁?鍚庣鏈嶅姟宸插氨缁?[0m
+[32m2026-07-14 17:03:06[0m | [1mINFO    [0m | [36m__main__[0m:[36mrun_desktop[0m:[36m119[0m | [1m馃殌 姝ｅ湪鍚姩 PyQt6 妗岄潰搴旂敤...[0m
+[32m2026-07-14 17:03:06[0m | [1mINFO    [0m | [36msrc.ui.app[0m:[36mlaunch_app[0m:[36m2017[0m | [1m馃摝 鍒涘缓 QApplication...[0m
+[32m2026-07-14 17:03:06[0m | [1mINFO    [0m | [36msrc.ui.app[0m:[36mlaunch_app[0m:[36m2025[0m | [1m馃彈锔?鍒涘缓涓荤獥鍙?..[0m
+[32m2026-07-14 17:03:06[0m | [1mINFO    [0m | [36msrc.tools.browser_bridge[0m:[36mregister_bridge[0m:[36m342[0m | [1m鉁?BrowserBridge 宸叉敞鍐?[0m
+[32m2026-07-14 17:03:06[0m | [1mINFO    [0m | [36msrc.tools.browser_tools[0m:[36mregister_web_view[0m:[36m25[0m | [1m鉁?QWebEngineView 宸叉敞鍐屽埌 browser_tools + BrowserBridge[0m
+[32m2026-07-14 17:03:06[0m | [1mINFO    [0m | [36msrc.ui.app[0m:[36mlaunch_app[0m:[36m2028[0m | [1m馃枼锔?鍘熺敓 PyQt6 妗岄潰搴旂敤宸插惎鍔?[0m
+.venv\Scripts\python.exe : QThread: Destroyed while thread '' is still running
+所在位置 行:1 字符: 56
++ ... UNBUFFERED=1; .venv\Scripts\python.exe main.py --desktop 2>&1 | Out-F ...
++                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (QThread: Destro...s still running 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

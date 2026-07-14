@@ -1,14 +1,13 @@
 """
-Web 服务器 — FastAPI + WebSocket + REST API
-详见架构文档 §21
+后端 API 服务器 — FastAPI + WebSocket + REST API
+纯 API 模式，桌面版使用 PyQt6 原生控件
 """
 import sys
 import asyncio
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from loguru import logger
 
 
@@ -17,14 +16,6 @@ def _get_project_root():
     if getattr(sys, 'frozen', False):
         return Path(sys.executable).parent
     return Path(__file__).parent.parent.parent
-
-
-def _get_static_dir():
-    """获取静态文件目录"""
-    if getattr(sys, 'frozen', False):
-        # PyInstaller: sys._MEIPASS 中是只读的 bundled data
-        return Path(sys._MEIPASS) / "src" / "web" / "static"
-    return Path(__file__).parent / "static"
 
 
 PROJECT_ROOT = _get_project_root()
@@ -52,24 +43,12 @@ app.include_router(stats_router)
 app.include_router(settings_router)
 app.include_router(chat_router)
 
-# ===== 挂载静态文件 =====
-static_dir = _get_static_dir()
-if static_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
-
-# ===== 根路由 — 返回前端页面 =====
-
-TEMPLATE_DIR = _get_static_dir().parent / "templates"
-
+# ===== 根路由 =====
 
 @app.get("/")
 async def root():
-    """返回前端首页"""
-    index_file = TEMPLATE_DIR / "index.html"
-    if index_file.exists():
-        return HTMLResponse(content=index_file.read_text(encoding="utf-8"))
-    return HTMLResponse(content="<h1>7坛AI小编</h1><p>前端文件未找到</p>", status_code=404)
+    """根路由 — API 信息"""
+    return JSONResponse({"app": "7坛AI小编", "version": app.version, "mode": "desktop"})
 
 
 @app.get("/api/health")
@@ -85,12 +64,12 @@ async def startup():
     # 确保 CDN 离线缓存目录存在（§21.2）
     cache_dir = PROJECT_ROOT / "data" / "web_cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    logger.info("🌐 Web 服务器启动于 http://localhost:9800")
+    logger.info("🌐 API 服务器启动于 http://localhost:9800")
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    logger.info("🌐 Web 服务器关闭")
+    logger.info("🌐 API 服务器关闭")
 
 
 # ===== WebSocket =====
@@ -306,17 +285,8 @@ async def jobs():
     return {"jobs": get_jobs_status()}
 
 
-@app.get("/")
-async def index():
-    """返回前端页面"""
-    html_path = Path(__file__).parent / "templates" / "index.html"
-    if html_path.exists():
-        return HTMLResponse(html_path.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>7坛AI小编</h1><p>前端页面未找到</p>")
-
-
 def start_server(host: str = "0.0.0.0", port: int = 9800):
-    """启动 Web 服务器"""
+    """启动 API 服务器"""
     import uvicorn
-    logger.info(f"🌐 启动 Web 服务器: http://{host}:{port}")
+    logger.info(f"🌐 启动 API 服务器: http://{host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="warning")

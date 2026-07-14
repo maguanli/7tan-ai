@@ -62,7 +62,15 @@ class ModelManager:
             # 兼容新格式（ai.configs）和旧格式（直接 ai.xxx）
             if "configs" in ai_cfg:
                 active_key = ai_cfg.get("active", "deepseek")
-                active_cfg = ai_cfg["configs"].get(active_key, {})
+                active_cfg = ai_cfg["configs"].get(active_key)
+                # 如果 active 指向的配置不存在，回退到第一个可用配置
+                if not active_cfg:
+                    available = [k for k, v in ai_cfg["configs"].items() if v and isinstance(v, dict)]
+                    if available:
+                        active_key = available[0]
+                        active_cfg = ai_cfg["configs"][active_key]
+                    else:
+                        active_cfg = {}
             else:
                 active_cfg = ai_cfg
             self.context_window = active_cfg.get("context_window", ai_cfg.get("context_window", 128000))
@@ -95,7 +103,16 @@ class ModelManager:
         # 兼容新格式（ai.configs.active_key）和旧格式（ai.provider）
         if "configs" in ai_cfg:
             active_key = ai_cfg.get("active", "deepseek")
-            active_cfg = ai_cfg["configs"].get(active_key, {})
+            active_cfg = ai_cfg["configs"].get(active_key)
+            # 如果 active 指向的配置不存在，回退到第一个可用配置
+            if not active_cfg:
+                available = [k for k, v in ai_cfg["configs"].items() if v and isinstance(v, dict)]
+                if available:
+                    active_key = available[0]
+                    active_cfg = ai_cfg["configs"][active_key]
+                    logger.warning(f"配置 ai.active='{ai_cfg.get('active')}' 无效，已回退到 '{active_key}'")
+                else:
+                    active_cfg = {}
             provider = active_cfg.get("provider", "deepseek") if active_cfg else "deepseek"
             api_key = active_cfg.get("api_key", "") if active_cfg else ""
             base_url = (active_cfg.get("base_url", "") or "").strip() if active_cfg else ""

@@ -4,6 +4,7 @@
 """
 import base64
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -17,10 +18,22 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+# ===== 持久化数据目录 =====
+
+def _get_data_dir() -> Path:
+    """获取持久化数据目录（兼容源码运行和 PyInstaller 打包）"""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller 打包：EXE 同目录下的 data 文件夹
+        return Path(sys.executable).parent / "data"
+    else:
+        # 源码运行：项目根目录下的 data 文件夹
+        return Path(__file__).parent.parent.parent / "data"
+
+
 # ===== 密码加密工具 =====
 
-_KEY_FILE = Path("data/.encryption_key")
-_SALT_FILE = Path("data/.encryption_salt")
+_KEY_FILE = _get_data_dir() / ".encryption_key"
+_SALT_FILE = _get_data_dir() / ".encryption_salt"
 _fernet: Fernet = None
 
 
@@ -275,7 +288,7 @@ def get_engine(db_path: str = None):
     global _engine
     if _engine is None:
         if db_path is None:
-            db_path = Path(__file__).parent.parent.parent / "data" / "games.db"
+            db_path = _get_data_dir() / "games.db"
         db_path = Path(db_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
 

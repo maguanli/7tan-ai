@@ -405,6 +405,23 @@ class DashboardPage(QWidget):
         self._lbl_uptime.setText(str(sys_info.get('uptime', '—')))
 
 
+# ===== Enter 发送输入框 =====
+class _EnterToSendEdit(QPlainTextEdit):
+    send_triggered = pyqtSignal()
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            modifiers = event.modifiers()
+            if (modifiers & (Qt.KeyboardModifier.ShiftModifier | Qt.KeyboardModifier.ControlModifier)):
+                # Shift/Ctrl+Enter = 换行
+                super().keyPressEvent(event)
+            else:
+                self.send_triggered.emit()
+        else:
+            super().keyPressEvent(event)
+
+
 # ===== AI 对话页面 =====
 class ChatPage(QWidget):
     def __init__(self):
@@ -452,10 +469,11 @@ class ChatPage(QWidget):
 
         # 输入区
         input_layout = QHBoxLayout()
-        self._input = QPlainTextEdit()
-        self._input.setPlaceholderText("输入消息... (Ctrl+Enter 发送)")
+        self._input = _EnterToSendEdit()
+        self._input.setPlaceholderText("输入消息... (Enter 发送, Shift+Enter 换行)")
         self._input.setMaximumHeight(100)
         self._input.setMinimumHeight(48)
+        self._input.send_triggered.connect(self._send_message)
         input_layout.addWidget(self._input, 1)
 
         send_btn = QPushButton("发送 ▶")
@@ -477,6 +495,8 @@ class ChatPage(QWidget):
         layout.addLayout(hints_layout)
 
         self._current_session_id = None
+        self._sessions_loaded = False
+        self._session_combo.currentIndexChanged.connect(self._on_session_changed)
 
     def _use_hint(self, text):
         self._input.setPlainText(text)
@@ -490,6 +510,14 @@ class ChatPage(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         self._add_message("system", "新对话已开始，输入指令开始操作吧 👋")
+
+    def _keep_worker(self, worker):
+        """保持 worker 引用防止 GC — 完成后自动清理"""
+        if not hasattr(self, '_workers'):
+            self._workers = []
+        self._workers.append(worker)
+        worker.finished.connect(lambda d, w=worker: self._workers.remove(w) if w in self._workers else None)
+        worker.error.connect(lambda e, w=worker: self._workers.remove(w) if w in self._workers else None)
 
     def _send_message(self):
         text = self._input.toPlainText().strip()
@@ -507,6 +535,7 @@ class ChatPage(QWidget):
         self._worker.finished.connect(self._on_response)
         self._worker.error.connect(lambda e: self._add_message("error", f"❌ 请求失败: {e}"))
         self._worker.start()
+        self._keep_worker(self._worker)
 
         self._add_message("system", "⏳ AI 正在处理...")
 
@@ -588,6 +617,62 @@ class ChatPage(QWidget):
         QTimer.singleShot(50, lambda: self._chat_area.verticalScrollBar().setValue(
             self._chat_area.verticalScrollBar().maximum()
         ))
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._sessions_loaded:
+            self._sessions_loaded = True
+            self._load_sessions()
+
+    def _load_sessions(self):
+        self._worker = ApiWorker("GET", f"{API_BASE}/api/chat/history")
+        self._worker.finished.connect(self._on_sessions_loaded)
+        self._worker.error.connect(lambda e: logger.error(f"加载会话列表失败: {e}"))
+        self._worker.start()
+        self._keep_worker(self._worker)
+
+    def _on_sessions_loaded(self, data):
+        sessions = data.get("sessions", [])
+        self._session_combo.blockSignals(True)
+        self._session_combo.clear()
+        self._session_combo.addItem("新建对话")
+        for s in sessions:
+            sid = s.get("id", "")
+            title = s.get("title", sid)[:40] or sid[:20]
+            self._session_combo.addItem(f"  {title}", sid)
+        self._session_combo.blockSignals(False)
+
+    def _on_session_changed(self, index):
+        if index <= 0:
+            return
+        session_id = self._session_combo.itemData(index)
+        if session_id:
+            self._load_history(session_id)
+
+    def _load_history(self, session_id):
+        self._current_session_id = session_id
+        while self._messages_layout.count() > 1:
+            item = self._messages_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._add_message("system", "⏳ 加载对话历史...")
+        self._worker = ApiWorker("GET", f"{API_BASE}/api/chat/history?session_id={session_id}")
+        self._worker.finished.connect(self._on_history_loaded)
+        self._worker.start()
+        self._keep_worker(self._worker)
+
+    def _on_history_loaded(self, data):
+        if self._messages_layout.count() > 1:
+            item = self._messages_layout.itemAt(self._messages_layout.count() - 2)
+            if item.widget():
+                w = item.widget()
+                if hasattr(w, 'property') and w.property("role") == "system":
+                    w.deleteLater()
+        messages = data.get("messages", [])
+        for msg in messages:
+            role = msg.get("role", "assistant")
+            content = msg.get("content", "")
+            self._add_message(role, content)
 
 
 # ===== 资源管理页面（表格） =====
@@ -875,6 +960,39 @@ class SourcesPage(QWidget):
             self._worker2.start()
 
 
+
+# ===== 独立浏览器窗口 =====
+class DetachedBrowserWindow(QMainWindow):
+    """弹出式独立浏览器窗口"""
+
+    def __init__(self, url: str = "about:blank", title: str = "独立窗口"):
+        super().__init__()
+        self.setWindowTitle(f"🌐 {title}")
+        self.resize(1024, 700)
+        self.setMinimumSize(400, 300)
+
+        from PyQt6.QtWebEngineWidgets import QWebEngineView
+
+        self._view = QWebEngineView()
+        self._view.setStyleSheet("background-color: white;")
+        self._view.urlChanged.connect(lambda u: self.setWindowTitle(f"🌐 {u.toString()[:60]}"))
+        self._view.titleChanged.connect(lambda t: self.setWindowTitle(f"🌐 {t}"))
+        self.setCentralWidget(self._view)
+
+        # 注册到 browser_tools
+        import src.tools.browser_tools as bt
+        bt.register_web_view(self._view)
+
+        if url and url != "about:blank":
+            self._view.load(QUrl(url))
+        else:
+            self._view.setHtml("<h2 style='color:#aaa;text-align:center;margin-top:100px'>🌐 输入网址开始浏览</h2>")
+
+    @property
+    def view(self):
+        return self._view
+
+
 # ===== 浏览器页面 =====
 class BrowserPage(QWidget):
     """内置浏览器 — 多标签页，使用 PyQt6 QWebEngineView 原生渲染网页"""
@@ -891,6 +1009,88 @@ class BrowserPage(QWidget):
         title = QLabel("🌐 浏览器")
         title.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {THEME['text_primary']};")
         layout.addWidget(title)
+
+        # ===== URL 输入栏（在标签页上方，标准浏览器布局）=====
+        url_layout = QHBoxLayout()
+        url_layout.setSpacing(6)
+
+        self._back_btn = QPushButton("⬅")
+        self._back_btn.setToolTip("后退")
+        self._back_btn.setFixedWidth(36)
+        self._back_btn.clicked.connect(self._back_current)
+        self._back_btn.setEnabled(False)
+        self._back_btn.setStyleSheet(f"QPushButton {{ font-size:14px; padding:4px; }}")
+        url_layout.addWidget(self._back_btn)
+
+        self._forward_btn = QPushButton("➡")
+        self._forward_btn.setToolTip("前进")
+        self._forward_btn.setFixedWidth(36)
+        self._forward_btn.clicked.connect(self._forward_current)
+        self._forward_btn.setEnabled(False)
+        self._forward_btn.setStyleSheet(f"QPushButton {{ font-size:14px; padding:4px; }}")
+        url_layout.addWidget(self._forward_btn)
+
+        refresh_btn = QPushButton("🔄")
+        refresh_btn.setToolTip("刷新")
+        refresh_btn.setFixedWidth(36)
+        refresh_btn.clicked.connect(self._refresh_current)
+        refresh_btn.setStyleSheet(f"QPushButton {{ font-size:14px; padding:4px; }}")
+        url_layout.addWidget(refresh_btn)
+
+        self._url_input = QLineEdit()
+        self._url_input.setPlaceholderText("输入网址，按回车打开…")
+        self._url_input.returnPressed.connect(self._browse)
+        self._url_input.setStyleSheet(f"""
+            QLineEdit {{
+                background: {THEME['bg_input']};
+                color: {THEME['text_primary']};
+                border: 1px solid {THEME['accent']};
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-size: 13px;
+            }}
+            QLineEdit:focus {{
+                border-color: {THEME['accent']};
+            }}
+        """)
+        url_layout.addWidget(self._url_input, 1)
+
+        go_btn = QPushButton("前往")
+        go_btn.clicked.connect(self._browse)
+        go_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['accent']};
+                color: #000;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-weight: bold;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{ background: {THEME['accent']}dd; }}
+        """)
+        url_layout.addWidget(go_btn)
+
+        # 🔲 独立窗口按钮
+        detach_btn = QPushButton("🔲")
+        detach_btn.setToolTip("将当前标签页弹出为独立窗口")
+        detach_btn.setFixedWidth(36)
+        detach_btn.clicked.connect(self._detach_current_tab)
+        detach_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['bg_input']};
+                color: {THEME['text_secondary']};
+                border: 1px solid {THEME['border']};
+                border-radius: 6px;
+                font-size: 14px;
+                padding: 4px;
+            }}
+            QPushButton:hover {{
+                background: {THEME['accent']};
+                color: #000;
+            }}
+        """)
+        url_layout.addWidget(detach_btn)
+        layout.addLayout(url_layout)
 
         # ===== 标签页栏 =====
         self._tab_widget = QTabWidget()
@@ -933,10 +1133,6 @@ class BrowserPage(QWidget):
                 background: {THEME['danger']}66;
                 border-radius: 4px;
             }}
-            QTabBar::tab:only-one {{
-                /* 只有一个标签时隐藏关闭按钮 */
-                /* Note: Qt doesn't natively support :only-one; use code logic */
-            }}
         """)
 
         # "+" 新标签按钮 — 放在 tab bar 右侧
@@ -959,42 +1155,12 @@ class BrowserPage(QWidget):
             }}
         """)
         self._new_tab_btn.clicked.connect(self._add_tab)
-
-        # 把 + 按钮放到 tab bar 的右上角
         self._tab_widget.setCornerWidget(self._new_tab_btn, Qt.Corner.TopRightCorner)
 
-        layout.addWidget(self._tab_widget)
-
-        # ===== URL 输入栏 =====
-        url_layout = QHBoxLayout()
-        self._url_input = QLineEdit()
-        self._url_input.setPlaceholderText("输入网页地址...")
-        self._url_input.returnPressed.connect(self._browse)
-        url_layout.addWidget(self._url_input, 1)
-
-        go_btn = QPushButton("🔍 打开")
-        go_btn.clicked.connect(self._browse)
-        url_layout.addWidget(go_btn)
-
-        refresh_btn = QPushButton("🔄 刷新")
-        refresh_btn.clicked.connect(self._refresh_current)
-        url_layout.addWidget(refresh_btn)
-
-        self._back_btn = QPushButton("⬅ 后退")
-        self._back_btn.setToolTip("回到上一页")
-        self._back_btn.clicked.connect(self._back_current)
-        self._back_btn.setEnabled(False)
-        url_layout.addWidget(self._back_btn)
-
-        self._forward_btn = QPushButton("前进 ➡")
-        self._forward_btn.setToolTip("前进到下一页")
-        self._forward_btn.clicked.connect(self._forward_current)
-        self._forward_btn.setEnabled(False)
-        url_layout.addWidget(self._forward_btn)
-        layout.addLayout(url_layout)
+        layout.addWidget(self._tab_widget, 1)
 
         # 状态栏
-        self._status = QLabel("🟢 就绪 — 输入网址按回车")
+        self._status = QLabel("🟢 就绪 — 输入网址按回车打开")
         self._status.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 11px;")
         layout.addWidget(self._status)
 
@@ -1023,7 +1189,6 @@ class BrowserPage(QWidget):
 
     def _add_tab(self, url="about:blank", title="新标签页"):
         """添加新标签页"""
-        from PyQt6.QtWebEngineWidgets import QWebEngineView
         view = self._create_web_view()
 
         idx = self._tab_widget.addTab(view, title)
@@ -1032,6 +1197,19 @@ class BrowserPage(QWidget):
 
         self._tab_widget.setCurrentIndex(idx)
         self._update_tab_visibility()
+
+        # 立即设为当前 view（不等 currentChanged 信号，避免初始化时未触发）
+        self._current_view = view
+        if url == "about:blank":
+            self._url_input.setText("")
+        else:
+            self._url_input.setText(url)
+        self._back_btn.setEnabled(False)
+        self._forward_btn.setEnabled(False)
+
+        # 注册到 browser_tools
+        import src.tools.browser_tools as bt
+        bt.register_web_view(view)
 
         if url and url != "about:blank":
             view.load(QUrl(url))
@@ -1068,6 +1246,60 @@ class BrowserPage(QWidget):
             self._tab_widget.setTabsClosable(False)
         else:
             self._tab_widget.setTabsClosable(True)
+
+    def _detach_current_tab(self):
+        """将当前标签页弹出为独立窗口"""
+        if not self._tabs or self._tab_widget.count() <= 1:
+            return  # 至少保留一个标签页
+
+        idx = self._tab_widget.currentIndex()
+        if idx < 0:
+            return
+
+        tab = self._tabs[idx]
+        view = tab["view"]
+        url = tab.get("url", "about:blank")
+        title = tab.get("title", "独立窗口")
+
+        # 断开主窗口的信号
+        try:
+            view.urlChanged.disconnect()
+            view.titleChanged.disconnect()
+            view.loadStarted.disconnect()
+            view.loadFinished.disconnect()
+        except Exception:
+            pass
+
+        # 从标签栏移除
+        self._tab_widget.removeTab(idx)
+        self._tabs.pop(idx)
+        self._update_tab_visibility()
+
+        # 如果当前 view 就是被移除的，切换 current
+        if view is self._current_view:
+            new_idx = self._tab_widget.currentIndex()
+            if new_idx >= 0 and new_idx < len(self._tabs):
+                self._current_view = self._tabs[new_idx]["view"]
+                self._on_tab_changed(new_idx)
+            else:
+                self._current_view = None
+
+        # 创建独立窗口
+        win = DetachedBrowserWindow(url=url, title=title)
+        old_view = win.centralWidget()
+        win.takeCentralWidget()
+        if old_view:
+            old_view.deleteLater()
+        win.setCentralWidget(view)
+        win.setWindowTitle(f"🌐 {title}")
+        if url and url != "about:blank":
+            view.load(QUrl(url))
+        win.show()
+
+        # 跟踪窗口防止 GC
+        if not hasattr(self, '_detached_windows'):
+            self._detached_windows = []
+        self._detached_windows.append(win)
 
     # ===== 标签切换 =====
 
@@ -1138,14 +1370,32 @@ class BrowserPage(QWidget):
     # ===== 导航操作 =====
 
     def _browse(self):
+        """导航到 URL 栏中输入的网址"""
         url = self._url_input.text().strip()
         if not url:
             return
-        if not url.startswith("http"):
+        # 自动补全协议头
+        if not url.startswith("http://") and not url.startswith("https://"):
             url = "https://" + url
             self._url_input.setText(url)
-        if self._current_view:
-            self._current_view.load(QUrl(url))
+
+        # 如果没有当前 view，尝试从第一个标签获取或创建新标签
+        if self._current_view is None:
+            if self._tabs:
+                self._current_view = self._tabs[0]["view"]
+                self._tab_widget.setCurrentIndex(0)
+            else:
+                self._add_tab(url=url, title="新标签页")
+                return
+
+        # 更新当前标签的 url 追踪
+        for tab in self._tabs:
+            if tab["view"] is self._current_view:
+                tab["url"] = url
+                break
+
+        self._status.setText(f"⏳ 正在加载 {url}…")
+        self._current_view.load(QUrl(url))
 
     def _refresh_current(self):
         if self._current_view:
@@ -1268,6 +1518,7 @@ class AnalyticsPage(QWidget):
 class SettingsPage(QWidget):
     def __init__(self):
         super().__init__()
+        self._loaded = False
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
@@ -1330,6 +1581,20 @@ class SettingsPage(QWidget):
         self._ai_configs = {}
         self._active_config = ""
         self._suppress_change = False
+
+    def _keep_worker(self, worker):
+        """保持 worker 引用防止 GC — 完成后自动清理"""
+        if not hasattr(self, '_workers'):
+            self._workers = []
+        self._workers.append(worker)
+        worker.finished.connect(lambda d, w=worker: self._workers.remove(w) if w in self._workers else None)
+        worker.error.connect(lambda e, w=worker: self._workers.remove(w) if w in self._workers else None)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._loaded:
+            self._loaded = True
+            self._load_settings()
 
     # =================== AI 模型 Tab ===================
     def _build_ai_tab(self):
@@ -1604,9 +1869,6 @@ class SettingsPage(QWidget):
         layout.addWidget(save_btn)
 
     # =================== 事件处理 ===================
-    def showEvent(self, event):
-        super().showEvent(event)
-        self._load_settings()
 
     def _on_provider_changed(self, provider):
         default_url = self._provider_urls.get(provider, "")
@@ -1807,14 +2069,15 @@ class SettingsPage(QWidget):
 
     def _post_json(self, method, path, payload, ok_msg=None, err_msg=None):
         """通用保存方法"""
-        self._worker2 = ApiWorker(method, f"{API_BASE}{path}", payload)
+        worker = ApiWorker(method, f"{API_BASE}{path}", payload)
         if ok_msg:
-            self._worker2.finished.connect(lambda d: QMessageBox.information(self, "成功", ok_msg))
+            worker.finished.connect(lambda d, m=ok_msg: QMessageBox.information(self, "成功", m))
         if err_msg:
-            self._worker2.error.connect(lambda e: QMessageBox.warning(self, "错误", f"{err_msg}: {e}"))
+            worker.error.connect(lambda e, m=err_msg: QMessageBox.warning(self, "错误", f"{m}: {e}"))
         else:
-            self._worker2.error.connect(lambda e: QMessageBox.warning(self, "错误", f"保存失败: {e}"))
-        self._worker2.start()
+            worker.error.connect(lambda e: QMessageBox.warning(self, "错误", f"保存失败: {e}"))
+        worker.start()
+        self._keep_worker(worker)
 
 
 # ===== 主窗口 =====

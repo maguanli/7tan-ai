@@ -1214,27 +1214,6 @@ class BrowserPage(QWidget):
             }}
         """)
 
-        # "+" 新标签按钮 — 放在 tab bar 右侧
-        self._new_tab_btn = QPushButton("＋")
-        self._new_tab_btn.setFixedSize(32, 32)
-        self._new_tab_btn.setToolTip("新建标签页 (Ctrl+T)")
-        self._new_tab_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {THEME['accent']};
-                color: #000;
-                border: none;
-                border-radius: 16px;
-                font-size: 18px;
-                font-weight: bold;
-                padding: 0;
-            }}
-            QPushButton:hover {{
-                background: {THEME['accent']}dd;
-            }}
-        """)
-        self._new_tab_btn.clicked.connect(self._add_tab)
-        self._tab_widget.setCornerWidget(self._new_tab_btn, Qt.Corner.TopRightCorner)
-
         layout.addWidget(self._tab_widget, 1)
 
         # 状态栏

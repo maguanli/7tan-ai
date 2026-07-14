@@ -1367,49 +1367,32 @@ class BrowserPage(QWidget):
     def _detach_current_tab(self):
         """将当前标签页弹出为独立窗口"""
         if not self._tabs or self._tab_widget.count() <= 1:
-            return  # 至少保留一个标签页
+            return
 
         idx = self._tab_widget.currentIndex()
         if idx < 0:
             return
 
         tab = self._tabs[idx]
-        view = tab["view"]
         url = tab.get("url", "about:blank")
         title = tab.get("title", "独立窗口")
 
-        # 断开主窗口的信号
-        try:
-            view.urlChanged.disconnect()
-            view.titleChanged.disconnect()
-            view.loadStarted.disconnect()
-            view.loadFinished.disconnect()
-        except Exception:
-            pass
-
-        # 从标签栏移除
-        self._tab_widget.removeTab(idx)
-        self._tabs.pop(idx)
-        self._update_tab_visibility()
-
-        # 如果当前 view 就是被移除的，切换 current
-        if view is self._current_view:
-            new_idx = self._tab_widget.currentIndex()
-            if new_idx >= 0 and new_idx < len(self._tabs):
-                self._current_view = self._tabs[new_idx]["view"]
-                self._on_tab_changed(new_idx)
+        # 先关闭标签页
+        if len(self._tabs) > 1:
+            # 切换到其他标签
+            if idx > 0:
+                self._tab_widget.setCurrentIndex(idx - 1)
             else:
-                self._current_view = None
+                self._tab_widget.setCurrentIndex(1)
+            self._close_tab(idx)
 
-        # 创建独立窗口（传入已有 view，不复用新建逻辑）
-        win = DetachedBrowserWindow(url=url, title=title, view=view)
-        win.setWindowTitle(f"🌐 {title}")
-        win.show()
-
-        # 跟踪窗口防止 GC
+        # 创建新窗口（会自己创建 QWebEngineView）
+        win = DetachedBrowserWindow(url=url, title=title)
+        # 保存引用防 GC
         if not hasattr(self, '_detached_windows'):
             self._detached_windows = []
         self._detached_windows.append(win)
+        win.show()
 
     # ===== 标签切换 =====
 

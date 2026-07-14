@@ -733,63 +733,6 @@ class ChatPage(QWidget):
             self._chat_area.verticalScrollBar().maximum()
         ))
 
-    def showEvent(self, event):
-        super().showEvent(event)
-        if not self._sessions_loaded:
-            self._sessions_loaded = True
-            self._load_sessions()
-
-    def _load_sessions(self):
-        self._worker = ApiWorker("GET", f"{API_BASE}/api/chat/history")
-        self._worker.finished.connect(self._on_sessions_loaded)
-        self._worker.error.connect(lambda e: logger.error(f"加载会话列表失败: {e}"))
-        self._worker.start()
-        self._keep_worker(self._worker)
-
-    def _on_sessions_loaded(self, data):
-        sessions = data.get("sessions", [])
-        self._session_combo.blockSignals(True)
-        self._session_combo.clear()
-        self._session_combo.addItem("新建对话")
-        for s in sessions:
-            sid = s.get("id", "")
-            title = s.get("title", sid)[:40] or sid[:20]
-            self._session_combo.addItem(f"  {title}", sid)
-        self._session_combo.blockSignals(False)
-
-    def _on_session_changed(self, index):
-        if index <= 0:
-            return
-        session_id = self._session_combo.itemData(index)
-        if session_id:
-            self._load_history(session_id)
-
-    def _load_history(self, session_id):
-        self._current_session_id = session_id
-        while self._messages_layout.count() > 1:
-            item = self._messages_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        self._add_message("system", "⏳ 加载对话历史...")
-        self._worker = ApiWorker("GET", f"{API_BASE}/api/chat/history?session_id={session_id}")
-        self._worker.finished.connect(self._on_history_loaded)
-        self._worker.start()
-        self._keep_worker(self._worker)
-
-    def _on_history_loaded(self, data):
-        if self._messages_layout.count() > 1:
-            item = self._messages_layout.itemAt(self._messages_layout.count() - 2)
-            if item.widget():
-                w = item.widget()
-                if hasattr(w, 'property') and w.property("role") == "system":
-                    w.deleteLater()
-        messages = data.get("messages", [])
-        for msg in messages:
-            role = msg.get("role", "assistant")
-            content = msg.get("content", "")
-            self._add_message(role, content)
-
-
 # ===== 资源管理页面（表格） =====
 class ResourceTablePage(QWidget):
     def __init__(self):

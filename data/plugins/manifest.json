@@ -1,0 +1,69 @@
+[
+  {
+    "id": "web_search",
+    "name": "联网搜索",
+    "version": "1.0.0",
+    "author": "7tan",
+    "type": "builtin",
+    "category": "搜索",
+    "description": "让 AI 能够搜索互联网获取最新资讯、游戏攻略、补丁信息",
+    "tools": ["web_search", "fetch_news"],
+    "icon": "🔍"
+  },
+  {
+    "id": "deep_analysis",
+    "name": "深度分析",
+    "version": "1.0.0",
+    "author": "7tan",
+    "type": "builtin",
+    "category": "分析",
+    "description": "对游戏进行深度分析：评价、优缺点、用户反馈汇总、竞品对比",
+    "tools": ["analyze_game", "compare_games", "summarize_reviews"],
+    "icon": "📊"
+  },
+  {
+    "id": "auto_images",
+    "name": "自动配图",
+    "version": "1.0.0",
+    "author": "7tan",
+    "type": "builtin",
+    "category": "媒体",
+    "description": "发布时自动从页面截取高清截图、提取 LOGO 并压缩优化",
+    "tools": ["auto_screenshot", "extract_logo"],
+    "icon": "🖼️"
+  },
+  {
+    "id": "video_download",
+    "name": "视频下载",
+    "version": "1.0.0",
+    "author": "7tan",
+    "type": "remote",
+    "category": "媒体",
+    "description": "下载 YouTube/B站/抖音 游戏宣传视频，自动提取封面",
+    "tools": ["download_video", "extract_thumbnail"],
+    "source_url": "",
+    "icon": "🎬"
+  },
+  {
+    "id": "smart_translate",
+    "name": "智能翻译",
+    "version": "1.0.0",
+    "author": "7tan",
+    "type": "builtin",
+    "category": "语言",
+    "description": "自动翻译英文游戏介绍、Steam商店页面描述为中文",
+    "tools": ["translate_text"],
+    "icon": "🌐"
+  },
+  {
+    "id": "price_monitor",
+    "name": "价格监控",
+    "version": "1.0.0",
+    "author": "7tan",
+    "type": "builtin",
+    "category": "监控",
+    "description": "监控 Steam/Epic/TapTap 等平台游戏价格变动和打折信息",
+    "tools": ["check_price", "price_alert"],
+    "icon": "💰"
+  }
+]

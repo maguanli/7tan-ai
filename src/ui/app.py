@@ -1772,17 +1772,20 @@ class SettingsPage(QWidget):
             }}
         """)
 
-        # 三个 Tab
+        # 四个 Tab
         self._ai_tab = QWidget()
         self._site_tab = QWidget()
         self._oss_tab = QWidget()
+        self._plugin_tab = QWidget()
         self._build_ai_tab()
         self._build_site_tab()
         self._build_oss_tab()
+        self._build_plugin_tab()
 
         self._tabs.addTab(self._ai_tab, "🤖 AI 模型")
         self._tabs.addTab(self._site_tab, "🌐 站点设置")
         self._tabs.addTab(self._oss_tab, "☁️ OSS 存储")
+        self._tabs.addTab(self._plugin_tab, "🧩 插件市场")
         layout.addWidget(self._tabs)
 
         # 内部状态
@@ -2390,6 +2393,146 @@ class SettingsPage(QWidget):
         if self._oss_secret.text() and self._oss_secret.text() != "••••••••":
             payload["oss"]["secret_key"] = self._oss_secret.text()
         self._post_json("PUT", "/api/settings", payload, ok_msg="OSS 设置已保存！")
+
+    # =================== 插件市场 Tab ===================
+    def _build_plugin_tab(self):
+        layout = QVBoxLayout(self._plugin_tab)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+
+        subtitle = QLabel("选择安装需要的功能插件，安装后 AI 将获得新能力。已安装的插件在启动时自动加载。")
+        subtitle.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
+        subtitle.setWordWrap(True)
+        layout.addWidget(subtitle)
+
+        # 刷新按钮
+        refresh_btn = QPushButton("🔄 刷新插件列表")
+        refresh_btn.setFixedHeight(32)
+        refresh_btn.clicked.connect(self._refresh_plugins)
+        refresh_btn.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['accent']}; color: #000; border: none;
+                border-radius: 6px; font-size: 13px; font-weight: bold; padding: 6px 14px; }}
+            QPushButton:hover {{ background: {THEME['accent']}dd; }}
+        """)
+        layout.addWidget(refresh_btn)
+
+        # 插件列表
+        self._plugin_list = QListWidget()
+        self._plugin_list.setMinimumHeight(300)
+        self._plugin_list.setStyleSheet(f"""
+            QListWidget {{ background: {THEME['bg_card']}; color: {THEME['text_primary']};
+                border: 1px solid {THEME['border']}; border-radius: 8px; font-size: 13px; }}
+            QListWidget::item {{ padding: 12px 16px; border-bottom: 1px solid {THEME['border']}; }}
+            QListWidget::item:hover {{ background: {THEME['hover']}; }}
+            QListWidget::item:selected {{ background: {THEME['accent']}33; }}
+        """)
+        layout.addWidget(self._plugin_list, 1)
+
+        # 按钮行
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+
+        self._install_btn = QPushButton("📥 安装选中插件")
+        self._install_btn.setFixedHeight(36)
+        self._install_btn.clicked.connect(self._install_plugin)
+        self._install_btn.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['success']}; color: #fff; border: none;
+                border-radius: 8px; font-size: 14px; font-weight: bold; padding: 8px 20px; }}
+            QPushButton:hover {{ background: #059669; }}
+        """)
+        btn_row.addWidget(self._install_btn)
+
+        self._uninstall_btn = QPushButton("🗑️ 卸载选中插件")
+        self._uninstall_btn.setFixedHeight(36)
+        self._uninstall_btn.clicked.connect(self._uninstall_plugin)
+        self._uninstall_btn.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['danger']}; color: #fff; border: none;
+                border-radius: 8px; font-size: 14px; font-weight: bold; padding: 8px 20px; }}
+            QPushButton:hover {{ background: #dc2626; }}
+        """)
+        btn_row.addWidget(self._uninstall_btn)
+
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        # 状态
+        self._plugin_status = QLabel("")
+        self._plugin_status.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
+        layout.addWidget(self._plugin_status)
+
+        # 初始加载
+        self._refresh_plugins()
+
+    def _refresh_plugins(self):
+        """刷新插件列表"""
+        from src.plugins import get_manager
+        mgr = get_manager()
+        manifest = mgr.get_manifest()
+        installed = mgr.get_installed()
+
+        self._plugin_list.clear()
+        for p in manifest:
+            pid = p.get("id", "")
+            name = p.get("name", pid)
+            icon = p.get("icon", "📦")
+            desc = p.get("description", "")
+            ver = p.get("version", "")
+            author = p.get("author", "")
+            tools = p.get("tools", [])
+            is_installed = pid in installed
+
+            status = "✅ 已安装" if is_installed else "⬇️ 可安装"
+            item_text = f"{icon}  {name}  v{ver}  [{status}]\n     {desc}\n     作者: {author} | 工具: {', '.join(tools)}"
+
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.ItemDataRole.UserRole, pid)
+            if is_installed:
+                item.setForeground(QColor(THEME['success']))
+            self._plugin_list.addItem(item)
+
+        self._plugin_status.setText(f"共 {len(manifest)} 个插件，{len(installed)} 个已安装")
+
+    def _install_plugin(self):
+        """安装选中插件"""
+        item = self._plugin_list.currentItem()
+        if not item:
+            QMessageBox.information(self, "提示", "请先选择要安装的插件")
+            return
+
+        plugin_id = item.data(Qt.ItemDataRole.UserRole)
+        from src.plugins import get_manager
+        mgr = get_manager()
+        result = mgr.install(plugin_id)
+
+        if result.get("ok"):
+            QMessageBox.information(self, "安装成功", result.get("message", ""))
+        else:
+            QMessageBox.warning(self, "安装失败", result.get("error", ""))
+        self._refresh_plugins()
+
+    def _uninstall_plugin(self):
+        """卸载选中插件"""
+        item = self._plugin_list.currentItem()
+        if not item:
+            QMessageBox.information(self, "提示", "请先选择要卸载的插件")
+            return
+
+        plugin_id = item.data(Qt.ItemDataRole.UserRole)
+        from src.plugins import get_manager
+        mgr = get_manager()
+        installed = mgr.get_installed()
+        if plugin_id not in installed:
+            QMessageBox.information(self, "提示", "该插件未安装")
+            return
+
+        reply = QMessageBox.question(self, "确认卸载",
+            f"确定要卸载插件 '{plugin_id}' 吗？\n工具代码会保留在 data/plugins/ 目录。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+
+        if reply == QMessageBox.StandardButton.Yes:
+            result = mgr.uninstall(plugin_id)
+            QMessageBox.information(self, "卸载完成", result.get("message", ""))
+            self._refresh_plugins()
 
     def _post_json(self, method, path, payload, ok_msg=None, err_msg=None):
         """通用保存方法"""

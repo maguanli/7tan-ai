@@ -117,6 +117,16 @@ def run_desktop(args):
 
     # ===== GUI 启动 =====
     logger.info("🚀 正在启动 PyQt6 桌面应用...")
+
+    # 加载已安装的插件
+    try:
+        from src.plugins import get_manager
+        mgr = get_manager()
+        mgr.load_all_installed()
+        logger.info("📦 插件已加载")
+    except Exception as e:
+        logger.warning(f"插件加载跳过: {e}")
+
     try:
         from src.ui.app import launch_app
         launch_app()

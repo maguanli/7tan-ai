@@ -44,8 +44,6 @@ def generate_spec():
     ]
 
     datas = [
-        ("src/web/templates", "src/web/templates"),
-        ("src/web/static", "src/web/static"),
         ("config", "config"),
         ("data/prompts", "data/prompts"),
     ]

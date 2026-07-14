@@ -1036,7 +1036,6 @@ class DetachedBrowserWindow(QMainWindow):
             # view 已有页面内容，仅连接信号，不重新加载
         else:
             self._view = QWebEngineView()
-            self._view.setStyleSheet("background-color: white;")
             import src.tools.browser_tools as bt
             bt.register_web_view(self._view)
             if url and url != "about:blank":
@@ -1196,7 +1195,7 @@ class BrowserPage(QWidget):
             QTabWidget::pane {{
                 border: 1px solid {THEME['border']};
                 border-radius: 0 0 8px 8px;
-                background: {THEME['bg_card']};
+                background: transparent;
             }}
             QTabBar::tab {{
                 background: {THEME['bg_dark']};
@@ -1285,7 +1284,7 @@ class BrowserPage(QWidget):
         """创建一个配置好的 QWebEngineView"""
         from PyQt6.QtWebEngineWidgets import QWebEngineView
         view = QWebEngineView()
-        view.setStyleSheet("background-color: white; border-radius: 0;")
+        # 不对 QWebEngineView 设置 QSS — 会干扰 Chromium 的渲染和事件处理
 
         # 连接信号
         view.urlChanged.connect(lambda u, v=view: self._on_view_url_changed(v, u))

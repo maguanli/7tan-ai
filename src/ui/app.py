@@ -1272,37 +1272,18 @@ class BrowserPage(QWidget):
     def _create_web_view(self):
         """创建一个配置好的 QWebEngineView"""
         from PyQt6.QtWebEngineWidgets import QWebEngineView
-        from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
+        from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings
 
-        view = QWebEngineView()
-        view.setStyleSheet("background-color: white; border-radius: 0;")
-
-        # 启用 JavaScript 和本地存储（很多网站依赖）
+        # 确保默认配置启用 JS
         profile = QWebEngineProfile.defaultProfile()
         settings = profile.settings()
         settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, True)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
 
-        self_view = self
-
-        class _Page(QWebEnginePage):
-            def __init__(self, profile):
-                super().__init__(profile)
-
-            def acceptNavigationRequest(self, url, nav_type, is_main_frame):
-                return True
-
-            def createWindow(self, ww_type):
-                new_view = self_view._create_web_view()
-                idx = self_view._tab_widget.currentIndex()
-                self_view._add_tab(url="about:blank", title="新标签页")
-                return new_view.page()
-
-        page = _Page(profile)
-        view.setPage(page)
+        view = QWebEngineView()
+        view.setStyleSheet("background-color: white; border-radius: 0;")
 
         # 连接信号
         view.urlChanged.connect(lambda u, v=view: self._on_view_url_changed(v, u))

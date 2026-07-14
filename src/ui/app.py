@@ -1944,6 +1944,24 @@ class SettingsPage(QWidget):
         self._site_user = QLineEdit()
         self._site_pass = QLineEdit()
         self._site_pass.setEchoMode(QLineEdit.EchoMode.Password)
+
+        # 密码显示/隐藏按钮
+        self._site_pass_toggle = QPushButton("显示")
+        self._site_pass_toggle.setFixedSize(42, 32)
+        self._site_pass_toggle.setToolTip("显示/隐藏密码")
+        self._site_pass_toggle.setCheckable(True)
+        self._site_pass_toggle.clicked.connect(self._toggle_site_pass_visibility)
+        self._site_pass_toggle.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['bg_input']}; border: 1px solid {THEME['border']};
+                border-radius: 6px; color: {THEME['text_secondary']}; font-size: 11px; padding: 2px 6px; }}
+            QPushButton:checked {{ background: {THEME['accent']}; color: #000; font-weight: bold; }}
+            QPushButton:hover {{ border-color: {THEME['accent']}; }}
+        """)
+
+        pass_row = QHBoxLayout()
+        pass_row.setSpacing(6)
+        pass_row.addWidget(self._site_pass, 1)
+        pass_row.addWidget(self._site_pass_toggle)
         self._publish_interval = QSpinBox()
         self._publish_interval.setRange(1, 1440)
         self._publish_interval.setValue(30)
@@ -1954,7 +1972,7 @@ class SettingsPage(QWidget):
 
         form.addRow("站点地址:", self._site_url)
         form.addRow("用户名:", self._site_user)
-        form.addRow("密码:", self._site_pass)
+        form.addRow("密码:", pass_row)
         form.addRow("发布间隔:", self._publish_interval)
         layout.addWidget(group)
 
@@ -2182,6 +2200,9 @@ class SettingsPage(QWidget):
         self._site_url.setText(site.get("base_url", ""))
         self._site_user.setText(site.get("username", ""))
         self._publish_interval.setValue(site.get("publish_delay_min", 30))
+        # 重置密码显示/隐藏按钮状态
+        self._site_pass_toggle.setChecked(False)
+        self._site_pass.setEchoMode(QLineEdit.EchoMode.Password)
 
         oss = settings.get("oss", {})
         self._oss_bucket.setText(oss.get("bucket", ""))
@@ -2211,6 +2232,20 @@ class SettingsPage(QWidget):
             }
         }
         self._post_json("PUT", "/api/settings", payload, ok_msg=f"模型「{key}」已保存！")
+
+    def _toggle_site_pass_visibility(self, checked):
+        """切换站点密码显示/隐藏 — 显示时从本地配置加载真实密码"""
+        if checked:
+            from src.config.loader import load_config
+            config = load_config()
+            real_pass = config.get("site_7tan", {}).get("password", "")
+            if real_pass:
+                self._site_pass.setText(real_pass)
+            self._site_pass.setEchoMode(QLineEdit.EchoMode.Normal)
+            self._site_pass_toggle.setText("隐藏")
+        else:
+            self._site_pass.setEchoMode(QLineEdit.EchoMode.Password)
+            self._site_pass_toggle.setText("显示")
 
     def _save_site_config(self):
         """只保存站点设置"""

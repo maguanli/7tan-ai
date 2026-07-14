@@ -46,6 +46,7 @@ def generate_spec():
     datas = [
         ("config", "config"),
         ("data/prompts", "data/prompts"),
+        ("data/plugins", "data/plugins"),
     ]
 
     spec_content = f"""# -*- mode: python ; coding: utf-8 -*-

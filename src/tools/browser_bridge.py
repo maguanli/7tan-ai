@@ -31,22 +31,7 @@ class BrowserBridge(QObject):
         self._js_done = threading.Event()
         self._navigate_timeout = 30.0  # 导航超时（秒）
         self._operation_lock = threading.Lock()
-        self._next_files = []  # 下次文件对话框打开时的预填文件路径
-
-        # 拦截文件选择器 — 自动填入文件路径
-        from PyQt6.QtCore import QUrl
-        from PyQt6.QtWebEngineCore import QWebEnginePage
-        page = web_view.page()
-
-        def patched_choose_files(*args, **kwargs):
-            if self._next_files:
-                files = [str(f) for f in self._next_files]
-                self._next_files = []
-                return files
-            # 回退到默认行为
-            return []
-
-        page.chooseFiles = patched_choose_files
+        self._next_files = []  # 文件上传队列
 
     # ===== 导航 =====
 
@@ -385,11 +370,15 @@ class BrowserBridge(QObject):
         if not valid:
             return "no_valid_files"
 
-        self._next_files = valid
-        # 点击文件输入框触发选择器（会被 patched_choose_files 拦截）
-        result = self.click(selector)
-        remaining = self._next_files  # 未消费的文件
-        self._next_files = []  # 清理
+        # 设置 QWebEngineView 的待上传文件列表
+        page = self._web_view.page()
+        if hasattr(self._web_view, '_pending_files'):
+            self._web_view._pending_files[0] = valid
+        # 点击文件输入框触发选择器（会被 CustomWebPage.chooseFiles 拦截）
+        self.click(selector)
+        if hasattr(self._web_view, '_pending_files'):
+            remaining = self._web_view._pending_files[0]
+            self._web_view._pending_files[0] = None
         return f"uploaded_{len(valid)}_files"
 
     @property

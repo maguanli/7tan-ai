@@ -1353,15 +1353,31 @@ class BrowserPage(QWidget):
     # ===== 标签页管理 =====
 
     def _create_web_view(self):
-        """创建一个配置好的 QWebEngineView"""
+        """创建一个配置好的 QWebEngineView（带自动文件上传）"""
         from PyQt6.QtWebEngineWidgets import QWebEngineView
+        from PyQt6.QtWebEngineCore import QWebEnginePage
+
+        # 自定义 Page — 拦截文件对话框
+        _pending_files = [None]  # 用列表实现闭包可变引用
+
+        class _AutoUploadPage(QWebEnginePage):
+            def chooseFiles(self, mode, old_files, accepted_types):
+                if _pending_files[0] is not None:
+                    files = _pending_files[0]
+                    _pending_files[0] = None
+                    return files
+                return super().chooseFiles(mode, old_files, accepted_types)
+
+        page = _AutoUploadPage()
         view = QWebEngineView()
+        view.setPage(page)
 
         # 连接信号
         view.urlChanged.connect(lambda u, v=view: self._on_view_url_changed(v, u))
         view.titleChanged.connect(lambda t, v=view: self._on_view_title_changed(v, t))
         view.loadStarted.connect(lambda v=view: self._on_view_load_started(v))
         view.loadFinished.connect(lambda ok, v=view: self._on_view_load_finished(v, ok))
+        view._pending_files = _pending_files  # 方便外部设置上传文件
         return view
 
     def _add_tab(self, url="about:blank", title="新标签页"):

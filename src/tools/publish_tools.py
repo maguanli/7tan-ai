@@ -392,58 +392,52 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
         file_inputs = []
         filled["文件入口"] = "扫描失败，尝试默认选择器"
 
-    # === LOGO 上传（在截图上方） ===
+    # === LOGO 上传（单个文件，第一个 file input） ===
     if logo_path:
         logo_sel = None
-        # 优先用第一个 file input（用户说 LOGO 在截图上方）
         if file_inputs:
             first = file_inputs[0]
             if first.get("name"):
                 logo_sel = f'input[type="file"][name="{first["name"]}"]'
             elif first.get("id"):
                 logo_sel = f'#{first["id"]}'
-        # 兜底选择器
         if not logo_sel:
-            for sel in ['input[name="logo"]', 'input[name="thumb"]', '#logo', 
-                         'input[type="file"]:first-of-type', 'input[type="file"]']:
-                logo_sel = sel
-                break
-        if logo_sel:
-            bridge.click(logo_sel)
-            filled["LOGO"] = f"✅ 已触发上传 (选择器: {logo_sel[:40]})"
-        else:
-            filled["LOGO"] = f"⚠️ 未找到上传入口，文件: {logo_path}"
+            logo_sel = 'input[type="file"]:first-of-type'
+        try:
+            result = bridge.upload_files(logo_sel, [logo_path])
+            filled["LOGO"] = f"✅ 已上传 ({result})"
+        except Exception as e:
+            filled["LOGO"] = f"⚠️ 上传失败: {e}"
 
-    # === 截图上传（在 LOGO 下方） ===
+    # === 截图上传（全部上传，不允许少） ===
     if screenshot_paths:
         try:
             shots = json.loads(screenshot_paths) if isinstance(screenshot_paths, str) else screenshot_paths
             if isinstance(shots, list) and shots:
                 shot_sel = None
-                # 用第二个或最后一个 file input（用户说截图在 LOGO 下方）
                 if len(file_inputs) >= 2:
                     second = file_inputs[1]
                     if second.get("name"):
                         shot_sel = f'input[type="file"][name="{second["name"]}"]'
                     elif second.get("id"):
                         shot_sel = f'#{second["id"]}'
-                elif file_inputs:
-                    # 只有一个 file input，可能是通用的
-                    first = file_inputs[0]
-                    shot_sel = f'input[type="file"][name="{first["name"]}"]'
-                # 兜底
+                # 检查是否支持 multiple
+                has_multiple = bridge.execute_js(f"""
+                    (function() {{ var el = document.querySelector('{shot_sel or "input[type=file]:last-of-type"}');
+                    return el && el.multiple ? 'yes' : 'no'; }})()
+                """, timeout=1.0)
+                if "yes" not in has_multiple:
+                    shot_sel = f'{shot_sel or "input[type=file]:first-of-type"}'
+
                 if not shot_sel:
-                    for sel in ['input[type="file"][multiple]', 'input[type="file"]:last-of-type',
-                                 'input[type="file"]', 'input[name="screenshot[]"]']:
-                        shot_sel = sel
-                        break
-                for shot in shots[:5]:
-                    bridge.click(shot_sel)
-                filled["截图"] = f"✅ 已触发 {len(shots)} 张上传 (选择器: {shot_sel[:40] if shot_sel else 'auto'})"
+                    shot_sel = 'input[type="file"]:last-of-type'
+
+                result = bridge.upload_files(shot_sel, shots)
+                filled["截图"] = f"✅ 已上传全部 {len(shots)} 张 ({result})"
             else:
                 filled["截图"] = "无截图参数"
-        except Exception:
-            filled["截图"] = "格式解析失败"
+        except Exception as e:
+            filled["截图"] = f"⚠️ 上传异常: {e}"
 
     # === 生成报告 ===
     report_parts = []

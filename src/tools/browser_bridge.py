@@ -31,6 +31,22 @@ class BrowserBridge(QObject):
         self._js_done = threading.Event()
         self._navigate_timeout = 30.0  # 导航超时（秒）
         self._operation_lock = threading.Lock()
+        self._next_files = []  # 下次文件对话框打开时的预填文件路径
+
+        # 拦截文件选择器 — 自动填入文件路径
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtWebEngineCore import QWebEnginePage
+        page = web_view.page()
+
+        def patched_choose_files(*args, **kwargs):
+            if self._next_files:
+                files = [str(f) for f in self._next_files]
+                self._next_files = []
+                return files
+            # 回退到默认行为
+            return []
+
+        page.chooseFiles = patched_choose_files
 
     # ===== 导航 =====
 
@@ -351,6 +367,30 @@ class BrowserBridge(QObject):
         self._web_view.page().runJavaScript(js, _on_click_done)
         # 超时保护
         QTimer.singleShot(8000, lambda: self._js_done.is_set() or self._js_done.set())
+
+    def upload_files(self, selector: str, file_paths: list) -> str:
+        """
+        上传文件到文件输入框（线程安全）。
+        自动拦截文件对话框，填入指定文件路径。
+
+        Args:
+            selector: CSS 选择器定位 file input
+            file_paths: 文件路径列表
+
+        Returns:
+            str: 操作结果
+        """
+        import os
+        valid = [str(f) for f in file_paths if os.path.exists(str(f))]
+        if not valid:
+            return "no_valid_files"
+
+        self._next_files = valid
+        # 点击文件输入框触发选择器（会被 patched_choose_files 拦截）
+        result = self.click(selector)
+        remaining = self._next_files  # 未消费的文件
+        self._next_files = []  # 清理
+        return f"uploaded_{len(valid)}_files"
 
     @property
     def is_available(self) -> bool:

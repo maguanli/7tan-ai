@@ -1353,27 +1353,9 @@ class BrowserPage(QWidget):
     # ===== 标签页管理 =====
 
     def _create_web_view(self):
-        """创建一个配置好的 QWebEngineView（带自动文件上传）"""
+        """创建一个配置好的 QWebEngineView"""
         from PyQt6.QtWebEngineWidgets import QWebEngineView
-        from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
-
-        _pending = [None]
-
-        class _UploadPage(QWebEnginePage):
-            def __init__(self, profile):
-                super().__init__(profile)
-            def chooseFiles(self, mode, old_files, accepted_types):
-                if _pending[0] is not None:
-                    files = _pending[0]
-                    _pending[0] = None
-                    return files
-                return super().chooseFiles(mode, old_files, accepted_types)
-
-        profile = QWebEngineProfile.defaultProfile()
-        page = _UploadPage(profile)
         view = QWebEngineView()
-        view.setPage(page)
-        view._pending = _pending
 
         # 连接信号
         view.urlChanged.connect(lambda u, v=view: self._on_view_url_changed(v, u))

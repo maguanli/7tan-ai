@@ -355,30 +355,58 @@ class BrowserBridge(QObject):
 
     def upload_files(self, selector: str, file_paths: list) -> str:
         """
-        上传文件到文件输入框（线程安全）。
-        自动拦截文件对话框，填入指定文件路径。
-
-        Args:
-            selector: CSS 选择器定位 file input
-            file_paths: 文件路径列表
+        上传文件到文件输入框 — 使用 base64 注入绕过文件对话框。
+        JS 无法触发 file input 的 chooseFiles，所以直接用 JS File API 注入文件。
 
         Returns:
-            str: 操作结果
+            str: "uploaded_N_files" 或错误信息
         """
-        import os
-        valid = [str(f) for f in file_paths if os.path.exists(str(f))]
+        import os, base64
+        valid = []
+        for f in file_paths:
+            f = str(f)
+            if os.path.exists(f):
+                valid.append(f)
         if not valid:
             return "no_valid_files"
 
-        # 设置 QWebEngineView 的待上传文件列表
-        if hasattr(self._web_view, '_pending'):
-            self._web_view._pending[0] = valid
-        # 点击文件输入框触发选择器
-        self.click(selector)
-        if hasattr(self._web_view, '_pending'):
-            remaining = self._web_view._pending[0]
-            self._web_view._pending[0] = None
-        return f"uploaded_{len(valid)}_files"
+        # 用 Python 读取文件并 base64 → JS 注入 FileList
+        files_js = []
+        for fp in valid:
+            with open(fp, "rb") as fh:
+                b64 = base64.b64encode(fh.read()).decode()
+            fname = os.path.basename(fp)
+            files_js.append(f'["{fname}","{b64}"]')
+        files_json = "[" + ",".join(files_js) + "]"
+
+        js = f"""
+        (function() {{
+            var files_data = {files_json};
+            var el = document.querySelector('{selector}');
+            if (!el || el.type !== 'file') return 'selector_not_found';
+
+            var dt = new DataTransfer();
+            files_data.forEach(function(fd) {{
+                var name = fd[0];
+                var b64 = fd[1];
+                var binary = atob(b64);
+                var bytes = new Uint8Array(binary.length);
+                for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                var mime = name.endsWith('.png') ? 'image/png' : 
+                          name.endsWith('.jpg') || name.endsWith('.jpeg') ? 'image/jpeg' : 
+                          'application/octet-stream';
+                var file = new File([bytes], name, {{type: mime}});
+                dt.items.add(file);
+            }});
+            el.files = dt.files;
+            el.dispatchEvent(new Event('change', {{bubbles: true}}));
+            el.dispatchEvent(new Event('input', {{bubbles: true}}));
+            return 'uploaded_{len(valid)}';
+        }})()
+        """
+
+        result = self.execute_js(js, timeout=10.0)
+        return result if result else f"uploaded_{len(valid)}_files"
 
     @property
     def is_available(self) -> bool:

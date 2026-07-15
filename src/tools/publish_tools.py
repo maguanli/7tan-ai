@@ -304,178 +304,89 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
     filled = {}
     not_found = {}
 
-    # === 第0步: 扫描页面所有表单元素 ===
-    form_debug = bridge.execute_js("""
-        (function() {
-            var result = [];
-            var inputs = document.querySelectorAll('input, textarea, select');
-            inputs.forEach(function(el) {
-                var info = {tag: el.tagName, name: el.name || '', id: el.id || '',
-                    type: el.type || '', placeholder: (el.placeholder || '').substring(0,30),
-                    className: (el.className || '').toString().substring(0,40)};
-                result.push(info);
-            });
-            return JSON.stringify(result.slice(0, 30));
-        })()
+    # === 第1步: 填写标题 → name="ll_biaoti" ===
+    r = bridge.execute_js(f"""
+        (function() {{
+            var el = document.querySelector('input[name="ll_biaoti"]');
+            if (el) {{ el.value = {json.dumps(title)}; el.dispatchEvent(new Event('input',{{bubbles:true}})); el.dispatchEvent(new Event('change',{{bubbles:true}})); return 'ok'; }}
+            return 'not found';
+        }})()
     """, timeout=2.0)
-    try:
-        fields = json.loads(form_debug)
-        filled["表单字段"] = ", ".join([f"{f['tag']}[{f['name'] or f['id'] or '?'}]" for f in fields[:15]])
-    except:
-        filled["表单字段"] = "扫描失败"
-
-    # === 第1步: 填写标题 ===
-    for sel in ['input[name="title"]', '#title', 'input[placeholder*="标题"]']:
-        r = bridge.execute_js(f"""
-            (function() {{
-                var el = document.querySelector('{sel}');
-                if (el) {{ el.value = {json.dumps(title)}; el.focus(); el.dispatchEvent(new Event('input',{{bubbles:true}})); el.dispatchEvent(new Event('change',{{bubbles:true}})); return 'ok'; }}
-                return 'not found';
-            }})()
-        """, timeout=2.0)
-        if "ok" in r:
-            filled["1.标题"] = title[:30]
-            break
+    if "ok" in r:
+        filled["1.标题"] = title[:30]
     else:
-        not_found["1.标题"] = "未找到标题输入框"
+        not_found["1.标题"] = "未找到 ll_biaoti"
         return _make_report(filled, not_found)
 
-    # === 第2步: 选择分类 ===
+    # === 第2步: 选择分类 → name="ll_idd" ===
     if category:
-        found_cat = False
-        # 尝试 select 下拉框（按选项文字匹配）
         r = bridge.execute_js(f"""
             (function() {{
                 var cat = {json.dumps(category)};
-                var selects = document.querySelectorAll('select');
-                for (var i = 0; i < selects.length; i++) {{
-                    var el = selects[i];
-                    var name = (el.name||'').toLowerCase();
-                    if (!name) name = (el.id||'').toLowerCase();
-                    if (!name || /cate|type|class|sort/.test(name)) {{
-                        for (var j = 0; j < el.options.length; j++) {{
-                            var opt = el.options[j].text;
-                            if (opt === cat || opt.indexOf(cat) >= 0) {{
-                                el.selectedIndex = j;
-                                el.dispatchEvent(new Event('change',{{bubbles:true}}));
-                                return 'ok:' + opt;
-                            }}
-                        }}
+                var el = document.querySelector('select[name="ll_idd"]');
+                if (!el) return 'not found';
+                for (var i = 0; i < el.options.length; i++) {{
+                    var opt = el.options[i].text;
+                    if (opt === cat || opt.indexOf(cat) >= 0 || cat.indexOf(opt) >= 0) {{
+                        el.selectedIndex = i;
+                        el.dispatchEvent(new Event('change',{{bubbles:true}}));
+                        return 'ok:' + opt;
                     }}
                 }}
-                return 'not found';
+                return 'no match';
             }})()
         """, timeout=2.0)
         if "ok:" in r:
             filled["2.分类"] = r.split(":",1)[1]
-            found_cat = True
         else:
-            # 尝试 radio/label
+            not_found["2.分类"] = f"分类'{category}'未匹配 ll_idd 选项"
+
+    # === 第3步: 填写简介 → name="ll_jie"(简短描述) + name="ll_gxts"(详细内容) ===
+    if intro and len(intro) > 10:
+        results = []
+        for field_name in ["ll_jie", "ll_gxts"]:
             r = bridge.execute_js(f"""
                 (function() {{
-                    var cat = {json.dumps(category)};
-                    var labels = document.querySelectorAll('label');
-                    for (var i = 0; i < labels.length; i++) {{
-                        if (labels[i].textContent.indexOf(cat) >= 0) {{
-                            var inp = labels[i].querySelector('input');
-                            if (inp && (inp.type==='radio'||inp.type==='checkbox')) {{
-                                inp.checked = true; inp.dispatchEvent(new Event('change',{{bubbles:true}}));
-                                return 'ok:radio';
-                            }}
-                        }}
+                    var el = document.querySelector('textarea[name="{field_name}"]');
+                    if (el) {{
+                        el.value = {json.dumps(intro)};
+                        el.dispatchEvent(new Event('input',{{bubbles:true}}));
+                        el.dispatchEvent(new Event('change',{{bubbles:true}}));
+                        return 'ok';
                     }}
                     return 'not found';
                 }})()
             """, timeout=2.0)
-            if "ok:" in r:
-                filled["2.分类"] = category
-                found_cat = True
-        if not found_cat:
-            not_found["2.分类"] = "未找到分类控件"
-
-    # === 第3步: 填写简介 ⭐ ===
-    if intro and len(intro) > 10:
-        r = bridge.execute_js(f"""
-            (function() {{
-                var intro = {json.dumps(intro)};
-                var debug = [];
-
-                // 扫描所有可编辑区域
-                var areas = document.querySelectorAll('textarea, [contenteditable="true"], div[class*="editor"]');
-                debug.push('找到' + areas.length + '个可编辑区域');
-
-                // 过滤：排除温馨提示、SEO、搜索等
-                var candidates = [];
-                areas.forEach(function(el, i) {{
-                    var tag = (el.tagName||'').toLowerCase();
-                    var n = (el.name||'').toLowerCase();
-                    var id = (el.id||'').toLowerCase();
-                    var ph = (el.placeholder||'').toLowerCase();
-                    var cls = (el.className||'').toString().toLowerCase();
-                    
-                    // 检查关联的 label 文字
-                    var labelText = '';
-                    if (id) {{
-                        var lab = document.querySelector('label[for="'+id+'"]');
-                        if (lab) labelText = lab.textContent.toLowerCase();
-                    }}
-                    var prev = el.previousElementSibling;
-                    if (prev && prev.tagName === 'LABEL') labelText += ' ' + prev.textContent.toLowerCase();
-                    
-                    var allInfo = tag + ' ' + n + ' ' + id + ' ' + ph + ' ' + cls + ' ' + labelText;
-                    
-                    // 排除规则 — 除了温馨提示，也排除下载地址/链接字段
-                    var exclude = /温馨|提示|tips|hint|说明|备注|remark|搜索|search|seo|meta|footer|header|nav|广告|公告|通知|notice|链接|地址|download|url[^l]|file|上传/.test(allInfo);
-                    var rows = el.rows || 5;
-                    var h = el.offsetHeight || 100;
-                    
-                    // 评分 — 大幅提高内容相关字段的权重
-                    var score = rows * 20 + h;
-                    if (/content|intro|内容|简介|正文|body|detail|article|游戏|介绍|描述|main|descript/.test(allInfo)) score += 5000;
-                    if (rows >= 5) score += 500;  // 大文本框极可能是正文
-                    if (rows >= 10) score += 1000;
-                    
-                    debug.push((exclude?'⛔跳过':'✅候选') + '['+i+'] ' + (tag||'?') + ' r='+rows+' h='+h+' s='+score+' n='+n.substring(0,20)+' id='+id.substring(0,20));
-                    
-                    if (!exclude) candidates.push({{el: el, score: score}});
-                }});
-                
-                if (candidates.length === 0) {{
-                    debug.push('❌ 全部被排除！');
-                    return JSON.stringify(debug);
-                }}
-                
-                candidates.sort(function(a,b) {{ return b.score - a.score; }});
-                var best = candidates[0].el;
-                
-                best.value = intro;
-                best.focus();
-                ['input','change','blur'].forEach(function(ev) {{
-                    best.dispatchEvent(new Event(ev, {{bubbles: true}}));
-                }});
-                
-                var label = (best.name||best.id||'?');
-                var verify = (best.value||'').substring(0,40);
-                debug.push('✅ 已填: ' + label + ' 验证=' + verify);
-                return JSON.stringify(debug);
-            }})()
-        """, timeout=5.0)
-
-        try:
-            info = json.loads(r)
-            filled["3.简介"] = "|".join(info[-3:]) if isinstance(info, list) else str(r)
-        except:
-            filled["3.简介"] = f"异常: {r[:200]}"
+            results.append(f"{field_name}:{'✓' if 'ok' in r else '✗'}")
+        filled["3.简介"] = " | ".join(results)
     else:
-        filled["3.简介"] = f"⚠️ 简介内容太短({len(intro)}字)"
+        filled["3.简介"] = f"⚠️ 内容太短({len(intro)}字)"
 
     # === 第4步: 上传LOGO ===
 
-    # === 下载链接 ===
+    # === 第4步: 上传LOGO → id="logoFile" ===
+    if logo_path:
+        try:
+            result = bridge.upload_files('#logoFile', [logo_path])
+            filled["4.LOGO"] = f"✅ {result}"
+        except Exception as e:
+            filled["4.LOGO"] = f"⚠️ {e}"
+
+    # === 第5步: 上传截图 → id="screenshotFile" ===
+    if screenshot_paths:
+        try:
+            shots = json.loads(screenshot_paths) if isinstance(screenshot_paths, str) else screenshot_paths
+            if isinstance(shots, list) and shots:
+                result = bridge.upload_files('#screenshotFile', shots)
+                filled["5.截图"] = f"✅ {len(shots)}张 ({result})"
+            else:
+                filled["5.截图"] = "无"
+        except Exception as e:
+            filled["5.截图"] = f"⚠️ {e}"
+
+    # === 下载链接 → name="ll_url" 或 name="ll_text" ===
     if download_url:
-        for sel in ['input[name="download_url"]', 'input[name="download"]', 'input[name="url"]',
-                     '#download_url', 'input[placeholder*="下载"]', 'input[placeholder*="链接"]',
-                     'input[placeholder*="地址"]']:
+        for sel in ['input[name="ll_url"]', 'textarea[name="ll_url"]', 'textarea[name="ll_text"]']:
             r = bridge.execute_js(f"""
                 (function() {{
                     var el = document.querySelector('{sel}');
@@ -487,11 +398,11 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
                 filled["下载链接"] = download_url[:50]
                 break
         else:
-            not_found["下载链接"] = "未找到下载链接输入框"
+            not_found["下载链接"] = "未找到 ll_url/ll_text"
 
     # === 标签 ===
     if tags:
-        for sel in ['input[name="tags"]', '#tags', 'input[placeholder*="标签"]']:
+        for sel in ['input[name="ll_tags"]', 'input[name="tags"]', '#tags']:
             r = bridge.execute_js(f"""
                 (function() {{
                     var el = document.querySelector('{sel}');
@@ -505,61 +416,7 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
         else:
             not_found["标签"] = "未找到标签输入框"
 
-    # === 先扫描页面上所有文件上传入口 ===
-    file_inputs_raw = bridge.execute_js("""
-        (function() {
-            var inputs = document.querySelectorAll('input[type="file"]');
-            var result = [];
-            inputs.forEach(function(el) {
-                result.push({name: el.name, id: el.id, className: el.className, placeholder: el.placeholder});
-            });
-            return JSON.stringify(result);
-        })()
-    """, timeout=2.0)
-    try:
-        file_inputs = json.loads(file_inputs_raw)
-        filled["文件入口"] = f"找到 {len(file_inputs)} 个: {file_inputs}"
-    except:
-        file_inputs = []
-        filled["文件入口"] = "扫描失败，尝试默认选择器"
-
-    # === 第4步: 上传LOGO ===
-    if logo_path:
-        logo_sel = None
-        if file_inputs:
-            first = file_inputs[0]
-            if first.get("name"):
-                logo_sel = f'input[type="file"][name="{first["name"]}"]'
-            elif first.get("id"):
-                logo_sel = f'#{first["id"]}'
-        if not logo_sel:
-            logo_sel = 'input[type="file"]:first-of-type'
-        try:
-            result = bridge.upload_files(logo_sel, [logo_path])
-            filled["4.LOGO"] = f"✅ {result}"
-        except Exception as e:
-            filled["4.LOGO"] = f"⚠️ {e}"
-
-    # === 第5步: 上传截图（全部） ===
-    if screenshot_paths:
-        try:
-            shots = json.loads(screenshot_paths) if isinstance(screenshot_paths, str) else screenshot_paths
-            if isinstance(shots, list) and shots:
-                shot_sel = None
-                if len(file_inputs) >= 2:
-                    second = file_inputs[1]
-                    if second.get("name"):
-                        shot_sel = f'input[type="file"][name="{second["name"]}"]'
-                    elif second.get("id"):
-                        shot_sel = f'#{second["id"]}'
-                if not shot_sel:
-                    shot_sel = 'input[type="file"]:last-of-type'
-                result = bridge.upload_files(shot_sel, shots)
-                filled["5.截图"] = f"✅ {len(shots)}张 ({result})"
-            else:
-                filled["5.截图"] = "无"
-        except Exception as e:
-            filled["5.截图"] = f"⚠️ {e}"
+    # === 生成报告 ===
 
     # === 生成报告 ===
     report_parts = []

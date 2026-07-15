@@ -15,7 +15,7 @@ from ..tools.monitor_tools import track_cost
 from ..database.db import get_session, ConversationHistory
 
 # 最大迭代次数（防止无限循环）
-MAX_ITERATIONS = 50
+MAX_ITERATIONS = 15  # 限制最大操作次数，防止 AI 空转乱跑
 
 
 def _get_active_ai_config(config: dict) -> dict:

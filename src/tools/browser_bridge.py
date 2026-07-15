@@ -360,23 +360,38 @@ class BrowserBridge(QObject):
 
 # 全局桥接实例
 _bridge: BrowserBridge | None = None
+_admin_bridge: BrowserBridge | None = None
 
 
 def register_bridge(web_view) -> BrowserBridge:
-    """注册 QWebEngineView 并创建桥接实例（主线程调用）"""
+    """注册源网站 QWebEngineView 并创建桥接实例（主线程调用）"""
     global _bridge
     _bridge = BrowserBridge(web_view)
-    logger.info("✅ BrowserBridge 已注册")
+    logger.info("✅ BrowserBridge [源网站] 已注册")
     return _bridge
+
+
+def register_admin_bridge(web_view) -> BrowserBridge:
+    """注册管理后台 QWebEngineView 并创建桥接实例（主线程调用）"""
+    global _admin_bridge
+    _admin_bridge = BrowserBridge(web_view)
+    logger.info("✅ BrowserBridge [管理后台] 已注册")
+    return _admin_bridge
 
 
 def get_bridge() -> BrowserBridge | None:
-    """获取全局桥接实例（任意线程调用）"""
+    """获取源网站桥接实例（任意线程调用）"""
     return _bridge
+
+
+def get_admin_bridge() -> BrowserBridge | None:
+    """获取管理后台桥接实例（任意线程调用）"""
+    return _admin_bridge
 
 
 def unregister_bridge():
     """释放桥接实例"""
-    global _bridge
+    global _bridge, _admin_bridge
     _bridge = None
+    _admin_bridge = None
     logger.info("🔌 BrowserBridge 已释放")

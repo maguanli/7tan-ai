@@ -1369,9 +1369,10 @@ class BrowserPage(QWidget):
         self._back_btn.setEnabled(False)
         self._forward_btn.setEnabled(False)
 
-        # 注册到 browser_tools
+        # 注册到 browser_tools（区分源网站 / 管理后台）
         bt = self._get_browser_tools()
-        bt.register_web_view(view)
+        role = self.property("browser_role") or "source"
+        bt.register_web_view(view, context=role)
 
         if url and url != "about:blank":
             view.load(QUrl(url))
@@ -1626,17 +1627,18 @@ class BrowserPage(QWidget):
 
 # ===== AI 工作台（浏览器 + 对话 左右分屏） =====
 class ChatBrowserSplitPage(QWidget):
-    """浏览器在左、AI 对话在右，中间可拖动分隔条"""
+    """双浏览器 + AI 对话 — 源网站 和 管理后台 各一个浏览器窗口"""
 
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setSpacing(2)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.setHandleWidth(4)
-        splitter.setStyleSheet(f"""
+        # ===== 双浏览器水平分割 =====
+        browser_split = QSplitter(Qt.Orientation.Horizontal)
+        browser_split.setHandleWidth(4)
+        browser_split.setStyleSheet(f"""
             QSplitter::handle {{
                 background-color: {THEME['accent']}44;
                 margin: 4px 0;
@@ -1647,17 +1649,75 @@ class ChatBrowserSplitPage(QWidget):
             }}
         """)
 
-        # 浏览器（左）自动通过 register_web_view 注册到全局 BrowserBridge
-        self.browser = BrowserPage()
+        # 左侧：源网站浏览器
+        self.source_browser = BrowserPage()
+        self.source_browser.setProperty("browser_role", "source")
+
+        # 右侧：管理后台浏览器
+        self.admin_browser = BrowserPage()
+        self.admin_browser.setProperty("browser_role", "admin")
+
+        # 包裹标签
+        source_wrapper = QWidget()
+        src_layout = QVBoxLayout(source_wrapper)
+        src_layout.setContentsMargins(0, 0, 0, 0)
+        src_layout.setSpacing(0)
+        src_label = QLabel("🌐 源网站浏览器（游戏站 / 搜索）")
+        src_label.setStyleSheet(f"""
+            background: {THEME['accent']}; color: #000; font-size: 11px;
+            font-weight: bold; padding: 4px 10px; border-radius: 4px 4px 0 0;
+        """)
+        src_layout.addWidget(src_label)
+        src_layout.addWidget(self.source_browser, 1)
+
+        admin_wrapper = QWidget()
+        adm_layout = QVBoxLayout(admin_wrapper)
+        adm_layout.setContentsMargins(0, 0, 0, 0)
+        adm_layout.setSpacing(0)
+        adm_label = QLabel("🔧 管理后台浏览器（7tan 管理面板）")
+        adm_label.setStyleSheet(f"""
+            background: {THEME['accent2']}; color: #fff; font-size: 11px;
+            font-weight: bold; padding: 4px 10px; border-radius: 4px 4px 0 0;
+        """)
+        adm_layout.addWidget(adm_label)
+        adm_layout.addWidget(self.admin_browser, 1)
+
+        browser_split.addWidget(source_wrapper)
+        browser_split.addWidget(admin_wrapper)
+        browser_split.setSizes([600, 640])
+
+        # ===== 垂直分割：浏览器 + 对话 =====
+        main_split = QSplitter(Qt.Orientation.Vertical)
+        main_split.setHandleWidth(4)
+        main_split.setStyleSheet(f"""
+            QSplitter::handle {{
+                background-color: {THEME['accent']}44;
+                margin: 0 4px;
+                border-radius: 2px;
+            }}
+        """)
+
         self.chat = ChatPage()
 
-        splitter.addWidget(self.browser)
-        splitter.addWidget(self.chat)
-        splitter.setSizes([560, 680])  # 默认 560:680 分割
-        splitter.setStretchFactor(0, 2)
-        splitter.setStretchFactor(1, 3)
+        main_split.addWidget(browser_split)
+        main_split.addWidget(self.chat)
+        main_split.setSizes([550, 250])
+        main_split.setStretchFactor(0, 3)
+        main_split.setStretchFactor(1, 1)
 
-        layout.addWidget(splitter)
+        layout.addWidget(main_split)
+
+        # 首次显示时自动加载初始页面
+        self._initialized = False
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._initialized:
+            self._initialized = True
+            # 源网站浏览器打开默认页面
+            self.source_browser._add_tab(url="https://www.7723.cn", title="7723游戏")
+            # 管理后台浏览器打开 7tan 后台
+            self.admin_browser._add_tab(url="https://img.7tan.cn/admin", title="7tan管理后台")
 
 
 # ===== 统计分析页面 =====

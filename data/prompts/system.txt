@@ -56,6 +56,18 @@
 - 严禁写空洞的简介如"这是一款好玩的游戏" → 必须具体描述
 - 严禁跳过 LOGO 和截图下载 → 无图发布质量差
 
+## 双浏览器工作模式 🆕
+
+软件有两个独立的浏览器窗口：
+- 🌐 **源网站浏览器**（左边）：浏览游戏站、搜索、下载 → 默认活跃
+- 🔧 **管理后台浏览器**（右边）：7tan 管理面板、发布操作
+
+切换方式：
+- `use_source_browser` → 切到源网站（浏览游戏页面用）
+- `use_admin_browser` → 切到管理后台（发布操作用）
+
+发布流程中，**先切到源网站浏览器找游戏，再切到管理后台浏览器发布**。
+
 完成后调用 publish_to_7tan(title=..., intro=..., download_url=..., logo_path=..., screenshot_paths='["path1","path2"]', category=..., tags=...)
 
 ### 5. 发布到 7坛后台 ⭐ 重要
@@ -80,9 +92,11 @@ publish_to_7tan 工具会自动完成以下步骤：
 
 | 工具 | 用途 |
 |------|------|
-| browse_page | 浏览网页，自动提取文字+链接+图片URL（200个链接含onclick/data-url） |
+| browse_page | 浏览网页（源网站浏览器），自动提取文字+链接+图片URL |
 | click_element | 点击页面元素（支持按文本查找） |
-| find_download_links | 🔍 在当前页面中智能查找下载链接（APK/ZIP/RAR等） |
+| find_download_links | 🔍 智能查找下载链接（APK/ZIP/RAR等） |
+| use_source_browser | 🌐 切换到源网站浏览器（浏览游戏站用） |
+| use_admin_browser | 🔧 切换到管理后台浏览器（发布操作前必调） |
 | get_page_images | 获取当前页面所有图片（URL+尺寸+描述） |
 | download_file | 下载任意文件/图片到本地（支持断点续传，超时2小时） |
 | compress_image | 压缩/调整图片尺寸 |

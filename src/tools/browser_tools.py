@@ -11,24 +11,72 @@ import requests
 from loguru import logger
 from .registry import register_tool
 
-# 全局 WebEngine 视图引用（由 BrowserPage 注册，仅用于判断浏览器是否可用）
-_web_view = None
+# 全局 WebEngine 视图引用（源网站 + 管理后台 双浏览器）
+_web_view = None        # 源网站浏览器
+_admin_web_view = None  # 管理后台浏览器
+_active_context = "source"  # 当前活跃的浏览器上下文
 
 
-def register_web_view(view):
+def register_web_view(view, context: str = "source"):
     """BrowserPage 创建后注册 QWebEngineView 实例并初始化 Bridge"""
-    global _web_view
-    _web_view = view
+    global _web_view, _admin_web_view
+    if context == "admin":
+        _admin_web_view = view
+    else:
+        _web_view = view
     # 同时注册到 BrowserBridge
-    from .browser_bridge import register_bridge
-    register_bridge(view)
-    logger.info("✅ QWebEngineView 已注册到 browser_tools + BrowserBridge")
+    from .browser_bridge import register_bridge, register_admin_bridge
+    if context == "admin":
+        register_admin_bridge(view)
+    else:
+        register_bridge(view)
+    logger.info(f"✅ QWebEngineView 已注册 [{context}] -> browser_tools + BrowserBridge")
+
+
+@register_tool(
+    name="use_admin_browser",
+    description="切换到管理后台浏览器窗口。之后所有浏览器操作（浏览/点击/填表）都将在管理后台页面执行。",
+    parameters={"type": "object", "properties": {}, "required": []},
+    category="browser",
+    requires_browser=True,
+)
+def use_admin_browser() -> str:
+    """切换到管理后台浏览器"""
+    global _active_context
+    _active_context = "admin"
+    return "✅ 已切换到管理后台浏览器窗口"
+
+
+@register_tool(
+    name="use_source_browser",
+    description="切换到源网站浏览器窗口。之后所有浏览器操作（浏览/点击/下载）都将在源网站页面执行。",
+    parameters={"type": "object", "properties": {}, "required": []},
+    category="browser",
+    requires_browser=True,
+)
+def use_source_browser() -> str:
+    """切换到源网站浏览器"""
+    global _active_context
+    _active_context = "source"
+    return "✅ 已切换到源网站浏览器窗口"
+
+
+def _get_active_view():
+    """获取当前活跃的 WebEngineView"""
+    global _web_view, _admin_web_view, _active_context
+    if _active_context == "admin" and _admin_web_view is not None:
+        return _admin_web_view
+    return _web_view
 
 
 def _get_bridge():
-    """获取 BrowserBridge 实例（线程安全）"""
-    from .browser_bridge import get_bridge
-    bridge = get_bridge()
+    """获取当前活跃浏览器的 Bridge 实例（线程安全）"""
+    from .browser_bridge import get_bridge, get_admin_bridge
+    global _active_context
+    if _active_context == "admin":
+        bridge = get_admin_bridge() or get_bridge()
+    else:
+        bridge = get_bridge()
     if bridge is None:
         raise RuntimeError("浏览器未启动（Bridge 未注册）")
     return bridge

@@ -66,7 +66,7 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
         steps.append(f"🔐 登录: {login_result[:80]}")
 
         # ===== 步骤 2: 浏览管理后台首页，读取所有链接 =====
-        bridge.navigate(f"{admin_url}/admin", wait_seconds=5.0)
+        bridge.navigate(f"{admin_url}/", wait_seconds=5.0)
         time.sleep(2)
         
         all_links = bridge.get_page_links(100)  # 读取最多 100 个链接
@@ -133,7 +133,7 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
             elif href.startswith("/") or href.startswith("?"):
                 bridge.navigate(f"{admin_url}{href}", wait_seconds=4.0)
             elif href:
-                bridge.navigate(f"{admin_url}/admin/{href}", wait_seconds=4.0)
+                bridge.navigate(f"{admin_url}/{href}", wait_seconds=4.0)
             else:
                 # 用选择器点击
                 click_result = bridge.click(f'a:has-text("{text}")')
@@ -188,9 +188,9 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
         if not clicked_publish:
             # 最后尝试直接 URL
             for fallback_path in [
-                f"{admin_url}/admin/post.php?action=new",
-                f"{admin_url}/admin/post.php?action=add",
-                f"{admin_url}/admin/publish.php",
+                f"{admin_url}/post.php?action=new",
+                f"{admin_url}/post.php?action=add",
+                f"{admin_url}/publish.php",
             ]:
                 bridge.navigate(fallback_path, wait_seconds=4.0)
                 fb_text = bridge.get_page_text(500)

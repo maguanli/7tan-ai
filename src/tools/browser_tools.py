@@ -90,8 +90,8 @@ def use_admin_browser() -> str:
         config = load_config()
         admin_url = config.get("site_7tan", {}).get("base_url", "https://img.7tan.cn")
         bridge = _get_bridge()
-        bridge.navigate(f"{admin_url}/admin", wait_seconds=5.0)
-        return f"✅ 已切换到管理后台，当前页面: {admin_url}/admin"
+        bridge.navigate(f"{admin_url}/", wait_seconds=5.0)
+        return f"✅ 已切换到管理后台，当前页面: {admin_url}/"
     except Exception as e:
         return f"✅ 已切换到管理后台（导航失败: {e}）"
     return "✅ 已切换到管理后台浏览器"
@@ -353,7 +353,7 @@ def login_7tan(username: str, password: str) -> str:
     """自动登录 7坛 管理后台（线程安全）"""
     if _source_view is not None:
         bridge = _get_bridge()
-        login_url = "https://img.7tan.cn/admin"
+        login_url = "https://img.7tan.cn/"
 
         # 安全转义 JS 字符串
         _u = json.dumps(username)

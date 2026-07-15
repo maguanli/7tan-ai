@@ -371,14 +371,13 @@ class BrowserBridge(QObject):
             return "no_valid_files"
 
         # 设置 QWebEngineView 的待上传文件列表
-        page = self._web_view.page()
-        if hasattr(self._web_view, '_pending_files'):
-            self._web_view._pending_files[0] = valid
-        # 点击文件输入框触发选择器（会被 CustomWebPage.chooseFiles 拦截）
+        if hasattr(self._web_view, '_pending'):
+            self._web_view._pending[0] = valid
+        # 点击文件输入框触发选择器
         self.click(selector)
-        if hasattr(self._web_view, '_pending_files'):
-            remaining = self._web_view._pending_files[0]
-            self._web_view._pending_files[0] = None
+        if hasattr(self._web_view, '_pending'):
+            remaining = self._web_view._pending[0]
+            self._web_view._pending[0] = None
         return f"uploaded_{len(valid)}_files"
 
     @property

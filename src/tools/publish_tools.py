@@ -51,7 +51,36 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
         admin_url = config.get("site_7tan", {}).get("base_url", "https://img.7tan.cn")
         steps = []
 
-        # 切换到管理后台上下文（先确保窗口已打开）
+        # ⚠️ 硬性检查：LOGO和截图必须存在本地才能发布
+        import os as _os
+        missing = []
+        if not logo_path:
+            missing.append("LOGO (logo_path 参数为空)")
+        elif not _os.path.exists(str(logo_path)):
+            missing.append(f"LOGO (文件不存在: {logo_path})")
+        if not screenshot_paths or screenshot_paths in ("[]", '[""]'):
+            missing.append("截图 (screenshot_paths 参数为空)")
+        else:
+            try:
+                shots_list = json.loads(screenshot_paths) if isinstance(screenshot_paths, str) else screenshot_paths
+                if not isinstance(shots_list, list) or len(shots_list) == 0:
+                    missing.append("截图 (列表为空)")
+                else:
+                    for sp in shots_list:
+                        if not _os.path.exists(str(sp)):
+                            missing.append(f"截图 (文件不存在: {sp})")
+            except:
+                missing.append("截图 (格式解析失败)")
+        if not intro or len(intro) < 20:
+            missing.append("简介 (太短，需要≥100字)")
+        if not download_url:
+            missing.append("下载链接")
+
+        if missing:
+            return "❌ 发布被拒绝，以下必填项缺失:\n  - " + "\n  - ".join(missing) + \
+                   "\n\n💡 请先下载 LOGO 和截图（get_page_images → download_file），再调用 publish_to_7tan。"
+
+        # 切换到管理后台上下文
         from .browser_tools import set_active_context, _admin_view
         set_active_context("admin")
         if _admin_view is None:

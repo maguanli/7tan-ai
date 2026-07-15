@@ -1721,7 +1721,8 @@ class ChatBrowserSplitPage(QWidget):
         if not self._initialized:
             self._initialized = True
             self.source_browser._add_tab(url="about:blank", title="新标签页")
-            self.admin_browser._add_tab(url="about:blank", title="新标签页")
+            # admin browser: 初始化时不创建tab，等切换时再加载
+            # （QStackedWidget隐藏页中的 QWebEngineView 可能渲染异常）
 
     def switch_browser(self, target: str):
         """切换显示的浏览器（线程安全 — 通过信号）"""
@@ -1731,6 +1732,8 @@ class ChatBrowserSplitPage(QWidget):
         """实际执行浏览器切换（仅主线程通过信号触发）"""
         if target == "admin":
             self._browser_stack.setCurrentIndex(1)
+            if len(self.admin_browser._tabs) == 0:
+                self.admin_browser._add_tab(url="https://img.7tan.cn/", title="7tan管理后台")
         else:
             self._browser_stack.setCurrentIndex(0)
 

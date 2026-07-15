@@ -304,6 +304,26 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
     filled = {}
     not_found = {}
 
+    # === 第0步: 扫描页面所有表单元素 ===
+    form_debug = bridge.execute_js("""
+        (function() {
+            var result = [];
+            var inputs = document.querySelectorAll('input, textarea, select');
+            inputs.forEach(function(el) {
+                var info = {tag: el.tagName, name: el.name || '', id: el.id || '',
+                    type: el.type || '', placeholder: (el.placeholder || '').substring(0,30),
+                    className: (el.className || '').toString().substring(0,40)};
+                result.push(info);
+            });
+            return JSON.stringify(result.slice(0, 30));
+        })()
+    """, timeout=2.0)
+    try:
+        fields = json.loads(form_debug)
+        filled["表单字段"] = ", ".join([f"{f['tag']}[{f['name'] or f['id'] or '?'}]" for f in fields[:15]])
+    except:
+        filled["表单字段"] = "扫描失败"
+
     # === 标题 ===
     for sel in ['input[name="title"]', '#title', 'input[placeholder*="标题"]', '.title-input input']:
         r = bridge.execute_js(f"""
@@ -321,90 +341,123 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
 
     # === 分类 ===
     if category:
-        for sel in ['select[name="category"]', '#category', 'select[name="type"]', 'select[name="cate"]']:
+        # 先尝试 select 下拉框
+        found_cat = False
+        for sel in ['select[name="category"]', '#category', 'select[name="type"]', 'select[name="cate"]',
+                     'select[name="catid"]', 'select']:
             r = bridge.execute_js(f"""
                 (function() {{
                     var el = document.querySelector('{sel}');
-                    if (el) {{ 
-                        el.value = {json.dumps(category)}; 
-                        el.dispatchEvent(new Event('change')); el.dispatchEvent(new Event('input'));
-                        return 'ok'; 
+                    if (!el || el.tagName !== 'SELECT') return 'not found';
+                    // 精确匹配或包含匹配
+                    var cat = {json.dumps(category)};
+                    for (var i = 0; i < el.options.length; i++) {{
+                        var opt = el.options[i].text;
+                        if (opt === cat || opt.indexOf(cat) >= 0 || cat.indexOf(opt) >= 0) {{
+                            el.selectedIndex = i;
+                            el.dispatchEvent(new Event('change'));
+                            return 'selected:' + opt;
+                        }}
+                    }}
+                    // 没找到精确匹配，选第一个非空选项
+                    if (el.options.length > 1) {{ el.selectedIndex = 1; el.dispatchEvent(new Event('change')); return 'fallback:' + el.options[1].text; }}
+                    return 'no options';
+                }})()
+            """, timeout=2.0)
+            if "selected:" in r or "fallback:" in r:
+                filled["分类"] = r.replace("selected:", "").replace("fallback:", "")
+                found_cat = True
+                break
+        # 如果 select 没找到，尝试 radio/checkbox
+        if not found_cat:
+            r = bridge.execute_js(f"""
+                (function() {{
+                    var cat = {json.dumps(category)};
+                    var labels = document.querySelectorAll('label');
+                    for (var i = 0; i < labels.length; i++) {{
+                        if (labels[i].textContent.indexOf(cat) >= 0) {{
+                            var input = labels[i].querySelector('input[type=radio], input[type=checkbox]');
+                            if (input) {{ input.checked = true; input.dispatchEvent(new Event('change')); return 'radio:' + cat; }}
+                        }}
                     }}
                     return 'not found';
                 }})()
             """, timeout=2.0)
-            if "ok" in r:
+            if "radio:" in r:
                 filled["分类"] = category
-                break
-        else:
-            not_found["分类"] = "未找到分类下拉框"
+                found_cat = True
+        if not found_cat:
+            not_found["分类"] = "未找到分类控件"
 
-    # === 简介/内容 ⭐ 最关键 — 自动跳过温馨提示等无关字段 ===
-    # 先用 JS 扫描所有 textarea，找最可能是「正文」的那一个
-    r = bridge.execute_js("""
-        (function() {
+    # === 简介 ⭐ 关键 — 找正文 textarea，跳过 温馨提示/备注/搜索 ===
+    filled_intro = False
+    r = bridge.execute_js(f"""
+        (function() {{
+            var intro = {json.dumps(intro)};
             var areas = document.querySelectorAll('textarea');
-            var best = null, bestScore = -1;
-            areas.forEach(function(el) {
-                var ph = (el.placeholder || '').toLowerCase();
-                var name = (el.name || '').toLowerCase();
-                var id = (el.id || '').toLowerCase();
-                // 排除：温馨提示、提示、tip、note、notice、search
-                if (/温馨|提示|tip|note|notice|search|搜索|备注|说明/.test(ph + name + id)) return;
-                var score = 0;
-                if (/content|intro|内容|简介|正文|描述|body/.test(name + id + ph)) score += 100;
-                if (el.rows > 5) score += 50;
-                if (el.rows > 10) score += 100;
-                if (el.offsetHeight > 200) score += 100;
-                // 通用 textarea 也有基础分
-                if (score > bestScore) { best = el; bestScore = score; }
-            });
-            // 如果没找到符合条件的，返回第一个被排除的（至少有个兜底）
-            if (!best && areas.length > 0) best = areas[0];
-            // 设置属性方便外部定位
-            if (best) { best.setAttribute('data-7tan-intro', 'true'); return 'found'; }
-            return 'not found';
-        })()
-    """, timeout=2.0)
-
-    if "found" in r:
-        bridge.execute_js(f"""
-            (function() {{
-                var el = document.querySelector('textarea[data-7tan-intro="true"]');
-                if (el) {{
-                    el.value = {json.dumps(intro)};
-                    el.dispatchEvent(new Event('input'));
-                    el.dispatchEvent(new Event('change'));
+            var filled = false;
+            // 遍历所有 textarea，排除温馨提示等，填最大的或名字匹配的
+            areas.forEach(function(el) {{
+                if (filled) return;  // 已找到好的，跳过
+                var info = (el.name||'') + (el.id||'') + (el.placeholder||'') + (el.className||'');
+                info = info.toLowerCase();
+                // 跳过这些字段
+                if (/温馨|提示|tip|note|notice|搜索|search|备注|remark|说明|desc[^r]/.test(info)) return;
+                // 优先填「内容」或「简介」字段
+                if (/content|intro|内容|简介|正文|描述|body|detail|article/.test(info)) {{
+                    el.value = intro;
+                    el.dispatchEvent(new Event('input', {{bubbles: true}}));
+                    el.dispatchEvent(new Event('change', {{bubbles: true}}));
                     el.dispatchEvent(new Event('blur'));
-                    el.removeAttribute('data-7tan-intro');
-                    return 'ok';
+                    filled = true;
+                    return;
                 }}
-                return 'not found';
+            }});
+            // 如果还没找到，找最大的 textarea（排除小字段）
+            if (!filled) {{
+                var best = null, bestSize = 0;
+                areas.forEach(function(el) {{
+                    var info = (el.name||'') + (el.id||'') + (el.placeholder||'');
+                    if (/温馨|提示|tip|搜索|search|备注/.test(info)) return;
+                    var sz = (el.rows || 1) * (el.cols || 1) + el.offsetHeight;
+                    if (sz > bestSize && sz > 60) {{ best = el; bestSize = sz; }}
+                }});
+                if (best) {{
+                    best.value = intro;
+                    best.dispatchEvent(new Event('input', {{bubbles: true}}));
+                    best.dispatchEvent(new Event('change', {{bubbles: true}}));
+                    filled = true;
+                }}
+            }}
+            return filled ? 'ok' : 'not found';
+        }})()
+    """, timeout=3.0)
+
+    if "ok" in r:
+        filled["简介"] = f"{len(intro)}字"
+        filled_intro = True
+    else:
+        # 最后兜底：直接填所有 textarea（除了明显不对的）
+        r2 = bridge.execute_js(f"""
+            (function() {{
+                var intro = {json.dumps(intro)};
+                var areas = document.querySelectorAll('textarea');
+                var count = 0;
+                areas.forEach(function(el) {{
+                    var info = (el.name||'') + (el.id||'') + (el.placeholder||'');
+                    if (/温馨|tip|搜索|search/.test(info.toLowerCase())) return;
+                    el.value = intro;
+                    el.dispatchEvent(new Event('input'));
+                    count++;
+                }});
+                return 'filled ' + count + ' areas';
             }})()
         """, timeout=2.0)
-        filled["简介"] = f"{len(intro)}字"
-    else:
-        # 兜底：常用选择器
-        for sel in ['textarea[name="content"]', 'textarea[name="intro"]', '#content',
-                     '.editor textarea', '[contenteditable="true"]:not([placeholder*="温馨"])',
-                     'textarea:not([placeholder*="提示"])']:
-            r2 = bridge.execute_js(f"""
-                (function() {{
-                    var el = document.querySelector('{sel}');
-                    if (el) {{
-                        el.value = {json.dumps(intro)};
-                        el.dispatchEvent(new Event('input'));
-                        el.dispatchEvent(new Event('change'));
-                        return 'ok';
-                    }}
-                    return 'not found';
-                }})()
-            """, timeout=2.0)
-            if "ok" in r2:
-                filled["简介"] = f"{len(intro)}字"
-                break
+        if "filled" in r2 and " " in r2:
+            count = r2.split(" ")[1]
+            filled["简介"] = f"{len(intro)}字 (兜底填了{count}个区域)"
         else:
-            not_found["简介"] = "未找到内容输入区域"
+            not_found["简介"] = f"未找到内容区域 (页面扫描: {form_debug[:200]})"
 
     # === 下载链接 ===
     if download_url:

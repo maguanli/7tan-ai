@@ -395,6 +395,17 @@ class PluginManager:
                 "tools": ["ocr_screenshot"],
                 "icon": "📄",
             },
+            {
+                "id": "cloud_ai",
+                "name": "Cloud Code 云端AI增强",
+                "version": "1.0.0",
+                "author": "OpenAI",
+                "type": "builtin",
+                "category": "AI",
+                "description": "接入 OpenAI GPT-4o-mini 云端模型增强推理。比本地模型聪明10倍，自动写简介/分析游戏。需配置 API Key。",
+                "tools": ["cloud_analyze", "cloud_write_intro"],
+                "icon": "☁️",
+            },
         ]
 
 

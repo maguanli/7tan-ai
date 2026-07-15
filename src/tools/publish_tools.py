@@ -394,43 +394,57 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
             not_found["2.分类"] = "未找到分类控件"
 
     # === 第3步: 填写简介 ⭐ ===
-    r = bridge.execute_js(f"""
-        (function() {{
-            var intro = {json.dumps(intro)};
-            var best = null, bestSize = 0;
-            var areas = document.querySelectorAll('textarea');
-            areas.forEach(function(el) {{
-                var info = (el.name||'') + (el.id||'') + (el.placeholder||'') + (el.className||'');
-                // 跳过这些
-                if (/温馨|提示|tip|搜索|search|备注|remark|说明|desc[^r]/.test(info.toLowerCase())) return;
-                var sz = el.rows * 80 + el.offsetHeight;
-                // 名字匹配加分
-                if (/content|intro|内容|简介|正文|body|detail/.test(info.toLowerCase())) sz += 10000;
-                if (sz > bestSize) {{ best = el; bestSize = sz; }}
-            }});
-            if (!best) {{
-                // 最后的兜底：找不是温馨提示的 textarea
-                areas.forEach(function(el) {{
-                    var info = (el.name||'') + (el.placeholder||'');
-                    if (!/温馨|提示|tip/.test(info.toLowerCase()) && !best) best = el;
-                }});
-            }}
-            if (best) {{
-                best.value = intro;
-                ['input','change','blur','keyup'].forEach(function(ev) {{
-                    best.dispatchEvent(new Event(ev, {{bubbles: true}}));
-                }});
-                var name = best.name || best.id || best.placeholder || 'textarea';
-                return 'ok:' + name.substring(0,40);
-            }}
-            return 'not found';
-        }})()
-    """, timeout=3.0)
+    if intro and len(intro) > 10:
+        r = bridge.execute_js(f"""
+            (function() {{
+                var debug = [];
+                var intro = {json.dumps(intro)};
+                
+                // 找所有可编辑元素
+                var areas = document.querySelectorAll('textarea, [contenteditable="true"], .editor, .ck-content, .ql-editor');
+                debug.push('找到' + areas.length + '个可编辑区域');
 
-    if "ok:" in r:
-        filled["3.简介"] = f"{len(intro)}字 → {r.split(':',1)[1]}"
+                var best = null, bestScore = 0;
+                areas.forEach(function(el, i) {{
+                    var tag = el.tagName || '';
+                    var n = el.name || '', id = el.id || '', ph = el.placeholder || '', cls = (el.className||'').toString();
+                    var info = (tag + '|' + n + '|' + id + '|' + ph + '|' + cls).toLowerCase();
+                    var skip = /温馨|提示|tip[^p]|搜索|search|备注|remark|说明|seo|meta|footer|header|nav|comment/.test(info);
+                    var score = (el.rows||1) * 60 + (el.offsetHeight||0);
+                    if (tag==='TEXTAREA' && (el.rows||0) >= 5) score += 200;
+                    if (/content|intro|内容|简介|正文|body|detail|article|main|游戏/.test(info)) score += 5000;
+                    if (/editor|ck-content|ql-editor/.test(cls)) score += 3000;
+                    debug.push((skip?'SKIP':'KEEP') + ' t=' + tag + ' r=' + (el.rows||0) + ' h=' + (el.offsetHeight||0) + ' s=' + score + ' n=' + n + ' id=' + id);
+                    if (!skip && score > bestScore) {{ best = el; bestScore = score; }}
+                }});
+
+                if (best) {{
+                    var isCE = best.isContentEditable || best.getAttribute('contenteditable') === 'true';
+                    if (isCE) {{
+                        best.innerHTML = intro;
+                    }} else {{
+                        best.value = intro;
+                    }}
+                    best.focus();
+                    ['input','change','blur','keyup','focus'].forEach(function(ev) {{
+                        best.dispatchEvent(new Event(ev, {{bubbles: true}}));
+                    }});
+                    var label = best.name || best.id || best.placeholder || best.tagName;
+                    var verify = isCE ? best.innerHTML.substring(0,30) : (best.value||'').substring(0,30);
+                    debug.push('FILLED[' + label + '] verify=' + verify + ' isCE=' + isCE);
+                }} else {{
+                    debug.push('NO_BEST: 全部被跳过或页面无编辑区域');
+                }}
+                return JSON.stringify(debug);
+            }})()
+        """, timeout=5.0)
+        try:
+            info = json.loads(r)
+            filled["3.简介"] = " | ".join(info) if isinstance(info, list) else str(r)
+        except:
+            filled["3.简介"] = f"结果: {r[:300]}"
     else:
-        not_found["3.简介"] = "未找到内容输入区域（所有textarea都被跳过了）"
+        filled["3.简介"] = f"⚠️ 简介内容太短({len(intro)}字) — AI没生成简介"
 
     # === 第4步: 上传LOGO ===
 

@@ -131,7 +131,7 @@ def _add_site_polling_jobs(sched: BackgroundScheduler, config: dict):
             poll_site_job,
             trigger="interval",
             seconds=interval,
-            args=[site.get("name", ""), site.get("url", "")],
+            args=[site],
             id=job_id,
             name=f"轮询 {site['name']}",
         )

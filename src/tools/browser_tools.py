@@ -26,7 +26,7 @@ def set_active_context(ctx: str):
         _switch_ui_callback(ctx)
 
 
-def register_source_view(view, role: str = "source"):
+def register_web_view(view, role: str = "source"):
     """注册 QWebEngineView。role: 'source'（主窗口）或 'admin'（管理后台窗口）"""
     global _source_view, _admin_view
     if role == "admin":
@@ -39,28 +39,6 @@ def register_source_view(view, role: str = "source"):
     else:
         register_bridge(view)
     logger.info(f"✅ BrowserView 已注册 [{role}]")
-
-
-def set_active_context(ctx: str):
-    """设置当前操作的浏览器上下文，同时触发 UI 切换"""
-    global _active_ctx
-    _active_ctx = ctx
-    # 通知 UI 切换浏览器面板
-    try:
-        from PyQt6.QtWidgets import QApplication
-        app = QApplication.instance()
-        if app:
-            for widget in app.topLevelWidgets():
-                # 找到 ChatBrowserSplitPage 并切换
-                from PyQt6.QtCore import QMetaObject, Qt
-                split_page = widget.findChild(QWidget, None)
-                # 遍历查找
-                for w in widget.findChildren(QWidget):
-                    if hasattr(w, 'switch_browser'):
-                        w.switch_browser(ctx)
-                        break
-    except Exception:
-        pass
 
 
 def _get_active_view():

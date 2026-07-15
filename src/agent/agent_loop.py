@@ -15,7 +15,7 @@ from ..tools.monitor_tools import track_cost
 from ..database.db import get_session, ConversationHistory
 
 # 最大迭代次数（防止无限循环）
-MAX_ITERATIONS = 30  # 复杂发布任务可能需要 20+ 步
+MAX_ITERATIONS = 50  # 发布任务复杂，需要足够步数
 
 
 def _get_active_ai_config(config: dict) -> dict:
@@ -91,6 +91,7 @@ def run_agent_loop(
     total_cost = 0.0
     final_result = ""
     all_logs = []
+    last_calls = []  # 防重复循环检测
 
     for iteration in range(1, max_iterations + 1):
         logger.info(f"🔄 Agent 迭代 {iteration}/{max_iterations}")
@@ -177,6 +178,21 @@ def run_agent_loop(
             tool_def = get_tool(tool_name)
             danger_label = "⚠️" if (tool_def and tool_def.dangerous) else ""
             logger.info(f"🔧 {danger_label}调用工具: {tool_name}({_truncate_args(tool_args)})")
+
+            # 检测重复调用死循环
+            call_sig = f"{tool_name}:{json.dumps(tool_args, sort_keys=True)}"
+            last_calls.append(call_sig)
+            if len(last_calls) > 5:
+                last_calls.pop(0)
+            if len(last_calls) >= 3 and len(set(last_calls[-3:])) == 1:
+                logger.warning(f"⚠️ 检测到重复调用死循环: {call_sig}")
+                return {
+                    "success": False,
+                    "result": f"⚠️ 检测到死循环 — 工具 {tool_name} 连续调用 3 次相同参数，已自动停止。\n请尝试不同的方法或简化任务。",
+                    "iterations": iteration,
+                    "cost": total_cost,
+                    "logs": all_logs,
+                }
 
             # 执行工具
             result_str = execute_tool(tool_name, tool_args)

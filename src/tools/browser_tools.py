@@ -84,6 +84,16 @@ def use_source_browser() -> str:
 )
 def use_admin_browser() -> str:
     set_active_context("admin")
+    # 自动打开管理后台页面
+    try:
+        from ..config.loader import load_config
+        config = load_config()
+        admin_url = config.get("site_7tan", {}).get("base_url", "https://img.7tan.cn")
+        bridge = _get_bridge()
+        bridge.navigate(f"{admin_url}/admin", wait_seconds=5.0)
+        return f"✅ 已切换到管理后台，当前页面: {admin_url}/admin"
+    except Exception as e:
+        return f"✅ 已切换到管理后台（导航失败: {e}）"
     return "✅ 已切换到管理后台浏览器"
 
 

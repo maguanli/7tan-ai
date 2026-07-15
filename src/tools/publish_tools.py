@@ -324,140 +324,115 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
     except:
         filled["表单字段"] = "扫描失败"
 
-    # === 标题 ===
-    for sel in ['input[name="title"]', '#title', 'input[placeholder*="标题"]', '.title-input input']:
+    # === 第1步: 填写标题 ===
+    for sel in ['input[name="title"]', '#title', 'input[placeholder*="标题"]']:
         r = bridge.execute_js(f"""
             (function() {{
                 var el = document.querySelector('{sel}');
-                if (el) {{ el.value = {json.dumps(title)}; el.focus(); el.dispatchEvent(new Event('input')); el.dispatchEvent(new Event('change')); return 'ok'; }}
+                if (el) {{ el.value = {json.dumps(title)}; el.focus(); el.dispatchEvent(new Event('input',{{bubbles:true}})); el.dispatchEvent(new Event('change',{{bubbles:true}})); return 'ok'; }}
                 return 'not found';
             }})()
         """, timeout=2.0)
         if "ok" in r:
-            filled["标题"] = title[:30]
+            filled["1.标题"] = title[:30]
             break
     else:
-        not_found["标题"] = "未找到标题输入框"
+        not_found["1.标题"] = "未找到标题输入框"
+        return _make_report(filled, not_found)
 
-    # === 分类 ===
+    # === 第2步: 选择分类 ===
     if category:
-        # 先尝试 select 下拉框
         found_cat = False
-        for sel in ['select[name="category"]', '#category', 'select[name="type"]', 'select[name="cate"]',
-                     'select[name="catid"]', 'select']:
-            r = bridge.execute_js(f"""
-                (function() {{
-                    var el = document.querySelector('{sel}');
-                    if (!el || el.tagName !== 'SELECT') return 'not found';
-                    // 精确匹配或包含匹配
-                    var cat = {json.dumps(category)};
-                    for (var i = 0; i < el.options.length; i++) {{
-                        var opt = el.options[i].text;
-                        if (opt === cat || opt.indexOf(cat) >= 0 || cat.indexOf(opt) >= 0) {{
-                            el.selectedIndex = i;
-                            el.dispatchEvent(new Event('change'));
-                            return 'selected:' + opt;
+        # 尝试 select 下拉框（按选项文字匹配）
+        r = bridge.execute_js(f"""
+            (function() {{
+                var cat = {json.dumps(category)};
+                var selects = document.querySelectorAll('select');
+                for (var i = 0; i < selects.length; i++) {{
+                    var el = selects[i];
+                    var name = (el.name||'').toLowerCase();
+                    if (!name) name = (el.id||'').toLowerCase();
+                    if (!name || /cate|type|class|sort/.test(name)) {{
+                        for (var j = 0; j < el.options.length; j++) {{
+                            var opt = el.options[j].text;
+                            if (opt === cat || opt.indexOf(cat) >= 0) {{
+                                el.selectedIndex = j;
+                                el.dispatchEvent(new Event('change',{{bubbles:true}}));
+                                return 'ok:' + opt;
+                            }}
                         }}
                     }}
-                    // 没找到精确匹配，选第一个非空选项
-                    if (el.options.length > 1) {{ el.selectedIndex = 1; el.dispatchEvent(new Event('change')); return 'fallback:' + el.options[1].text; }}
-                    return 'no options';
-                }})()
-            """, timeout=2.0)
-            if "selected:" in r or "fallback:" in r:
-                filled["分类"] = r.replace("selected:", "").replace("fallback:", "")
-                found_cat = True
-                break
-        # 如果 select 没找到，尝试 radio/checkbox
-        if not found_cat:
+                }}
+                return 'not found';
+            }})()
+        """, timeout=2.0)
+        if "ok:" in r:
+            filled["2.分类"] = r.split(":",1)[1]
+            found_cat = True
+        else:
+            # 尝试 radio/label
             r = bridge.execute_js(f"""
                 (function() {{
                     var cat = {json.dumps(category)};
                     var labels = document.querySelectorAll('label');
                     for (var i = 0; i < labels.length; i++) {{
                         if (labels[i].textContent.indexOf(cat) >= 0) {{
-                            var input = labels[i].querySelector('input[type=radio], input[type=checkbox]');
-                            if (input) {{ input.checked = true; input.dispatchEvent(new Event('change')); return 'radio:' + cat; }}
+                            var inp = labels[i].querySelector('input');
+                            if (inp && (inp.type==='radio'||inp.type==='checkbox')) {{
+                                inp.checked = true; inp.dispatchEvent(new Event('change',{{bubbles:true}}));
+                                return 'ok:radio';
+                            }}
                         }}
                     }}
                     return 'not found';
                 }})()
             """, timeout=2.0)
-            if "radio:" in r:
-                filled["分类"] = category
+            if "ok:" in r:
+                filled["2.分类"] = category
                 found_cat = True
         if not found_cat:
-            not_found["分类"] = "未找到分类控件"
+            not_found["2.分类"] = "未找到分类控件"
 
-    # === 简介 ⭐ 关键 — 找正文 textarea，跳过 温馨提示/备注/搜索 ===
-    filled_intro = False
+    # === 第3步: 填写简介 ⭐ ===
     r = bridge.execute_js(f"""
         (function() {{
             var intro = {json.dumps(intro)};
+            var best = null, bestSize = 0;
             var areas = document.querySelectorAll('textarea');
-            var filled = false;
-            // 遍历所有 textarea，排除温馨提示等，填最大的或名字匹配的
             areas.forEach(function(el) {{
-                if (filled) return;  // 已找到好的，跳过
                 var info = (el.name||'') + (el.id||'') + (el.placeholder||'') + (el.className||'');
-                info = info.toLowerCase();
-                // 跳过这些字段
-                if (/温馨|提示|tip|note|notice|搜索|search|备注|remark|说明|desc[^r]/.test(info)) return;
-                // 优先填「内容」或「简介」字段
-                if (/content|intro|内容|简介|正文|描述|body|detail|article/.test(info)) {{
-                    el.value = intro;
-                    el.dispatchEvent(new Event('input', {{bubbles: true}}));
-                    el.dispatchEvent(new Event('change', {{bubbles: true}}));
-                    el.dispatchEvent(new Event('blur'));
-                    filled = true;
-                    return;
-                }}
+                // 跳过这些
+                if (/温馨|提示|tip|搜索|search|备注|remark|说明|desc[^r]/.test(info.toLowerCase())) return;
+                var sz = el.rows * 80 + el.offsetHeight;
+                // 名字匹配加分
+                if (/content|intro|内容|简介|正文|body|detail/.test(info.toLowerCase())) sz += 10000;
+                if (sz > bestSize) {{ best = el; bestSize = sz; }}
             }});
-            // 如果还没找到，找最大的 textarea（排除小字段）
-            if (!filled) {{
-                var best = null, bestSize = 0;
+            if (!best) {{
+                // 最后的兜底：找不是温馨提示的 textarea
                 areas.forEach(function(el) {{
-                    var info = (el.name||'') + (el.id||'') + (el.placeholder||'');
-                    if (/温馨|提示|tip|搜索|search|备注/.test(info)) return;
-                    var sz = (el.rows || 1) * (el.cols || 1) + el.offsetHeight;
-                    if (sz > bestSize && sz > 60) {{ best = el; bestSize = sz; }}
+                    var info = (el.name||'') + (el.placeholder||'');
+                    if (!/温馨|提示|tip/.test(info.toLowerCase()) && !best) best = el;
                 }});
-                if (best) {{
-                    best.value = intro;
-                    best.dispatchEvent(new Event('input', {{bubbles: true}}));
-                    best.dispatchEvent(new Event('change', {{bubbles: true}}));
-                    filled = true;
-                }}
             }}
-            return filled ? 'ok' : 'not found';
+            if (best) {{
+                best.value = intro;
+                ['input','change','blur','keyup'].forEach(function(ev) {{
+                    best.dispatchEvent(new Event(ev, {{bubbles: true}}));
+                }});
+                var name = best.name || best.id || best.placeholder || 'textarea';
+                return 'ok:' + name.substring(0,40);
+            }}
+            return 'not found';
         }})()
     """, timeout=3.0)
 
-    if "ok" in r:
-        filled["简介"] = f"{len(intro)}字"
-        filled_intro = True
+    if "ok:" in r:
+        filled["3.简介"] = f"{len(intro)}字 → {r.split(':',1)[1]}"
     else:
-        # 最后兜底：直接填所有 textarea（除了明显不对的）
-        r2 = bridge.execute_js(f"""
-            (function() {{
-                var intro = {json.dumps(intro)};
-                var areas = document.querySelectorAll('textarea');
-                var count = 0;
-                areas.forEach(function(el) {{
-                    var info = (el.name||'') + (el.id||'') + (el.placeholder||'');
-                    if (/温馨|tip|搜索|search/.test(info.toLowerCase())) return;
-                    el.value = intro;
-                    el.dispatchEvent(new Event('input'));
-                    count++;
-                }});
-                return 'filled ' + count + ' areas';
-            }})()
-        """, timeout=2.0)
-        if "filled" in r2 and " " in r2:
-            count = r2.split(" ")[1]
-            filled["简介"] = f"{len(intro)}字 (兜底填了{count}个区域)"
-        else:
-            not_found["简介"] = f"未找到内容区域 (页面扫描: {form_debug[:200]})"
+        not_found["3.简介"] = "未找到内容输入区域（所有textarea都被跳过了）"
+
+    # === 第4步: 上传LOGO ===
 
     # === 下载链接 ===
     if download_url:
@@ -511,7 +486,7 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
         file_inputs = []
         filled["文件入口"] = "扫描失败，尝试默认选择器"
 
-    # === LOGO 上传（单个文件，第一个 file input） ===
+    # === 第4步: 上传LOGO ===
     if logo_path:
         logo_sel = None
         if file_inputs:
@@ -524,11 +499,11 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
             logo_sel = 'input[type="file"]:first-of-type'
         try:
             result = bridge.upload_files(logo_sel, [logo_path])
-            filled["LOGO"] = f"✅ 已上传 ({result})"
+            filled["4.LOGO"] = f"✅ {result}"
         except Exception as e:
-            filled["LOGO"] = f"⚠️ 上传失败: {e}"
+            filled["4.LOGO"] = f"⚠️ {e}"
 
-    # === 截图上传（全部上传，不允许少） ===
+    # === 第5步: 上传截图（全部） ===
     if screenshot_paths:
         try:
             shots = json.loads(screenshot_paths) if isinstance(screenshot_paths, str) else screenshot_paths
@@ -540,31 +515,28 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
                         shot_sel = f'input[type="file"][name="{second["name"]}"]'
                     elif second.get("id"):
                         shot_sel = f'#{second["id"]}'
-                # 检查是否支持 multiple
-                has_multiple = bridge.execute_js(f"""
-                    (function() {{ var el = document.querySelector('{shot_sel or "input[type=file]:last-of-type"}');
-                    return el && el.multiple ? 'yes' : 'no'; }})()
-                """, timeout=1.0)
-                if "yes" not in has_multiple:
-                    shot_sel = f'{shot_sel or "input[type=file]:first-of-type"}'
-
                 if not shot_sel:
                     shot_sel = 'input[type="file"]:last-of-type'
-
                 result = bridge.upload_files(shot_sel, shots)
-                filled["截图"] = f"✅ 已上传全部 {len(shots)} 张 ({result})"
+                filled["5.截图"] = f"✅ {len(shots)}张 ({result})"
             else:
-                filled["截图"] = "无截图参数"
+                filled["5.截图"] = "无"
         except Exception as e:
-            filled["截图"] = f"⚠️ 上传异常: {e}"
+            filled["5.截图"] = f"⚠️ {e}"
 
     # === 生成报告 ===
     report_parts = []
-    for k, v in filled.items():
-        report_parts.append(f"  ✅ {k}: {v}")
-    for k, v in not_found.items():
-        report_parts.append(f"  ❌ {k}: {v}")
+    for k in sorted(filled.keys()):
+        report_parts.append(f"  ✅ {k}: {filled[k]}")
+    for k in not_found:
+        report_parts.append(f"  ❌ {k}: {not_found[k]}")
 
-    report = "📝 表单填写报告:\n" + "\n".join(report_parts)
+    report = "📝 填写报告（按用户要求的5步顺序）:\n" + "\n".join(report_parts)
     logger.info(report)
     return report, len(not_found) == 0
+
+
+def _make_report(filled, not_found):
+    parts = [f"  ✅ {k}: {v}" for k, v in filled.items()]
+    parts += [f"  ❌ {k}: {v}" for k, v in not_found.items()]
+    return "📝 " + "\n".join(parts)

@@ -26,7 +26,7 @@ def set_active_context(ctx: str):
         _switch_ui_callback(ctx)
 
 
-def register_web_view(view, role: str = "source"):
+def register_source_view(view, role: str = "source"):
     """注册 QWebEngineView。role: 'source'（主窗口）或 'admin'（管理后台窗口）"""
     global _source_view, _admin_view
     if role == "admin":
@@ -139,7 +139,7 @@ def _navigate(url: str, wait_seconds: float = 3.0) -> str:
 )
 def browse_page(url: str, wait_seconds: int = 3) -> str:
     """浏览网页 — GUI 模式用 Bridge（线程安全），无 GUI 用 requests"""
-    if _web_view is not None:
+    if _source_view is not None:
         bridge = _get_bridge()
         bridge.navigate(url, wait_seconds)
         title = bridge.get_page_title()
@@ -200,7 +200,7 @@ def browse_page(url: str, wait_seconds: int = 3) -> str:
 )
 def find_download_links() -> str:
     """在当前页面中智能搜索下载链接"""
-    if _web_view is None:
+    if _source_view is None:
         return "❌ 浏览器未就绪"
 
     bridge = _get_bridge()
@@ -285,7 +285,7 @@ def find_download_links() -> str:
 )
 def click_element(selector: str, text: str = None) -> str:
     """点击页面元素（线程安全）"""
-    if _web_view is None:
+    if _source_view is None:
         return "⚠️ 浏览器未打开，请先切换到「浏览器」页面"
     return _get_bridge().click(selector, text)
 
@@ -305,7 +305,7 @@ def click_element(selector: str, text: str = None) -> str:
 )
 def screenshot(filename: str) -> str:
     """对当前页面截图（线程安全）"""
-    if _web_view is None:
+    if _source_view is None:
         return "⚠️ 浏览器未打开"
     path = Path("data/screenshots") / filename
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -328,7 +328,7 @@ def screenshot(filename: str) -> str:
 )
 def get_page_images(max_images: int = 50) -> str:
     """获取当前页面所有图片 URL"""
-    if _web_view is None:
+    if _source_view is None:
         return "⚠️ 浏览器未打开，请先浏览网页"
     image_list = _get_bridge().get_page_images(max_images)
     if not image_list:
@@ -363,7 +363,7 @@ def get_page_images(max_images: int = 50) -> str:
 )
 def login_7tan(username: str, password: str) -> str:
     """自动登录 7坛 管理后台（线程安全）"""
-    if _web_view is not None:
+    if _source_view is not None:
         bridge = _get_bridge()
         login_url = "https://img.7tan.cn/admin"
 
@@ -471,8 +471,9 @@ def login_7tan(username: str, password: str) -> str:
 
 def close_browser():
     """释放浏览器引用和 Bridge"""
-    global _web_view
-    _web_view = None
+    global _source_view, _admin_view
+    _source_view = None
+    _admin_view = None
     from .browser_bridge import unregister_bridge
     unregister_bridge()
     logger.info("🔌 浏览器引用已释放")

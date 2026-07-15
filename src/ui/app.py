@@ -1666,6 +1666,8 @@ class BrowserPage(QWidget):
 class ChatBrowserSplitPage(QWidget):
     """浏览器在左、AI 对话在右，源网站/管理后台一键切换（不占空间）"""
 
+    _switch_signal = pyqtSignal(str)  # 线程安全的切换信号
+
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
@@ -1706,8 +1708,9 @@ class ChatBrowserSplitPage(QWidget):
         layout.addWidget(splitter)
         self._admin_window = None
 
-        # 注册 UI 切换回调 — AI 切浏览器时自动切换面板
+        # 注册 UI 切换回调 — AI 切浏览器时自动切换面板（通过信号确保主线程安全）
         from src.tools import browser_tools as _bt
+        self._switch_signal.connect(self._do_switch_browser)
         _bt._switch_ui_callback = self.switch_browser
 
         # 首次显示时预加载
@@ -1721,14 +1724,15 @@ class ChatBrowserSplitPage(QWidget):
             self.admin_browser._add_tab(url="about:blank", title="新标签页")
 
     def switch_browser(self, target: str):
-        """切换显示的浏览器：source 或 admin"""
-        from src.tools import browser_tools as bt
+        """切换显示的浏览器（线程安全 — 通过信号）"""
+        self._switch_signal.emit(target)
+
+    def _do_switch_browser(self, target: str):
+        """实际执行浏览器切换（仅主线程通过信号触发）"""
         if target == "admin":
             self._browser_stack.setCurrentIndex(1)
-            bt.set_active_context("admin")
         else:
             self._browser_stack.setCurrentIndex(0)
-            bt.set_active_context("source")
 
     def _open_admin_window(self):
         """打开管理后台"""

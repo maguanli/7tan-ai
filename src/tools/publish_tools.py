@@ -339,35 +339,72 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
         else:
             not_found["分类"] = "未找到分类下拉框"
 
-    # === 简介/内容 ⭐ 最关键 ===
-    intro_selectors = [
-        'textarea[name="content"]', 'textarea[name="intro"]', '#content', '#intro',
-        '.editor textarea', '.ck-content', '[contenteditable="true"]',
-        'textarea',  # 兜底：页面中任意 textarea
-    ]
-    for sel in intro_selectors:
-        r = bridge.execute_js(f"""
+    # === 简介/内容 ⭐ 最关键 — 自动跳过温馨提示等无关字段 ===
+    # 先用 JS 扫描所有 textarea，找最可能是「正文」的那一个
+    r = bridge.execute_js("""
+        (function() {
+            var areas = document.querySelectorAll('textarea');
+            var best = null, bestScore = -1;
+            areas.forEach(function(el) {
+                var ph = (el.placeholder || '').toLowerCase();
+                var name = (el.name || '').toLowerCase();
+                var id = (el.id || '').toLowerCase();
+                // 排除：温馨提示、提示、tip、note、notice、search
+                if (/温馨|提示|tip|note|notice|search|搜索|备注|说明/.test(ph + name + id)) return;
+                var score = 0;
+                if (/content|intro|内容|简介|正文|描述|body/.test(name + id + ph)) score += 100;
+                if (el.rows > 5) score += 50;
+                if (el.rows > 10) score += 100;
+                if (el.offsetHeight > 200) score += 100;
+                // 通用 textarea 也有基础分
+                if (score > bestScore) { best = el; bestScore = score; }
+            });
+            // 如果没找到符合条件的，返回第一个被排除的（至少有个兜底）
+            if (!best && areas.length > 0) best = areas[0];
+            // 设置属性方便外部定位
+            if (best) { best.setAttribute('data-7tan-intro', 'true'); return 'found'; }
+            return 'not found';
+        })()
+    """, timeout=2.0)
+
+    if "found" in r:
+        bridge.execute_js(f"""
             (function() {{
-                var el = document.querySelector('{sel}');
+                var el = document.querySelector('textarea[data-7tan-intro="true"]');
                 if (el) {{
-                    if (el.isContentEditable || el.getAttribute('contenteditable') === 'true') 
-                        el.innerHTML = {json.dumps(intro)};
-                    else 
-                        el.value = {json.dumps(intro)};
-                    el.focus(); 
-                    el.dispatchEvent(new Event('input')); 
+                    el.value = {json.dumps(intro)};
+                    el.dispatchEvent(new Event('input'));
                     el.dispatchEvent(new Event('change'));
                     el.dispatchEvent(new Event('blur'));
+                    el.removeAttribute('data-7tan-intro');
                     return 'ok';
                 }}
                 return 'not found';
             }})()
         """, timeout=2.0)
-        if "ok" in r:
-            filled["简介"] = f"{len(intro)}字"
-            break
+        filled["简介"] = f"{len(intro)}字"
     else:
-        not_found["简介"] = "未找到内容输入区域"
+        # 兜底：常用选择器
+        for sel in ['textarea[name="content"]', 'textarea[name="intro"]', '#content',
+                     '.editor textarea', '[contenteditable="true"]:not([placeholder*="温馨"])',
+                     'textarea:not([placeholder*="提示"])']:
+            r2 = bridge.execute_js(f"""
+                (function() {{
+                    var el = document.querySelector('{sel}');
+                    if (el) {{
+                        el.value = {json.dumps(intro)};
+                        el.dispatchEvent(new Event('input'));
+                        el.dispatchEvent(new Event('change'));
+                        return 'ok';
+                    }}
+                    return 'not found';
+                }})()
+            """, timeout=2.0)
+            if "ok" in r2:
+                filled["简介"] = f"{len(intro)}字"
+                break
+        else:
+            not_found["简介"] = "未找到内容输入区域"
 
     # === 下载链接 ===
     if download_url:

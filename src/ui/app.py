@@ -497,6 +497,17 @@ class ChatPage(QWidget):
         """)
         toolbar.addWidget(load_history_btn)
 
+        del_btn = QPushButton("✕ 删除")
+        del_btn.setFixedWidth(65)
+        del_btn.setToolTip("删除当前选中的历史对话")
+        del_btn.clicked.connect(self._delete_current_session)
+        del_btn.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['danger']}33; color: {THEME['danger']};
+                border: 1px solid {THEME['danger']}66; border-radius: 6px; padding: 6px 8px; font-size: 12px; font-weight: bold; }}
+            QPushButton:hover {{ background: {THEME['danger']}; color: #fff; }}
+        """)
+        toolbar.addWidget(del_btn)
+
         new_btn = QPushButton("+ 新对话")
         new_btn.setFixedWidth(80)
         new_btn.clicked.connect(self._new_session)
@@ -566,6 +577,32 @@ class ChatPage(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         self._add_message("system", "新对话已开始，输入指令开始操作吧 👋")
+
+    def _delete_current_session(self):
+        """删除当前选中的历史对话"""
+        idx = self._session_combo.currentIndex()
+        if idx <= 1:
+            return
+        session_id = self._session_combo.itemData(idx)
+        session_title = self._session_combo.itemText(idx)
+        if not session_id:
+            return
+
+        reply = QMessageBox.question(self, "确认删除",
+            f"确定要删除对话「{session_title}」吗？\n此操作不可撤销。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        worker = ApiWorker("DELETE", f"{API_BASE}/api/chat/session/{session_id}")
+        worker.finished.connect(lambda _: (
+            self._session_combo.removeItem(idx),
+            self._session_combo.setCurrentIndex(0),
+            self._new_session()
+        ))
+        worker.error.connect(lambda e: QMessageBox.warning(self, "错误", f"删除失败: {e}"))
+        worker.start()
+        self._keep_worker(worker)
 
     def _on_session_changed(self, idx):
         """下拉框选择变化的处理"""

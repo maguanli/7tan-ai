@@ -11,26 +11,77 @@ import requests
 from loguru import logger
 from .registry import register_tool
 
-# 全局 WebEngine 视图引用（由 BrowserPage 注册）
-_web_view = None
+# 全局 WebEngine 视图引用 — 支持源站 + 管理后台双窗口
+_source_view = None   # 主窗口浏览器（源网站）
+_admin_view = None    # 管理后台浏览器（独立窗口）
+_active_ctx = "source"  # 当前操作目标
 
 
-def register_web_view(view):
-    """BrowserPage 创建后注册 QWebEngineView 实例并初始化 Bridge"""
-    global _web_view
-    _web_view = view
-    from .browser_bridge import register_bridge
-    register_bridge(view)
-    logger.info("✅ QWebEngineView 已注册到 browser_tools + BrowserBridge")
+def register_web_view(view, role: str = "source"):
+    """注册 QWebEngineView。role: 'source'（主窗口）或 'admin'（管理后台窗口）"""
+    global _source_view, _admin_view
+    if role == "admin":
+        _admin_view = view
+    else:
+        _source_view = view
+    from .browser_bridge import register_bridge, register_admin_bridge
+    if role == "admin":
+        register_admin_bridge(view)
+    else:
+        register_bridge(view)
+    logger.info(f"✅ BrowserView 已注册 [{role}]")
+
+
+def set_active_context(ctx: str):
+    """设置当前操作的浏览器上下文"""
+    global _active_ctx
+    _active_ctx = ctx
+
+
+def _get_active_view():
+    global _source_view, _admin_view, _active_ctx
+    if _active_ctx == "admin" and _admin_view is not None:
+        return _admin_view
+    return _source_view
 
 
 def _get_bridge():
-    """获取 BrowserBridge 实例（线程安全）"""
-    from .browser_bridge import get_bridge
-    bridge = get_bridge()
+    """获取当前活跃浏览器的 Bridge 实例（线程安全）"""
+    from .browser_bridge import get_bridge, get_admin_bridge
+    global _active_ctx
+    if _active_ctx == "admin":
+        bridge = get_admin_bridge()
+        if bridge is None:
+            bridge = get_bridge()  # fallback
+    else:
+        bridge = get_bridge()
     if bridge is None:
         raise RuntimeError("浏览器未启动（Bridge 未注册）")
     return bridge
+
+
+@register_tool(
+    name="use_source_browser",
+    description="切换到源网站浏览器。之后 browse_page/click_element 等操作都在游戏源站执行。",
+    parameters={"type": "object", "properties": {}, "required": []},
+    category="browser",
+    requires_browser=True,
+)
+def use_source_browser() -> str:
+    set_active_context("source")
+    return "✅ 已切回源网站浏览器"
+
+
+@register_tool(
+    name="use_admin_browser",
+    description="切换到管理后台浏览器。之后 browse_page/click_element 等操作都在管理后台执行。",
+    parameters={"type": "object", "properties": {}, "required": []},
+    category="browser",
+    requires_browser=True,
+)
+def use_admin_browser() -> str:
+    set_active_context("admin")
+    return "✅ 已切换到管理后台浏览器"
 
 
 def _exec_js(js: str, timeout: float = 5.0) -> str:

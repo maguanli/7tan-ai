@@ -1634,6 +1634,29 @@ class ChatBrowserSplitPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        # ===== 快捷工具栏 =====
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(8, 4, 8, 4)
+        toolbar.setSpacing(6)
+
+        self._admin_btn = QPushButton("🔧 打开管理后台")
+        self._admin_btn.setFixedHeight(28)
+        self._admin_btn.setToolTip("在独立窗口中打开 7tan 管理后台")
+        self._admin_btn.clicked.connect(self._open_admin_window)
+        self._admin_btn.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['accent2']}; color: #fff; border: none;
+                border-radius: 6px; font-size: 12px; font-weight: bold; padding: 4px 12px; }}
+            QPushButton:hover {{ background: {THEME['accent2']}dd; }}
+        """)
+        toolbar.addWidget(self._admin_btn)
+
+        self._admin_status = QLabel("")
+        self._admin_status.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 11px;")
+        toolbar.addWidget(self._admin_status)
+        toolbar.addStretch()
+        layout.addLayout(toolbar)
+
+        # ===== 主分屏 =====
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setHandleWidth(4)
         splitter.setStyleSheet(f"""
@@ -1649,6 +1672,41 @@ class ChatBrowserSplitPage(QWidget):
 
         self.browser = BrowserPage()
         self.chat = ChatPage()
+
+        splitter.addWidget(self.browser)
+        splitter.addWidget(self.chat)
+        splitter.setSizes([700, 540])
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
+
+        layout.addWidget(splitter)
+
+        self._admin_window = None
+
+    def _open_admin_window(self):
+        """打开管理后台独立窗口"""
+        from PyQt6.QtWebEngineWidgets import QWebEngineView
+        from src.tools import browser_tools as bt
+
+        if self._admin_window is not None:
+            try:
+                self._admin_window.show()
+                self._admin_window.raise_()
+                self._admin_status.setText("管理后台已显示")
+                return
+            except Exception:
+                self._admin_window = None
+
+        admin_url = "https://img.7tan.cn/admin"
+        win = DetachedBrowserWindow(url=admin_url, title="7tan 管理后台")
+        # 注册为 admin 视图
+        bt.register_web_view(win.view, role="admin")
+        win.setWindowTitle("🔧 7tan 管理后台")
+        win.show()
+        self._admin_window = win
+        self._admin_status.setText("✅ 管理后台已打开")
+        # 切到 admin 上下文
+        bt.set_active_context("admin")
 
         splitter.addWidget(self.browser)
         splitter.addWidget(self.chat)

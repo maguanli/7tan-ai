@@ -50,7 +50,14 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
     try:
         admin_url = config.get("site_7tan", {}).get("base_url", "https://img.7tan.cn")
         steps = []
-        
+
+        # 切换到管理后台上下文（先确保窗口已打开）
+        from .browser_tools import set_active_context, _admin_view
+        set_active_context("admin")
+        if _admin_view is None:
+            steps.append("⚠️ 请先在浏览器页面点击「打开管理后台」按钮，或手动在浏览器新标签中打开管理后台")
+        else:
+            steps.append("🔧 管理后台窗口已就绪")
         # ===== 步骤 1: 登录 =====
         login_result = login_7tan(
             config.get("site_7tan", {}).get("username", ""),

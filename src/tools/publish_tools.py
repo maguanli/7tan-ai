@@ -424,14 +424,16 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
                     
                     var allInfo = tag + ' ' + n + ' ' + id + ' ' + ph + ' ' + cls + ' ' + labelText;
                     
-                    // 排除规则
-                    var exclude = /温馨|提示|tips|hint|说明|备注|remark|搜索|search|seo|meta|footer|header|nav|广告|公告|通知|notice/.test(allInfo);
+                    // 排除规则 — 除了温馨提示，也排除下载地址/链接字段
+                    var exclude = /温馨|提示|tips|hint|说明|备注|remark|搜索|search|seo|meta|footer|header|nav|广告|公告|通知|notice|链接|地址|download|url[^l]|file|上传/.test(allInfo);
                     var rows = el.rows || 5;
                     var h = el.offsetHeight || 100;
                     
-                    // 评分
-                    var score = rows * 60 + h;
-                    if (/content|intro|内容|简介|正文|body|detail|article|游戏|介绍|描述|main/.test(allInfo)) score += 2000;
+                    // 评分 — 大幅提高内容相关字段的权重
+                    var score = rows * 20 + h;
+                    if (/content|intro|内容|简介|正文|body|detail|article|游戏|介绍|描述|main|descript/.test(allInfo)) score += 5000;
+                    if (rows >= 5) score += 500;  // 大文本框极可能是正文
+                    if (rows >= 10) score += 1000;
                     
                     debug.push((exclude?'⛔跳过':'✅候选') + '['+i+'] ' + (tag||'?') + ' r='+rows+' h='+h+' s='+score+' n='+n.substring(0,20)+' id='+id.substring(0,20));
                     

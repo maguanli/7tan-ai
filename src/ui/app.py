@@ -1369,9 +1369,10 @@ class BrowserPage(QWidget):
         self._back_btn.setEnabled(False)
         self._forward_btn.setEnabled(False)
 
-        # 注册到 browser_tools
+        # 注册到 browser_tools（区分源站/管理后台）
         bt = self._get_browser_tools()
-        bt.register_web_view(view)
+        role = self.property("browser_role") or "source"
+        bt.register_web_view(view, role=role)
 
         if url and url != "about:blank":
             view.load(QUrl(url))

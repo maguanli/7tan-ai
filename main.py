@@ -57,8 +57,7 @@ def main():
 
     # 确保已初始化（GUI 模式下静默生成默认配置，不弹 CLI 引导）
     from src.config.loader import ensure_initialized
-    mode = args.command
-    ensure_initialized(interactive=(mode not in ("desktop", "scheduler")))
+    ensure_initialized(interactive=(args.command not in ("desktop", "scheduler")))
 
     # 初始化数据库
     from src.database.db import init_db
@@ -132,8 +131,9 @@ def run_desktop(args):
         launch_app()
     except Exception as e:
         logger.exception(f"❌ PyQt6 启动失败: {e}")
-        import time as _time
-        _time.sleep(300)
+        print(f"\n❌ GUI 启动失败: {e}")
+        print("按 Enter 退出...")
+        input()
 
 
 def run_task(args):

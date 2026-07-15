@@ -184,7 +184,9 @@ QSplitter::handle {{
 """
 
 # ===== API 基础 URL =====
-API_BASE = "http://127.0.0.1:9800"
+import os as _os
+_API_PORT = _os.environ.get("7TAN_PORT", "9800")
+API_BASE = f"http://127.0.0.1:{_API_PORT}"
 
 
 # ===== 后台请求线程 =====
@@ -1056,6 +1058,12 @@ class DetachedBrowserWindow(QMainWindow):
 class BrowserPage(QWidget):
     """内置浏览器 — 多标签页，使用 PyQt6 QWebEngineView 原生渲染网页"""
 
+    @staticmethod
+    def _get_browser_tools():
+        """延迟导入 browser_tools（避免循环引用）"""
+        import src.tools.browser_tools as bt
+        return bt
+
     def __init__(self):
         super().__init__()
         from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -1362,7 +1370,7 @@ class BrowserPage(QWidget):
         self._forward_btn.setEnabled(False)
 
         # 注册到 browser_tools
-        import src.tools.browser_tools as bt
+        bt = self._get_browser_tools()
         bt.register_web_view(view)
 
         if url and url != "about:blank":
@@ -1380,10 +1388,8 @@ class BrowserPage(QWidget):
         try:
             view.urlChanged.disconnect()
             view.titleChanged.disconnect()
-            view.loadStarted.disconnect()
-            view.loadFinished.disconnect()
         except Exception:
-            pass
+            pass  # 信号可能未连接，正常
 
         # 如果是当前活跃的 view，先取消注册
         if view is self._current_view:
@@ -1458,7 +1464,7 @@ class BrowserPage(QWidget):
         self._forward_btn.setEnabled(history.canGoForward())
 
         # 注册到全局，供 browser_tools 使用
-        import src.tools.browser_tools as bt
+        bt = self._get_browser_tools()
         bt.register_web_view(view)
 
     # ===== View 信号处理 =====

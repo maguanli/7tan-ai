@@ -51,13 +51,9 @@ uvicorn>=0.24.0
 websockets>=12.0
 
 # === Native Desktop (PyQt6 — 全原生控件) ===
-PyQt6>=6.5  # 含 QtWidgets/QtNetwork/QtWebSockets
+PyQt6>=6.5  # QtWidgets/QtNetwork/QtWebSockets
+PyQt6-WebEngine>=6.5
 PyQt6-Charts>=6.5  # QtCharts 图表扩展
 
 # === Build (PyInstaller) ===
 pyinstaller>=6.0
-websockets>=12.0
-
-# === Native Desktop (原生桌面窗口) ===
-PyQt6>=6.5
-PyQt6-WebEngine>=6.5

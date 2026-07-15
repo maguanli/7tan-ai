@@ -76,8 +76,8 @@ class ModelManager:
             self.context_window = active_cfg.get("context_window", ai_cfg.get("context_window", 128000))
             self.max_tokens = active_cfg.get("max_tokens", ai_cfg.get("max_tokens", 4096))
             self.temperature = active_cfg.get("temperature", ai_cfg.get("temperature", 0.7))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"加载 AI 配置失败，使用默认值: {e}")
 
     def get_api_name(self) -> str:
         return self._api_name

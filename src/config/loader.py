@@ -244,49 +244,36 @@ def _generate_default_config(answers: dict) -> dict:
     }
 
 
-def ensure_initialized(interactive: bool = True):
+def _ensure_infrastructure():
     """
-    确保项目已初始化：
-    1. 如果 config.yaml 不存在，从模板创建默认配置
-    2. 如果 .env 不存在，从 .env.example 复制
-    3. 创建必要的目录结构
-    兼容开发模式和 PyInstaller 打包模式
-
-    Args:
-        interactive: 是否交互式引导（False 时静默生成默认配置）
+    确保基础设施就绪：目录结构、配置文件模板、.env 模板。
+    PyInstaller 打包模式下从 sys._MEIPASS 复制模板。
     """
     import shutil
     from loguru import logger
 
-    # 配置文件
+    # 配置文件模板
     if not CONFIG_PATH.exists():
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        # 尝试从模板复制（PyInstaller 打包后模板在 sys._MEIPASS）
-        bundled_template = None
         if getattr(sys, 'frozen', False):
             bundled_template = Path(sys._MEIPASS) / "config" / "config.yaml"
-        if bundled_template and bundled_template.exists():
-            shutil.copy(bundled_template, CONFIG_PATH)
-            logger.info(f"已从模板创建配置文件: {CONFIG_PATH}")
+            if bundled_template.exists():
+                shutil.copy(bundled_template, CONFIG_PATH)
+                logger.info(f"已从模板创建配置文件: {CONFIG_PATH}")
+            else:
+                logger.warning(f"配置文件不存在: {CONFIG_PATH}，将使用默认配置")
+                save_config(_generate_default_config({}), CONFIG_PATH)
         else:
-            logger.warning(f"配置文件不存在: {CONFIG_PATH}，将使用默认配置")
+            logger.info("开发模式：配置文件不存在，将使用默认配置")
             save_config(_generate_default_config({}), CONFIG_PATH)
 
-    # .env 文件
-    env_file = ROOT_DIR / ".env"
+    # .env 模板
     env_example = ROOT_DIR / ".env.example"
-    if not env_file.exists():
-        # 尝试从 bundled template 复制
+    if not env_example.exists():
         if getattr(sys, 'frozen', False):
             bundled_env = Path(sys._MEIPASS) / ".env.example"
             if bundled_env.exists():
                 shutil.copy(bundled_env, env_example)
-        if env_example.exists():
-            shutil.copy(env_example, env_file)
-            logger.info(f"已从模板创建 .env 文件，请编辑填写 API Key")
-        else:
-            env_file.touch()
-            logger.warning("已创建空 .env 文件，请填写 API Key")
 
     # 必要目录
     for dirname in ["data", "logs", "downloads"]:
@@ -381,11 +368,15 @@ def cli_first_time_setup() -> dict:
 def ensure_initialized(interactive: bool = True) -> dict:
     """
     确保系统已初始化。
-    如果配置文件不存在：
+    - 先调用 _ensure_infrastructure() 准备目录和模板
+    - 如果配置文件不存在：
       - interactive=True: 运行 CLI 交互式首次设置引导
       - interactive=False: 静默生成默认配置（GUI 模式）
     返回配置字典。
     """
+    # 先确保基础设施就绪
+    _ensure_infrastructure()
+
     if not CONFIG_PATH.exists():
         if interactive:
             print("⚠️  首次运行，正在启动配置引导...")

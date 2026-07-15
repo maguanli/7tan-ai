@@ -42,7 +42,7 @@ def start_scheduler(config: dict = None):
     sched.remove_all_jobs()
 
     # 添加定时任务
-    if sched_cfg.get("enabled", True):
+    if sched_cfg.get("auto_publish", True):
         _add_cron_jobs(sched, sched_cfg)
         _add_interval_jobs(sched, sched_cfg)
         _add_site_polling_jobs(sched, config)

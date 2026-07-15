@@ -90,7 +90,7 @@ class ContextManager:
         调用 OpenAI 兼容 API
         """
         try:
-            from ..llm.client import get_client
+            from ..agent.model_manager import ModelManager
 
             # 构建摘要请求
             conversation_text = ""
@@ -100,9 +100,16 @@ class ContextManager:
                 if content:
                     conversation_text += f"[{role}]: {content[:200]}\n"
 
-            client = get_client()
-            response = client.chat.completions.create(
-                model=model_name or "deepseek-chat",
+            # 使用 ModelManager 统一的 API 调用
+            from ..config.loader import load_config
+            config = load_config()
+            model_name = model_name or config.get("ai", {}).get("configs", {}).get(
+                config.get("ai", {}).get("active", "deepseek"),
+                {}
+            ).get("model", "deepseek-chat")
+
+            mm = ModelManager(model_name)
+            response = mm.chat(
                 messages=[
                     {
                         "role": "system",

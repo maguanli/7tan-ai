@@ -38,8 +38,6 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
     智能导航：登录 → 读取页面链接 → 找到「安卓游戏」→ 找到「发布」按钮 → 填写表单 → 提交。
     使用 BrowserBridge 线程安全操作浏览器。
     """
-    import time as _time
-    import json as _json
     from .browser_bridge import get_bridge
     from .browser_tools import login_7tan
     from ..config.loader import load_config
@@ -62,7 +60,7 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
 
         # ===== 步骤 2: 浏览管理后台首页，读取所有链接 =====
         bridge.navigate(f"{admin_url}/admin", wait_seconds=5.0)
-        _time.sleep(2)
+        time.sleep(2)
         
         all_links = bridge.get_page_links(100)  # 读取最多 100 个链接
         page_text = bridge.get_page_text(8000)   # 读取更多文本
@@ -134,7 +132,7 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
                 click_result = bridge.click(f'a:has-text("{text}")')
                 steps.append(f"   点击结果: {click_result}")
         
-        _time.sleep(3)
+        time.sleep(3)
         
         # ===== 步骤 5: 在安卓游戏页面找「发布」按钮 =====
         android_page_text = bridge.get_page_text(5000)
@@ -203,7 +201,7 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
             return "❌ 未找到发布入口。" + "\n".join(steps) + \
                    "\n\n💡 建议：先用 browse_page 查看安卓游戏页面内容，确认发布按钮的位置。"
         
-        _time.sleep(2)
+        time.sleep(2)
 
         # ===== 步骤 6: 填写表单 =====
         _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
@@ -211,7 +209,7 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
         steps.append("📝 表单已填写")
 
         # ===== 步骤 7: 提交 =====
-        _time.sleep(1)
+        time.sleep(1)
         submit_keywords = ["提交", "发布", "保存", "确认"]
         submitted = False
         for kw in submit_keywords:
@@ -240,7 +238,7 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
                     submitted = True
                     break
 
-        _time.sleep(3)
+        time.sleep(3)
 
         # ===== 步骤 8: 验证结果 =====
         current_title = bridge.get_page_title()
@@ -273,11 +271,12 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
 
     # 分类
     if category:
+        escaped_category = json.dumps(category)
         for sel in ['select[name="category"]', '#category', 'select[name="type"]']:
             bridge.execute_js(f"""
                 (function() {{
                     var el = document.querySelector('{sel}');
-                    if (el) {{ el.value = '{category}'; el.dispatchEvent(new Event('change')); return 'ok'; }}
+                    if (el) {{ el.value = {escaped_category}; el.dispatchEvent(new Event('change')); return 'ok'; }}
                     return 'not found';
                 }})()
             """, timeout=2.0)
@@ -316,11 +315,12 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
 
     # 标签
     if tags:
+        escaped_tags = json.dumps(tags)
         for sel in ['input[name="tags"]', '#tags', 'input[placeholder*="标签"]']:
             bridge.execute_js(f"""
                 (function() {{
                     var el = document.querySelector('{sel}');
-                    if (el) {{ el.value = '{tags}'; el.dispatchEvent(new Event('input')); return 'ok'; }}
+                    if (el) {{ el.value = {escaped_tags}; el.dispatchEvent(new Event('input')); return 'ok'; }}
                     return 'not found';
                 }})()
             """, timeout=2.0)

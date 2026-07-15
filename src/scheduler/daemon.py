@@ -42,7 +42,7 @@ def restart_self():
         from src.tools.browser_tools import close_browser
         close_browser()
     except Exception:
-        pass
+        pass  # 浏览器可能未启动，忽略关闭异常
 
     # 3. 启动新进程
     if getattr(sys, 'frozen', False):

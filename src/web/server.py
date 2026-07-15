@@ -6,9 +6,13 @@ import sys
 import asyncio
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
+
+# API 安全：仅允许本地请求（桌面应用）或带 token 的远程请求
+import os
+API_TOKEN = os.environ.get("7TAN_API_TOKEN", "")
 
 
 def _get_project_root():
@@ -24,6 +28,30 @@ PROJECT_ROOT = _get_project_root()
 sys.path.insert(0, str(PROJECT_ROOT))
 
 app = FastAPI(title="7坛AI小编", version="5.1.0", docs_url=None, redoc_url=None)
+
+
+# ===== API 安全中间件 =====
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """简单认证：本地请求放行，远程请求需要 token"""
+    host = request.client.host if request.client else ""
+    path = request.url.path
+
+    # 健康检查和 WebSocket 放行
+    if path == "/api/health" or path.startswith("/ws"):
+        return await call_next(request)
+
+    # 本地请求放行
+    if host in ("127.0.0.1", "::1", "localhost"):
+        return await call_next(request)
+
+    # 远程请求需要 API Token
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if API_TOKEN and token == API_TOKEN:
+        return await call_next(request)
+
+    logger.warning(f"未授权的远程请求: {host} -> {path}")
+    return JSONResponse({"error": "unauthorized"}, status_code=401)
 
 # ===== WebSocket 管理器 =====
 from .ws import get_ws_manager
@@ -53,8 +81,19 @@ async def root():
 
 @app.get("/api/health")
 async def health():
-    """健康检查"""
-    return JSONResponse({"status": "ok", "version": app.version})
+    """健康检查 — 返回版本号和系统状态"""
+    try:
+        from ..tools.monitor_tools import health_check
+        detail = health_check()
+    except Exception:
+        detail = "ok"
+    return JSONResponse({"status": "ok", "version": app.version, "detail": detail})
+
+
+@app.get("/api/version")
+async def version():
+    """版本信息"""
+    return JSONResponse({"version": app.version, "name": "7tanAI"})
 
 
 # ===== 生命周期 =====
@@ -261,12 +300,6 @@ async def _handle_resources(ws: WebSocket, client_id: str):
 
 # ===== REST API =====
 
-@app.get("/api/health")
-async def health():
-    from ..tools.monitor_tools import health_check
-    return {"status": "ok", "detail": health_check()}
-
-
 @app.get("/api/status")
 async def status():
     from ..tools.monitor_tools import get_system_status
@@ -285,7 +318,7 @@ async def jobs():
     return {"jobs": get_jobs_status()}
 
 
-def start_server(host: str = "0.0.0.0", port: int = 9800):
+def start_server(host: str = "127.0.0.1", port: int = 9800):
     """启动 API 服务器"""
     import uvicorn
     logger.info(f"🌐 启动 API 服务器: http://{host}:{port}")

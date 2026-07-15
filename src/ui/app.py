@@ -1626,35 +1626,13 @@ class BrowserPage(QWidget):
 
 # ===== AI 工作台（浏览器 + 对话 左右分屏） =====
 class ChatBrowserSplitPage(QWidget):
-    """浏览器在左、AI 对话在右，中间可拖动分隔条"""
+    """浏览器在左、AI 对话在右，源网站/管理后台一键切换（不占空间）"""
 
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
-        # ===== 快捷工具栏 =====
-        toolbar = QHBoxLayout()
-        toolbar.setContentsMargins(8, 4, 8, 4)
-        toolbar.setSpacing(6)
-
-        self._admin_btn = QPushButton("🔧 打开管理后台")
-        self._admin_btn.setFixedHeight(28)
-        self._admin_btn.setToolTip("在独立窗口中打开 7tan 管理后台")
-        self._admin_btn.clicked.connect(self._open_admin_window)
-        self._admin_btn.setStyleSheet(f"""
-            QPushButton {{ background: {THEME['accent2']}; color: #fff; border: none;
-                border-radius: 6px; font-size: 12px; font-weight: bold; padding: 4px 12px; }}
-            QPushButton:hover {{ background: {THEME['accent2']}dd; }}
-        """)
-        toolbar.addWidget(self._admin_btn)
-
-        self._admin_status = QLabel("")
-        self._admin_status.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 11px;")
-        toolbar.addWidget(self._admin_status)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
 
         # ===== 主分屏 =====
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -1670,43 +1648,58 @@ class ChatBrowserSplitPage(QWidget):
             }}
         """)
 
-        self.browser = BrowserPage()
+        # 浏览器区 — QStackedWidget 叠加两个浏览器（只显示一个）
+        self._browser_stack = QStackedWidget()
+        self.source_browser = BrowserPage()
+        self.source_browser.setProperty("browser_role", "source")
+        self.admin_browser = BrowserPage()
+        self.admin_browser.setProperty("browser_role", "admin")
+        self._browser_stack.addWidget(self.source_browser)
+        self._browser_stack.addWidget(self.admin_browser)
+
         self.chat = ChatPage()
 
-        splitter.addWidget(self.browser)
+        splitter.addWidget(self._browser_stack)
         splitter.addWidget(self.chat)
         splitter.setSizes([700, 540])
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
 
         layout.addWidget(splitter)
-
         self._admin_window = None
 
-    def _open_admin_window(self):
-        """打开管理后台独立窗口"""
-        from PyQt6.QtWebEngineWidgets import QWebEngineView
+        # 注册 UI 切换回调 — AI 切浏览器时自动切换面板
+        from src.tools import browser_tools as _bt
+        _bt._switch_ui_callback = self.switch_browser
+
+        # 首次显示时预加载
+        self._initialized = False
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._initialized:
+            self._initialized = True
+            self.source_browser._add_tab(url="about:blank", title="新标签页")
+            self.admin_browser._add_tab(url="about:blank", title="新标签页")
+
+    def switch_browser(self, target: str):
+        """切换显示的浏览器：source 或 admin"""
         from src.tools import browser_tools as bt
+        if target == "admin":
+            self._browser_stack.setCurrentIndex(1)
+            bt.set_active_context("admin")
+        else:
+            self._browser_stack.setCurrentIndex(0)
+            bt.set_active_context("source")
 
-        if self._admin_window is not None:
-            try:
-                self._admin_window.show()
-                self._admin_window.raise_()
-                self._admin_status.setText("管理后台已显示")
-                return
-            except Exception:
-                self._admin_window = None
+    def _open_admin_window(self):
+        """打开管理后台"""
+        self.admin_browser._add_tab(url="https://img.7tan.cn/admin", title="7tan管理后台")
+        self.switch_browser("admin")
 
-        admin_url = "https://img.7tan.cn/admin"
-        win = DetachedBrowserWindow(url=admin_url, title="7tan 管理后台")
-        # 注册为 admin 视图
-        bt.register_web_view(win.view, role="admin")
-        win.setWindowTitle("🔧 7tan 管理后台")
-        win.show()
-        self._admin_window = win
-        self._admin_status.setText("✅ 管理后台已打开")
-        # 切到 admin 上下文
-        bt.set_active_context("admin")
+    def _open_source(self):
+        """切换到源网站"""
+        self.switch_browser("source")
 
         splitter.addWidget(self.browser)
         splitter.addWidget(self.chat)

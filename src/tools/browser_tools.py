@@ -15,6 +15,15 @@ from .registry import register_tool
 _source_view = None   # 主窗口浏览器（源网站）
 _admin_view = None    # 管理后台浏览器（独立窗口）
 _active_ctx = "source"  # 当前操作目标
+_switch_ui_callback = None  # UI 回调：ChatBrowserSplitPage.switch_browser
+
+
+def set_active_context(ctx: str):
+    """设置当前操作的浏览器上下文，触发 UI 切换"""
+    global _active_ctx, _switch_ui_callback
+    _active_ctx = ctx
+    if _switch_ui_callback:
+        _switch_ui_callback(ctx)
 
 
 def register_web_view(view, role: str = "source"):
@@ -33,9 +42,25 @@ def register_web_view(view, role: str = "source"):
 
 
 def set_active_context(ctx: str):
-    """设置当前操作的浏览器上下文"""
+    """设置当前操作的浏览器上下文，同时触发 UI 切换"""
     global _active_ctx
     _active_ctx = ctx
+    # 通知 UI 切换浏览器面板
+    try:
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            for widget in app.topLevelWidgets():
+                # 找到 ChatBrowserSplitPage 并切换
+                from PyQt6.QtCore import QMetaObject, Qt
+                split_page = widget.findChild(QWidget, None)
+                # 遍历查找
+                for w in widget.findChildren(QWidget):
+                    if hasattr(w, 'switch_browser'):
+                        w.switch_browser(ctx)
+                        break
+    except Exception:
+        pass
 
 
 def _get_active_view():

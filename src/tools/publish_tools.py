@@ -341,24 +341,21 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
         else:
             not_found["2.分类"] = f"分类'{category}'未匹配 ll_idd 选项"
 
-    # === 第3步: 填写简介 → name="ll_jie"(简短描述) + name="ll_gxts"(详细内容) ===
+    # === 第3步: 填写简介 → name="ll_jie"（不要填 ll_gxts 那是更新说明） ===
     if intro and len(intro) > 10:
-        results = []
-        for field_name in ["ll_jie", "ll_gxts"]:
-            r = bridge.execute_js(f"""
-                (function() {{
-                    var el = document.querySelector('textarea[name="{field_name}"]');
-                    if (el) {{
-                        el.value = {json.dumps(intro)};
-                        el.dispatchEvent(new Event('input',{{bubbles:true}}));
-                        el.dispatchEvent(new Event('change',{{bubbles:true}}));
-                        return 'ok';
-                    }}
-                    return 'not found';
-                }})()
-            """, timeout=2.0)
-            results.append(f"{field_name}:{'✓' if 'ok' in r else '✗'}")
-        filled["3.简介"] = " | ".join(results)
+        r = bridge.execute_js(f"""
+            (function() {{
+                var el = document.querySelector('textarea[name="ll_jie"]');
+                if (el) {{
+                    el.value = {json.dumps(intro)};
+                    el.dispatchEvent(new Event('input',{{bubbles:true}}));
+                    el.dispatchEvent(new Event('change',{{bubbles:true}}));
+                    return 'ok';
+                }}
+                return 'not found';
+            }})()
+        """, timeout=2.0)
+        filled["3.简介"] = f"{'✓' if 'ok' in r else '✗'} ll_jie"
     else:
         filled["3.简介"] = f"⚠️ 内容太短({len(intro)}字)"
 
@@ -384,21 +381,39 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
         except Exception as e:
             filled["5.截图"] = f"⚠️ {e}"
 
-    # === 下载链接 → name="ll_url" 或 name="ll_text" ===
+    # === 下载链接 → name="ll_text"(安卓), 不要填 ll_url(那是iOS) ===
     if download_url:
-        for sel in ['input[name="ll_url"]', 'textarea[name="ll_url"]', 'textarea[name="ll_text"]']:
-            r = bridge.execute_js(f"""
-                (function() {{
-                    var el = document.querySelector('{sel}');
-                    if (el) {{ el.value = '{download_url}'; el.dispatchEvent(new Event('input')); return 'ok'; }}
-                    return 'not found';
-                }})()
-            """, timeout=2.0)
-            if "ok" in r:
-                filled["下载链接"] = download_url[:50]
-                break
+        r = bridge.execute_js(f"""
+            (function() {{
+                var el = document.querySelector('textarea[name="ll_text"]');
+                if (el) {{ el.value = '{download_url}'; el.dispatchEvent(new Event('input')); return 'ok'; }}
+                return 'not found';
+            }})()
+        """, timeout=2.0)
+        if "ok" in r:
+            filled["下载链接"] = download_url[:50]
         else:
-            not_found["下载链接"] = "未找到 ll_url/ll_text"
+            not_found["下载链接"] = "未找到 ll_text"
+
+    # === 系统要求 → name="ll_xitong" 填 5.0 ===
+    r = bridge.execute_js("""
+        (function() {
+            var el = document.querySelector('input[name="ll_xitong"]');
+            if (el) { el.value = '5.0'; el.dispatchEvent(new Event('input')); return 'ok'; }
+            return 'not found';
+        })()
+    """, timeout=2.0)
+    filled["系统要求"] = "5.0" if "ok" in r else "未找到 ll_xitong"
+
+    # === 开发商 → name="ll_kaifa" ===
+    r = bridge.execute_js("""
+        (function() {
+            var el = document.querySelector('input[name="ll_kaifa"]');
+            if (el) { el.value = '官方'; el.dispatchEvent(new Event('input')); return 'ok'; }
+            return 'not found';
+        })()
+    """, timeout=2.0)
+    filled["开发商"] = "官方" if "ok" in r else "未找到 ll_kaifa"
 
     # === 标签 ===
     if tags:

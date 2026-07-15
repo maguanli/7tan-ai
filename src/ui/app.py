@@ -1627,18 +1627,55 @@ class BrowserPage(QWidget):
 
 # ===== AI 工作台（浏览器 + 对话 左右分屏） =====
 class ChatBrowserSplitPage(QWidget):
-    """双浏览器 + AI 对话 — 源网站 和 管理后台 各一个浏览器窗口"""
+    """浏览器在左、AI 对话在右，源网站/管理后台一键切换"""
 
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
+        layout.setSpacing(0)
 
-        # ===== 双浏览器水平分割 =====
-        browser_split = QSplitter(Qt.Orientation.Horizontal)
-        browser_split.setHandleWidth(4)
-        browser_split.setStyleSheet(f"""
+        # ===== 浏览器切换按钮 =====
+        toggle_bar = QHBoxLayout()
+        toggle_bar.setContentsMargins(6, 4, 6, 4)
+        toggle_bar.setSpacing(6)
+
+        self._source_toggle = QPushButton("🌐 源网站")
+        self._source_toggle.setCheckable(True)
+        self._source_toggle.setChecked(True)
+        self._source_toggle.setFixedHeight(30)
+        self._source_toggle.clicked.connect(lambda: self._switch_browser("source"))
+        self._source_toggle.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['accent']}; color: #000; border: none;
+                border-radius: 6px; font-size: 13px; font-weight: bold; padding: 4px 16px; }}
+            QPushButton:checked {{ background: {THEME['accent']}; color: #000; }}
+            QPushButton:!checked {{ background: {THEME['bg_dark']}; color: {THEME['text_secondary']}; }}
+        """)
+        toggle_bar.addWidget(self._source_toggle)
+
+        self._admin_toggle = QPushButton("🔧 管理后台")
+        self._admin_toggle.setCheckable(True)
+        self._admin_toggle.setChecked(False)
+        self._admin_toggle.setFixedHeight(30)
+        self._admin_toggle.clicked.connect(lambda: self._switch_browser("admin"))
+        self._admin_toggle.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['accent2']}; color: #fff; border: none;
+                border-radius: 6px; font-size: 13px; font-weight: bold; padding: 4px 16px; }}
+            QPushButton:checked {{ background: {THEME['accent2']}; color: #fff; }}
+            QPushButton:!checked {{ background: {THEME['bg_dark']}; color: {THEME['text_secondary']}; }}
+        """)
+        toggle_bar.addWidget(self._admin_toggle)
+
+        self._toggle_hint = QLabel("")
+        self._toggle_hint.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 11px;")
+        toggle_bar.addWidget(self._toggle_hint)
+        toggle_bar.addStretch()
+        layout.addLayout(toggle_bar)
+
+        # ===== 主分屏（浏览器 + 对话）=====
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(4)
+        splitter.setStyleSheet(f"""
             QSplitter::handle {{
                 background-color: {THEME['accent']}44;
                 margin: 4px 0;
@@ -1649,74 +1686,50 @@ class ChatBrowserSplitPage(QWidget):
             }}
         """)
 
-        # 左侧：源网站浏览器
+        # 浏览器区 — 用 QStackedWidget 切换
+        self._browser_stack = QStackedWidget()
         self.source_browser = BrowserPage()
         self.source_browser.setProperty("browser_role", "source")
-
-        # 右侧：管理后台浏览器
         self.admin_browser = BrowserPage()
         self.admin_browser.setProperty("browser_role", "admin")
-
-        # 包裹标签
-        source_wrapper = QWidget()
-        src_layout = QVBoxLayout(source_wrapper)
-        src_layout.setContentsMargins(0, 0, 0, 0)
-        src_layout.setSpacing(0)
-        src_label = QLabel("🌐 源网站浏览器（游戏站 / 搜索）")
-        src_label.setStyleSheet(f"""
-            background: {THEME['accent']}; color: #000; font-size: 11px;
-            font-weight: bold; padding: 4px 10px; border-radius: 4px 4px 0 0;
-        """)
-        src_layout.addWidget(src_label)
-        src_layout.addWidget(self.source_browser, 1)
-
-        admin_wrapper = QWidget()
-        adm_layout = QVBoxLayout(admin_wrapper)
-        adm_layout.setContentsMargins(0, 0, 0, 0)
-        adm_layout.setSpacing(0)
-        adm_label = QLabel("🔧 管理后台浏览器（7tan 管理面板）")
-        adm_label.setStyleSheet(f"""
-            background: {THEME['accent2']}; color: #fff; font-size: 11px;
-            font-weight: bold; padding: 4px 10px; border-radius: 4px 4px 0 0;
-        """)
-        adm_layout.addWidget(adm_label)
-        adm_layout.addWidget(self.admin_browser, 1)
-
-        browser_split.addWidget(source_wrapper)
-        browser_split.addWidget(admin_wrapper)
-        browser_split.setSizes([600, 640])
-
-        # ===== 垂直分割：浏览器 + 对话 =====
-        main_split = QSplitter(Qt.Orientation.Vertical)
-        main_split.setHandleWidth(4)
-        main_split.setStyleSheet(f"""
-            QSplitter::handle {{
-                background-color: {THEME['accent']}44;
-                margin: 0 4px;
-                border-radius: 2px;
-            }}
-        """)
+        self._browser_stack.addWidget(self.source_browser)
+        self._browser_stack.addWidget(self.admin_browser)
+        self._browser_stack.setCurrentIndex(0)
 
         self.chat = ChatPage()
 
-        main_split.addWidget(browser_split)
-        main_split.addWidget(self.chat)
-        main_split.setSizes([550, 250])
-        main_split.setStretchFactor(0, 3)
-        main_split.setStretchFactor(1, 1)
+        splitter.addWidget(self._browser_stack)
+        splitter.addWidget(self.chat)
+        splitter.setSizes([700, 540])
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
 
-        layout.addWidget(main_split)
+        layout.addWidget(splitter)
 
-        # 首次显示时自动加载初始页面
+        # 首次显示时初始化
         self._initialized = False
+
+    def _switch_browser(self, which):
+        """切换浏览器：源网站 / 管理后台"""
+        if which == "source":
+            self._browser_stack.setCurrentIndex(0)
+            self._source_toggle.setChecked(True)
+            self._admin_toggle.setChecked(False)
+            self._toggle_hint.setText("浏览游戏站点、搜索、下载资源")
+        else:
+            self._browser_stack.setCurrentIndex(1)
+            self._source_toggle.setChecked(False)
+            self._admin_toggle.setChecked(True)
+            self._toggle_hint.setText("登录后台、填写表单、发布资源")
+        # 同步 AI 工具上下文
+        from src.tools import browser_tools as bt
+        bt._active_context = which
 
     def showEvent(self, event):
         super().showEvent(event)
         if not self._initialized:
             self._initialized = True
-            # 源网站浏览器打开默认页面
             self.source_browser._add_tab(url="https://www.7723.cn", title="7723游戏")
-            # 管理后台浏览器打开 7tan 后台
             self.admin_browser._add_tab(url="https://img.7tan.cn/admin", title="7tan管理后台")
 
 

@@ -211,9 +211,15 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
         time.sleep(2)
 
         # ===== 步骤 6: 填写表单 =====
-        _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
-                              logo_path, screenshot_paths, resource_type)
-        steps.append("📝 表单已填写")
+        fill_report, all_filled = _fill_form_via_bridge(
+            bridge, title, intro, category, tags, download_url,
+            logo_path, screenshot_paths, resource_type)
+        steps.append(fill_report)
+
+        if not all_filled:
+            steps.append("⚠️ 部分必填字段未成功填写，请在提交前手动检查")
+            return "⚠️ 表单填写不完整。\n" + fill_report + \
+                   "\n\n💡 建议：使用 browse_page 查看发布页面的 HTML 结构，找到正确的输入框选择器后重新发布。"
 
         # ===== 步骤 7: 提交 =====
         time.sleep(1)
@@ -265,69 +271,161 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
 
 def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
                           logo_path, screenshot_paths, resource_type):
-    """通过 Bridge 执行 JS 填写发布表单"""
-    # 标题
+    """通过 Bridge 执行 JS 填写发布表单，返回填写报告"""
+    filled = {}
+    not_found = {}
+
+    # === 标题 ===
     for sel in ['input[name="title"]', '#title', 'input[placeholder*="标题"]', '.title-input input']:
-        bridge.execute_js(f"""
+        r = bridge.execute_js(f"""
             (function() {{
                 var el = document.querySelector('{sel}');
-                if (el) {{ el.value = {json.dumps(title)}; el.dispatchEvent(new Event('input')); return 'ok'; }}
+                if (el) {{ el.value = {json.dumps(title)}; el.focus(); el.dispatchEvent(new Event('input')); el.dispatchEvent(new Event('change')); return 'ok'; }}
                 return 'not found';
             }})()
         """, timeout=2.0)
+        if "ok" in r:
+            filled["标题"] = title[:30]
+            break
+    else:
+        not_found["标题"] = "未找到标题输入框"
 
-    # 分类
+    # === 分类 ===
     if category:
-        escaped_category = json.dumps(category)
-        for sel in ['select[name="category"]', '#category', 'select[name="type"]']:
-            bridge.execute_js(f"""
+        for sel in ['select[name="category"]', '#category', 'select[name="type"]', 'select[name="cate"]']:
+            r = bridge.execute_js(f"""
                 (function() {{
                     var el = document.querySelector('{sel}');
-                    if (el) {{ el.value = {escaped_category}; el.dispatchEvent(new Event('change')); return 'ok'; }}
+                    if (el) {{ 
+                        el.value = {json.dumps(category)}; 
+                        el.dispatchEvent(new Event('change')); el.dispatchEvent(new Event('input'));
+                        return 'ok'; 
+                    }}
                     return 'not found';
                 }})()
             """, timeout=2.0)
+            if "ok" in r:
+                filled["分类"] = category
+                break
+        else:
+            not_found["分类"] = "未找到分类下拉框"
 
-    # 内容
+    # === 简介/内容 ⭐ 最关键 ===
     intro_selectors = [
-        'textarea[name="content"]', 'textarea[name="intro"]', '#content',
+        'textarea[name="content"]', 'textarea[name="intro"]', '#content', '#intro',
         '.editor textarea', '.ck-content', '[contenteditable="true"]',
+        'textarea',  # 兜底：页面中任意 textarea
     ]
     for sel in intro_selectors:
-        escaped_intro = json.dumps(intro)
-        bridge.execute_js(f"""
+        r = bridge.execute_js(f"""
             (function() {{
                 var el = document.querySelector('{sel}');
                 if (el) {{
-                    if (el.isContentEditable) el.innerHTML = {escaped_intro};
-                    else el.value = {escaped_intro};
-                    el.dispatchEvent(new Event('input'));
+                    if (el.isContentEditable || el.getAttribute('contenteditable') === 'true') 
+                        el.innerHTML = {json.dumps(intro)};
+                    else 
+                        el.value = {json.dumps(intro)};
+                    el.focus(); 
+                    el.dispatchEvent(new Event('input')); 
+                    el.dispatchEvent(new Event('change'));
+                    el.dispatchEvent(new Event('blur'));
                     return 'ok';
                 }}
                 return 'not found';
             }})()
         """, timeout=2.0)
+        if "ok" in r:
+            filled["简介"] = f"{len(intro)}字"
+            break
+    else:
+        not_found["简介"] = "未找到内容输入区域"
 
-    # 下载链接
+    # === 下载链接 ===
     if download_url:
-        for sel in ['input[name="download_url"]', 'input[name="download"]',
-                     '#download_url', 'input[placeholder*="下载"]']:
-            bridge.execute_js(f"""
+        for sel in ['input[name="download_url"]', 'input[name="download"]', 'input[name="url"]',
+                     '#download_url', 'input[placeholder*="下载"]', 'input[placeholder*="链接"]',
+                     'input[placeholder*="地址"]']:
+            r = bridge.execute_js(f"""
                 (function() {{
                     var el = document.querySelector('{sel}');
                     if (el) {{ el.value = '{download_url}'; el.dispatchEvent(new Event('input')); return 'ok'; }}
                     return 'not found';
                 }})()
             """, timeout=2.0)
+            if "ok" in r:
+                filled["下载链接"] = download_url[:50]
+                break
+        else:
+            not_found["下载链接"] = "未找到下载链接输入框"
 
-    # 标签
+    # === 标签 ===
     if tags:
-        escaped_tags = json.dumps(tags)
         for sel in ['input[name="tags"]', '#tags', 'input[placeholder*="标签"]']:
-            bridge.execute_js(f"""
+            r = bridge.execute_js(f"""
                 (function() {{
                     var el = document.querySelector('{sel}');
-                    if (el) {{ el.value = {escaped_tags}; el.dispatchEvent(new Event('input')); return 'ok'; }}
+                    if (el) {{ el.value = {json.dumps(tags)}; el.dispatchEvent(new Event('input')); return 'ok'; }}
                     return 'not found';
                 }})()
             """, timeout=2.0)
+            if "ok" in r:
+                filled["标签"] = tags
+                break
+        else:
+            not_found["标签"] = "未找到标签输入框"
+
+    # === LOGO 上传 ===
+    if logo_path:
+        logo_uploaded = False
+        for sel in ['input[name="logo"]', 'input[name="thumb"]', '#logo', 'input[type="file"]']:
+            r = bridge.execute_js(f"""
+                (function() {{
+                    var el = document.querySelector('{sel}');
+                    if (el) return el.name || el.id || 'file_input';
+                    return 'not found';
+                }})()
+            """, timeout=1.0)
+            if "not found" not in r:
+                # 点击触发文件选择
+                bridge.click(sel)
+                filled["LOGO"] = f"✅ 已触发上传 ({logo_path})"
+                logo_uploaded = True
+                break
+        if not logo_uploaded:
+            filled["LOGO"] = f"⚠️ 未找到上传入口，文件: {logo_path}"
+
+    # === 截图上传 ===
+    if screenshot_paths:
+        try:
+            shots = json.loads(screenshot_paths) if isinstance(screenshot_paths, str) else screenshot_paths
+            if isinstance(shots, list) and shots:
+                filled["截图"] = f"准备上传 {len(shots)} 张"
+                # 查找截图上传入口
+                shot_sel = None
+                for sel in ['input[name="screenshot[]"]', 'input[name="screenshots[]"]', 
+                             '#screenshots input', 'input[accept*="image"]:not([name="logo"]):not([name="thumb"])']:
+                    r = bridge.execute_js(f"""
+                        (function() {{ return document.querySelector('{sel}') ? 'ok' : 'not found'; }})()
+                    """, timeout=1.0)
+                    if "ok" in r:
+                        shot_sel = sel
+                        break
+                if shot_sel:
+                    for shot in shots[:5]:
+                        bridge.click(shot_sel)
+                    filled["截图"] = f"✅ 已触发 {len(shots)} 张截图上传"
+                else:
+                    filled["截图"] = f"⚠️ 未找到截图上传入口"
+        except Exception:
+            filled["截图"] = "格式解析失败"
+
+    # === 生成报告 ===
+    report_parts = []
+    for k, v in filled.items():
+        report_parts.append(f"  ✅ {k}: {v}")
+    for k, v in not_found.items():
+        report_parts.append(f"  ❌ {k}: {v}")
+
+    report = "📝 表单填写报告:\n" + "\n".join(report_parts)
+    logger.info(report)
+    return report, len(not_found) == 0

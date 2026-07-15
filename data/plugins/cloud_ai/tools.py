@@ -1,6 +1,6 @@
 """
-Cloud Code 插件 — 接入云端 AI 增强推理能力
-支持 OpenAI GPT-4o-mini 等模型，自动降级到本地 DeepSeek
+Cloud Code 插件 — 复用软件已配置的 AI 进行深度分析
+直接使用 config.yaml 中的 API Key 和模型，零配置
 """
 import sys, json
 from pathlib import Path
@@ -9,75 +9,65 @@ sys.path.insert(0, str(ROOT))
 from src.tools.registry import register_tool
 
 
-def _get_cloud_client():
-    """获取云端 AI 客户端（OpenAI 兼容）"""
-    try:
-        from openai import OpenAI
-        from src.config.loader import load_config
-        config = load_config()
-        cloud_cfg = config.get("plugins", {}).get("cloud_ai", {})
-        api_key = cloud_cfg.get("api_key", "") or config.get("ai", {}).get("configs", {}).get("deepseek", {}).get("api_key", "")
-        base_url = cloud_cfg.get("base_url", "https://api.openai.com/v1")
-        model = cloud_cfg.get("model", "gpt-4o-mini")
-        if not api_key:
-            return None, None
-        return OpenAI(api_key=api_key, base_url=base_url), model
-    except Exception:
-        return None, None
+def _get_client():
+    """直接使用软件当前活跃的 AI 配置"""
+    from openai import OpenAI
+    from src.config.loader import load_config
+    config = load_config()
+    ai = config.get("ai", {})
+    active = ai.get("active", "deepseek")
+    cfg = ai.get("configs", {}).get(active, {})
+    key = cfg.get("api_key", "")
+    url = cfg.get("base_url", "https://api.deepseek.com/v1")
+    model = cfg.get("model", "deepseek-chat")
+    return OpenAI(api_key=key, base_url=url), model if key else (None, None)
 
 
 @register_tool(
     name="cloud_analyze",
-    description="使用云端 AI（GPT-4o-mini）进行深度分析。比本地模型更聪明，用于复杂任务如写游戏简介、分析评测、对比游戏。失败时自动降级。",
+    description="深度分析模式。用软件当前的AI模型单独调用一次进行深度推理，适合写游戏简介、对比评测等需要仔细思考的任务。",
     parameters={
         "type": "object",
         "properties": {
             "prompt": {"type": "string", "description": "分析任务描述"},
-            "context": {"type": "string", "description": "相关上下文资料"},
+            "context": {"type": "string", "description": "参考资料"},
         },
         "required": ["prompt", "context"]
     },
     category="ai",
 )
 def cloud_analyze(prompt: str, context: str) -> str:
-    """云端 AI 分析 — 用更聪明的模型处理复杂任务"""
-    client, model = _get_cloud_client()
+    client, model = _get_client()
     if client is None:
-        return f"⚠️ 云端 AI 未配置（在 config.yaml 的 plugins.cloud_ai 中设置 API Key）\n\n请基于以下资料完成任务：\n{prompt}\n\n资料：\n{context[:3000]}"
+        return f"⚠️ AI未配置，请基于资料完成:\n{prompt}\n\n{context[:3000]}"
 
     try:
-        response = client.chat.completions.create(
+        resp = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": "你是一个专业的游戏编辑，擅长分析游戏特点、撰写专业评测和简介。用中文回复。"},
-                {"role": "user", "content": f"任务：{prompt}\n\n参考资料：\n{context[:8000]}"},
+                {"role": "system", "content": "资深游戏编辑。仔细思考，给出高质量中文回复。"},
+                {"role": "user", "content": f"任务：{prompt}\n\n资料：\n{context[:8000]}"},
             ],
-            max_tokens=2000,
-            temperature=0.7,
+            max_tokens=2000, temperature=0.7,
         )
-        result = response.choices[0].message.content
-        return f"☁️ 云端 AI 分析结果 ({model}):\n\n{result}"
+        return f"☁️ 深度分析结果:\n\n{resp.choices[0].message.content}"
     except Exception as e:
-        return f"⚠️ 云端 AI 调用失败 ({e})，请基于资料自行分析：\n{prompt}\n\n资料：\n{context[:2000]}"
+        return f"⚠️ 分析失败({e})\n\n{prompt}\n\n{context[:2000]}"
 
 
 @register_tool(
     name="cloud_write_intro",
-    description="使用云端 AI 撰写游戏发布简介（HTML格式）。自动从游戏信息中提取要点，生成专业、吸引人的介绍文案。",
+    description="用深度分析模式撰写游戏发布简介（HTML格式）。自动提取要点生成专业文案。",
     parameters={
         "type": "object",
         "properties": {
             "game_name": {"type": "string", "description": "游戏名称"},
-            "game_info": {"type": "string", "description": "游戏详情（从页面提取的文本）"},
-            "features": {"type": "string", "description": "游戏特色/亮点", "default": ""},
+            "game_info": {"type": "string", "description": "游戏详情（页面提取的文本）"},
         },
         "required": ["game_name", "game_info"]
     },
     category="ai",
 )
-def cloud_write_intro(game_name: str, game_info: str, features: str = "") -> str:
-    """用云端 AI 写游戏简介"""
-    prompt = f"为游戏「{game_name}」写一段约 150-200 字的发布简介，用 HTML 格式（<p>段落、<b>加粗、<br>换行）。包含游戏类型、核心玩法、画面风格、特色亮点。语言生动吸引人，不要夸大。"
-    if features:
-        prompt += f"\n特色亮点：{features}"
+def cloud_write_intro(game_name: str, game_info: str) -> str:
+    prompt = f"为「{game_name}」写150-200字HTML格式发布简介（<p><b><br>标签）。含类型、玩法、画面、特色。吸引人但不夸张。"
     return cloud_analyze(prompt, game_info)

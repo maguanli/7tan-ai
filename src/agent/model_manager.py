@@ -49,7 +49,7 @@ class ModelManager:
         self._client = None
         self._api_name = model_name  # API 实际调用的名称
         self.context_window = 128000
-        self.max_tokens = 4096
+        self.max_tokens = 16384
         self.temperature = 0.7
         self._load_config_defaults()
 

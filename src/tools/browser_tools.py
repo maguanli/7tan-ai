@@ -148,9 +148,9 @@ def browse_page(url: str, wait_seconds: int = 3) -> str:
         link_list = bridge.get_page_links(200)    # 提取200个链接（含onclick/data-url）
         image_list = bridge.get_page_images(50)
 
-        result = f"📄 页面标题: {title}\n\n📝 页面内容 (前10000字):\n{text[:10000]}\n"
+        result = f"📄 页面标题: {title}\n\n📝 页面内容:\n{text}\n"
         result += f"\n🔗 全部链接 ({len(link_list)}个):\n"
-        for link in link_list[:80]:               # 显示前 80 个
+        for link in link_list:                     # 全部链接
             href = link.get('href', '')
             text = link.get('text', '') or '(无文字)'
             # 高亮下载链接
@@ -158,8 +158,8 @@ def browse_page(url: str, wait_seconds: int = 3) -> str:
                        'download', 'down', 'apk'])
             prefix = "📦 " if is_dl else "  - "
             result += f"{prefix}{text}: {href}\n"
-        result += f"\n🖼️ 图片 ({len(image_list)}个, 显示前25):\n"
-        for img in image_list[:25]:               # 显示前 25 个 (之前 20)
+        result += f"\n🖼️ 图片 ({len(image_list)}个):\n"
+        for img in image_list:                     # 全部图片
             size_info = f" ({img.get('width','?')}x{img.get('height','?')})" if img.get('width') else ""
             alt = img.get('alt', '') or img.get('title', '') or '(无描述)'
             cls_hint = ""
@@ -258,8 +258,8 @@ def find_download_links() -> str:
     if not exact_matches and not keyword_matches:
         result += "❌ 未找到明显的下载链接。\n"
         if other_links:
-            result += f"\n📋 页面其他链接 ({len(other_links)}个, 显示前20):\n"
-            for link in other_links[:20]:
+            result += f"\n📋 页面其他链接 ({len(other_links)}个):\n"
+            for link in other_links:
                 text = link.get('text', '') or '(无文字)'
                 if len(text) > 40:
                     text = text[:40] + '...'

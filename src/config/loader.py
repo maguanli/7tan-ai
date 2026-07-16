@@ -83,7 +83,7 @@ def create_default_config(config_path: Path = None):
                     "base_url": "https://api.deepseek.com/v1",
                     "api_key": "",
                     "context_window": 128000,
-                    "max_tokens": 4096,
+                    "max_tokens": 16384,
                     "temperature": 0.7,
                 },
                 "ollama": {
@@ -92,7 +92,7 @@ def create_default_config(config_path: Path = None):
                     "base_url": "http://localhost:11434/v1",
                     "api_key": "ollama",
                     "context_window": 128000,
-                    "max_tokens": 4096,
+                    "max_tokens": 16384,
                     "temperature": 0.7,
                 },
             },
@@ -163,7 +163,7 @@ def _generate_default_config(answers: dict) -> dict:
                     "base_url": base_url,
                     "api_key": _env_var_ref("DEEPSEEK_API_KEY"),
                     "context_window": 128000,
-                    "max_tokens": 4096,
+                    "max_tokens": 16384,
                     "temperature": 0.7,
                 }
             },

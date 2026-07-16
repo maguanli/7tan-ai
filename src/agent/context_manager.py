@@ -33,7 +33,7 @@ class ContextManager:
         self.history.append({
             "role": "tool",
             "tool_call_id": tool_call_id,
-            "content": content[:16000],  # 保留足够长的结果给AI看
+            "content": content[:100000],  # 硬保护，极高上限
         })
         self._total_tokens += len(content) // 2
         self._trim_if_needed()

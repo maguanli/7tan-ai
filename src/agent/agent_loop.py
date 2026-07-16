@@ -202,9 +202,9 @@ def run_agent_loop(
             # 执行工具
             result_str = execute_tool(tool_name, tool_args)
 
-            # 截断过长结果
-            if len(result_str) > 32000:
-                result_str = result_str[:32000] + "\n...(结果已截断)"
+            # 截断过长结果（硬保护，极高上限）
+            if len(result_str) > 100000:
+                result_str = result_str[:100000] + "\n...(结果已截断)"
 
             logger.debug(f"   结果: {result_str[:100]}...")
 

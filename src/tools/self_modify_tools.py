@@ -23,8 +23,99 @@ SANDBOX_ROOT = Path("data/sandbox")
 SANDBOX_TIMEOUT = 30  # 秒
 MAX_OUTPUT_SIZE = 100 * 1024  # 100KB
 
-# 项目根目录（源码树）
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # src/tools/self_modify_tools.py → 项目根
+
+def _get_project_root():
+    """获取可靠的项目根目录 — 兼容 PyInstaller 打包和开发模式"""
+    root = Path(__file__).resolve().parent.parent.parent  # src/tools/xxx.py → 项目根
+
+    # 在 PyInstaller 打包后，__file__ 可能指向 _internal/.../xxx.py
+    # 此时 parent.parent.parent 得到的是 _internal/，而非真正的项目根
+    # 判断标准：真正的项目根一定有 build.bat，而 _internal/ 只有 config（被打包进去了）
+    if (root / "build.bat").exists():
+        return root
+
+    # 否则从 sys.executable 推断：exe 在 dist/7tan-editor/，项目根在 ../../../
+    exe_dir = Path(sys.executable).parent
+    candidates = [
+        exe_dir.parent.parent.parent,  # dist/7tan-editor → ../../.. → 项目根
+        exe_dir.parent.parent,         # dist/7tan-editor → ../.. → dist 上级
+        exe_dir.parent,                # dist/7tan-editor → .. → dist（备用）
+        exe_dir,                       # exe 自身目录（备用）
+    ]
+    for c in candidates:
+        if (c / "build.bat").exists():
+            logger.info(f"🔍 检测到项目根: {c}")
+            return c
+
+    # 最后回退
+    logger.warning(f"⚠️ 无法定位项目根，使用: {root}")
+    return root
+
+
+PROJECT_ROOT = _get_project_root()
+
+# 缓存真实 Python 解释器路径
+_REAL_PYTHON = None
+
+
+def _find_real_python() -> str:
+    """找到真正的 Python 解释器（而非 PyInstaller exe）"""
+    global _REAL_PYTHON
+    if _REAL_PYTHON and Path(_REAL_PYTHON).exists():
+        return _REAL_PYTHON
+
+    is_frozen = getattr(sys, 'frozen', False)
+
+    if not is_frozen:
+        # 开发环境：直接用当前 Python
+        _REAL_PYTHON = sys.executable
+        return _REAL_PYTHON
+
+    # ===== PyInstaller 打包环境：需要找到真正的 Python =====
+
+    # 候选1：_base_executable（某些 PyInstaller 版本支持）
+    base_exe = getattr(sys, '_base_executable', None)
+    if base_exe and Path(base_exe).exists():
+        _REAL_PYTHON = base_exe
+        return _REAL_PYTHON
+
+    # 候选2：项目虚拟环境（使用修复后的 PROJECT_ROOT）
+    candidates = [
+        PROJECT_ROOT / ".venv" / "Scripts" / "python.exe",
+        PROJECT_ROOT / "venv" / "Scripts" / "python.exe",
+    ]
+
+    # 候选3：系统 Python 路径
+    candidates.extend([
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Python" / "Python312" / "python.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Python" / "Python311" / "python.exe",
+        Path("C:/Program Files/Python312/python.exe"),
+        Path("C:/Program Files/Python311/python.exe"),
+        Path("C:/Python312/python.exe"),
+        Path("C:/Python311/python.exe"),
+    ])
+
+    for candidate in candidates:
+        if candidate.exists():
+            _REAL_PYTHON = str(candidate)
+            logger.info(f"🔍 沙盒找到 Python: {_REAL_PYTHON}")
+            return _REAL_PYTHON
+
+    # 候选4：PATH 上的 python
+    import shutil
+    for name in ["python", "python3", "py"]:
+        found = shutil.which(name)
+        if found:
+            # 验证不是 PyInstaller exe 自身
+            if "7tan-editor" not in found.lower():
+                _REAL_PYTHON = found
+                logger.info(f"🔍 沙盒找到 Python (PATH): {_REAL_PYTHON}")
+                return _REAL_PYTHON
+
+    # 最后回退（很可能失败，因为 exe 不是 Python 解释器）
+    logger.warning("⚠️ 找不到独立 Python，回退到 sys.executable（可能导致沙盒不可用）")
+    _REAL_PYTHON = sys.executable
+    return _REAL_PYTHON
 
 
 @register_tool(
@@ -114,15 +205,16 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
         # 写入脚本
         script_path.write_text(code, encoding="utf-8")
 
-        # 判断是否在 PyInstaller 打包环境运行
-        # PyInstaller 中 sys.executable 指向打包后的 exe，不支持 -I 隔离模式
+        # 找到真正的 Python 解释器
+        python_exe = _find_real_python()
         is_frozen = getattr(sys, 'frozen', False)
+
         if is_frozen:
-            # 打包环境：不用 -I，直接执行脚本
-            cmd = [sys.executable, str(script_path)]
+            cmd = [python_exe, str(script_path)]
         else:
-            # 开发环境：可以用 -I 隔离
-            cmd = [sys.executable, "-I", str(script_path)]
+            cmd = [python_exe, "-I", str(script_path)]
+
+        logger.debug(f"🔧 沙盒执行: {' '.join(cmd)}")
 
         result = subprocess.run(
             cmd,
@@ -132,8 +224,9 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
             cwd=str(SANDBOX_ROOT),
         )
 
-        stdout = result.stdout[:MAX_OUTPUT_SIZE]
-        stderr = result.stderr[:MAX_OUTPUT_SIZE]
+        # 防御性处理：在某些环境下 stdout/stderr 可能为 None
+        stdout = (result.stdout or "")[:MAX_OUTPUT_SIZE]
+        stderr = (result.stderr or "")[:MAX_OUTPUT_SIZE]
 
         if result.returncode == 0:
             return f"✅ 执行成功\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
@@ -142,6 +235,8 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
 
     except subprocess.TimeoutExpired:
         return "⏰ 沙盒执行超时"
+    except FileNotFoundError:
+        return "❌ 找不到 Python 解释器，请检查系统是否安装了 Python 3"
     except Exception as e:
         return f"❌ 沙盒执行异常: {e}"
     finally:
@@ -201,9 +296,8 @@ def self_rebuild(build_script: str = "build.bat", timeout: int = 900) -> str:
             return f"❌ 构建失败 (退出码 {result.returncode})\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
 
     except subprocess.TimeoutExpired:
-        return f"⏰ 构建超时（>{timeout}秒）。构建通常需要 5-15 分钟，请检查是否有问题。"
+        return f"⏰ 构建超时（超过 {timeout} 秒）"
     except Exception as e:
-        logger.error(f"❌ 构建异常: {e}")
         return f"❌ 构建异常: {e}"
 
 
@@ -222,30 +316,13 @@ def self_rebuild(build_script: str = "build.bat", timeout: int = 900) -> str:
     category="self_modify",
 )
 def self_update_prompt(prompt_type: str, new_template: str, reason: str) -> str:
-    """更新系统 prompt 模板"""
-    prompts_dir = Path("data/prompts")
-    prompts_dir.mkdir(parents=True, exist_ok=True)
-
-    # 映射 prompt_type 到文件名
-    PROMPT_FILES = {
-        "system": "system.txt",
-        "scraper": "scraper.txt",
-        "rewriter": "rewriter.txt",
-        "reviewer": "reviewer.txt",
-        "publisher": "publisher.txt",
-    }
-    filename = PROMPT_FILES.get(prompt_type, f"{prompt_type}.txt")
-    prompt_file = prompts_dir / filename
-
-    # 备份旧 prompt
-    if prompt_file.exists():
-        backup = prompts_dir / f"{filename}.bak"
-        prompt_file.replace(backup)
-
-    prompt_file.write_text(new_template, encoding="utf-8")
-    logger.info(f"📝 Prompt 模板已更新: {prompt_type} → {filename} (原因: {reason})")
-
-    return f"✅ Prompt 模板已更新\n  类型: {prompt_type}\n  文件: {prompt_file}\n  下次对话生效"
+    """更新系统提示词"""
+    from ..agent.prompts import update_prompt
+    try:
+        update_prompt(prompt_type, new_template, reason)
+        return f"✅ 提示词已更新: {prompt_type}\n原因: {reason}"
+    except Exception as e:
+        return f"❌ 更新失败: {e}"
 
 
 @register_tool(
@@ -259,36 +336,36 @@ def self_update_prompt(prompt_type: str, new_template: str, reason: str) -> str:
     category="self_modify",
 )
 def verify_integrity() -> str:
-    """验证文件完整性"""
-    integrity_file = Path("integrity.json")
+    """验证完整性"""
+    from ..security.integrity import verify_all
+    return verify_all()
 
-    if not integrity_file.exists():
-        return "⚠️ 未找到 integrity.json，跳过完整性验证"
 
-    try:
-        checksums = json.loads(integrity_file.read_text())
-    except Exception:
-        return "❌ integrity.json 格式错误"
+@register_tool(
+    name="self_restart",
+    description="自动重启应用程序。AI 可以调用此工具来重启自己。重启后约3秒新窗口会自动打开。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "delay_seconds": {"type": "integer", "description": "重启前等待秒数，默认2秒", "default": 2},
+        },
+        "required": []
+    },
+    category="self_modify",
+)
+def self_restart(delay_seconds: int = 2) -> str:
+    """重启应用程序"""
+    logger.warning("🔄 正在重启...")
+    import subprocess
+    import os
 
-    results = []
-    ok_count = 0
-    fail_count = 0
+    exe_path = sys.executable
+    if not os.path.exists(exe_path):
+        return f"❌ 找不到可执行文件: {exe_path}"
 
-    for filepath, expected_hash in checksums.items():
-        p = Path(filepath)
-        if not p.exists():
-            results.append(f"  ❌ 缺失: {filepath}")
-            fail_count += 1
-            continue
+    # 启动新进程
+    subprocess.Popen([exe_path], creationflags=0x00000008 if os.name == 'nt' else 0)
 
-        actual = hashlib.sha256(p.read_bytes()).hexdigest()
-        if actual == expected_hash:
-            ok_count += 1
-        else:
-            results.append(f"  ⚠️ 校验失败: {filepath}")
-            fail_count += 1
-
-    if fail_count == 0:
-        return f"✅ 完整性验证通过 ({ok_count} 个文件)"
-    else:
-        return f"❌ 完整性验证失败: {ok_count} OK, {fail_count} 失败\n" + "\n".join(results)
+    # 退出当前进程
+    os._exit(0)
+    return "🔄 正在重启..."

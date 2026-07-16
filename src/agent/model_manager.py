@@ -89,7 +89,31 @@ class ModelManager:
         kwargs.setdefault("model", self.model_name)
         kwargs.setdefault("max_tokens", self.max_tokens)
         kwargs.setdefault("temperature", self.temperature)
+
+        # 🔒 安全校验：确保所有 tools 的 schema 合法（防止 type: null 等 400 错误）
+        if "tools" in kwargs:
+            kwargs["tools"] = self._sanitize_tools(kwargs["tools"])
+
         return client.chat.completions.create(**kwargs)
+
+    @staticmethod
+    def _sanitize_tools(tools: list) -> list:
+        """修复 tools 列表中不完整的 function schema"""
+        sanitized = []
+        for tool in tools:
+            try:
+                fn = tool.get("function", {})
+                params = fn.get("parameters")
+                if not isinstance(params, dict) or not params.get("type"):
+                    fn = dict(fn)
+                    fn["parameters"] = {"type": "object", "properties": {}, "required": []}
+                    tool = dict(tool)
+                    tool["function"] = fn
+                    logger.warning(f"🔧 修复工具 schema: {fn.get('name', 'unknown')} (type was: {type(params).__name__})")
+                sanitized.append(tool)
+            except Exception:
+                sanitized.append(tool)
+        return sanitized
 
     def _get_client(self):
         """获取 OpenAI 兼容客户端 — 统一从 config.ai 读取（兼容多配置格式，带缓存）"""

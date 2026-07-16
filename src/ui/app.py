@@ -1,5 +1,5 @@
 """
-7坛AI小编 — 原生 PyQt6 桌面应用
+7Tan — 原生 PyQt6 桌面应用
 所有 UI 组件均使用 PyQt6 原生控件，不依赖 Web 前端
 """
 import sys
@@ -272,7 +272,7 @@ class Sidebar(QFrame):
         layout.setSpacing(4)
 
         # Logo
-        logo = QLabel("🎮 7坛AI小编")
+        logo = QLabel("🎮 7Tan")
         logo.setStyleSheet(f"color: {THEME['accent']}; font-size: 16px; font-weight: bold; padding: 8px;")
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(logo)
@@ -2924,7 +2924,7 @@ class SettingsPage(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("7tanAI — AI 自动更新系统")
+        self.setWindowTitle("7Tan — AI 自动更新系统")
         self.resize(1280, 820)
         self.setMinimumSize(960, 600)
 
@@ -2988,7 +2988,7 @@ def launch_app():
         app = QApplication(sys.argv)
         app.setStyle("Fusion")
         app.setStyleSheet(DARK_STYLESHEET)
-        app.setApplicationName("7tanAI")
+        app.setApplicationName("7Tan")
 
         logger.info("🏗️ 创建主窗口...")
         window = MainWindow()

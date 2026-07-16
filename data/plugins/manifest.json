@@ -1,134 +1,92 @@
 [
   {
-    "id": "web_search",
-    "name": "联网搜索",
-    "version": "1.0.0",
-    "author": "DuckDuckGo",
-    "type": "builtin",
-    "category": "搜索",
+    "id": "web_search", "name": "联网搜索", "version": "1.0.0", "author": "DuckDuckGo", "type": "builtin", "category": "搜索",
     "description": "让 AI 能够搜索互联网获取最新资讯、游戏攻略、补丁信息。基于 DuckDuckGo 免费搜索 API。",
-    "tools": ["web_search", "fetch_news"],
-    "icon": "🔍"
+    "tools": ["web_search", "fetch_news"], "icon": "🔍"
   },
   {
-    "id": "deep_analysis",
-    "name": "深度分析",
-    "version": "1.0.0",
-    "author": "7tanAI Team",
-    "type": "builtin",
-    "category": "分析",
+    "id": "deep_analysis", "name": "深度分析", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "分析",
     "description": "对游戏进行深度分析：评价、优缺点、用户反馈汇总、竞品对比。由 AI 驱动生成结构化报告。",
-    "tools": ["analyze_game", "compare_games", "summarize_reviews"],
-    "icon": "📊"
+    "tools": ["analyze_game", "compare_games", "summarize_reviews"], "icon": "📊"
   },
   {
-    "id": "auto_images",
-    "name": "自动配图",
-    "version": "1.0.0",
-    "author": "7tanAI Team",
-    "type": "builtin",
-    "category": "媒体",
+    "id": "auto_images", "name": "自动配图", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "媒体",
     "description": "发布时自动从页面截取高清截图、提取 LOGO 并压缩优化。基于 Qt WebEngine 截图引擎。",
-    "tools": ["auto_screenshot", "extract_logo"],
-    "icon": "🖼️"
+    "tools": ["auto_screenshot", "extract_logo"], "icon": "🖼️"
   },
   {
-    "id": "form_enhance",
-    "name": "自动填表增强",
-    "version": "1.0.0",
-    "author": "7tanAI Team",
-    "type": "builtin",
-    "category": "发布",
+    "id": "form_enhance", "name": "自动填表增强", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "发布",
     "description": "智能检测表单所有字段并批量填写。自动匹配字段名称、处理富文本编辑器、下拉选择框。",
-    "tools": ["detect_form_fields", "fill_all_fields"],
-    "icon": "📝"
+    "tools": ["detect_form_fields", "fill_all_fields"], "icon": "📝"
   },
   {
-    "id": "smart_translate",
-    "name": "智能翻译",
-    "version": "1.0.0",
-    "author": "Google Translate",
-    "type": "builtin",
-    "category": "语言",
+    "id": "smart_translate", "name": "智能翻译", "version": "1.0.0", "author": "Google Translate", "type": "builtin", "category": "语言",
     "description": "自动翻译英文游戏介绍、Steam商店页面描述为中文。基于 Google 翻译免费 API。",
-    "tools": ["translate_text"],
-    "icon": "🌐"
+    "tools": ["translate_text"], "icon": "🌐"
   },
   {
-    "id": "price_monitor",
-    "name": "价格监控",
-    "version": "1.0.0",
-    "author": "7tanAI Team",
-    "type": "builtin",
-    "category": "监控",
+    "id": "price_monitor", "name": "价格监控", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "监控",
     "description": "监控 Steam/Epic/TapTap 等平台游戏价格变动和打折信息。通过搜索获取实时价格。",
-    "tools": ["check_price", "price_alert"],
-    "icon": "💰"
+    "tools": ["check_price", "price_alert"], "icon": "💰"
   },
   {
-    "id": "ocr_reader",
-    "name": "页面内容提取",
-    "version": "1.0.0",
-    "author": "7tanAI Team",
-    "type": "builtin",
-    "category": "工具",
+    "id": "ocr_reader", "name": "页面内容提取", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "工具",
     "description": "从页面提取标题和完整文字内容，用于分析游戏详情、版本更新日志等。",
-    "tools": ["ocr_screenshot"],
-    "icon": "📄"
+    "tools": ["ocr_screenshot"], "icon": "📄"
   },
   {
-    "id": "cloud_ai",
-    "name": "Cloud Code 云端AI增强",
-    "version": "1.0.0",
-    "author": "OpenAI",
-    "type": "builtin",
-    "category": "AI",
+    "id": "cloud_ai", "name": "Cloud Code 云端AI增强", "version": "1.0.0", "author": "OpenAI", "type": "builtin", "category": "AI",
     "description": "接入 OpenAI GPT-4o-mini 云端模型增强推理。比本地模型聪明10倍，自动写简介/分析游戏。需配置 API Key。",
-    "tools": ["cloud_analyze", "cloud_write_intro"],
-    "icon": "☁️"
+    "tools": ["cloud_analyze", "cloud_write_intro"], "icon": "☁️"
   },
   {
-    "id": "self_evolution",
-    "name": "自我进化",
-    "version": "1.0.0",
-    "author": "AI Self-Evolution",
-    "type": "custom",
-    "category": "系统",
+    "id": "self_evolution", "name": "自我进化", "version": "1.0.0", "author": "AI Self-Evolution", "type": "custom", "category": "系统",
     "description": "赋予 AI 自我诊断、动态创建插件、系统信息查询、文件完整性校验等自我扩展能力。",
-    "tools": ["self_diagnose", "create_plugin", "system_shell", "check_file_integrity"],
-    "icon": "🧬"
+    "tools": ["self_diagnose", "create_plugin", "system_shell", "check_file_integrity"], "icon": "🧬"
   },
   {
-    "id": "memory_enhance",
-    "name": "记忆增强",
-    "version": "1.0.0",
-    "author": "AI Self-Evolution",
-    "type": "custom",
-    "category": "记忆",
+    "id": "memory_enhance", "name": "记忆增强", "version": "1.0.0", "author": "AI Self-Evolution", "type": "custom", "category": "记忆",
     "description": "持久化知识存储与检索。让 AI 记住游戏知识、技能经验、配置信息，跨会话保持记忆。",
-    "tools": ["memory_store", "memory_recall", "memory_summary", "memory_forget"],
-    "icon": "🧠"
+    "tools": ["memory_store", "memory_recall", "memory_summary", "memory_forget"], "icon": "🧠"
   },
   {
-    "id": "self_restart",
-    "name": "自我重启",
-    "version": "1.0.0",
-    "author": "AI Self-Evolution",
-    "type": "custom",
-    "category": "系统",
+    "id": "self_restart", "name": "自我重启", "version": "1.0.0", "author": "AI Self-Evolution", "type": "custom", "category": "系统",
     "description": "允许 AI 自动重启应用程序，以及诊断修复自身问题。重启后约3秒新窗口自动打开。",
-    "tools": ["self_restart", "self_fix_sandbox"],
-    "icon": "🔄"
+    "tools": ["self_restart", "self_fix_sandbox"], "icon": "🔄"
   },
   {
-    "id": "qq_bridge",
-    "name": "QQ桥接",
-    "version": "1.0.0",
-    "author": "AI Self-Evolution",
-    "type": "custom",
-    "category": "通信",
+    "id": "qq_bridge", "name": "QQ桥接", "version": "1.0.0", "author": "AI Self-Evolution", "type": "custom", "category": "通信",
     "description": "通过 OneBot 协议连接 QQ，支持收发消息。让 AI 能通过 QQ 群/私聊与用户交互。",
-    "tools": ["qq_connect", "qq_disconnect", "qq_send_message", "qq_get_messages", "qq_status"],
-    "icon": "🐧"
+    "tools": ["qq_connect", "qq_disconnect", "qq_send_message", "qq_get_messages", "qq_status"], "icon": "🐧"
+  },
+  {
+    "id": "code_completion", "name": "代码智能补全", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "开发",
+    "description": "启动本地 AI 代码补全 HTTP 服务 (端口17890)。VS Code 扩展可连接获取实时 AI 补全建议。支持多语言。",
+    "tools": ["completion_start", "completion_stop", "completion_status"], "icon": "💡"
+  },
+  {
+    "id": "git_ops", "name": "Git 版本控制", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "开发",
+    "description": "Git 全功能操作：status/diff/log/commit/add/push/pull/branch/checkout/clone/init。支持 Conventional Commits。",
+    "tools": ["git_status", "git_diff", "git_log", "git_commit", "git_add", "git_push", "git_pull", "git_branch", "git_checkout", "git_clone", "git_init"], "icon": "📦"
+  },
+  {
+    "id": "git_advanced", "name": "Git 高级操作", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "开发",
+    "description": "Git 高级功能：stash/tag/remote/hooks/contributors。提交信息规范检查、自动初始化 Git Hooks。",
+    "tools": ["git_stash", "git_tag", "git_remote_info", "git_check_commit_message", "git_init_hooks", "git_contributors"], "icon": "🔀"
+  },
+  {
+    "id": "docker_k8s", "name": "Docker & K8s 管理", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "运维",
+    "description": "Docker 容器管理（ps/images/build/compose/logs/prune）及 Kubernetes 集群操作（kubectl get/apply）。",
+    "tools": ["docker_ps", "docker_images", "docker_compose_up", "docker_compose_down", "docker_logs", "docker_build", "docker_prune", "kubectl_get", "kubectl_apply"], "icon": "🐳"
+  },
+  {
+    "id": "ide_integration", "name": "VS Code 集成", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "开发",
+    "description": "通过 code CLI 深度集成 VS Code：打开文件/项目/对比差异/安装扩展/列出扩展。支持行列跳转。",
+    "tools": ["vscode_open_file", "vscode_open_project", "vscode_open_multi", "vscode_diff", "vscode_list_extensions", "vscode_install_extension"], "icon": "💻"
+  },
+  {
+    "id": "file_replacer", "name": "文件批量替换", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "工具",
+    "description": "对文本文件执行批量字符串替换。支持多个替换对一次性执行，JSON 格式配置。",
+    "tools": ["file_replace"], "icon": "✏️"
   }
 ]

@@ -85,6 +85,9 @@ def run_agent_loop(
                 kept.insert(0, entry)
                 hist_tokens += t
             messages.extend(kept)
+            # 修复历史中可能存在的孤儿 tool_calls
+            if kept:
+                messages = _repair_messages(messages)
             if len(kept) < len(history):
                 logger.info(f"📜 加载 {len(history)} 条历史，保留最近 {len(kept)} 条 (约 {hist_tokens} tokens)")
             else:
@@ -109,6 +112,9 @@ def run_agent_loop(
                 tc = m.get("tool_calls")
                 tc_type = type(tc).__name__ if tc else "-"
                 logger.debug(f"  消息[{i}] role={role} tool_calls={tc_type} keys={list(m.keys())[:5]}")
+
+            # 🔒 安全检查：修复孤立的 assistant tool_calls（防止 API 400 错误）
+            messages = _repair_messages(messages)
             
             response = _call_llm(
                 model=model,
@@ -230,16 +236,21 @@ def run_agent_loop(
                     "logs": all_logs,
                 }
 
-            # 执行工具
-            result_str = execute_tool(tool_name, tool_args)
+            # 执行工具（带异常保护，确保永远不会遗漏 tool 响应）
+            try:
+                result_str = execute_tool(tool_name, tool_args)
 
-            # 截断过长结果（硬保护，极高上限）
-            if len(result_str) > 100000:
-                result_str = result_str[:100000] + "\n...(结果已截断)"
+                # 截断过长结果（硬保护，极高上限）
+                if len(result_str) > 100000:
+                    result_str = result_str[:100000] + "\n...(结果已截断)"
 
-            logger.debug(f"   结果: {result_str[:100]}...")
+                logger.debug(f"   结果: {result_str[:100]}...")
+            except Exception as tool_err:
+                import traceback
+                logger.error(f"❌ 工具执行失败 [{tool_name}]: {tool_err}\n{traceback.format_exc()}")
+                result_str = f"❌ 工具执行失败: {tool_err}"
 
-            # 添加到消息历史
+            # 无论如何都要添加到消息历史（防止孤立的 assistant tool_calls）
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_id,
@@ -255,6 +266,74 @@ def run_agent_loop(
         "cost": total_cost,
         "logs": all_logs,
     }
+
+
+def _repair_messages(messages: list) -> list:
+    """修复消息历史中的孤儿 tool_calls，防止 API 400 错误
+    
+    API 要求：assistant 消息的 tool_calls 必须紧跟着对应的 tool 响应消息。
+    如果发现缺失，在正确位置补上占位消息。
+    """
+    repaired = []
+    pending_calls = {}     # tool_call_id → tool_name
+    pending_insert_at = 0  # 已修复的 tool 消息应该插入的位置
+    
+    for i, msg in enumerate(messages):
+        role = msg.get("role", "")
+        
+        if role == "assistant" and msg.get("tool_calls"):
+            # 先把上一轮未处理的孤儿 tool_calls 补上
+            if pending_calls:
+                for missing_id, tool_name in pending_calls.items():
+                    logger.warning(f"🔧 修复孤立 tool_call: id={missing_id}, tool={tool_name}")
+                    repaired.insert(pending_insert_at, {
+                        "role": "tool",
+                        "tool_call_id": missing_id,
+                        "content": f"⚠️ 工具 {tool_name} 的响应丢失，请重试此操作。",
+                    })
+                    pending_insert_at += 1
+                pending_calls.clear()
+            
+            # 重新设置 pending 列表（先清理上一轮可能残留的）
+            pending_calls.clear()
+            for tc in msg["tool_calls"]:
+                pending_calls[tc["id"]] = tc.get("function", {}).get("name", "unknown")
+            
+            repaired.append(msg)
+            pending_insert_at = len(repaired)  # tool 响应应该从这里开始插入
+            
+        elif role == "tool":
+            tid = msg.get("tool_call_id", "")
+            if tid in pending_calls:
+                del pending_calls[tid]
+            repaired.append(msg)
+        else:
+            # 遇到非 tool 消息，先把未处理的孤儿 tool_calls 补上
+            if pending_calls:
+                for missing_id, tool_name in pending_calls.items():
+                    logger.warning(f"🔧 修复孤立 tool_call: id={missing_id}, tool={tool_name}")
+                    repaired.insert(pending_insert_at, {
+                        "role": "tool",
+                        "tool_call_id": missing_id,
+                        "content": f"⚠️ 工具 {tool_name} 的响应丢失，请重试此操作。",
+                    })
+                    pending_insert_at += 1
+                pending_calls.clear()
+            repaired.append(msg)
+    
+    # 末尾还有未处理的孤儿 tool_calls
+    if pending_calls:
+        for missing_id, tool_name in pending_calls.items():
+            logger.warning(f"🔧 修复孤立 tool_call: id={missing_id}, tool={tool_name}")
+            repaired.insert(pending_insert_at, {
+                "role": "tool",
+                "tool_call_id": missing_id,
+                "content": f"⚠️ 工具 {tool_name} 的响应丢失，请重试此操作。",
+            })
+            pending_insert_at += 1
+        pending_calls.clear()
+    
+    return repaired
 
 
 def _call_llm(model, messages: list, tools: list, config: dict) -> dict:

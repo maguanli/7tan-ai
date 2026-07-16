@@ -1,0 +1,65 @@
+{
+  "name": "vscode-7tan-copilot",
+  "displayName": "7Tan Copilot",
+  "description": "7Tan AI 实时代码补全 — 基于 DeepSeek 的行内代码补全",
+  "version": "1.0.0",
+  "publisher": "7tan",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Machine Learning", "Programming Languages"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "7tan-copilot.toggle",
+        "title": "7Tan Copilot: 切换开/关"
+      },
+      {
+        "command": "7tan-copilot.configure",
+        "title": "7Tan Copilot: 配置 API"
+      }
+    ],
+    "configuration": {
+      "title": "7Tan Copilot",
+      "properties": {
+        "7tan-copilot.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用/禁用 7Tan Copilot"
+        },
+        "7tan-copilot.apiEndpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:17890/api/complete",
+          "description": "7Tan 补全 API 地址"
+        },
+        "7tan-copilot.deepseekApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "DeepSeek API Key（留空则使用 7Tan 代理）"
+        },
+        "7tan-copilot.maxTokens": {
+          "type": "number",
+          "default": 128,
+          "description": "每次补全最大 token 数"
+        },
+        "7tan-copilot.debounceMs": {
+          "type": "number",
+          "default": 300,
+          "description": "输入后延迟多少毫秒触发补全"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
+  }
+}

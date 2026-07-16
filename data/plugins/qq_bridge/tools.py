@@ -11,8 +11,7 @@ import logging
 import sys
 from pathlib import Path
 from datetime import datetime
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 # ========== 修复导入：兼容打包环境和开发环境 ==========
 
@@ -60,39 +59,69 @@ def _get_tool_registry():
                     return mod.TOOL_REGISTRY
 
     # 方案五：所有方案都失败，返回一个本地字典
-    # 注意：这种情况下工具会注册到本地字典，主程序可能看不到
-    # 但我们至少让插件能正常加载
     return {}
+
+
+def _get_tool_class() -> Optional[type]:
+    """尝试获取主程序的 Tool dataclass"""
+    try:
+        from src.tools.registry import Tool
+        return Tool
+    except (ImportError, ModuleNotFoundError):
+        pass
+    # 搜索 sys.modules
+    for mod in sys.modules.values():
+        if hasattr(mod, 'Tool') and hasattr(mod, 'TOOL_REGISTRY'):
+            cls = getattr(mod, 'Tool')
+            if callable(cls):
+                return cls
+    return None
 
 
 # 获取全局 TOOL_REGISTRY
 TOOL_REGISTRY = _get_tool_registry()
+_ToolClass = _get_tool_class()
 
 
 def register_tool(name=None, description="", parameters=None, category="misc",
                   dangerous=False, requires_browser=False, requires_db=False):
     """
-    工具注册装饰器 — 本地实现，不依赖主程序 registry 模块
-    
-    将函数注册到 TOOL_REGISTRY 字典中，与主程序的 register_tool 行为一致
+    工具注册装饰器 — 优先注册为 Tool 对象，回退为 dict
     """
     def decorator(target):
-        # 智能包装: 确保 parameters 是合法的 JSON Schema
         params = parameters or {}
         if isinstance(params, dict) and "type" not in params:
             params = {"type": "object", "properties": params, "required": list(params.keys())}
-        tool_def = {
-            "name": name or target.__name__,
-            "description": description,
-            "parameters": params,
-            "function": target,
-            "category": category,
-            "dangerous": dangerous,
-            "requires_browser": requires_browser,
-            "requires_db": requires_db,
-        }
-        tool_name = tool_def["name"]
-        TOOL_REGISTRY[tool_name] = tool_def
+
+        tool_name = name or target.__name__
+
+        if _ToolClass is not None:
+            # ✅ 使用主程序的 Tool dataclass，消除警告
+            tool_obj = _ToolClass(
+                name=tool_name,
+                description=description,
+                parameters=params,
+                function=target,
+                category=category,
+                dangerous=dangerous,
+                requires_browser=requires_browser,
+                requires_db=requires_db,
+            )
+            TOOL_REGISTRY[tool_name] = tool_obj
+        else:
+            # ⚠️ 回退：主程序 registry 不可用，用 dict
+            tool_def = {
+                "name": tool_name,
+                "description": description,
+                "parameters": params,
+                "function": target,
+                "category": category,
+                "dangerous": dangerous,
+                "requires_browser": requires_browser,
+                "requires_db": requires_db,
+            }
+            TOOL_REGISTRY[tool_name] = tool_def
+
         logger = logging.getLogger("qq_bridge")
         logger.debug(f"🔧 注册工具: {tool_name} ({category})")
         return target

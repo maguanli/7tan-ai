@@ -10,6 +10,12 @@
     "self_evolution",
     "memory_enhance",
     "self_restart",
-    "qq_bridge"
+    "qq_bridge",
+    "code_completion",
+    "git_ops",
+    "git_advanced",
+    "docker_k8s",
+    "ide_integration",
+    "file_replacer"
   ]
 }

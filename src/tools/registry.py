@@ -23,6 +23,9 @@ class Tool:
 # 全局注册表
 TOOL_REGISTRY: dict[str, Tool] = {}
 
+# 已警告过的 dict 类型工具名（避免重复告警）
+_warned_dict_tools: set = set()
+
 
 def register_tool(
     name: str = None,
@@ -82,13 +85,21 @@ def get_all_tools() -> list[dict]:
     """返回 OpenAI 兼容的 tools 数组"""
     result = []
     for t in TOOL_REGISTRY.values():
-        # 兼容插件可能注册 dict 而不是 ToolDefinition（qq_bridge等）
+        # 兼容插件可能注册 dict 而不是 Tool（qq_bridge等旧版本）
         if hasattr(t, 'name'):
             name, desc, params = t.name, t.description, t.parameters
         else:
+            # 检测到 dict 类型的工具定义
             name = t.get("name", "unknown")
             desc = t.get("description", "")
             params = t.get("parameters", {})
+            if name not in _warned_dict_tools:
+                _warned_dict_tools.add(name)
+                logger.warning(
+                    f"⚠️ TOOL_REGISTRY 中混入 dict 而不是 Tool: {name}。"
+                    f"建议将插件的 register_tool 改为使用 Tool 类，"
+                    f"参考 data/plugins/qq_bridge/tools.py 的写法。"
+                )
         result.append({
             "type": "function",
             "function": {
@@ -101,8 +112,10 @@ def get_all_tools() -> list[dict]:
 
 
 def _ensure_schema(params: dict) -> dict:
-    """确保 parameters 是合法的 JSON Schema"""
-    if isinstance(params, dict) and "type" not in params:
+    """确保 parameters 是合法的 JSON Schema（防止 type: null 等 API 400 错误）"""
+    if not isinstance(params, dict) or params is None:
+        return {"type": "object", "properties": {}, "required": []}
+    if not params.get("type"):
         return {"type": "object", "properties": params, "required": list(params.keys())}
     return params
 
@@ -118,8 +131,17 @@ def execute_tool(name: str, args: dict) -> str:
     if not tool:
         return f"❌ 未知工具: {name}"
 
+    # 兼容 dict 类型
+    if hasattr(tool, 'function'):
+        func = tool.function
+    else:
+        func = tool.get("function")
+
+    if func is None:
+        return f"❌ 工具 {name} 无可执行函数"
+
     try:
-        result = tool.function(**args)
+        result = func(**args)
         return str(result) if result is not None else "✅ 完成"
     except Exception as e:
         logger.error(f"❌ 工具执行失败 {name}: {e}")

@@ -477,6 +477,28 @@ class ChatPage(QWidget):
         title.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {THEME['text_primary']};")
         layout.addWidget(title)
 
+        # AI 模型选择器
+        model_bar = QHBoxLayout()
+        model_label = QLabel("🤖 当前模型:")
+        model_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 13px;")
+        model_bar.addWidget(model_label)
+        self._model_combo = QComboBox()
+        self._model_combo.setMinimumWidth(180)
+        self._model_combo.setStyleSheet(f"""
+            QComboBox {{
+                background: {THEME['bg_input']}; color: {THEME['text_primary']};
+                border: 1px solid {THEME['border']}; border-radius: 6px;
+                padding: 4px 8px; font-size: 13px;
+            }}
+            QComboBox:hover {{ border-color: {THEME['accent']}; }}
+        """)
+        self._model_combo.currentIndexChanged.connect(self._on_model_changed)
+        model_bar.addWidget(self._model_combo)
+        model_bar.addStretch()
+        layout.addLayout(model_bar)
+
+        self._load_model_list()
+
         # 会话管理
         toolbar = QHBoxLayout()
         self._session_combo = QComboBox()
@@ -568,6 +590,56 @@ class ChatPage(QWidget):
     def _use_hint(self, text):
         self._input.setPlainText(text)
         self._send_message()
+
+    def _load_model_list(self):
+        """加载可用 AI 模型列表并标记当前激活"""
+        try:
+            from ..config.loader import load_config
+            config = load_config()
+            ai = config.get("ai", {})
+            active_key = ai.get("active", "deepseek")
+            configs = ai.get("configs", {})
+
+            self._model_combo.blockSignals(True)
+            self._model_combo.clear()
+            for key, cfg in configs.items():
+                provider = cfg.get("provider", "")
+                model_name = cfg.get("model", key)
+                display = f"{key} ({model_name})"
+                if key == active_key:
+                    display = f"⭐ {display}"
+                self._model_combo.addItem(display, key)
+
+            idx = self._model_combo.findData(active_key)
+            if idx >= 0:
+                self._model_combo.setCurrentIndex(idx)
+            self._model_combo.blockSignals(False)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+
+    def _on_model_changed(self, index):
+        """切换 AI 模型"""
+        if index < 0:
+            return
+        config_key = self._model_combo.itemData(index)
+        if not config_key:
+            return
+        try:
+            from ..config.loader import load_config, save_config
+            from ..agent.model_manager import clear_model_cache
+            config = load_config()
+            ai = config.get("ai", {})
+            if ai.get("active") == config_key:
+                return
+            ai["active"] = config_key
+            config["ai"] = ai
+            save_config(config)
+            clear_model_cache()
+            self._load_model_list()
+            self._add_message("system", f"✅ 已切换到 AI 模型: {config_key}")
+        except Exception as e:
+            self._add_message("error", f"❌ 切换模型失败: {e}")
 
     def _new_session(self):
         self._current_session_id = None
@@ -684,6 +756,17 @@ class ChatPage(QWidget):
         data = {"message": text}
         if self._current_session_id:
             data["session_id"] = self._current_session_id
+        # 传递当前选中的模型
+        idx = self._model_combo.currentIndex()
+        if idx >= 0:
+            model_key = self._model_combo.itemData(idx)
+            if model_key:
+                # 获取配置中的实际 model ID
+                from ..config.loader import load_config
+                cfg = load_config()
+                model_cfg = cfg.get("ai", {}).get("configs", {}).get(model_key, {})
+                actual_model = model_cfg.get("model", model_key)
+                data["model"] = actual_model
 
         self._worker = ApiWorker("POST", f"{API_BASE}/api/chat/send", data)
         self._worker.finished.connect(self._on_response)

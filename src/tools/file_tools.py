@@ -28,14 +28,22 @@ def list_files(directory: str, pattern: str = "*") -> str:
     if not p.exists():
         return f"❌ 目录不存在: {directory}"
 
-    if pattern == "**":
-        # 递归列出所有文件
+    # 规范化 pattern — 去除可能的前缀匹配符号
+    clean_pattern = pattern.strip()
+    if clean_pattern.startswith("**/"):
+        # 已经是递归模式
+        clean_pattern = clean_pattern[3:] or "*"
+        files = sorted(p.rglob(clean_pattern))
+    elif clean_pattern == "**":
         files = sorted(p.rglob("*"))
-    elif pattern != "*":
-        files = sorted(p.glob(f"*{pattern}"))
-        # 也搜子目录
+    elif "**" in clean_pattern:
+        # 去除混在中间的 **
+        clean_pattern = clean_pattern.replace("**", "")
+        files = sorted(p.rglob(clean_pattern))
+    elif clean_pattern != "*":
+        files = sorted(p.glob(clean_pattern))
         if not files:
-            files = sorted(p.rglob(f"*{pattern}"))
+            files = sorted(p.rglob(clean_pattern))
     else:
         files = sorted(p.iterdir())
 
@@ -56,19 +64,20 @@ def list_files(directory: str, pattern: str = "*") -> str:
 
 @register_tool(
     name="read_file_content",
-    description="读取文件内容（支持文本文件和 JSON）",
+    description="读取文件内容（支持文本文件和 JSON）。可通过 offset 指定起始行，max_lines 限制行数。",
     parameters={
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "文件路径"},
             "encoding": {"type": "string", "description": "编码", "default": "utf-8"},
             "max_lines": {"type": "integer", "description": "最大读取行数", "default": 200},
+            "offset": {"type": "integer", "description": "从第几行开始读取（0=第一行）", "default": 0},
         },
         "required": ["path"]
     },
     category="file",
 )
-def read_file_content(path: str, encoding: str = "utf-8", max_lines: int = 200) -> str:
+def read_file_content(path: str, encoding: str = "utf-8", max_lines: int = 200, offset: int = 0) -> str:
     """读取文件内容"""
     p = Path(path)
     if not p.exists():
@@ -79,11 +88,15 @@ def read_file_content(path: str, encoding: str = "utf-8", max_lines: int = 200) 
             data = _json.loads(p.read_text(encoding=encoding))
             return f"📄 {p.name} (JSON):\n" + _json.dumps(data, ensure_ascii=False, indent=2)[:5000]
         else:
-            lines = p.read_text(encoding=encoding).split("\n")
-            if len(lines) > max_lines:
-                content = "\n".join(lines[:max_lines])
-                return f"📄 {p.name} (共 {len(lines)} 行，显示前 {max_lines} 行):\n```\n{content}\n```"
-            return f"📄 {p.name}:\n```\n" + "\n".join(lines) + "\n```"
+            all_lines = p.read_text(encoding=encoding).split("\n")
+            total = len(all_lines)
+            # 应用 offset
+            if offset > 0:
+                all_lines = all_lines[offset:]
+            if len(all_lines) > max_lines:
+                content = "\n".join(all_lines[:max_lines])
+                return f"📄 {p.name} (共 {total} 行，offset={offset}，显示前 {max_lines} 行):\n```\n{content}\n```"
+            return f"📄 {p.name}:\n```\n" + "\n".join(all_lines) + "\n```"
     except Exception as e:
         return f"❌ 读取失败: {e}"
 

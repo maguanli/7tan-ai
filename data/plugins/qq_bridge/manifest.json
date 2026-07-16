@@ -1,0 +1,17 @@
+{
+  "id": "qq_bridge",
+  "name": "QQ桥接",
+  "version": "1.0.0",
+  "author": "AI Self-Evolution",
+  "type": "custom",
+  "category": "通信",
+  "description": "通过 OneBot 协议连接 QQ，支持收发消息。让 AI 能通过 QQ 群/私聊与用户交互。",
+  "tools": [
+    "qq_connect",
+    "qq_disconnect",
+    "qq_send_message",
+    "qq_get_messages",
+    "qq_status"
+  ],
+  "icon": "🐧"
+}

@@ -119,5 +119,16 @@
     "description": "允许 AI 自动重启应用程序，以及诊断修复自身问题。重启后约3秒新窗口自动打开。",
     "tools": ["self_restart", "self_fix_sandbox"],
     "icon": "🔄"
+  },
+  {
+    "id": "qq_bridge",
+    "name": "QQ桥接",
+    "version": "1.0.0",
+    "author": "AI Self-Evolution",
+    "type": "custom",
+    "category": "通信",
+    "description": "通过 OneBot 协议连接 QQ，支持收发消息。让 AI 能通过 QQ 群/私聊与用户交互。",
+    "tools": ["qq_connect", "qq_disconnect", "qq_send_message", "qq_get_messages", "qq_status"],
+    "icon": "🐧"
   }
 ]

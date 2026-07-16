@@ -5,7 +5,7 @@ cd /d "%~dp0"
 echo.
 echo ╔══════════════════════════════════════════════╗
 echo ║   7坛AI小编 — PyInstaller 一键打包脚本       ║
-echo ║   输出: dist\7tan-updater\7tan-updater.exe     ║
+echo ║   输出: dist\7tan-editor\7tan-editor.exe      ║
 echo ╚══════════════════════════════════════════════╝
 echo.
 
@@ -52,7 +52,7 @@ echo.
 echo [4/5] PyInstaller 打包中（需要5-15分钟，请耐心等待）...
 echo.
 :: 清理旧构建
-if exist "dist\7tan-updater" rmdir /s /q "dist\7tan-updater"
+if exist "dist\7tan-editor" rmdir /s /q "dist\7tan-editor"
 if exist "build" rmdir /s /q "build"
 
 pyinstaller build.spec
@@ -66,35 +66,35 @@ if errorlevel 1 (
 echo.
 
 :: ── 5. 复制额外文件到 dist ──
-echo [5/5] 复制运行文件到 dist\7tan-updater\...
+echo [5/5] 复制运行文件到 dist\7tan-editor\...
 :: 复制配置文件模板
-if not exist "dist\7tan-updater\config" mkdir "dist\7tan-updater\config"
-copy /y "config\config.yaml" "dist\7tan-updater\config\config.yaml" >nul
-copy /y "config\sensitive_words.txt" "dist\7tan-updater\config\sensitive_words.txt" >nul
+if not exist "dist\7tan-editor\config" mkdir "dist\7tan-editor\config"
+copy /y "config\config.yaml" "dist\7tan-editor\config\config.yaml" >nul
+copy /y "config\sensitive_words.txt" "dist\7tan-editor\config\sensitive_words.txt" >nul
 :: 复制 .env 模板
-copy /y ".env.example" "dist\7tan-updater\.env.example" >nul
-:: 复制数据目录结构
-if not exist "dist\7tan-updater\data" mkdir "dist\7tan-updater\data"
-if not exist "dist\7tan-updater\logs" mkdir "dist\7tan-updater\logs"
-if not exist "dist\7tan-updater\downloads" mkdir "dist\7tan-updater\downloads"
+copy /y ".env.example" "dist\7tan-editor\.env.example" >nul
+:: 复制数据目录结构（build.spec已打包prompts和plugins，这里补充运行时数据目录）
+if not exist "dist\7tan-editor\data" mkdir "dist\7tan-editor\data"
+if not exist "dist\7tan-editor\logs" mkdir "dist\7tan-editor\logs"
+if not exist "dist\7tan-editor\downloads" mkdir "dist\7tan-editor\downloads"
 
 echo.
 echo ╔══════════════════════════════════════════════╗
-echo ║  打包完成！  ^^_^^                            ║
+echo ║  打包完成！  ^^_^                            ║
 echo ║                                            ║
-echo ║  输出位置: dist\7tan-updater\               ║
-echo ║  启动文件: 7tan-updater.exe                 ║
+echo ║  输出位置: dist\7tan-editor\                ║
+echo ║  启动文件: 7tan-editor.exe                  ║
 echo ║  预计大小: 300-500MB (含 Chromium)           ║
 echo ║                                            ║
 echo ║  首次使用请在 exe 同级目录:                   ║
 echo ║  1. 复制 .env.example 重命名为 .env          ║
 echo ║  2. 填写 API Key                             ║
-echo ║  3. 双击运行 7tan-updater.exe                ║
+echo ║  3. 双击运行 7tan-editor.exe                 ║
 echo ╚══════════════════════════════════════════════╝
 echo.
 
 :: 打开输出文件夹
-start "" "dist\7tan-updater"
+start "" "dist\7tan-editor"
 
 pause
 exit /b 0

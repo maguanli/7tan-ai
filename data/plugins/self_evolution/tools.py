@@ -111,11 +111,14 @@ def create_plugin(plugin_id: str, plugin_name: str, description: str, tools_code
         tool_names = re.findall(r"name='([^']+)'", tools_code)
 
     written = []
+    seen = set()  # 用 set 去重，修复之前 _REAL_ROOT 永远被跳过的 BUG
 
     # 写入运行目录（dist）和源码目录（持久化）
     for base_root in [ROOT, _REAL_ROOT]:
-        if base_root.resolve() == _REAL_ROOT.resolve():
-            continue  # 同一个目录
+        key = base_root.resolve()
+        if key in seen:
+            continue
+        seen.add(key)
         try:
             plugin_dir = base_root / "data" / "plugins" / plugin_id
             plugin_dir.mkdir(parents=True, exist_ok=True)

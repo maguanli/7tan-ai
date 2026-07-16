@@ -95,10 +95,17 @@ def get_all_tools() -> list[dict]:
             "function": {
                 "name": name,
                 "description": desc,
-                "parameters": params,
+                "parameters": _ensure_schema(params),
             }
         })
     return result
+
+
+def _ensure_schema(params: dict) -> dict:
+    """确保 parameters 是合法的 JSON Schema"""
+    if isinstance(params, dict) and "type" not in params:
+        return {"type": "object", "properties": params, "required": list(params.keys())}
+    return params
 
 
 def get_tool(name: str) -> Tool:

@@ -110,7 +110,8 @@ def run_agent_loop(
                 config=config,
             )
         except Exception as e:
-            logger.error(f"❌ LLM 调用失败: {e}")
+            import traceback
+            logger.error(f"❌ LLM 调用失败: {e}\n{traceback.format_exc()}")
             ctx.add_assistant_message(f"❌ LLM 调用失败: {e}")
             return {
                 "success": False,
@@ -134,13 +135,24 @@ def run_agent_loop(
         msg = choice.message
         finish_reason = choice.finish_reason or ""
 
-        # 添加 assistant 消息到历史 — 只传 OpenAI 需要的最小字段
+        # 添加 assistant 消息到历史
         msg_dict = {"role": "assistant"}
         if msg.content:
             msg_dict["content"] = msg.content
         if msg.tool_calls:
-            # 保持 tool_calls 为对象格式，不转 dict
-            msg_dict["tool_calls"] = msg.tool_calls
+            # 开放式API格式: 只保留 id/type/function 三个字段
+            safe_calls = []
+            for tc in msg.tool_calls:
+                fn = tc.function
+                safe_calls.append({
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": fn.name if hasattr(fn, 'name') else fn.get("name", ""),
+                        "arguments": fn.arguments if hasattr(fn, 'arguments') else fn.get("arguments", ""),
+                    }
+                })
+            msg_dict["tool_calls"] = safe_calls
         messages.append(msg_dict)
 
         # 记录到对话历史

@@ -76,17 +76,23 @@ def register_tool(
 
 def get_all_tools() -> list[dict]:
     """返回 OpenAI 兼容的 tools 数组"""
-    return [
-        {
+    result = []
+    for t in TOOL_REGISTRY.values():
+        # 兼容插件可能注册 dict 而不是 ToolDefinition
+        if not hasattr(t, 'name'):
+            logger.warning(f"⚠️ TOOL_REGISTRY 中混入 dict 而不是 ToolDefinition: {t}")
+            name = t.get("name", "unknown")
+            desc = t.get("description", "")
+            params = t.get("parameters", {})
+        result.append({
             "type": "function",
             "function": {
-                "name": t.name,
-                "description": t.description,
-                "parameters": t.parameters,
+                "name": name,
+                "description": desc,
+                "parameters": params,
             }
-        }
-        for t in TOOL_REGISTRY.values()
-    ]
+        })
+    return result
 
 
 def get_tool(name: str) -> Tool:

@@ -103,6 +103,13 @@ def run_agent_loop(
         logger.info(f"🔄 Agent 迭代 {iteration}/{max_iterations}")
 
         try:
+            # 诊断: 打印每条消息的角色和类型
+            for i, m in enumerate(messages):
+                role = m.get("role", "?")
+                tc = m.get("tool_calls")
+                tc_type = type(tc).__name__ if tc else "-"
+                logger.debug(f"  消息[{i}] role={role} tool_calls={tc_type} keys={list(m.keys())[:5]}")
+            
             response = _call_llm(
                 model=model,
                 messages=messages,

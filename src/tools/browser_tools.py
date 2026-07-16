@@ -97,6 +97,19 @@ def use_admin_browser() -> str:
     return "✅ 已切换到管理后台浏览器"
 
 
+@register_tool(
+    name="scroll_down",
+    description="滚动到页面底部。列表页用无限滚动/懒加载时，必须先用这个滚到底触发加载，再browse_page才能读到全部内容。",
+    parameters={"type": "object", "properties": {}, "required": []},
+    category="browser",
+    requires_browser=True,
+)
+def scroll_down() -> str:
+    bridge = _get_bridge()
+    bridge.scroll_bottom()
+    return "✅ 已滚动到底部"
+
+
 def _exec_js(js: str, timeout: float = 5.0) -> str:
     """通过 Bridge 线程安全地执行 JS 并同步等待结果"""
     return _get_bridge().execute_js(js, timeout)

@@ -408,6 +408,10 @@ class BrowserBridge(QObject):
         result = self.execute_js(js, timeout=10.0)
         return result if result else f"uploaded_{len(valid)}_files"
 
+    def scroll_bottom(self):
+        """滚动到页面底部（触发懒加载）"""
+        self.execute_js("window.scrollTo(0, document.body.scrollHeight);", timeout=1.0)
+
     @property
     def is_available(self) -> bool:
         """浏览器是否可用"""

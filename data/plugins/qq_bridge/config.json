@@ -1,0 +1,7 @@
+{
+  "ws_url": "ws://127.0.0.1:3001",
+  "access_token": "",
+  "auto_reconnect": true,
+  "reconnect_interval": 5,
+  "max_queue_size": 200
+}

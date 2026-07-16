@@ -185,9 +185,12 @@ def run_agent_loop(
             continue
 
         for tc in tool_calls_raw:
-            func = tc.function
-            tool_name = func.name
-            tool_args = json.loads(func.arguments)
+            # 兼容 openai 库新版返回 dict 而不是对象
+            func = tc.function if hasattr(tc, 'function') else tc.get("function", {})
+            tool_name = func.name if hasattr(func, 'name') else func.get("name", "unknown")
+            tool_args_raw = func.arguments if hasattr(func, 'arguments') else func.get("arguments", "{}")
+            tool_id = tc.id if hasattr(tc, 'id') else tc.get("id", "")
+            tool_args = json.loads(tool_args_raw) if isinstance(tool_args_raw, str) else tool_args_raw
 
             tool_def = get_tool(tool_name)
             danger_label = "⚠️" if (tool_def and tool_def.dangerous) else ""
@@ -220,7 +223,7 @@ def run_agent_loop(
             # 添加到消息历史
             messages.append({
                 "role": "tool",
-                "tool_call_id": tc.id,
+                "tool_call_id": tool_id,
                 "content": result_str,
             })
 

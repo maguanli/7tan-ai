@@ -58,10 +58,14 @@ def register_tool(
                 requires_db=getattr(instance, "requires_db", requires_db),
             )
         else:
+            # 智能包装: 如果 parameters 缺少 type/properties，自动补全 JSON Schema
+            params = parameters or {}
+            if isinstance(params, dict) and "type" not in params:
+                params = {"type": "object", "properties": params, "required": list(params.keys())}
             tool = Tool(
                 name=name or target.__name__,
                 description=description,
-                parameters=parameters or {"type": "object", "properties": {}, "required": []},
+                parameters=params,
                 function=target,
                 category=category,
                 dangerous=dangerous,

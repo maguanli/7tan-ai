@@ -99,33 +99,13 @@ def run_agent_loop(
     all_logs = []
     last_calls = []  # 防重复循环检测
 
-    def _repair_messages(msgs):
-        """修复消息列表：删除孤立（无配对 tool 回复）的 tool_calls"""
-        ids_needed = set()
-        for m in msgs:
-            if m.get("role") == "tool":
-                tid = m.get("tool_call_id")
-                if tid:
-                    ids_needed.add(tid)
-        fixed = []
-        for m in msgs:
-            if m.get("role") == "assistant" and m.get("tool_calls"):
-                # 只保留有对应 tool 回复的 tool_calls
-                valid = [tc for tc in m["tool_calls"] if (tc.get("id") or tc.get("function",{}).get("name",_) + "_") in ids_needed or tc.get("id") in ids_needed]
-                if not valid:
-                    m = {k: v for k, v in m.items() if k != "tool_calls"}
-                else:
-                    m["tool_calls"] = valid
-            fixed.append(m)
-        return fixed
-
     for iteration in range(1, max_iterations + 1):
         logger.info(f"🔄 Agent 迭代 {iteration}/{max_iterations}")
 
         try:
             response = _call_llm(
                 model=model,
-                messages=_repair_messages(messages),
+                messages=messages,
                 tools=get_all_tools(),
                 config=config,
             )

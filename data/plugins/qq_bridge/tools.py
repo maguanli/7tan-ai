@@ -8,8 +8,92 @@ import time
 import queue
 import threading
 import logging
+import sys
 from pathlib import Path
 from datetime import datetime
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+# ========== 修复导入：兼容打包环境和开发环境 ==========
+
+def _get_tool_registry():
+    """获取主程序的 TOOL_REGISTRY 字典，兼容各种环境"""
+    # 方案一：从 sys.modules 获取已加载的模块
+    for mod_name in list(sys.modules.keys()):
+        mod = sys.modules[mod_name]
+        registry = getattr(mod, 'TOOL_REGISTRY', None)
+        if registry is not None and isinstance(registry, dict):
+            return registry
+
+    # 方案二：尝试直接导入
+    ROOT = Path(__file__).parent.parent.parent.parent  # D:\7tan\7tanAI
+    try:
+        sys.path.insert(0, str(ROOT))
+        from src.tools.registry import TOOL_REGISTRY
+        return TOOL_REGISTRY
+    except (ImportError, ModuleNotFoundError, AttributeError):
+        pass
+
+    # 方案三：通过文件路径加载
+    registry_path = ROOT / "src" / "tools" / "registry.py"
+    if registry_path.exists():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_qq_registry", str(registry_path))
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules["_qq_registry"] = mod
+            spec.loader.exec_module(mod)
+            if hasattr(mod, 'TOOL_REGISTRY'):
+                return mod.TOOL_REGISTRY
+
+    # 方案四：搜索打包目录
+    import glob
+    for f in glob.glob(str(ROOT / "dist" / "7tan-editor" / "_internal" / "*.py"), recursive=False):
+        if 'registry' in f.lower():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("_qq_registry_fb", f)
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                sys.modules["_qq_registry_fb"] = mod
+                spec.loader.exec_module(mod)
+                if hasattr(mod, 'TOOL_REGISTRY'):
+                    return mod.TOOL_REGISTRY
+
+    # 方案五：所有方案都失败，返回一个本地字典
+    # 注意：这种情况下工具会注册到本地字典，主程序可能看不到
+    # 但我们至少让插件能正常加载
+    return {}
+
+
+# 获取全局 TOOL_REGISTRY
+TOOL_REGISTRY = _get_tool_registry()
+
+
+def register_tool(name=None, description="", parameters=None, category="misc",
+                  dangerous=False, requires_browser=False, requires_db=False):
+    """
+    工具注册装饰器 — 本地实现，不依赖主程序 registry 模块
+    
+    将函数注册到 TOOL_REGISTRY 字典中，与主程序的 register_tool 行为一致
+    """
+    def decorator(target):
+        tool_def = {
+            "name": name or target.__name__,
+            "description": description,
+            "parameters": parameters or {"type": "object", "properties": {}, "required": []},
+            "function": target,
+            "category": category,
+            "dangerous": dangerous,
+            "requires_browser": requires_browser,
+            "requires_db": requires_db,
+        }
+        tool_name = tool_def["name"]
+        TOOL_REGISTRY[tool_name] = tool_def
+        logger = logging.getLogger("qq_bridge")
+        logger.debug(f"🔧 注册工具: {tool_name} ({category})")
+        return target
+    return decorator
+
 
 logger = logging.getLogger("qq_bridge")
 

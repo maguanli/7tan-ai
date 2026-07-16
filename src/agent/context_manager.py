@@ -133,14 +133,35 @@ class ContextManager:
             return self._rule_summarize(messages)
 
     def _trim_if_needed(self):
-        """按消息数量或 token 估算截断"""
+        """按消息数量截断 — 确保不破坏 tool_calls/tool 配对"""
         if len(self.history) > self.max_messages:
-            logger.debug(f"📎 消息数量 {len(self.history)} > {self.max_messages}，进行截断")
-            self.history = self.history[-self.max_messages:]
+            # 从最旧的消息开始找安全截断点
+            trim_at = len(self.history) - self.max_messages
+            # 检查截断点后的第一条消息是不是 tool 回复（孤立的 tool）
+            while trim_at < len(self.history) and self.history[trim_at].get("role") == "tool":
+                trim_at += 1  # 保留这个 tool 回复需要对应的 assistant message
+            self.history = self.history[trim_at:]
+            # 修复截断后可能出现的孤立 tool_calls
+            self._repair_tool_pairs()
+            logger.debug(f"📎 截断后保留 {len(self.history)} 条消息")
 
         if self._total_tokens > self.max_tokens_estimate:
-            logger.debug(f"📎 Token 估算 {self._total_tokens} > {self.max_tokens_estimate}，进行摘要")
+            logger.debug(f"📎 Token 估算 {self._total_tokens} > {self.max_tokens_estimate}")
             self.summarize()
+
+    def _repair_tool_pairs(self):
+        """修复截断后可能残留的孤立 tool_calls（无对应 tool 回复）"""
+        if not self.history:
+            return
+        ids_found = set()
+        for m in self.history:
+            if m.get("role") == "tool" and m.get("tool_call_id"):
+                ids_found.add(m["tool_call_id"])
+        for m in self.history:
+            if m.get("role") == "assistant" and m.get("tool_calls"):
+                m["tool_calls"] = [tc for tc in m["tool_calls"] if tc.get("id") in ids_found]
+                if not m["tool_calls"]:
+                    del m["tool_calls"]
 
     def __len__(self):
         return len(self.history)

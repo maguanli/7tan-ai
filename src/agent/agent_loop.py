@@ -76,7 +76,13 @@ def run_agent_loop(
                 t = len(m.get("content", "")) // 2
                 if hist_tokens + t > 16000:
                     break
-                kept.insert(0, {"role": m["role"], "content": m["content"]})
+                # 保留所有字段（tool_calls, tool_call_id 等），加载对应 tool 回复
+                entry = {"role": m["role"], "content": m.get("content", "")}
+                if "tool_calls" in m and m["tool_calls"]:
+                    entry["tool_calls"] = m["tool_calls"]
+                if "tool_call_id" in m and m["tool_call_id"]:
+                    entry["tool_call_id"] = m["tool_call_id"]
+                kept.insert(0, entry)
                 hist_tokens += t
             messages.extend(kept)
             if len(kept) < len(history):
@@ -93,13 +99,33 @@ def run_agent_loop(
     all_logs = []
     last_calls = []  # 防重复循环检测
 
+    def _repair_messages(msgs):
+        """修复消息列表：删除孤立（无配对 tool 回复）的 tool_calls"""
+        ids_needed = set()
+        for m in msgs:
+            if m.get("role") == "tool":
+                tid = m.get("tool_call_id")
+                if tid:
+                    ids_needed.add(tid)
+        fixed = []
+        for m in msgs:
+            if m.get("role") == "assistant" and m.get("tool_calls"):
+                # 只保留有对应 tool 回复的 tool_calls
+                valid = [tc for tc in m["tool_calls"] if (tc.get("id") or tc.get("function",{}).get("name",_) + "_") in ids_needed or tc.get("id") in ids_needed]
+                if not valid:
+                    m = {k: v for k, v in m.items() if k != "tool_calls"}
+                else:
+                    m["tool_calls"] = valid
+            fixed.append(m)
+        return fixed
+
     for iteration in range(1, max_iterations + 1):
         logger.info(f"🔄 Agent 迭代 {iteration}/{max_iterations}")
 
         try:
             response = _call_llm(
                 model=model,
-                messages=messages,
+                messages=_repair_messages(messages),
                 tools=get_all_tools(),
                 config=config,
             )
@@ -131,6 +157,9 @@ def run_agent_loop(
         # 添加 assistant 消息到历史
         # 将 pydantic model 转为 dict 以保持兼容
         msg_dict = msg.model_dump(exclude_none=True)
+        # DeepSeek 严格校验: 空 tool_calls 数组也触发配对检查, 必须剔除
+        if "tool_calls" in msg_dict and (not msg_dict["tool_calls"]):
+            del msg_dict["tool_calls"]
         messages.append(msg_dict)
 
         # 记录到对话历史

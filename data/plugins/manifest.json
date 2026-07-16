@@ -86,5 +86,38 @@
     "description": "接入 OpenAI GPT-4o-mini 云端模型增强推理。比本地模型聪明10倍，自动写简介/分析游戏。需配置 API Key。",
     "tools": ["cloud_analyze", "cloud_write_intro"],
     "icon": "☁️"
+  },
+  {
+    "id": "self_evolution",
+    "name": "自我进化",
+    "version": "1.0.0",
+    "author": "AI Self-Evolution",
+    "type": "custom",
+    "category": "系统",
+    "description": "赋予 AI 自我诊断、动态创建插件、系统信息查询、文件完整性校验等自我扩展能力。",
+    "tools": ["self_diagnose", "create_plugin", "system_shell", "check_file_integrity"],
+    "icon": "🧬"
+  },
+  {
+    "id": "memory_enhance",
+    "name": "记忆增强",
+    "version": "1.0.0",
+    "author": "AI Self-Evolution",
+    "type": "custom",
+    "category": "记忆",
+    "description": "持久化知识存储与检索。让 AI 记住游戏知识、技能经验、配置信息，跨会话保持记忆。",
+    "tools": ["memory_store", "memory_recall", "memory_summary", "memory_forget"],
+    "icon": "🧠"
+  },
+  {
+    "id": "self_restart",
+    "name": "自我重启",
+    "version": "1.0.0",
+    "author": "AI Self-Evolution",
+    "type": "custom",
+    "category": "系统",
+    "description": "允许 AI 自动重启应用程序，以及诊断修复自身问题。重启后约3秒新窗口自动打开。",
+    "tools": ["self_restart", "self_fix_sandbox"],
+    "icon": "🔄"
   }
 ]

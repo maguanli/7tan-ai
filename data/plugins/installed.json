@@ -6,6 +6,9 @@
     "deep_analysis",
     "form_enhance",
     "ocr_reader",
-    "cloud_ai"
+    "cloud_ai",
+    "self_evolution",
+    "memory_enhance",
+    "self_restart"
   ]
 }

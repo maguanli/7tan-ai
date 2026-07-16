@@ -131,7 +131,7 @@ def browse_page(url: str, wait_seconds: int = 3) -> str:
         bridge = _get_bridge()
         bridge.navigate(url, wait_seconds)
         title = bridge.get_page_title()
-        text = bridge.get_page_text(10000)       # 读取更多文本 (之前 5000)
+        text = bridge.get_page_text(50000)       # 列表页面需要大容量
         link_list = bridge.get_page_links(200)    # 提取200个链接（含onclick/data-url）
         image_list = bridge.get_page_images(50)
 

@@ -414,14 +414,18 @@ class DashboardPage(QWidget):
 
         layout.addStretch()
 
-        # 定时刷新
+        # 定时刷新（仅页面可见时生效）
         self._timer = QTimer()
         self._timer.timeout.connect(self.refresh)
-        self._timer.start(10000)
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._timer.start(10000)
         self.refresh()
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self._timer.stop()
 
     def refresh(self):
         self._worker = ApiWorker("GET", f"{API_BASE}/api/stats/dashboard")
@@ -919,11 +923,15 @@ class ResourceTablePage(QWidget):
 
         self._timer = QTimer()
         self._timer.timeout.connect(self.refresh)
-        self._timer.start(30000)
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._timer.start(30000)
         self.refresh()
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self._timer.stop()
 
     def refresh(self):
         params = {}
@@ -1012,11 +1020,15 @@ class TasksPage(QWidget):
 
         self._timer = QTimer()
         self._timer.timeout.connect(self.refresh)
-        self._timer.start(5000)
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._timer.start(5000)
         self.refresh()
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self._timer.stop()
 
     def refresh(self):
         self._worker = ApiWorker("GET", f"{API_BASE}/api/tasks")

@@ -134,12 +134,13 @@ def run_agent_loop(
         msg = choice.message
         finish_reason = choice.finish_reason or ""
 
-        # 添加 assistant 消息到历史
-        # 将 pydantic model 转为 dict 以保持兼容
-        msg_dict = msg.model_dump(exclude_none=True)
-        # DeepSeek 严格校验: 空 tool_calls 数组也触发配对检查, 必须剔除
-        if "tool_calls" in msg_dict and (not msg_dict["tool_calls"]):
-            del msg_dict["tool_calls"]
+        # 添加 assistant 消息到历史 — 只传 OpenAI 需要的最小字段
+        msg_dict = {"role": "assistant"}
+        if msg.content:
+            msg_dict["content"] = msg.content
+        if msg.tool_calls:
+            # 保持 tool_calls 为对象格式，不转 dict
+            msg_dict["tool_calls"] = msg.tool_calls
         messages.append(msg_dict)
 
         # 记录到对话历史

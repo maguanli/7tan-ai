@@ -15,7 +15,7 @@ from ..tools.monitor_tools import track_cost
 from ..database.db import get_session, ConversationHistory
 
 # 最大迭代次数（防止无限循环）
-MAX_ITERATIONS = 50  # 发布任务复杂，需要足够步数
+MAX_ITERATIONS = 80  # 浏览列表多页任务需要更多步数
 
 
 def _get_active_ai_config(config: dict) -> dict:

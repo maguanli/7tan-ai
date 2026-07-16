@@ -282,7 +282,6 @@ def find_download_links() -> str:
     },
     category="browser",
     requires_browser=True,
-    dangerous=True,
 )
 def click_element(selector: str, text: str = None) -> str:
     """点击页面元素（线程安全）"""
@@ -360,7 +359,6 @@ def get_page_images(max_images: int = 50) -> str:
     },
     category="browser",
     requires_browser=True,
-    dangerous=True,
 )
 def login_7tan(username: str, password: str) -> str:
     """自动登录 7坛 管理后台（线程安全）"""

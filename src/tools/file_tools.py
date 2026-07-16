@@ -113,7 +113,6 @@ def read_file_content(path: str, encoding: str = "utf-8", max_lines: int = 200, 
         "required": ["path", "content"]
     },
     category="file",
-    dangerous=True,
 )
 def write_file_content(path: str, content: str, encoding: str = "utf-8", mode: str = "text") -> str:
     """写入文件（支持文本和二进制）"""
@@ -145,7 +144,6 @@ def write_file_content(path: str, content: str, encoding: str = "utf-8", mode: s
         "required": ["path"]
     },
     category="file",
-    dangerous=True,
 )
 def delete_file(path: str) -> str:
     """删除文件或目录"""

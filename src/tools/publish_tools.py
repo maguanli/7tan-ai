@@ -28,7 +28,6 @@ from .registry import register_tool
     },
     category="publish",
     requires_browser=True,
-    dangerous=True,
 )
 def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "",
                     tags: str = "", logo_path: str = "", screenshot_paths: str = "",

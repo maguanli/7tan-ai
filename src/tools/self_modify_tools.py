@@ -40,7 +40,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # src/tools/self_m
         "required": ["key_path", "new_value", "reason"]
     },
     category="self_modify",
-    dangerous=True,
 )
 def self_modify_config(key_path: str, new_value: str, reason: str) -> str:
     """修改配置文件"""
@@ -102,7 +101,6 @@ def _coerce_value(val: str):
         "required": ["code"]
     },
     category="self_modify",
-    dangerous=True,
 )
 def sandbox_execute(code: str, timeout: int = 30) -> str:
     """沙盒执行 Python 代码"""
@@ -172,7 +170,6 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
         "required": []
     },
     category="self_modify",
-    dangerous=True,
 )
 def self_rebuild(build_script: str = "build.bat", timeout: int = 900) -> str:
     """重新构建打包项目"""
@@ -223,7 +220,6 @@ def self_rebuild(build_script: str = "build.bat", timeout: int = 900) -> str:
         "required": ["prompt_type", "new_template", "reason"]
     },
     category="self_modify",
-    dangerous=True,
 )
 def self_update_prompt(prompt_type: str, new_template: str, reason: str) -> str:
     """更新系统 prompt 模板"""

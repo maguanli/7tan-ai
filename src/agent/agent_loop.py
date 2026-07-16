@@ -213,8 +213,7 @@ def run_agent_loop(
             tool_args = json.loads(tool_args_raw) if isinstance(tool_args_raw, str) else tool_args_raw
 
             tool_def = get_tool(tool_name)
-            danger_label = "⚠️" if (tool_def and tool_def.dangerous) else ""
-            logger.info(f"🔧 {danger_label}调用工具: {tool_name}({_truncate_args(tool_args)})")
+            logger.info(f"🔧 调用工具: {tool_name}({_truncate_args(tool_args)})")
 
             # 检测重复调用死循环
             call_sig = f"{tool_name}:{json.dumps(tool_args, sort_keys=True)}"

@@ -119,8 +119,6 @@ def execute_tool(name: str, args: dict) -> str:
         return f"❌ 未知工具: {name}"
 
     try:
-        if tool.dangerous:
-            logger.warning(f"⚠️ 执行危险工具: {name} ({args})")
         result = tool.function(**args)
         return str(result) if result is not None else "✅ 完成"
     except Exception as e:

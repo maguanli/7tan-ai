@@ -82,11 +82,10 @@ def get_all_tools() -> list[dict]:
     """返回 OpenAI 兼容的 tools 数组"""
     result = []
     for t in TOOL_REGISTRY.values():
-        # 兼容插件可能注册 dict 而不是 ToolDefinition
+        # 兼容插件可能注册 dict 而不是 ToolDefinition（qq_bridge等）
         if hasattr(t, 'name'):
             name, desc, params = t.name, t.description, t.parameters
         else:
-            logger.warning(f"⚠️ TOOL_REGISTRY 中混入 dict 而不是 ToolDefinition: {t}")
             name = t.get("name", "unknown")
             desc = t.get("description", "")
             params = t.get("parameters", {})

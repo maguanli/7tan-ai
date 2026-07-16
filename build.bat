@@ -4,7 +4,7 @@ cd /d "%~dp0"
 
 echo.
 echo ╔══════════════════════════════════════════════╗
-echo ║   7坛AI小编 — PyInstaller 一键打包脚本       ║
+echo ║   7Tan — PyInstaller 一键打包脚本            ║
 echo ║   输出: dist\7tan-editor\7tan-editor.exe      ║
 echo ╚══════════════════════════════════════════════╝
 echo.

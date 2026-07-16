@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-7坛AI小编 — 主入口
+7Tan — 主入口
 绿色免安装 AI 编辑器，自动抓取→改写→发布游戏/软件资源
 
 用法:
@@ -196,7 +196,7 @@ def run_cli(args):
     from src.agent.conversation import create_session
 
     print("\n" + "=" * 50)
-    print("  🤖 7坛AI小编 — 交互式 CLI")
+    print("  🤖 7Tan — 交互式 CLI")
     print("  输入任务指令，AI 将自动执行")
     print("  输入 /help 查看更多命令")
     print("=" * 50 + "\n")
@@ -214,62 +214,53 @@ def run_cli(args):
         if not user_input:
             continue
 
-        # 特殊命令
+        # --- 内置命令 ---
         if user_input.startswith("/"):
-            cmd = user_input[1:].lower()
-            if cmd == "help":
+            parts = user_input.split(maxsplit=1)
+            cmd = parts[0].lower()
+            if cmd == "/help":
                 print("""
-命令列表:
-  /help      - 显示帮助
-  /quit      - 退出
-  /status    - 系统状态
-  /costs     - 费用报告
-  /new       - 新对话
-  /resources - 查看资源列表
-  /jobs      - 查看定时任务
-  /web       - 启动 Web 界面
+  可用命令:
+  /help        显示帮助
+  /stats       查看统计
+  /model       切换 AI 模型
+  /quit        退出
+  /sessions    查看历史会话
+  /switch <id> 切换会话
+  直接在提示符下输入任务描述即可执行
                 """)
-            elif cmd == "quit" or cmd == "exit":
+            elif cmd == "/quit":
                 print("👋 再见!")
                 break
-            elif cmd == "status":
-                from src.tools.monitor_tools import get_system_status
-                print(get_system_status())
-            elif cmd == "costs":
-                from src.tools.monitor_tools import get_cost_report
-                print(get_cost_report(days=7))
-            elif cmd == "new":
-                session_id = create_session()
-                print(f"🆕 新对话: {session_id}")
-            elif cmd == "resources":
-                from src.database.db import get_session, Resource
-                session = get_session()
+            elif cmd == "/stats":
+                from src.database.db import Session
+                db = Session()
                 try:
-                    resources = session.query(Resource).order_by(
-                        Resource.created_at.desc()
-                    ).limit(10).all()
-                    for r in resources:
-                        print(f"  [{r.status}] {r.title} ({r.resource_type})")
-                    print(f"  共 {len(resources)} 条记录")
+                    from src.database.db import Resource
+                    total = db.query(Resource).count()
+                    print(f"  总资源数: {total}")
                 finally:
-                    session.close()
-            elif cmd == "jobs":
-                from src.scheduler.scheduler import get_jobs_status
-                jobs = get_jobs_status()
-                for j in jobs:
-                    print(f"  {j['name']}: 下次 {j['next_run'] or '-'}")
-            elif cmd == "web":
-                print("启动 Web 界面...")
-                run_web(args)
-                break
+                    db.close()
+            elif cmd == "/model":
+                from src.config.loader import load_config
+                config = load_config()
+                active = config.get("ai", {}).get("active", "unknown")
+                print(f"  当前模型: {active}")
             else:
-                print(f"未知命令: /{cmd}. 输入 /help 查看帮助")
-        else:
-            print("⏳ 执行中...")
+                print(f"  未知命令: {cmd}，输入 /help 查看帮助")
+            continue
+
+        # --- AI 任务执行 ---
+        print("🤔 思考中...")
+        try:
             result = run_agent_loop(task=user_input, session_id=session_id, model_name=model)
-            print(f"\n{'✅ 成功' if result['success'] else '❌ 失败'} (¥{result.get('cost', 0):.4f})")
-            print(result.get("result", ""))
-            print()
+            print("\n" + "-" * 40)
+            print(result.get("result", "无输出"))
+            print(f"费用: ¥{result.get('cost', 0):.4f}")
+            print("-" * 40 + "\n")
+        except Exception as e:
+            logger.exception("CLI 执行失败")
+            print(f"❌ 执行失败: {e}")
 
 
 if __name__ == "__main__":

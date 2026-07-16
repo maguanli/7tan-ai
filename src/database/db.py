@@ -7,6 +7,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from sqlalchemy import (
     Column, Integer, String, Text, Float, DateTime, ForeignKey,
@@ -21,13 +22,45 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 # ===== 持久化数据目录 =====
 
 def _get_data_dir() -> Path:
-    """获取持久化数据目录（兼容源码运行和 PyInstaller 打包）"""
+    """获取持久化数据目录（兼容源码运行和 PyInstaller 打包）
+    
+    优先级：
+    1. config.yaml 中的 storage.data_dir（避免构建时被清除）
+    2. PyInstaller 打包：EXE 同目录下的 data 文件夹
+    3. 源码运行：项目根目录下的 data 文件夹
+    """
+    # 优先从配置文件读取自定义数据目录
+    config_dir = _try_read_config_data_dir()
+    if config_dir:
+        return config_dir
+    
     if getattr(sys, 'frozen', False):
         # PyInstaller 打包：EXE 同目录下的 data 文件夹
         return Path(sys.executable).parent / "data"
     else:
         # 源码运行：项目根目录下的 data 文件夹
         return Path(__file__).parent.parent.parent / "data"
+
+
+def _try_read_config_data_dir() -> Optional[Path]:
+    """尝试从 config.yaml 读取 storage.data_dir，用于将数据目录指向 dist 之外"""
+    try:
+        import yaml
+        if getattr(sys, 'frozen', False):
+            config_path = Path(sys.executable).parent / "config" / "config.yaml"
+        else:
+            config_path = Path(__file__).parent.parent.parent / "config" / "config.yaml"
+        
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                data = yaml.safe_load(f)
+            if data and 'storage' in data and data['storage'].get('data_dir'):
+                path = Path(data['storage']['data_dir'])
+                path.mkdir(parents=True, exist_ok=True)
+                return path
+    except Exception:
+        pass
+    return None
 
 
 # ===== 密码加密工具 =====

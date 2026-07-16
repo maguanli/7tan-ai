@@ -77,10 +77,14 @@ def register_tool(name=None, description="", parameters=None, category="misc",
     将函数注册到 TOOL_REGISTRY 字典中，与主程序的 register_tool 行为一致
     """
     def decorator(target):
+        # 智能包装: 确保 parameters 是合法的 JSON Schema
+        params = parameters or {}
+        if isinstance(params, dict) and "type" not in params:
+            params = {"type": "object", "properties": params, "required": list(params.keys())}
         tool_def = {
             "name": name or target.__name__,
             "description": description,
-            "parameters": parameters or {"type": "object", "properties": {}, "required": []},
+            "parameters": params,
             "function": target,
             "category": category,
             "dangerous": dangerous,

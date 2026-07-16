@@ -37,7 +37,7 @@ def parse_args(args: list = None) -> CliArgs:
     """
 
     parser = argparse.ArgumentParser(
-        description="7坛AI小编 — 自动抓取→改写→发布",
+        description="7Tan — 自动抓取→改写→发布",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:

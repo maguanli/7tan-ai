@@ -27,7 +27,7 @@ PROJECT_ROOT = _get_project_root()
 # 确保 src 目录在 path 中
 sys.path.insert(0, str(PROJECT_ROOT))
 
-app = FastAPI(title="7坛AI小编", version="5.1.0", docs_url=None, redoc_url=None)
+app = FastAPI(title="7Tan", version="5.1.0", docs_url=None, redoc_url=None)
 
 
 # ===== API 安全中间件 =====
@@ -76,7 +76,7 @@ app.include_router(chat_router)
 @app.get("/")
 async def root():
     """根路由 — API 信息"""
-    return JSONResponse({"app": "7坛AI小编", "version": app.version, "mode": "desktop"})
+    return JSONResponse({"app": "7Tan", "version": app.version, "mode": "desktop"})
 
 
 @app.get("/api/health")
@@ -93,7 +93,7 @@ async def health():
 @app.get("/api/version")
 async def version():
     """版本信息"""
-    return JSONResponse({"version": app.version, "name": "7tanAI"})
+    return JSONResponse({"version": app.version, "name": "7Tan"})
 
 
 # ===== 生命周期 =====
@@ -203,123 +203,126 @@ async def _handle_chat(ws: WebSocket, client_id: str, data: dict):
                 loop,
             )
         except Exception as e:
-            logger.error(f"对话执行失败: {e}")
-            save_message(session_id, "assistant", f"❌ {e}")
+            logger.exception("Agent 执行异常")
+            save_message(session_id, "assistant", f"执行失败: {e}")
             asyncio.run_coroutine_threadsafe(
                 ws.send_json({
                     "type": "chat_done",
                     "session_id": session_id,
                     "success": False,
-                    "result": str(e),
+                    "result": f"执行失败: {e}",
+                    "cost": 0,
                 }),
                 loop,
             )
 
-    # 使用模块级线程池（与 api_chat.py 共享）
-    from .routes.api_chat import _chat_executor
-    _chat_executor.submit(run_and_report)
-
-
-async def _handle_get_chat_history(ws: WebSocket, data: dict):
-    """加载指定会话的对话历史"""
-    session_id = data.get("session_id", "")
-    from ..agent.conversation import get_session_messages
-    messages = get_session_messages(session_id) if session_id else []
-    await ws.send_json({
-        "type": "chat_history",
-        "session_id": session_id,
-        "messages": messages,
-    })
-
-
-async def _handle_get_sessions(ws: WebSocket):
-    """获取最近会话列表"""
-    from ..agent.conversation import get_recent_sessions
-    sessions = get_recent_sessions()
-    await ws.send_json({
-        "type": "sessions_list",
-        "sessions": sessions,
-    })
+    import concurrent.futures
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    executor.submit(run_and_report)
 
 
 async def _handle_pipeline(ws: WebSocket, client_id: str, data: dict):
     """处理流水线任务"""
-    from ..pipeline.pipeline import Pipeline
-    from ..pipeline.task_queue import get_task_queue
+    task_text = data.get("task", "")
+    model = data.get("model")
+    await ws.send_json({"type": "pipeline_start"})
 
-    task_desc = data.get("task", "")
-    tq = get_task_queue()
+    loop = asyncio.get_event_loop()
 
-    # 通过任务队列提交（带进度推送）
-    def run_pipeline_task():
-        pipeline = Pipeline()
-        return pipeline.run(task=task_desc)
+    def run_pipeline():
+        try:
+            from ..pipeline.pipeline import Pipeline
+            pipeline = Pipeline()
+            result = pipeline.run(task=task_text, model=model)
+            asyncio.run_coroutine_threadsafe(
+                ws.send_json({
+                    "type": "pipeline_done",
+                    "success": result["success"],
+                    "result": result["result"],
+                    "cost": result.get("cost", 0),
+                }),
+                loop,
+            )
+        except Exception as e:
+            logger.exception("流水线执行失败")
+            asyncio.run_coroutine_threadsafe(
+                ws.send_json({"type": "pipeline_done", "success": False, "result": str(e), "cost": 0}),
+                loop,
+            )
 
-    task_id = tq.submit_function(
-        name=f"流水线: {task_desc[:40]}",
-        func=run_pipeline_task,
-        description=task_desc,
-    )
-
-    await ws.send_json({
-        "type": "pipeline_queued",
-        "task_id": task_id,
-        "message": "任务已提交到队列",
-    })
+    import concurrent.futures
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    executor.submit(run_pipeline)
 
 
 async def _handle_status(ws: WebSocket, client_id: str):
-    """系统状态"""
-    from ..tools.monitor_tools import get_system_status
-    status = get_system_status()
-    await ws.send_json({"type": "status", "data": status})
+    """返回系统状态"""
+    try:
+        from ..tools.monitor_tools import get_system_status
+        status = get_system_status()
+        await ws.send_json({"type": "status", "data": status})
+    except Exception as e:
+        await ws.send_json({"type": "status", "data": {"error": str(e)}})
 
 
 async def _handle_jobs(ws: WebSocket, client_id: str):
-    """调度器状态"""
-    from ..scheduler.scheduler import get_jobs_status
-    jobs = get_jobs_status()
-    await ws.send_json({"type": "jobs", "data": jobs})
+    """返回任务列表"""
+    try:
+        from ..database.db import Session
+        from ..database.db import TaskLog
+        db = Session()
+        try:
+            jobs = db.query(TaskLog).order_by(TaskLog.created_at.desc()).limit(50).all()
+            await ws.send_json({
+                "type": "jobs",
+                "data": [{"id": j.id, "task_type": j.task_type, "status": j.status, "message": j.message} for j in jobs],
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        await ws.send_json({"type": "jobs", "data": [], "error": str(e)})
 
 
 async def _handle_resources(ws: WebSocket, client_id: str):
-    """资源列表"""
-    from ..database.db import get_session, Resource
-    session = get_session()
+    """返回资源列表"""
     try:
-        resources = session.query(Resource).order_by(
-            Resource.created_at.desc()
-        ).limit(50).all()
-        await ws.send_json({
-            "type": "resources",
-            "data": [r.to_dict() for r in resources],
-        })
-    finally:
-        session.close()
+        from ..database.db import Session
+        from ..database.db import Resource
+        db = Session()
+        try:
+            resources = db.query(Resource).order_by(Resource.created_at.desc()).limit(50).all()
+            await ws.send_json({
+                "type": "resources",
+                "data": [{"id": r.id, "title": r.title, "status": r.status} for r in resources],
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        await ws.send_json({"type": "resources", "data": [], "error": str(e)})
 
 
-# ===== REST API =====
-
-@app.get("/api/status")
-async def status():
-    from ..tools.monitor_tools import get_system_status
-    return {"status": get_system_status()}
-
-
-@app.get("/api/costs")
-async def costs(days: int = 7):
-    from ..tools.monitor_tools import get_cost_report
-    return {"report": get_cost_report(days=days)}
+async def _handle_get_chat_history(ws: WebSocket, data: dict):
+    """返回聊天历史"""
+    session_id = data.get("session_id")
+    try:
+        from ..agent.conversation import get_messages
+        messages = get_messages(session_id)
+        await ws.send_json({"type": "chat_history", "session_id": session_id, "messages": messages})
+    except Exception as e:
+        await ws.send_json({"type": "chat_history", "session_id": session_id, "messages": [], "error": str(e)})
 
 
-@app.get("/api/jobs")
-async def jobs():
-    from ..scheduler.scheduler import get_jobs_status
-    return {"jobs": get_jobs_status()}
+async def _handle_get_sessions(ws: WebSocket):
+    """返回会话列表"""
+    try:
+        from ..agent.conversation import list_sessions
+        sessions = list_sessions()
+        await ws.send_json({"type": "sessions", "data": sessions})
+    except Exception as e:
+        await ws.send_json({"type": "sessions", "data": [], "error": str(e)})
 
 
-def start_server(host: str = "127.0.0.1", port: int = 9800):
-    """启动 API 服务器"""
+def start_server(host: str = "0.0.0.0", port: int = 9800):
+    """启动 FastAPI 服务器"""
     import uvicorn
-    logger.info(f"🌐 启动 API 服务器: http://{host}:{port}")
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    uvicorn.run(app, host=host, port=port, log_level="info")

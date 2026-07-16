@@ -1,6 +1,6 @@
 @echo off
 echo ============================================
-echo   7tanAI 构建脚本 v17
+echo   7Tan 构建脚本 v17
 echo ============================================
 cd /d D:\7tan\7tanAI
 
@@ -11,7 +11,7 @@ if not exist ".git" (
     echo   - 初始化 git 仓库...
     git init
     git add .gitignore requirements.txt main.py src/ data/prompts/ *.spec rebuild.bat start.bat
-    git commit -m "初始提交: 7tanAI 源码"
+    git commit -m "初始提交: 7Tan 源码"
 ) else (
     git add -A
     git commit -m "auto-save: %date% %time%"

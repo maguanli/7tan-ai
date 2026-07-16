@@ -1,10 +1,11 @@
 """
-自修改工具 — 沙盒执行、策略更新、配置修改
+自修改工具 — 沙盒执行、策略更新、配置修改、自主重建
 详见架构文档 §12 安全自修改机制
 """
 import copy
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -21,6 +22,9 @@ from ..utils.retry import retry, RETRY_POLICIES
 SANDBOX_ROOT = Path("data/sandbox")
 SANDBOX_TIMEOUT = 30  # 秒
 MAX_OUTPUT_SIZE = 100 * 1024  # 100KB
+
+# 项目根目录（源码树）
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # src/tools/self_modify_tools.py → 项目根
 
 
 @register_tool(
@@ -112,9 +116,18 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
         # 写入脚本
         script_path.write_text(code, encoding="utf-8")
 
-        # 执行（限制资源和时间）
+        # 判断是否在 PyInstaller 打包环境运行
+        # PyInstaller 中 sys.executable 指向打包后的 exe，不支持 -I 隔离模式
+        is_frozen = getattr(sys, 'frozen', False)
+        if is_frozen:
+            # 打包环境：不用 -I，直接执行脚本
+            cmd = [sys.executable, str(script_path)]
+        else:
+            # 开发环境：可以用 -I 隔离
+            cmd = [sys.executable, "-I", str(script_path)]
+
         result = subprocess.run(
-            [sys.executable, "-I", str(script_path)],  # -I 隔离模式
+            cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -137,6 +150,64 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
         # 清理
         if script_path.exists():
             script_path.unlink()
+
+
+@register_tool(
+    name="self_rebuild",
+    description="重新构建打包整个项目。修改源码后调用此工具，自动运行 build.bat 生成新的 exe。构建完成后需要调用 self_restart 重启。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "build_script": {
+                "type": "string",
+                "description": "构建脚本路径，默认为项目根目录下的 build.bat",
+                "default": "build.bat"
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "构建超时秒数（构建通常需要 5-15 分钟）",
+                "default": 900
+            },
+        },
+        "required": []
+    },
+    category="self_modify",
+    dangerous=True,
+)
+def self_rebuild(build_script: str = "build.bat", timeout: int = 900) -> str:
+    """重新构建打包项目"""
+    build_path = PROJECT_ROOT / build_script
+    if not build_path.exists():
+        # 也尝试在运行目录查找
+        build_path = Path(build_script)
+        if not build_path.exists():
+            return f"❌ 找不到构建脚本: {build_script}\n  已搜索:\n    - {PROJECT_ROOT / build_script}\n    - {Path(build_script).absolute()}"
+
+    logger.warning(f"🔨 开始重新构建: {build_path}")
+
+    try:
+        result = subprocess.run(
+            [str(build_path)],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(PROJECT_ROOT),
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+        )
+
+        stdout = result.stdout[-5000:] if len(result.stdout) > 5000 else result.stdout
+        stderr = result.stderr[-3000:] if len(result.stderr) > 3000 else result.stderr
+
+        if result.returncode == 0:
+            return f"✅ 构建成功！\n--- 构建输出（最后5000字符）---\n{stdout}\n--- stderr ---\n{stderr}"
+        else:
+            return f"❌ 构建失败 (退出码 {result.returncode})\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
+
+    except subprocess.TimeoutExpired:
+        return f"⏰ 构建超时（>{timeout}秒）。构建通常需要 5-15 分钟，请检查是否有问题。"
+    except Exception as e:
+        logger.error(f"❌ 构建异常: {e}")
+        return f"❌ 构建异常: {e}"
 
 
 @register_tool(

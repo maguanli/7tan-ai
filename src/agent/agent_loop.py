@@ -198,8 +198,8 @@ def run_agent_loop(
             result_str = execute_tool(tool_name, tool_args)
 
             # 截断过长结果
-            if len(result_str) > 8000:
-                result_str = result_str[:8000] + "\n...(结果已截断)"
+            if len(result_str) > 32000:
+                result_str = result_str[:32000] + "\n...(结果已截断)"
 
             logger.debug(f"   结果: {result_str[:100]}...")
 

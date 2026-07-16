@@ -154,6 +154,11 @@ def run_agent_loop(
             logger.info(f"💬 Agent: {content[:100]}...")
 
         # 判断是否需要工具调用
+        # "length" = 输出被截断，不能当完成！
+        if finish_reason == "length":
+            # 输出被截断，提示继续
+            messages.append({"role": "user", "content": "你的输出被截断了，请从中断处继续生成剩余内容，不要重复已输出的部分。"})
+            continue
         if finish_reason == "stop" or (not tool_calls_raw and content):
             final_result = content or "任务完成"
             return {

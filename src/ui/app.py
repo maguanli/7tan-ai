@@ -1395,11 +1395,11 @@ class ChatBrowserSplitPage(QWidget):
 
         # ===== 左侧顶部：面板切换按钮栏（2个按钮：浏览器 + 控制台）=====
         self._panel_bar = QHBoxLayout()
-        self._panel_bar.setContentsMargins(4, 4, 4, 2)
-        self._panel_bar.setSpacing(6)
+        self._panel_bar.setContentsMargins(8, 6, 8, 4)
+        self._panel_bar.setSpacing(8)
 
         panel_label = QLabel("📺")
-        panel_label.setStyleSheet("font-size: 14px;")
+        panel_label.setStyleSheet("font-size: 18px; padding-right: 2px;")
         self._panel_bar.addWidget(panel_label)
 
         self._btn_browser = self._make_panel_btn("🌐 浏览器", True)
@@ -1452,12 +1452,12 @@ class ChatBrowserSplitPage(QWidget):
         btn = QPushButton(text)
         btn.setCheckable(True)
         btn.setChecked(active)
-        btn.setFixedHeight(28)
+        btn.setFixedHeight(38)
         btn.setStyleSheet(f"""
             QPushButton {{
                 background: {bg}; color: {color};
                 border: 1px solid {THEME['border']}; border-radius: 4px;
-                padding: 2px 10px; font-size: 11px; font-weight: bold;
+                padding: 4px 18px; font-size: 14px; font-weight: bold;
             }}
             QPushButton:checked {{ background: {THEME['accent']}44; color: {THEME['accent']}; }}
             QPushButton:hover {{ border-color: {THEME['accent']}88; }}

@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QScrollArea, QFrame, QSplitter,
     QListWidget, QListWidgetItem, QStackedWidget,
-    QLineEdit, QPlainTextEdit, QTextBrowser,
+    QLineEdit, QPlainTextEdit, QTextBrowser, QComboBox,
     QSizePolicy, QAbstractItemView, QMenu, QDialog,
     QMessageBox, QProgressBar,
 )
@@ -46,7 +46,7 @@ THEME = {
     "danger": "#ef4444",
     "text_primary": "#e2e8f0",
     "text_secondary": "#94a3b8",
-    "text_muted": "#64748b",
+    "text_muted": "#333333",
     "border": "#1e293b",
     "hover": "#1e3a5f",
 }
@@ -111,6 +111,7 @@ class ChatWorker(QThread):
         self._model = model
 
     def run(self):
+        logger.info("[ChatWorker] run start")
         try:
             data = {"message": self._message}
             if self._session_id:
@@ -198,6 +199,7 @@ class MessageBubble(QFrame):
                  tool_calls: list = None, is_streaming: bool = False,
                  session_id: str = None, parent=None):
         super().__init__(parent)
+        logger.info(f"[MessageBubble] init start role={role} len={len(content)}")
         self._role = role
         self._content = content
         self._session_id = session_id
@@ -219,12 +221,12 @@ class MessageBubble(QFrame):
                      "error": "错误", "tool_call": "工具", "tool_result": "结果"}.get(role, "")
 
         role_label = QLabel(f"{role_icon} <b>{role_name}</b>")
-        role_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px;")
+        role_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px; font-weight: bold;")
         header.addWidget(role_label)
 
         if timestamp:
             ts_label = QLabel(timestamp)
-            ts_label.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 10px;")
+            ts_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 10px;")
             header.addWidget(ts_label)
 
         header.addStretch()
@@ -267,18 +269,17 @@ class MessageBubble(QFrame):
                 layout.addWidget(tc_widget)
 
         # ---- 消息内容 ----
-        self._content_browser = QTextBrowser()
-        self._content_browser.setOpenExternalLinks(True)
-        self._content_browser.setReadOnly(True)
-        self._content_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._content_browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
-        self._content_browser.viewport().setAutoFillBackground(False)
-        self._content_browser.setStyleSheet("border: none; background: transparent;")
-
-        # 根据角色设置不同的样式
+        self._content_label = QLabel()
+        self._content_label.setWordWrap(True)
+        self._content_label.setTextFormat(Qt.TextFormat.RichText)
+        self._content_label.setOpenExternalLinks(True)
+        self._content_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.LinksAccessibleByMouse)
+        self._content_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self._content_label.setMinimumWidth(0)
+        self._content_label.setStyleSheet("border: none; background: transparent;")
         if role == "user":
             bubble_color = THEME['accent']
-            text_color = "#000"
+            text_color = "#000000"
             margin = "0 0 0 60px"
         elif role == "assistant":
             bubble_color = THEME['bg_input']
@@ -290,8 +291,13 @@ class MessageBubble(QFrame):
             margin = "0"
         else:
             bubble_color = "transparent"
-            text_color = THEME['text_muted']
+            text_color = THEME['text_primary']
             margin = "0"
+        logger.info(f"[MessageBubble] md_to_html start ({len(content)} chars) text_color={text_color}")
+        html = self._md_to_html(content, text_color)
+        logger.info(f"[MessageBubble] md_to_html done ({len(html)} chars), setting text...")
+        self._content_label.setText(html)
+        logger.info("[MessageBubble] setText done")
 
         self.setStyleSheet(f"""
             MessageBubble {{
@@ -301,9 +307,7 @@ class MessageBubble(QFrame):
                 margin: {margin};
             }}
         """)
-        self._content_browser.setHtml(self._md_to_html(content))
-        self._content_browser.setMinimumHeight(30)
-        layout.addWidget(self._content_browser)
+        layout.addWidget(self._content_label)
 
         # ---- 底部操作栏 ----
         actions = QHBoxLayout()
@@ -316,7 +320,7 @@ class MessageBubble(QFrame):
         copy_btn.clicked.connect(lambda: self._copy_content())
         copy_btn.setStyleSheet(f"""
             QPushButton {{
-                background: transparent; color: {THEME['text_muted']};
+                background: transparent; color: {THEME['text_primary']};
                 border: none; font-size: 10px; padding: 0 6px;
             }}
             QPushButton:hover {{ color: {THEME['accent']}; }}
@@ -331,7 +335,7 @@ class MessageBubble(QFrame):
             retry_btn.clicked.connect(lambda: self.retry_requested.emit(self._content))
             retry_btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: transparent; color: {THEME['text_muted']};
+                    background: transparent; color: {THEME['text_primary']};
                     border: none; font-size: 10px; padding: 0 6px;
                 }}
                 QPushButton:hover {{ color: {THEME['warning']}; }}
@@ -340,64 +344,48 @@ class MessageBubble(QFrame):
 
         actions.addStretch()
         layout.addLayout(actions)
+        logger.info(f"[MessageBubble] init complete role={role}")
 
-    def _md_to_html(self, md_text: str) -> str:
-        """简单的 Markdown → HTML 转换"""
+    def _md_to_html(self, md_text: str, text_color: str = None) -> str:
+        """Markdown → HTML（优先 markdown 库，回退安全正则）"""
         if not md_text:
             return ""
+        try:
+            import markdown as _md
+            html = _md.markdown(md_text, extensions=['fenced_code', 'tables'], output_format='html')
+            html = html.replace('<pre>', f'<pre style="background:{THEME["bg_dark"]};padding:10px;border-radius:6px;overflow-x:auto;font-size:12px;">')
+            html = html.replace('<code>', '<code style="background:#2d2d4e;padding:1px 5px;border-radius:3px;font-size:12px;">')
+            html = html.replace('<a ', '<a style="color:#00d4ff;" ')
+            html = html.replace('<table>', '<table style="border-collapse:collapse;margin:8px 0;width:100%;">')
+            html = html.replace('<th>', f'<th style="border:1px solid {THEME["border"]};padding:6px 10px;background:{THEME["bg_dark"]};">')
+            html = html.replace('<td>', f'<td style="border:1px solid {THEME["border"]};padding:4px 10px;">')
+            html = html.replace('<blockquote>', '<blockquote style="border-left:3px solid #00d4ff;padding-left:12px;margin:4px 0;color:#94a3b8;">')
+            html = html.replace('<hr>', '<hr style="border-color:#1e293b;margin:8px 0;">')
+            html = html.replace('<hr/>', '<hr style="border-color:#1e293b;margin:8px 0;">')
+            return f'<div style="color:{text_color or THEME["text_primary"]};font-size:13px;line-height:1.6;word-break:break-word;overflow-wrap:break-word;max-width:100%;">{html}</div>'
+        except ImportError:
+            return self._md_to_html_safe(md_text, text_color)
 
+    def _md_to_html_safe(self, md_text: str, text_color: str = None) -> str:
+        """安全回退：零回溯正则（不用 .+? 嵌套量词）"""
+        import re as _re
         html = md_text
-
-        # 代码块 (```)
-        import re
-        html = re.sub(
-            r'```(\w*)\n(.*?)```',
+        html = _re.sub(r'```(\w*)\n(.*?)```',
             lambda m: f'<pre style="background:{THEME["bg_dark"]};padding:10px;border-radius:6px;overflow-x:auto;font-size:12px;"><code>{m.group(2)}</code></pre>',
-            html, flags=re.DOTALL
-        )
-
-        # 行内代码
-        html = re.sub(r'`([^`]+)`', r'<code style="background:#2d2d4e;padding:1px 5px;border-radius:3px;font-size:12px;">\1</code>', html)
-
-        # 粗体
-        html = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', html)
-
-        # 斜体
-        html = re.sub(r'\*(.+?)\*', r'<i>\1</i>', html)
-
-        # 链接
-        html = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2" style="color:#00d4ff;">\1</a>', html)
-
-        # 列表项
-        html = re.sub(r'^- (.+)$', r'<li>\1</li>', html, flags=re.MULTILINE)
-        html = html.replace('<li>', '<ul style="margin:4px 0;padding-left:20px;"><li>', 1)
-        # 关闭 ul（这里处理可能不完美，但足够用）
-
-        # 数字列表
-        html = re.sub(r'^\d+\. (.+)$', r'<li>\1</li>', html, flags=re.MULTILINE)
-
-        # 标题
-        html = re.sub(r'^### (.+)$', r'<h4 style="margin:8px 0 4px;color:#e2e8f0;">\1</h4>', html, flags=re.MULTILINE)
-        html = re.sub(r'^## (.+)$', r'<h3 style="margin:10px 0 6px;color:#e2e8f0;">\1</h3>', html, flags=re.MULTILINE)
-        html = re.sub(r'^# (.+)$', r'<h2 style="margin:12px 0 8px;color:#e2e8f0;">\1</h2>', html, flags=re.MULTILINE)
-
-        # 引用
-        html = re.sub(r'^> (.+)$', r'<blockquote style="border-left:3px solid #00d4ff;padding-left:12px;margin:4px 0;color:#94a3b8;">\1</blockquote>', html, flags=re.MULTILINE)
-
-        # 分隔线
-        html = re.sub(r'^---+$', r'<hr style="border-color:#1e293b;margin:8px 0;">', html, flags=re.MULTILINE)
-
-        # 换行
+            html, flags=_re.DOTALL)
+        html = _re.sub(r'`([^`]+)`', r'<code style="background:#2d2d4e;padding:1px 5px;border-radius:3px;font-size:12px;">\1</code>', html)
+        html = _re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', html)
+        html = _re.sub(r'(?<!\*)\*([^*\n]+)\*(?!\*)', r'<i>\1</i>', html)
+        html = _re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2" style="color:#00d4ff;">\1</a>', html)
+        html = _re.sub(r'^### (.+)$', r'<h4 style="margin:8px 0 4px;color:#e2e8f0;">\1</h4>', html, flags=_re.MULTILINE)
+        html = _re.sub(r'^## (.+)$', r'<h3 style="margin:10px 0 6px;color:#e2e8f0;">\1</h3>', html, flags=_re.MULTILINE)
+        html = _re.sub(r'^# (.+)$', r'<h2 style="margin:12px 0 8px;color:#e2e8f0;">\1</h2>', html, flags=_re.MULTILINE)
+        html = _re.sub(r'^- (.+)$', r'<li>\1</li>', html, flags=_re.MULTILINE)
+        html = _re.sub(r'^\d+\. (.+)$', r'<li>\1</li>', html, flags=_re.MULTILINE)
+        html = _re.sub(r'^> (.+)$', r'<blockquote style="border-left:3px solid #00d4ff;padding-left:12px;margin:4px 0;color:#94a3b8;">\1</blockquote>', html, flags=_re.MULTILINE)
+        html = _re.sub(r'^---+$', r'<hr style="border-color:#1e293b;margin:8px 0;">', html, flags=_re.MULTILINE)
         html = html.replace('\n', '<br>')
-
-        # 表格（基础支持）
-        html = re.sub(
-            r'<br>\|(.+)\|<br>\|[-| ]+\|<br>((?:<br>\|.+\|<br>)*)',
-            self._convert_table,
-            html
-        )
-
-        return f'<div style="color:{THEME["text_primary"]};font-size:13px;line-height:1.6;">{html}</div>'
+        return f'<div style="color:{text_color or THEME["text_primary"]};font-size:13px;line-height:1.6;word-break:break-word;overflow-wrap:break-word;max-width:100%;">{html}</div>'
 
     def _convert_table(self, match):
         """将 Markdown 表格转换为 HTML 表格"""
@@ -440,7 +428,7 @@ class MessageBubble(QFrame):
         status = tc.get("status", "running")
         status_icon = {"running": "⏳", "success": "✅", "failed": "❌"}.get(status, "⏳")
         status_color = {"running": THEME["warning"], "success": THEME["success"],
-                        "failed": THEME["danger"]}.get(status, THEME["text_secondary"])
+                        "failed": THEME["danger"]}.get(status, THEME["text_primary"])
 
         icon_label = QLabel(status_icon)
         icon_label.setStyleSheet("font-size: 14px;")
@@ -453,7 +441,7 @@ class MessageBubble(QFrame):
         args = tc.get("args", tc.get("parameters", {}))
         if args:
             args_str = json.dumps(args, ensure_ascii=False)[:60]
-            args_label = QLabel(f'<span style="color:{THEME.get("text_muted","#64748b")}">{args_str}</span>')
+            args_label = QLabel(f'<span style="color:{THEME.get("text_muted","#3d3d55")}">{args_str}</span>')
             args_label.setStyleSheet("font-size: 11px;")
             wl.addWidget(args_label)
 
@@ -472,15 +460,27 @@ class MessageBubble(QFrame):
         logger.info("📋 已复制到剪贴板")
 
     def update_content(self, new_content: str, is_streaming: bool = False):
-        """更新消息内容（用于流式输出）"""
+        """更新消息内容（流式输出时自动节流，避免高频渲染崩溃）"""
         self._content = new_content
         self._is_streaming = is_streaming
-        self._content_browser.setHtml(self._md_to_html(new_content))
-        # 重新调整高度
-        doc = self._content_browser.document()
-        doc.setTextWidth(self._content_browser.viewport().width())
-        h = doc.documentLayout().documentSize().height() + 10
-        self._content_browser.setFixedHeight(int(max(h, 30)))
+        if is_streaming:
+            # 流式模式：用 timer 节流，最多 100ms 更新一次
+            if not hasattr(self, '_update_timer'):
+                from PyQt6.QtCore import QTimer
+                self._update_timer = QTimer(self)
+                self._update_timer.setSingleShot(True)
+                self._update_timer.timeout.connect(self._do_update_label)
+                self._pending_content = new_content
+            self._pending_content = new_content
+            if not self._update_timer.isActive():
+                self._update_timer.start(100)
+        else:
+            self._do_update_label()
+
+    def _do_update_label(self):
+        """实际执行 QLabel.setText"""
+        content = getattr(self, '_pending_content', self._content)
+        self._content_label.setText(self._md_to_html(content, "#000000" if self._role == "user" else None))
 
 
 # ============================================================
@@ -503,7 +503,7 @@ class SessionSidebar(QFrame):
 
         # 标题
         title = QLabel("💬 对话列表")
-        title.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px; font-weight: bold; padding: 4px 8px;")
+        title.setStyleSheet(f"color: {THEME['text_primary']}; font-size: 12px; font-weight: bold; padding: 4px 8px;")
         layout.addWidget(title)
 
         # 新建按钮
@@ -547,7 +547,7 @@ class SessionSidebar(QFrame):
 
         # 底部信息
         self._count_label = QLabel("0 条对话")
-        self._count_label.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 10px; padding: 4px 8px;")
+        self._count_label.setStyleSheet(f"color: {THEME['text_primary']}; font-size: 10px; padding: 4px 8px;")
         layout.addWidget(self._count_label)
 
         self._sessions = []
@@ -646,12 +646,18 @@ class ChatPage(QWidget):
             }}
         """)
 
-        # ---- 左侧：会话列表 ----
+        # ---- 左侧：会话列表（可被外部侧边栏替代）----
         self._sidebar = SessionSidebar()
         self._sidebar.session_selected.connect(self._load_session)
         self._sidebar.new_session_requested.connect(self._new_session)
         self._sidebar.delete_session_requested.connect(self._delete_session)
+        self._external_sidebar = None  # 外部注入的侧边栏
         splitter.addWidget(self._sidebar)
+
+        # ===== 状态（必须在 _build_chat_panel 之前初始化）=====
+        self._current_session_id = None
+        self._current_model_key = None
+        self._messages = []  # 存储消息气泡引用
 
         # ---- 右侧：聊天区 ----
         right_panel = self._build_chat_panel()
@@ -662,14 +668,32 @@ class ChatPage(QWidget):
         splitter.setStretchFactor(1, 1)
         layout.addWidget(splitter)
 
-        # ===== 状态 =====
-        self._current_session_id = None
-        self._current_model_key = None
-        self._messages = []  # 存储消息气泡引用
-
         # 初始化时加载模型和会话
         self._load_model_list()
         QTimer.singleShot(500, self._auto_load_sessions)
+
+    def attach_external_sidebar(self, sidebar):
+        """连接外部会话侧边栏（从 Sidebar 组件传入），隐藏内部侧边栏"""
+        self._sidebar.hide()
+        # 如果已连接同一个侧边栏，跳过重复连接
+        if self._external_sidebar is sidebar:
+            return
+        # 断开旧的外部侧边栏信号
+        if self._external_sidebar is not None:
+            try:
+                self._external_sidebar.session_selected.disconnect(self._load_session)
+                self._external_sidebar.new_session_requested.disconnect(self._new_session)
+                self._external_sidebar.delete_session_requested.disconnect(self._delete_session)
+            except TypeError:
+                pass  # 未连接过，忽略
+        self._external_sidebar = sidebar
+        sidebar.session_selected.connect(self._load_session)
+        sidebar.new_session_requested.connect(self._new_session)
+        sidebar.delete_session_requested.connect(self._delete_session)
+
+    def _sidebar_ref(self):
+        """返回当前活跃的会话侧边栏（外部优先）"""
+        return self._external_sidebar or self._sidebar
 
     # ==================== 右侧聊天面板构建 ====================
 
@@ -729,12 +753,14 @@ class ChatPage(QWidget):
                 background: {THEME['bg_dark']}; width: 6px; border-radius: 3px;
             }}
             QScrollBar::handle:vertical {{
-                background: {THEME['text_muted']}; border-radius: 3px; min-height: 30px;
+                background: {THEME['text_primary']}; border-radius: 3px; min-height: 30px;
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
         """)
 
         self._messages_container = QWidget()
+        self._messages_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self._messages_container.setMinimumWidth(0)
         self._messages_layout = QVBoxLayout(self._messages_container)
         self._messages_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self._messages_layout.setSpacing(8)
@@ -745,6 +771,8 @@ class ChatPage(QWidget):
         self._show_welcome()
 
         self._scroll.setWidget(self._messages_container)
+        self._scroll.viewport().installEventFilter(self)
+        self._messages_container.installEventFilter(self)
         layout.addWidget(self._scroll, 1)
 
         # ---- 输入区 ----
@@ -778,7 +806,7 @@ class ChatPage(QWidget):
             h_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: {THEME['bg_input']};
-                    color: {THEME['text_muted']};
+                    color: {THEME['text_primary']};
                     border: 1px solid {THEME['border']};
                     border-radius: 4px;
                     padding: 2px 8px;
@@ -824,9 +852,9 @@ class ChatPage(QWidget):
 
     def _show_welcome(self):
         """显示欢迎消息"""
-        welcome = ("<h2 style='text-align:center;color:#64748b;margin-top:40px;'>"
+        welcome = ("<h2 style='text-align:center;color:#3d3d55;margin-top:40px;'>"
                    "👋 欢迎使用 7Tan AI</h2>"
-                   "<p style='text-align:center;color:#64748b;font-size:13px;'>"
+                   "<p style='text-align:center;color:#3d3d55;font-size:13px;'>"
                    "我可以帮你：<br>"
                    "🎮 查找并发布新游戏<br>"
                    "📊 查看系统统计<br>"
@@ -840,8 +868,11 @@ class ChatPage(QWidget):
                      cost: float = 0, iterations: int = 0,
                      tool_calls: list = None, is_streaming: bool = False) -> MessageBubble:
         """添加消息气泡"""
+        import sys; sys.stderr.write(f"[_add_message] ENTER role={role}\n"); sys.stderr.flush()
+        logger.info(f"[ChatPage] _add_message role={role} content_start={content[:20]}")
         if content.startswith("<h") or content.startswith("<p"):
             # 已经是 HTML（欢迎消息等），用 QLabel
+            logger.info("[ChatPage] HTML path")
             msg = QFrame()
             msg.setStyleSheet("background: transparent; padding: 8px;")
             ml = QVBoxLayout(msg)
@@ -858,6 +889,7 @@ class ChatPage(QWidget):
             self._scroll_to_bottom()
             return None
 
+        logger.info(f"[ChatPage] creating MessageBubble role={role} len={len(content)}")
         bubble = MessageBubble(
             role=role, content=content,
             timestamp=timestamp or datetime.now().strftime("%H:%M:%S"),
@@ -874,8 +906,7 @@ class ChatPage(QWidget):
         return bubble
 
     def _scroll_to_bottom(self):
-        """滚动到底部"""
-        QApplication.processEvents()
+        """滚动到底部 — 安全版：不调用 processEvents 避免重入崩溃"""
         sb = self._scroll.verticalScrollBar()
         QTimer.singleShot(50, lambda: sb.setValue(sb.maximum()))
 
@@ -945,10 +976,10 @@ class ChatPage(QWidget):
         try:
             resp = requests.get(f"{API_BASE}/api/chat/history", timeout=10)
             sessions = resp.json().get("sessions", [])
-            self._sidebar.load_sessions(sessions)
+            self._sidebar_ref().load_sessions(sessions)
             if sessions:
                 # 自动选中第一个
-                self._sidebar.select_session(sessions[0].get("session_id", ""))
+                self._sidebar_ref().select_session(sessions[0].get("session_id", ""))
         except Exception as e:
             if retry < 3:
                 QTimer.singleShot(1500, lambda: self._auto_load_sessions(retry + 1))
@@ -1023,17 +1054,47 @@ class ChatPage(QWidget):
                 model_cfg = cfg.get("ai", {}).get("configs", {}).get(model_key, {})
                 model = model_cfg.get("model", model_key)
 
-        # 尝试使用流式 SSE，失败时 fallback 到传统请求
-        try:
-            self._send_streaming(text, model)
-        except Exception as e:
-            logger.warning(f"流式请求失败，回退到传统模式: {e}")
-            # 显示等待动画
-            thinking_msg = self._add_message("system", "\u23f3 AI \u601d\u8003\u4e2d...")
-            self._worker = ChatWorker(text, self._current_session_id, model)
-            self._worker.finished.connect(lambda d: self._on_response(d, thinking_msg))
-            self._worker.error.connect(lambda e: self._on_error(e, thinking_msg))
-            self._worker.start()
+        # 用 Python 原生线程 + 轮询，避免 QThread 信号导致 Qt C++ 栈崩溃
+        import threading
+        thinking_msg = self._add_message("system", "\u23f3 AI \u601d\u8003\u4e2d...")
+
+        data = {"message": text}
+        if self._current_session_id:
+            data["session_id"] = self._current_session_id
+        if model:
+            data["model"] = model
+
+        self._pending_result = None
+        self._pending_error = None
+        self._poll_thinking_msg = thinking_msg  # 保存引用
+
+        def _do_request():
+            try:
+                resp = requests.post(f"{API_BASE}/api/chat/send", json=data, timeout=1800)
+                resp.raise_for_status()
+                self._pending_result = resp.json()
+            except Exception as e:
+                self._pending_error = str(e)
+
+        threading.Thread(target=_do_request, daemon=True).start()
+
+        # 用实例方法轮询，避免闭包问题
+        self._poll_timer = QTimer(self)
+        self._poll_timer.timeout.connect(self._poll_response)
+        self._poll_timer.start(500)
+
+    def _poll_response(self):
+        """轮询检查后台线程的请求结果"""
+        if self._pending_result is not None:
+            result = self._pending_result
+            self._pending_result = None
+            self._poll_timer.stop()
+            self._on_response(result, self._poll_thinking_msg)
+        elif self._pending_error is not None:
+            error = self._pending_error
+            self._pending_error = None
+            self._poll_timer.stop()
+            self._on_error(error, self._poll_thinking_msg)
 
     def _send_streaming(self, text: str, model: str = None):
         """使用 SSE 流式发送消息，展示思考过程 + 打字机效果"""
@@ -1169,21 +1230,24 @@ class ChatPage(QWidget):
 
     def _on_response(self, data, thinking_msg=None):
         """处理回复（传统模式 fallback）"""
-        # 移除思考中的消息
+        logger.info("[ChatPage] _on_response called")
+        # 删除 thinking 指示器
         if thinking_msg:
             self._remove_message(thinking_msg)
-
+        
         self._current_session_id = data.get("session_id", self._current_session_id)
         result = data.get("result", "\u65e0\u54cd\u5e94")
         cost = data.get("cost", 0)
         iterations = data.get("iterations", 0)
         success = data.get("success", False)
+        logger.info(f"[ChatPage] result len={len(result)} cost={cost} iterations={iterations}")
 
         if not success:
             self._add_message("error", f"\u274c {result}", cost=cost, iterations=iterations)
         else:
-            self._add_message("assistant", result, cost=cost, iterations=iterations,
-                            session_id=self._current_session_id)
+            logger.info("[ChatPage] calling _add_message assistant")
+            self._add_message("assistant", result, cost=cost, iterations=iterations)
+            logger.info("[ChatPage] full render ok")
 
         # 刷新会话列表
         if self._current_session_id:
@@ -1197,6 +1261,7 @@ class ChatPage(QWidget):
 
     def _remove_message(self, msg):
         """移除指定消息"""
+        logger.info(f"[ChatPage] _remove_message called")
         if msg and msg in self._messages:
             self._messages.remove(msg)
             idx = self._messages_layout.indexOf(msg)
@@ -1217,6 +1282,15 @@ class ChatPage(QWidget):
             self._sidebar.load_sessions(sessions)
         except:
             pass
+
+    def eventFilter(self, obj, event):
+        from PyQt6.QtCore import QEvent
+        if event.type() == QEvent.Type.Resize:
+            if obj is self._scroll.viewport() or obj is self._messages_container:
+                vp_w = self._scroll.viewport().width()
+                if vp_w > 0:
+                    self._messages_container.setFixedWidth(vp_w)
+        return super().eventFilter(obj, event)
 
     def _use_hint(self, text):
         """使用快捷提示"""

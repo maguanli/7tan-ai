@@ -22,11 +22,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import (
     QFont, QColor, QPalette, QIcon, QAction, QPixmap, QPainter,
     QBrush, QLinearGradient, QRadialGradient, QCursor, QFontDatabase,
-    QStandardItemModel, QStandardItem, QPolygonF, QPointF,
+    QStandardItemModel, QStandardItem, QPolygonF, QPen,
 )
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, QTimer, QSize, QUrl, QObject,
-    QPropertyAnimation, QEasingCurve, QRect, QRectF,
+    QPropertyAnimation, QEasingCurve, QRect, QRectF, QPointF,
 )
 from PyQt6.QtWebSockets import QWebSocket
 from PyQt6.QtCharts import (
@@ -528,7 +528,7 @@ class DashboardPage(QWidget):
 
 
 # ===== 导入重写的 ChatPage（from chat_page.py）=====
-from .chat_page import ChatPage, MessageInput
+from .chat_page import ChatPage, MessageInput, SessionSidebar
 
 
 
@@ -1494,6 +1494,15 @@ class ChatBrowserSplitPage(QWidget):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
         left_layout.addLayout(self._panel_bar)
+
+        # 对话列表 — 直接放在控制栏下方
+        self._workspace_sidebar = SessionSidebar()
+        self._workspace_sidebar.setFixedHeight(160)
+        self._workspace_sidebar.setMinimumWidth(0)
+        self._workspace_sidebar.setMaximumWidth(16777215)
+        left_layout.addWidget(self._workspace_sidebar)
+
+        # 浏览器/控制台 — 填充剩余空间
         left_layout.addWidget(self._browser_stack, 1)
 
         splitter.addWidget(left_container)
@@ -1501,6 +1510,9 @@ class ChatBrowserSplitPage(QWidget):
         splitter.setSizes([700, 540])
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
+
+        # 将左侧对话列表连接到 ChatPage（隐藏 ChatPage 内部侧边栏）
+        self.chat.attach_external_sidebar(self._workspace_sidebar)
 
         layout.addWidget(splitter)
         self._admin_window = None

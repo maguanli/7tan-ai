@@ -8,8 +8,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 import json
+import threading
 import asyncio
-import concurrent.futures
 
 from ...agent.agent_loop import run_agent_loop, run_agent_loop_streaming
 from ...agent.conversation import (
@@ -19,16 +19,6 @@ from ...agent.conversation import (
 from loguru import logger
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
-
-# 专用线程池，避免阻塞 FastAPI 事件循环（懒加载 + 自动重创建）
-_chat_executor = None
-
-def _get_executor():
-    """获取（或重建）线程池"""
-    global _chat_executor
-    if _chat_executor is None or _chat_executor._shutdown:
-        _chat_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
-    return _chat_executor
 
 
 class ChatRequest(BaseModel):
@@ -54,16 +44,23 @@ async def send_message(req: ChatRequest):
     save_message(session_id, "user", req.message)
 
     try:
-        # 在线程池中运行 Agent 循环，避免阻塞 FastAPI 事件循环
+        # 在线程中运行 Agent（threading.Thread，避免 ThreadPoolExecutor 与 PyQt6 冲突）
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            _get_executor(),
-            lambda: run_agent_loop(
-                task=req.message,
-                session_id=session_id,
-                model_name=req.model,
-            )
-        )
+        future = loop.create_future()
+
+        def _run_agent():
+            try:
+                result = run_agent_loop(
+                    task=req.message,
+                    session_id=session_id,
+                    model_name=req.model,
+                )
+                loop.call_soon_threadsafe(future.set_result, result)
+            except Exception as e:
+                loop.call_soon_threadsafe(future.set_exception, e)
+
+        threading.Thread(target=_run_agent, daemon=True).start()
+        result = await future
 
         # 保存 AI 回复
         save_message(session_id, "assistant", result.get("result", ""))

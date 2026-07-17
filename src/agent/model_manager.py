@@ -306,6 +306,10 @@ def clear_model_cache():
 def get_model(model_name: str) -> ModelManager:
     """获取模型实例（带缓存）"""
     if model_name not in _model_cache:
-        _model_cache[model_name] = ModelManager(model_name)
+        import sys
         logger.debug(f"🤖 加载模型: {model_name}")
+        sys.stderr.flush()
+        _model_cache[model_name] = ModelManager(model_name)
+        logger.debug(f"🤖 模型已缓存: {model_name}")
+        sys.stderr.flush()
     return _model_cache[model_name]

@@ -15,7 +15,7 @@ from ..tools.monitor_tools import track_cost
 from ..database.db import get_session, ConversationHistory
 
 # 最大迭代次数（防止无限循环）
-MAX_ITERATIONS = 80  # 浏览列表多页任务需要更多步数
+MAX_ITERATIONS = 300  # 浏览列表多页任务需要更多步数
 
 
 def _get_active_ai_config(config: dict) -> dict:
@@ -446,7 +446,7 @@ def run_agent_loop_streaming(
     task: str,
     session_id: str = None,
     model_name: str = None,
-    max_iterations: int = 80,
+    max_iterations: int = 300,
 ):
     """
     流式 Agent 循环 — 逐步 yield 事件给前端展示思考过程

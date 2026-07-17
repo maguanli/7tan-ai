@@ -123,7 +123,7 @@ def run_desktop(args):
         except Exception as e:
             logger.exception(f"❌ 后端服务启动失败: {e}")
 
-    threading.Thread(target=_run_server, daemon=False).start()
+    threading.Thread(target=_run_server, daemon=True).start()
 
     # ===== 等待后端就绪，再启动 GUI =====
     import time as _time

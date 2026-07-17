@@ -21,11 +21,12 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import (
     QFont, QColor, QPalette, QIcon, QAction, QPixmap, QPainter,
-    QBrush, QLinearGradient, QCursor, QFontDatabase, QStandardItemModel, QStandardItem,
+    QBrush, QLinearGradient, QRadialGradient, QCursor, QFontDatabase,
+    QStandardItemModel, QStandardItem, QPolygonF, QPointF,
 )
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, QTimer, QSize, QUrl, QObject,
-    QPropertyAnimation, QEasingCurve, QRect,
+    QPropertyAnimation, QEasingCurve, QRect, QRectF,
 )
 from PyQt6.QtWebSockets import QWebSocket
 from PyQt6.QtCharts import (
@@ -182,6 +183,80 @@ QSplitter::handle {{
     width: 1px;
 }}
 """
+
+import math as _math
+
+
+def create_refresh_icon(size=40):
+    """
+    用 QPainter 绘制自定义刷新图标
+    返回 QIcon，包含渐变圆弧 + 箭头 + 光晕效果
+    """
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    cx, cy = size / 2, size / 2
+    r = size / 2 - 3
+
+    # 外圈光晕
+    glow = QRadialGradient(cx, cy, r)
+    glow.setColorAt(0, QColor(124, 58, 237, 35))
+    glow.setColorAt(0.7, QColor(0, 212, 255, 18))
+    glow.setColorAt(1, QColor(124, 58, 237, 0))
+    painter.setBrush(QBrush(glow))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
+
+    # 渐变圆弧 — 用分段绘制模拟渐变
+    pen = QPen()
+    pen.setWidthF(max(3.0, size / 14))
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    arc_r = r * 0.70
+    rect = QRectF(cx - arc_r, cy - arc_r, arc_r * 2, arc_r * 2)
+
+    segments = [
+        (270, 90, QColor(124, 58, 237)),     # 紫 (270°→360°)
+        (0, 90, QColor(0, 212, 255)),         # 青 (0°→90°)
+        (180, 90, QColor(100, 150, 255, 160)),  # 淡蓝 (180°→270°)
+    ]
+    for start_angle, span, color in segments:
+        pen.setColor(color)
+        painter.setPen(pen)
+        painter.drawArc(rect, start_angle * 16, span * 16)
+
+    # 箭头（在 350° 位置）
+    arrow_angle = 348
+    rad = _math.radians(arrow_angle)
+    tip_x = cx + arc_r * _math.cos(rad)
+    tip_y = cy + arc_r * _math.sin(rad)
+
+    arrow_sz = max(5, size / 7)
+    tangent_rad = _math.radians(arrow_angle - 90)
+    arrow = QPolygonF()
+    arrow.append(QPointF(tip_x, tip_y))
+    arrow.append(QPointF(
+        tip_x + arrow_sz * _math.cos(tangent_rad) - arrow_sz * 0.55 * _math.cos(rad),
+        tip_y + arrow_sz * _math.sin(tangent_rad) - arrow_sz * 0.55 * _math.sin(rad),
+    ))
+    arrow.append(QPointF(
+        tip_x - arrow_sz * _math.cos(tangent_rad) - arrow_sz * 0.55 * _math.cos(rad),
+        tip_y - arrow_sz * _math.sin(tangent_rad) - arrow_sz * 0.55 * _math.sin(rad),
+    ))
+
+    painter.setBrush(QBrush(QColor(0, 212, 255)))
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawPolygon(arrow)
+
+    # 中心光点
+    painter.setBrush(QBrush(QColor(124, 58, 237, 80)))
+    painter.drawEllipse(QPointF(cx, cy), 2.5, 2.5)
+
+    painter.end()
+    return QIcon(pixmap)
+
 
 # ===== API 基础 URL =====
 import os as _os
@@ -2262,7 +2337,9 @@ class SettingsPage(QWidget):
         top_row.setSpacing(8)
 
 
-        refresh_btn = QPushButton("↻ 刷新插件")
+        refresh_btn = QPushButton(" 刷新插件")
+        refresh_btn.setIcon(create_refresh_icon(34))
+        refresh_btn.setIconSize(QSize(20, 20))
         refresh_btn.setFixedHeight(32)
         refresh_btn.setToolTip("重新扫描并刷新本地插件列表")
         refresh_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
@@ -2271,8 +2348,8 @@ class SettingsPage(QWidget):
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 {THEME['accent2']}, stop:1 {THEME['accent']});
-                color: #fff; border: none;
-                border-radius: 8px; padding: 4px 16px;
+                color: #fff; border: 1px solid {THEME['accent']}66;
+                border-radius: 8px; padding: 4px 16px 4px 10px;
                 font-size: 13px; font-weight: bold;
             }}
             QPushButton:hover {{

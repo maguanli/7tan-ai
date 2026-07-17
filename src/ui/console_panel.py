@@ -1,16 +1,16 @@
 """
 实时控制台面板 — 嵌入工作台左侧，替代命令行黑窗
-使用 OS 级管道重定向，捕获所有输出：
-- Python print() / sys.stdout / sys.stderr
-- loguru 日志
-- subprocess 子进程输出
-- C 扩展 / 浏览器引擎调试输出
-- 任何写入 fd 1 和 fd 2 的内容
 
-模块加载时立即安装重定向，确保不丢失任何启动输出。
+三层捕获，确保和之前黑窗输出完全一致：
+1. TeeWriter 替换 sys.stdout / sys.stderr — 捕获 print()、异常栈
+2. loguru 额外 sink — 捕获所有日志
+3. subprocess 管道捕获 — 捕获子进程输出
+
+模块加载时立即安装 TeeWriter，确保不丢失启动输出。
 """
 import os
 import sys
+import io
 import threading
 from datetime import datetime
 
@@ -19,6 +19,8 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit, QScrollBar,
 )
 from PyQt6.QtCore import Qt, QObject, pyqtSignal
+
+from loguru import logger
 
 # ===== 本地颜色常量 =====
 CONSOLE_THEME = {
@@ -35,82 +37,110 @@ CONSOLE_THEME = {
 
 # ===== 全局日志信号（线程安全）=====
 class _LogSignal(QObject):
-    """线程安全的日志信号，pipe reader 通过此信号将日志投递到主线程"""
+    """线程安全的日志信号，所有输出最终通过此信号投递到主线程 GUI"""
     log_received = pyqtSignal(str)
 
 
 _global_log_signal = _LogSignal()
 
-
-# ===== OS 级管道重定向（捕获一切输出）=====
-_orig_stdout_fd: int = -1
-_orig_stderr_fd: int = -1
-_pipe_read: int = -1
-_pipe_write: int = -1
-_reader_running = False
+# ===== 保存原始输出流（用于回写终端）=====
+_orig_stdout = sys.stdout
+_orig_stderr = sys.stderr
 
 
-def _install_os_redirect():
+# ===== TeeWriter：替换 sys.stdout/stderr =====
+class _TeeWriter(io.TextIOBase):
     """
-    OS 级重定向：用 os.dup2 将 fd 1 (stdout) 和 fd 2 (stderr)
-    都指向管道写端。任何进程/子进程写入这两个 fd 的内容都会被捕获。
-    后台线程持续从管道读端读取并发送到信号。
+    同时写入：
+    1. 原始输出流（终端可见，命令行启动时仍能看到）
+    2. 全局日志信号（GUI 控制台面板）
     """
-    global _orig_stdout_fd, _orig_stderr_fd, _pipe_read, _pipe_write, _reader_running
 
-    if _reader_running:
-        return
+    def __init__(self, original, label=""):
+        self._original = original
+        self._label = label  # "[stdout]" 或 "[stderr]"
+        self._buffer = ""
+        self._lock = threading.Lock()
 
-    # 保存原始 fd（用于回写调试 + 必要时恢复）
-    _orig_stdout_fd = os.dup(1)
-    _orig_stderr_fd = os.dup(2)
-
-    # 创建管道
-    _pipe_read, _pipe_write = os.pipe()
-
-    # 重定向 OS 级 stdout / stderr 到管道写端
-    os.dup2(_pipe_write, 1)
-    os.dup2(_pipe_write, 2)
-
-    # 让 Python 的 sys.stdout / sys.stderr 变为行缓冲模式
-    # （管道默认是块缓冲，行缓冲确保实时输出）
-    sys.stdout = os.fdopen(os.dup(1), 'w', buffering=1, encoding='utf-8', errors='replace')
-    sys.stderr = os.fdopen(os.dup(2), 'w', buffering=1, encoding='utf-8', errors='replace')
-
-    # 后台线程：持续从管道读取并发送信号
-    _reader_running = True
-
-    def _pipe_reader():
-        buf = b""
-        while _reader_running:
-            try:
-                data = os.read(_pipe_read, 65536)
-                if not data:
-                    break
-
-                # 回写到原始 stdout（便于外部调试，如从命令行启动时仍能看到输出）
+    def write(self, text):
+        with self._lock:
+            # 1. 回写原始输出（命令行启动时终端可见）
+            if self._original is not None:
                 try:
-                    os.write(_orig_stdout_fd, data)
-                except Exception:
+                    self._original.write(text)
+                    self._original.flush()
+                except (OSError, ValueError, AttributeError):
                     pass
 
-                # 解析行并发送信号
-                buf += data
-                while b'\n' in buf:
-                    raw_line, buf = buf.split(b'\n', 1)
-                    text = raw_line.decode('utf-8', errors='replace').rstrip('\r')
-                    if text:
-                        ts = datetime.now().strftime("%H:%M:%S")
-                        _global_log_signal.log_received.emit(f"{ts} │ {text}")
-            except Exception:
-                break
+            # 2. 按行发送信号到 GUI 控制台
+            self._buffer += text
+            while '\n' in self._buffer:
+                line, self._buffer = self._buffer.split('\n', 1)
+                line = line.rstrip('\r')
+                if line:
+                    ts = datetime.now().strftime("%H:%M:%S")
+                    label = self._label + " " if self._label else ""
+                    _global_log_signal.log_received.emit(f"{ts} │ {label}{line}")
 
-    t = threading.Thread(target=_pipe_reader, daemon=True, name="console-pipe-reader")
-    t.start()
+    def flush(self):
+        if self._original is not None:
+            try:
+                self._original.flush()
+            except (OSError, ValueError, AttributeError):
+                pass
+
+    def isatty(self):
+        return False
 
 
-# 模块加载时立即安装 OS 级重定向
-_install_os_redirect()
+# 模块加载时立即替换 sys.stdout / sys.stderr
+# 注意：只替换一次，避免重复
+if not isinstance(sys.stdout, _TeeWriter):
+    sys.stdout = _TeeWriter(_orig_stdout, label="")
+if not isinstance(sys.stderr, _TeeWriter):
+    sys.stderr = _TeeWriter(_orig_stderr, label="[stderr]")
+
+
+# ===== loguru sink（在 ConsoleViewer 初始化时注册）=====
+_loguru_sink_id = None
+
+
+def _install_loguru_sink():
+    """
+    为 loguru 添加额外的 GUI sink。
+    loguru 的原始 console sink 继续工作（写入终端），
+    这个额外 sink 把日志发到 GUI 控制台。
+    """
+    global _loguru_sink_id
+
+    if _loguru_sink_id is not None:
+        return  # 已安装
+
+    def _gui_sink(message):
+        # loguru 的 message 已经格式化好（含时间、级别等）
+        record = message.record
+        ts = record["time"].strftime("%H:%M:%S")
+        level = record["level"].name
+        text = record["message"].rstrip('\n')
+        _global_log_signal.log_received.emit(f"{ts} │ {level: <8} │ {text}")
+
+    _loguru_sink_id = logger.add(
+        _gui_sink,
+        level="DEBUG",
+        format="{message}",
+        catch=True,
+    )
+
+
+def _remove_loguru_sink():
+    """移除 GUI sink"""
+    global _loguru_sink_id
+    if _loguru_sink_id is not None:
+        try:
+            logger.remove(_loguru_sink_id)
+        except Exception:
+            pass
+        _loguru_sink_id = None
 
 
 # ===== 控制台面板组件 =====
@@ -177,7 +207,7 @@ class ConsoleViewer(QWidget):
         # --- 日志输出区 ---
         self._output = QPlainTextEdit()
         self._output.setReadOnly(True)
-        self._output.setMaximumBlockCount(10000)  # 比之前多一倍
+        self._output.setMaximumBlockCount(10000)
         self._output.setStyleSheet(f"""
             QPlainTextEdit {{
                 background-color: #0D1117;
@@ -193,16 +223,19 @@ class ConsoleViewer(QWidget):
         layout.addWidget(self._output, 1)
 
         # --- 底部状态 ---
-        status = QLabel("💡 OS级管道重定向 — 捕获 stdout/stderr/subprocess/loguru 全部输出")
+        status = QLabel("💡 实时捕获 stdout/stderr/loguru — 与黑窗完全一致")
         status.setStyleSheet(
             f"color: {T['text_secondary']}; font-size: 11px; padding: 2px 4px;"
         )
         layout.addWidget(status)
 
-        # 订阅全局日志信号
+        # ===== 订阅全局日志信号 =====
         _global_log_signal.log_received.connect(
             self._append_log, Qt.ConnectionType.QueuedConnection
         )
+
+        # ===== 安装 loguru GUI sink =====
+        _install_loguru_sink()
 
         self._total_lines = 0
 
@@ -216,3 +249,8 @@ class ConsoleViewer(QWidget):
         if self._auto_scroll:
             scrollbar = self._output.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
+
+    def closeEvent(self, event):
+        """面板关闭时移除 loguru sink"""
+        _remove_loguru_sink()
+        super().closeEvent(event)

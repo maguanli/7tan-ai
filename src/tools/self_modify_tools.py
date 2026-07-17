@@ -220,6 +220,8 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             cwd=str(SANDBOX_ROOT),
         )

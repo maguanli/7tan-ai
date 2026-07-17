@@ -2,7 +2,6 @@
 QQ 桥接插件 — 通过 OneBot WebSocket 协议连接 QQ
 支持：正向 WebSocket 连接、收发群消息/私聊消息
 """
-
 import json
 import time
 import queue
@@ -11,121 +10,11 @@ import logging
 import sys
 from pathlib import Path
 from datetime import datetime
-from typing import Any, Callable, Optional
 
-# ========== 修复导入：兼容打包环境和开发环境 ==========
-
-def _get_tool_registry():
-    """获取主程序的 TOOL_REGISTRY 字典，兼容各种环境"""
-    # 方案一：从 sys.modules 获取已加载的模块
-    for mod_name in list(sys.modules.keys()):
-        mod = sys.modules[mod_name]
-        registry = getattr(mod, 'TOOL_REGISTRY', None)
-        if registry is not None and isinstance(registry, dict):
-            return registry
-
-    # 方案二：尝试直接导入
-    ROOT = Path(__file__).parent.parent.parent.parent  # D:\7tan\7tanAI
-    try:
-        sys.path.insert(0, str(ROOT))
-        from src.tools.registry import TOOL_REGISTRY
-        return TOOL_REGISTRY
-    except (ImportError, ModuleNotFoundError, AttributeError):
-        pass
-
-    # 方案三：通过文件路径加载
-    registry_path = ROOT / "src" / "tools" / "registry.py"
-    if registry_path.exists():
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("_qq_registry", str(registry_path))
-        if spec and spec.loader:
-            mod = importlib.util.module_from_spec(spec)
-            sys.modules["_qq_registry"] = mod
-            spec.loader.exec_module(mod)
-            if hasattr(mod, 'TOOL_REGISTRY'):
-                return mod.TOOL_REGISTRY
-
-    # 方案四：搜索打包目录
-    import glob
-    for f in glob.glob(str(ROOT / "dist" / "7tan-editor" / "_internal" / "*.py"), recursive=False):
-        if 'registry' in f.lower():
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("_qq_registry_fb", f)
-            if spec and spec.loader:
-                mod = importlib.util.module_from_spec(spec)
-                sys.modules["_qq_registry_fb"] = mod
-                spec.loader.exec_module(mod)
-                if hasattr(mod, 'TOOL_REGISTRY'):
-                    return mod.TOOL_REGISTRY
-
-    # 方案五：所有方案都失败，返回一个本地字典
-    return {}
-
-
-def _get_tool_class() -> Optional[type]:
-    """尝试获取主程序的 Tool dataclass"""
-    try:
-        from src.tools.registry import Tool
-        return Tool
-    except (ImportError, ModuleNotFoundError):
-        pass
-    # 搜索 sys.modules
-    for mod in sys.modules.values():
-        if hasattr(mod, 'Tool') and hasattr(mod, 'TOOL_REGISTRY'):
-            cls = getattr(mod, 'Tool')
-            if callable(cls):
-                return cls
-    return None
-
-
-# 获取全局 TOOL_REGISTRY
-TOOL_REGISTRY = _get_tool_registry()
-_ToolClass = _get_tool_class()
-
-
-def register_tool(name=None, description="", parameters=None, category="misc",
-                  dangerous=False, requires_browser=False, requires_db=False):
-    """
-    工具注册装饰器 — 优先注册为 Tool 对象，回退为 dict
-    """
-    def decorator(target):
-        params = parameters or {}
-        if isinstance(params, dict) and "type" not in params:
-            params = {"type": "object", "properties": params, "required": list(params.keys())}
-
-        tool_name = name or target.__name__
-
-        if _ToolClass is not None:
-            # ✅ 使用主程序的 Tool dataclass，消除警告
-            tool_obj = _ToolClass(
-                name=tool_name,
-                description=description,
-                parameters=params,
-                function=target,
-                category=category,
-                dangerous=dangerous,
-                requires_browser=requires_browser,
-                requires_db=requires_db,
-            )
-            TOOL_REGISTRY[tool_name] = tool_obj
-        else:
-            # ⚠️ 回退：主程序 registry 不可用，用 dict
-            tool_def = {
-                "name": tool_name,
-                "description": description,
-                "parameters": params,
-                "function": target,
-                "category": category,
-                "dangerous": dangerous,
-                "requires_browser": requires_browser,
-                "requires_db": requires_db,
-            }
-            TOOL_REGISTRY[tool_name] = tool_def
-
-        logger = logging.getLogger("qq_bridge")
-        logger.debug(f"🔧 注册工具: {tool_name} ({category})")
-        return target
-    return decorator
+# ========== 标准工具注册 ==========
+ROOT = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(ROOT))
+from src.tools.registry import register_tool
 
 
 logger = logging.getLogger("qq_bridge")
@@ -274,9 +163,22 @@ def _handle_raw_message(raw: str):
     name="qq_connect",
     description="连接到 QQ（OneBot WebSocket）。使用前确保 OneBot 服务（如 go-cqhttp、NapCat）已启动。",
     parameters={
-        "ws_url": {"type": "string", "description": "OneBot WS 地址，默认 ws://127.0.0.1:3001", "default": "ws://127.0.0.1:3001"},
-        "access_token": {"type": "string", "description": "鉴权 token（可选）", "default": ""},
-    }
+        "type": "object",
+        "properties": {
+            "ws_url": {
+                "type": "string",
+                "description": "OneBot WS 地址，默认 ws://127.0.0.1:3001",
+                "default": "ws://127.0.0.1:3001",
+            },
+            "access_token": {
+                "type": "string",
+                "description": "鉴权 token（可选）",
+                "default": "",
+            },
+        },
+        "required": ["ws_url", "access_token"],
+    },
+    category="misc",
 )
 def qq_connect(ws_url: str = "ws://127.0.0.1:3001", access_token: str = "") -> str:
     """连接 QQ"""
@@ -306,7 +208,12 @@ def qq_connect(ws_url: str = "ws://127.0.0.1:3001", access_token: str = "") -> s
 @register_tool(
     name="qq_disconnect",
     description="断开 QQ 连接",
-    parameters={}
+    parameters={
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+    category="misc",
 )
 def qq_disconnect() -> str:
     """断开连接"""
@@ -328,10 +235,25 @@ def qq_disconnect() -> str:
     name="qq_send_message",
     description="发送 QQ 消息。支持群聊和私聊。",
     parameters={
-        "target_id": {"type": "integer", "description": "目标 ID：群号（群聊）或 QQ 号（私聊）"},
-        "message": {"type": "string", "description": "要发送的消息内容"},
-        "msg_type": {"type": "string", "description": "消息类型：group（群聊）或 private（私聊）", "default": "group"},
-    }
+        "type": "object",
+        "properties": {
+            "target_id": {
+                "type": "integer",
+                "description": "目标 ID：群号（群聊）或 QQ 号（私聊）",
+            },
+            "message": {
+                "type": "string",
+                "description": "要发送的消息内容",
+            },
+            "msg_type": {
+                "type": "string",
+                "description": "消息类型：group（群聊）或 private（私聊）",
+                "default": "group",
+            },
+        },
+        "required": ["target_id", "message", "msg_type"],
+    },
+    category="misc",
 )
 def qq_send_message(target_id: int, message: str, msg_type: str = "group") -> str:
     """发送 QQ 消息"""
@@ -370,9 +292,22 @@ def qq_send_message(target_id: int, message: str, msg_type: str = "group") -> st
     name="qq_get_messages",
     description="获取收到的 QQ 消息队列（不清空）。用于查看有没有新消息。",
     parameters={
-        "max_count": {"type": "integer", "description": "最多返回多少条", "default": 10},
-        "clear": {"type": "boolean", "description": "读取后是否清空队列", "default": False},
-    }
+        "type": "object",
+        "properties": {
+            "max_count": {
+                "type": "integer",
+                "description": "最多返回多少条",
+                "default": 10,
+            },
+            "clear": {
+                "type": "boolean",
+                "description": "读取后是否清空队列",
+                "default": False,
+            },
+        },
+        "required": ["max_count", "clear"],
+    },
+    category="misc",
 )
 def qq_get_messages(max_count: int = 10, clear: bool = False) -> str:
     """读取消息队列"""
@@ -410,7 +345,12 @@ def qq_get_messages(max_count: int = 10, clear: bool = False) -> str:
 @register_tool(
     name="qq_status",
     description="查看 QQ 连接状态",
-    parameters={}
+    parameters={
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+    category="misc",
 )
 def qq_status() -> str:
     """查看状态"""
@@ -425,4 +365,4 @@ def qq_status() -> str:
 
 
 _load_config()
-logger.info("QQ 桥接插件已加载")
+logger.info("QQ 桥接插件已加载 (标准 @register_tool)")

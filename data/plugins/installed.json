@@ -16,6 +16,8 @@
     "git_advanced",
     "docker_k8s",
     "ide_integration",
-    "file_replacer"
+    "file_replacer",
+    "code_reviewer",
+    "remote_deployer"
   ]
 }

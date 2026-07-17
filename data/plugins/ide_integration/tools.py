@@ -4,6 +4,12 @@ VS Code IDE 集成工具集。
 通过 code CLI 打开文件、项目，支持跳转到指定行列。
 """
 
+import sys
+from pathlib import Path
+ROOT = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(ROOT))
+from src.tools.registry import register_tool
+
 import subprocess
 import os
 import json
@@ -22,6 +28,16 @@ def _run_code(*args, timeout: int = 10) -> dict:
         return {"success": False, "stdout": "", "stderr": str(e)}
 
 
+@register_tool(
+    name="vscode_open_file",
+    description="在 VS Code 中打开文件，可跳转到指定行列。",
+    parameters={
+            "file_path": {"type": "string", "description": "文件完整路径"},
+            "line": {"type": "integer", "description": "跳转行号（0=不跳转）", "default": 0},
+            "column": {"type": "integer", "description": "跳转列号（0=不跳转）", "default": 0}
+        },
+    category="ide"
+)
 def vscode_open_file(file_path: str, line: int = 0, column: int = 0) -> str:
     """在 VS Code 中打开文件，可跳转到指定行列。
     
@@ -54,6 +70,12 @@ def vscode_open_file(file_path: str, line: int = 0, column: int = 0) -> str:
     return f"❌ 打开失败: {r['stderr']}"
 
 
+@register_tool(
+    name="vscode_open_project",
+    description="在 VS Code 中打开项目文件夹。",
+    parameters={"project_path": {"type": "string", "description": "项目根目录路径"}},
+    category="ide"
+)
 def vscode_open_project(project_path: str) -> str:
     """在 VS Code 中打开项目文件夹。
     
@@ -73,6 +95,12 @@ def vscode_open_project(project_path: str) -> str:
     return f"❌ 打开失败: {r['stderr']}"
 
 
+@register_tool(
+    name="vscode_open_multi",
+    description="在 VS Code 中同时打开多个文件。",
+    parameters={"files": {"type": "string", "description": "JSON 数组格式的文件路径列表"}},
+    category="ide"
+)
 def vscode_open_multi(files: str) -> str:
     """在 VS Code 中同时打开多个文件（对比/编辑）。
     
@@ -102,6 +130,15 @@ def vscode_open_multi(files: str) -> str:
     return f"❌ 打开失败: {r['stderr']}"
 
 
+@register_tool(
+    name="vscode_diff",
+    description="在 VS Code 中对比两个文件的差异。",
+    parameters={
+            "file1": {"type": "string", "description": "第一个文件路径"},
+            "file2": {"type": "string", "description": "第二个文件路径"}
+        },
+    category="ide"
+)
 def vscode_diff(file1: str, file2: str) -> str:
     """在 VS Code 中对比两个文件的差异。
     
@@ -120,6 +157,12 @@ def vscode_diff(file1: str, file2: str) -> str:
     return f"❌ 对比失败: {r['stderr']}"
 
 
+@register_tool(
+    name="vscode_list_extensions",
+    description="列出 VS Code 已安装的扩展列表。",
+    parameters={},
+    category="ide"
+)
 def vscode_list_extensions() -> str:
     """列出 VS Code 已安装的扩展。"""
     r = _run_code("--list-extensions", timeout=15)
@@ -129,6 +172,12 @@ def vscode_list_extensions() -> str:
     return f"❌ 获取失败: {r['stderr']}"
 
 
+@register_tool(
+    name="vscode_install_extension",
+    description="安装 VS Code 扩展（通过扩展 ID）。",
+    parameters={"extension_id": {"type": "string", "description": "扩展 ID，如 ms-python.python"}},
+    category="ide"
+)
 def vscode_install_extension(extension_id: str) -> str:
     """安装 VS Code 扩展。
     
@@ -142,55 +191,3 @@ def vscode_install_extension(extension_id: str) -> str:
     if r["success"]:
         return f"✅ 扩展安装成功: {extension_id}"
     return f"❌ 安装失败: {r['stderr']}"
-
-
-def register(registry_func):
-    """注册 IDE 集成工具到全局注册表"""
-    registry_func(
-        name="vscode_open_file",
-        description="在 VS Code 中打开文件，可跳转到指定行列。",
-        parameters={
-            "file_path": {"type": "string", "description": "文件完整路径"},
-            "line": {"type": "integer", "description": "跳转行号（0=不跳转）", "default": 0},
-            "column": {"type": "integer", "description": "跳转列号（0=不跳转）", "default": 0}
-        },
-        category="ide"
-    )(vscode_open_file)
-    
-    registry_func(
-        name="vscode_open_project",
-        description="在 VS Code 中打开项目文件夹。",
-        parameters={"project_path": {"type": "string", "description": "项目根目录路径"}},
-        category="ide"
-    )(vscode_open_project)
-    
-    registry_func(
-        name="vscode_open_multi",
-        description="在 VS Code 中同时打开多个文件。",
-        parameters={"files": {"type": "string", "description": "JSON 数组格式的文件路径列表"}},
-        category="ide"
-    )(vscode_open_multi)
-    
-    registry_func(
-        name="vscode_diff",
-        description="在 VS Code 中对比两个文件的差异。",
-        parameters={
-            "file1": {"type": "string", "description": "第一个文件路径"},
-            "file2": {"type": "string", "description": "第二个文件路径"}
-        },
-        category="ide"
-    )(vscode_diff)
-    
-    registry_func(
-        name="vscode_list_extensions",
-        description="列出 VS Code 已安装的扩展列表。",
-        parameters={},
-        category="ide"
-    )(vscode_list_extensions)
-    
-    registry_func(
-        name="vscode_install_extension",
-        description="安装 VS Code 扩展（通过扩展 ID）。",
-        parameters={"extension_id": {"type": "string", "description": "扩展 ID，如 ms-python.python"}},
-        category="ide"
-    )(vscode_install_extension)

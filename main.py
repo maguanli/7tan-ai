@@ -24,6 +24,17 @@ def _get_project_root():
 PROJECT_ROOT = _get_project_root()
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# 🔧 全局修复: subprocess text=True 在 Windows 中文系统下默认用 GBK 解码，
+# 遇到 UTF-8 内容会 UnicodeDecodeError。这里在入口统一补丁为 utf-8。
+import subprocess as _subprocess
+_original_run = _subprocess.run
+def _patched_run(*args, **kwargs):
+    if kwargs.get('text') and 'encoding' not in kwargs:
+        kwargs['encoding'] = 'utf-8'
+        kwargs['errors'] = 'replace'
+    return _original_run(*args, **kwargs)
+_subprocess.run = _patched_run
+
 # 修复 Windows 控制台 GBK 编码问题（emoji 字符无法编码）
 if sys.platform == 'win32':
     try:

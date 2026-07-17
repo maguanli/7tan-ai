@@ -3,6 +3,12 @@
 Git 高级操作插件 — 提供 stash、tag、hooks、contributors 等高级 Git 能力。
 与 git_ops 插件互补，不重复注册同名工具。
 """
+import sys
+from pathlib import Path
+ROOT = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(ROOT))
+from src.tools.registry import register_tool
+
 import subprocess
 import os
 from pathlib import Path
@@ -19,6 +25,16 @@ def _run_git(args: list, cwd: str = None) -> tuple:
         return -1, "", str(e)
 
 
+@register_tool(
+    name="git_stash",
+    description="Git stash 暂存操作：list(查看)/push(暂存)/pop(恢复并删除)/apply(恢复保留)。",
+    parameters={
+            "repo_path": {"type": "string", "description": "仓库路径", "default": "."},
+            "action": {"type": "string", "description": "操作: list/push/pop/apply", "default": "list"},
+            "message": {"type": "string", "description": "暂存消息（push时用）", "default": ""}
+        },
+    category="git"
+)
 def git_stash(repo_path: str = ".", action: str = "list", message: str = "") -> str:
     """暂存操作（list/push/pop/apply）
     
@@ -34,6 +50,17 @@ def git_stash(repo_path: str = ".", action: str = "list", message: str = "") -> 
     return out if code == 0 else f"❌ {err}"
 
 
+@register_tool(
+    name="git_tag",
+    description="Git 标签管理：list(列出)/create(创建)/delete(删除)。",
+    parameters={
+            "repo_path": {"type": "string", "description": "仓库路径", "default": "."},
+            "action": {"type": "string", "description": "操作: list/create/delete", "default": "list"},
+            "tag_name": {"type": "string", "description": "标签名", "default": ""},
+            "message": {"type": "string", "description": "标签注释信息", "default": ""}
+        },
+    category="git"
+)
 def git_tag(repo_path: str = ".", action: str = "list", tag_name: str = "", message: str = "") -> str:
     """标签管理（list/create/delete）
     
@@ -57,12 +84,24 @@ def git_tag(repo_path: str = ".", action: str = "list", tag_name: str = "", mess
     return out if code == 0 else f"❌ {err}"
 
 
+@register_tool(
+    name="git_remote_info",
+    description="查看 Git 远程仓库信息（URL 列表）。",
+    parameters={"repo_path": {"type": "string", "description": "仓库路径", "default": "."}},
+    category="git"
+)
 def git_remote_info(repo_path: str = ".") -> str:
     """查看远程仓库信息（URL、fetch/push 地址）。"""
     code, out, err = _run_git(["remote", "-v"], repo_path)
     return out if code == 0 else f"❌ {err}"
 
 
+@register_tool(
+    name="git_check_commit_message",
+    description="检查提交信息是否符合 Conventional Commits 规范。",
+    parameters={"message": {"type": "string", "description": "提交信息文本"}},
+    category="git"
+)
 def git_check_commit_message(message: str) -> str:
     """检查提交信息是否符合 Conventional Commits 规范。
     
@@ -96,6 +135,12 @@ def git_check_commit_message(message: str) -> str:
     return '\n'.join(issues)
 
 
+@register_tool(
+    name="git_init_hooks",
+    description="初始化 Git commit-msg Hook，自动检查提交信息格式。",
+    parameters={"repo_path": {"type": "string", "description": "仓库路径", "default": "."}},
+    category="git"
+)
 def git_init_hooks(repo_path: str = ".") -> str:
     """初始化 Git Hooks（commit-msg hook 检查提交信息格式）。
     
@@ -126,6 +171,15 @@ fi
         return f"❌ 初始化失败: {e}"
 
 
+@register_tool(
+    name="git_contributors",
+    description="查看 Git 仓库贡献者统计（按提交次数排名）。",
+    parameters={
+            "repo_path": {"type": "string", "description": "仓库路径", "default": "."},
+            "count": {"type": "integer", "description": "显示前 N 名", "default": 10}
+        },
+    category="git"
+)
 def git_contributors(repo_path: str = ".", count: int = 10) -> str:
     """查看贡献者统计（按提交次数排序）。
     
@@ -136,60 +190,3 @@ def git_contributors(repo_path: str = ".", count: int = 10) -> str:
     args = ["shortlog", "-sn", f"-{count}", "--no-merges"]
     code, out, err = _run_git(args, repo_path)
     return out if code == 0 else f"❌ {err}"
-
-
-def register(registry_func):
-    """注册 Git 高级工具到全局注册表（不与 git_ops 重复）"""
-    registry_func(
-        name="git_stash",
-        description="Git stash 暂存操作：list(查看)/push(暂存)/pop(恢复并删除)/apply(恢复保留)。",
-        parameters={
-            "repo_path": {"type": "string", "description": "仓库路径", "default": "."},
-            "action": {"type": "string", "description": "操作: list/push/pop/apply", "default": "list"},
-            "message": {"type": "string", "description": "暂存消息（push时用）", "default": ""}
-        },
-        category="git"
-    )(git_stash)
-
-    registry_func(
-        name="git_tag",
-        description="Git 标签管理：list(列出)/create(创建)/delete(删除)。",
-        parameters={
-            "repo_path": {"type": "string", "description": "仓库路径", "default": "."},
-            "action": {"type": "string", "description": "操作: list/create/delete", "default": "list"},
-            "tag_name": {"type": "string", "description": "标签名", "default": ""},
-            "message": {"type": "string", "description": "标签注释信息", "default": ""}
-        },
-        category="git"
-    )(git_tag)
-
-    registry_func(
-        name="git_remote_info",
-        description="查看 Git 远程仓库信息（URL 列表）。",
-        parameters={"repo_path": {"type": "string", "description": "仓库路径", "default": "."}},
-        category="git"
-    )(git_remote_info)
-
-    registry_func(
-        name="git_check_commit_message",
-        description="检查提交信息是否符合 Conventional Commits 规范。",
-        parameters={"message": {"type": "string", "description": "提交信息文本"}},
-        category="git"
-    )(git_check_commit_message)
-
-    registry_func(
-        name="git_init_hooks",
-        description="初始化 Git commit-msg Hook，自动检查提交信息格式。",
-        parameters={"repo_path": {"type": "string", "description": "仓库路径", "default": "."}},
-        category="git"
-    )(git_init_hooks)
-
-    registry_func(
-        name="git_contributors",
-        description="查看 Git 仓库贡献者统计（按提交次数排名）。",
-        parameters={
-            "repo_path": {"type": "string", "description": "仓库路径", "default": "."},
-            "count": {"type": "integer", "description": "显示前 N 名", "default": 10}
-        },
-        category="git"
-    )(git_contributors)

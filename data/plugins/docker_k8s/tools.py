@@ -2,6 +2,12 @@
 """
 Docker & K8s 管理插件 — 提供容器化和集群管理能力
 """
+import sys
+from pathlib import Path
+ROOT = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(ROOT))
+from src.tools.registry import register_tool
+
 import subprocess
 import json
 import os
@@ -9,6 +15,24 @@ from pathlib import Path
 from loguru import logger
 
 
+@register_tool(
+    name="docker_ps",
+    description="列出 Docker 容器（可选 all_containers=true 包括已停止的）",
+    parameters={"all_containers": {"type": "boolean", "description": "是否显示所有容器"}},
+    category="devops"
+)
+@register_tool(
+    name="docker_ps",
+    description="列出 Docker 容器（可选 all_containers=true 包括已停止的）",
+    parameters={"all_containers": {"type": "boolean", "description": "是否显示所有容器"}},
+    category="devops"
+)
+@register_tool(
+    name="docker_ps",
+    description="列出 Docker 容器（可选 all_containers=true 包括已停止的）",
+    parameters={"all_containers": {"type": "boolean", "description": "是否显示所有容器"}},
+    category="devops"
+)
 def docker_ps(all_containers: bool = False) -> str:
     """列出 Docker 容器"""
     cmd = ["docker", "ps"]
@@ -26,6 +50,24 @@ def docker_ps(all_containers: bool = False) -> str:
         return f"❌ 错误: {e}"
 
 
+@register_tool(
+    name="docker_images",
+    description="列出 Docker 镜像列表",
+    parameters={},
+    category="devops"
+)
+@register_tool(
+    name="docker_images",
+    description="列出 Docker 镜像列表",
+    parameters={},
+    category="devops"
+)
+@register_tool(
+    name="docker_images",
+    description="列出 Docker 镜像列表",
+    parameters={},
+    category="devops"
+)
 def docker_images() -> str:
     """列出 Docker 镜像"""
     cmd = ["docker", "images", "--format", "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}"]
@@ -40,6 +82,33 @@ def docker_images() -> str:
         return f"❌ 错误: {e}"
 
 
+@register_tool(
+    name="docker_compose_up",
+    description="启动 docker-compose 服务",
+    parameters={
+                      "compose_file": {"type": "string", "description": "docker-compose.yml 路径"},
+                      "detached": {"type": "boolean", "description": "是否后台运行"}
+                  },
+    category="devops"
+)
+@register_tool(
+    name="docker_compose_up",
+    description="启动 docker-compose 服务",
+    parameters={
+                      "compose_file": {"type": "string", "description": "docker-compose.yml 路径"},
+                      "detached": {"type": "boolean", "description": "是否后台运行"}
+                  },
+    category="devops"
+)
+@register_tool(
+    name="docker_compose_up",
+    description="启动 docker-compose 服务",
+    parameters={
+                      "compose_file": {"type": "string", "description": "docker-compose.yml 路径"},
+                      "detached": {"type": "boolean", "description": "是否后台运行"}
+                  },
+    category="devops"
+)
 def docker_compose_up(compose_file: str = "docker-compose.yml", detached: bool = True) -> str:
     """启动 docker-compose 服务"""
     path = Path(compose_file)
@@ -59,6 +128,24 @@ def docker_compose_up(compose_file: str = "docker-compose.yml", detached: bool =
         return f"❌ 错误: {e}"
 
 
+@register_tool(
+    name="docker_compose_down",
+    description="停止 docker-compose 服务",
+    parameters={"compose_file": {"type": "string", "description": "docker-compose.yml 路径"}},
+    category="devops"
+)
+@register_tool(
+    name="docker_compose_down",
+    description="停止 docker-compose 服务",
+    parameters={"compose_file": {"type": "string", "description": "docker-compose.yml 路径"}},
+    category="devops"
+)
+@register_tool(
+    name="docker_compose_down",
+    description="停止 docker-compose 服务",
+    parameters={"compose_file": {"type": "string", "description": "docker-compose.yml 路径"}},
+    category="devops"
+)
 def docker_compose_down(compose_file: str = "docker-compose.yml") -> str:
     """停止 docker-compose 服务"""
     path = Path(compose_file)
@@ -75,6 +162,33 @@ def docker_compose_down(compose_file: str = "docker-compose.yml") -> str:
         return f"❌ 错误: {e}"
 
 
+@register_tool(
+    name="docker_logs",
+    description="查看容器日志",
+    parameters={
+                      "container_name": {"type": "string", "description": "容器名称"},
+                      "tail": {"type": "integer", "description": "显示最后N行"}
+                  },
+    category="devops"
+)
+@register_tool(
+    name="docker_logs",
+    description="查看容器日志",
+    parameters={
+                      "container_name": {"type": "string", "description": "容器名称"},
+                      "tail": {"type": "integer", "description": "显示最后N行"}
+                  },
+    category="devops"
+)
+@register_tool(
+    name="docker_logs",
+    description="查看容器日志",
+    parameters={
+                      "container_name": {"type": "string", "description": "容器名称"},
+                      "tail": {"type": "integer", "description": "显示最后N行"}
+                  },
+    category="devops"
+)
 def docker_logs(container_name: str, tail: int = 100) -> str:
     """查看容器日志"""
     cmd = ["docker", "logs", "--tail", str(tail), container_name]
@@ -87,6 +201,33 @@ def docker_logs(container_name: str, tail: int = 100) -> str:
         return f"❌ 错误: {e}"
 
 
+@register_tool(
+    name="docker_build",
+    description="构建 Docker 镜像",
+    parameters={
+                      "dockerfile_dir": {"type": "string", "description": "Dockerfile 所在目录"},
+                      "tag": {"type": "string", "description": "镜像标签"}
+                  },
+    category="devops"
+)
+@register_tool(
+    name="docker_build",
+    description="构建 Docker 镜像",
+    parameters={
+                      "dockerfile_dir": {"type": "string", "description": "Dockerfile 所在目录"},
+                      "tag": {"type": "string", "description": "镜像标签"}
+                  },
+    category="devops"
+)
+@register_tool(
+    name="docker_build",
+    description="构建 Docker 镜像",
+    parameters={
+                      "dockerfile_dir": {"type": "string", "description": "Dockerfile 所在目录"},
+                      "tag": {"type": "string", "description": "镜像标签"}
+                  },
+    category="devops"
+)
 def docker_build(dockerfile_dir: str = ".", tag: str = "app:latest") -> str:
     """构建 Docker 镜像"""
     path = Path(dockerfile_dir)
@@ -106,6 +247,24 @@ def docker_build(dockerfile_dir: str = ".", tag: str = "app:latest") -> str:
         return f"❌ 错误: {e}"
 
 
+@register_tool(
+    name="docker_prune",
+    description="清理未使用的 Docker 资源（镜像/容器/网络）",
+    parameters={},
+    category="devops"
+)
+@register_tool(
+    name="docker_prune",
+    description="清理未使用的 Docker 资源（镜像/容器/网络）",
+    parameters={},
+    category="devops"
+)
+@register_tool(
+    name="docker_prune",
+    description="清理未使用的 Docker 资源（镜像/容器/网络）",
+    parameters={},
+    category="devops"
+)
 def docker_prune() -> str:
     """清理未使用的 Docker 资源"""
     cmd = ["docker", "system", "prune", "-f"]
@@ -118,6 +277,33 @@ def docker_prune() -> str:
         return f"❌ 错误: {e}"
 
 
+@register_tool(
+    name="kubectl_get",
+    description="获取 Kubernetes 资源列表",
+    parameters={
+                      "resource_type": {"type": "string", "description": "资源类型：pods/services/deployments/nodes"},
+                      "namespace": {"type": "string", "description": "命名空间"}
+                  },
+    category="devops"
+)
+@register_tool(
+    name="kubectl_get",
+    description="获取 Kubernetes 资源列表",
+    parameters={
+                      "resource_type": {"type": "string", "description": "资源类型：pods/services/deployments/nodes"},
+                      "namespace": {"type": "string", "description": "命名空间"}
+                  },
+    category="devops"
+)
+@register_tool(
+    name="kubectl_get",
+    description="获取 Kubernetes 资源列表",
+    parameters={
+                      "resource_type": {"type": "string", "description": "资源类型：pods/services/deployments/nodes"},
+                      "namespace": {"type": "string", "description": "命名空间"}
+                  },
+    category="devops"
+)
 def kubectl_get(resource_type: str = "pods", namespace: str = "default") -> str:
     """获取 Kubernetes 资源（pods/services/deployments等）"""
     cmd = ["kubectl", "get", resource_type, "-n", namespace]
@@ -132,6 +318,33 @@ def kubectl_get(resource_type: str = "pods", namespace: str = "default") -> str:
         return f"❌ 错误: {e}"
 
 
+@register_tool(
+    name="kubectl_apply",
+    description="应用 Kubernetes YAML 配置文件",
+    parameters={
+                      "yaml_file": {"type": "string", "description": "YAML 文件路径"},
+                      "namespace": {"type": "string", "description": "命名空间"}
+                  },
+    category="devops"
+)
+@register_tool(
+    name="kubectl_apply",
+    description="应用 Kubernetes YAML 配置文件",
+    parameters={
+                      "yaml_file": {"type": "string", "description": "YAML 文件路径"},
+                      "namespace": {"type": "string", "description": "命名空间"}
+                  },
+    category="devops"
+)
+@register_tool(
+    name="kubectl_apply",
+    description="应用 Kubernetes YAML 配置文件",
+    parameters={
+                      "yaml_file": {"type": "string", "description": "YAML 文件路径"},
+                      "namespace": {"type": "string", "description": "命名空间"}
+                  },
+    category="devops"
+)
 def kubectl_apply(yaml_file: str, namespace: str = "default") -> str:
     """应用 Kubernetes YAML 配置"""
     path = Path(yaml_file)

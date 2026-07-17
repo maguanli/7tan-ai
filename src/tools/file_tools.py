@@ -76,8 +76,10 @@ def list_files(directory: str, pattern: str = "*") -> str:
     },
     category="file",
 )
-def read_file_content(path: str, encoding: str = "utf-8", max_lines: int = 200, offset: int = 0) -> str:
+def read_file_content(path: str, encoding: str = "utf-8", max_lines: int = 200, offset: int = 0, limit: int = None) -> str:
     """读取文件内容"""
+    if limit is not None:
+        max_lines = limit
     p = Path(path)
     if not p.exists():
         return f"❌ 文件不存在: {path}"

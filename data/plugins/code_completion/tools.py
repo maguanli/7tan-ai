@@ -1,14 +1,17 @@
-
 """
 实时代码补全 API 服务。
 启动本地 HTTP 服务器，供 VS Code 扩展调用，实现 AI 代码补全。
 """
-
 import json
 import os
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
 import sys
+import threading
+from pathlib import Path
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+ROOT = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(ROOT))
+from src.tools.registry import register_tool
 
 # 服务状态
 _server = None
@@ -50,7 +53,6 @@ class CompletionHandler(BaseHTTPRequestHandler):
                 language = data.get("language", "python")
                 file_path = data.get("file_path", "")
                 
-                # 构建补全 prompt
                 prompt = f"""你是代码补全助手。根据上下文补全代码。
 
 语言: {language}
@@ -68,7 +70,6 @@ class CompletionHandler(BaseHTTPRequestHandler):
 
 请直接输出补全的代码片段（只补全缺失部分，不要重复已有代码），控制在 1-10 行内:"""
                 
-                # 返回提示给调用方
                 self._send_json({
                     "success": True,
                     "prompt": prompt,
@@ -95,6 +96,12 @@ class CompletionHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "Not Found"}, 404)
 
 
+@register_tool(
+    name="completion_start",
+    description="启动本地 AI 代码补全 HTTP 服务（端口 17890），供 VS Code 扩展调用。",
+    parameters={},
+    category="dev"
+)
 def completion_start() -> str:
     """启动代码补全 HTTP 服务（端口 17890）。
     启动后 VS Code 扩展可连接此服务获取 AI 补全。
@@ -119,6 +126,12 @@ def completion_start() -> str:
         return f"❌ 启动失败: {e}"
 
 
+@register_tool(
+    name="completion_stop",
+    description="停止代码补全 HTTP 服务。",
+    parameters={},
+    category="dev"
+)
 def completion_stop() -> str:
     """停止代码补全 HTTP 服务。"""
     global _server, _server_thread
@@ -135,33 +148,15 @@ def completion_stop() -> str:
         return f"❌ 停止失败: {e}"
 
 
+@register_tool(
+    name="completion_status",
+    description="查看代码补全服务运行状态。",
+    parameters={},
+    category="dev"
+)
 def completion_status() -> str:
     """查看代码补全服务状态。"""
     global _server
     if _server is not None:
         return f"✅ 运行中 — http://127.0.0.1:{PORT}/api/health"
     return "⏸️ 未启动 — 使用 completion_start 启动服务"
-
-
-def register(registry_func):
-    """注册插件工具到全局注册表"""
-    registry_func(
-        name="completion_start",
-        description="启动本地 AI 代码补全 HTTP 服务（端口 17890），供 VS Code 扩展调用。",
-        parameters={},
-        category="dev"
-    )(completion_start)
-    
-    registry_func(
-        name="completion_stop",
-        description="停止代码补全 HTTP 服务。",
-        parameters={},
-        category="dev"
-    )(completion_stop)
-    
-    registry_func(
-        name="completion_status",
-        description="查看代码补全服务运行状态。",
-        parameters={},
-        category="dev"
-    )(completion_status)

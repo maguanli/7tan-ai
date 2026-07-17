@@ -84,21 +84,33 @@ def register_tool(
 def get_all_tools() -> list[dict]:
     """返回 OpenAI 兼容的 tools 数组"""
     result = []
-    for t in TOOL_REGISTRY.values():
-        # 兼容插件可能注册 dict 而不是 Tool（qq_bridge等旧版本）
+    for key, t in list(TOOL_REGISTRY.items()):
+        # 兼容插件可能注册 dict 而不是 Tool（旧版本遗留问题）
         if hasattr(t, 'name'):
             name, desc, params = t.name, t.description, t.parameters
         else:
-            # 检测到 dict 类型的工具定义
+            # 检测到 dict 类型的工具定义 — 自动修复为 Tool 对象
             name = t.get("name", "unknown")
             desc = t.get("description", "")
             params = t.get("parameters", {})
+            func = t.get("function")
             if name not in _warned_dict_tools:
                 _warned_dict_tools.add(name)
-                logger.warning(
-                    f"⚠️ TOOL_REGISTRY 中混入 dict 而不是 Tool: {name}。"
-                    f"建议将插件的 register_tool 改为使用 Tool 类，"
-                    f"参考 data/plugins/qq_bridge/tools.py 的写法。"
+                logger.info(
+                    f"🔧 自动修复: TOOL_REGISTRY 中 {name} 为 dict 类型，"
+                    f"已转换为 Tool 对象（原因为旧版 create_plugin 未使用 @register_tool）"
+                )
+            # 自愈：用 dict 内容构建 Tool 对象并替换
+            if func is not None:
+                TOOL_REGISTRY[key] = Tool(
+                    name=name,
+                    description=desc,
+                    parameters=_ensure_schema(params),
+                    function=func,
+                    category=t.get("category", "misc"),
+                    dangerous=t.get("dangerous", False),
+                    requires_browser=t.get("requires_browser", False),
+                    requires_db=t.get("requires_db", False),
                 )
         result.append({
             "type": "function",
@@ -131,7 +143,7 @@ def execute_tool(name: str, args: dict) -> str:
     if not tool:
         return f"❌ 未知工具: {name}"
 
-    # 兼容 dict 类型
+    # 兼容 dict 类型 — 现在理论上不会出现，但保留兜底
     if hasattr(tool, 'function'):
         func = tool.function
     else:

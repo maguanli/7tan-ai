@@ -1,9 +1,24 @@
-
-"""文件内容批量替换工具"""
+"""
+文件内容批量替换工具
+"""
 import json
+import sys
 from pathlib import Path
 
+ROOT = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(ROOT))
+from src.tools.registry import register_tool
 
+
+@register_tool(
+    name="file_replace",
+    description="对文本文件执行批量字符串替换。支持多个替换对一次性执行，JSON 格式配置。",
+    parameters={
+        "filepath": {"type": "string", "description": "要修改的文件完整路径"},
+        "replacements": {"type": "string", "description": "替换对，JSON 格式: {\"旧字符串\": \"新字符串\", ...}"}
+    },
+    category="file_ops"
+)
 def file_replace(filepath: str, replacements: str) -> str:
     """在文本文件中执行批量字符串替换。支持多个替换对一次性执行。
     
@@ -43,16 +58,3 @@ def file_replace(filepath: str, replacements: str) -> str:
         return f"❌ 文件不是文本格式或编码不支持: {filepath}"
     except Exception as e:
         return f"❌ 替换失败: {e}"
-
-
-def register(registry_func):
-    """注册文件替换工具到全局注册表"""
-    registry_func(
-        name="file_replace",
-        description="对文本文件执行批量字符串替换。支持多个替换对一次性执行，JSON 格式配置。",
-        parameters={
-            "filepath": {"type": "string", "description": "要修改的文件完整路径"},
-            "replacements": {"type": "string", "description": "替换对，JSON 格式: {\"旧字符串\": \"新字符串\", ...}"}
-        },
-        category="file_ops"
-    )(file_replace)

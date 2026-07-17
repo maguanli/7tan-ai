@@ -88,5 +88,15 @@
     "id": "file_replacer", "name": "文件批量替换", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "工具",
     "description": "对文本文件执行批量字符串替换。支持多个替换对一次性执行，JSON 格式配置。",
     "tools": ["file_replace"], "icon": "✏️"
+  },
+  {
+    "id": "code_reviewer", "name": "代码审查", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "开发",
+    "description": "代码质量审查：静态分析、安全检查、代码规范检查。支持单文件和批量审查。",
+    "tools": ["code_review_file", "code_review_directory", "security_scan_file", "code_stats"], "icon": "🔍"
+  },
+  {
+    "id": "remote_deployer", "name": "远程部署", "version": "1.0.0", "author": "7tanAI Team", "type": "builtin", "category": "运维",
+    "description": "远程部署与CI/CD：ADB安装、SCP上传、SSH执行、Gradle构建、部署流水线。支持 Android 和远程服务器。",
+    "tools": ["adb_devices", "adb_install", "adb_uninstall", "adb_list_packages", "adb_screenshot", "adb_shell", "rsync_deploy", "scp_upload", "ssh_execute", "gradle_build", "run_shell_script", "deploy_pipeline"], "icon": "🚀"
   }
 ]

@@ -1,7 +1,11 @@
 """
 实时控制台面板 — 嵌入工作台左侧，替代命令行黑窗
+捕获全部输出：loguru 日志 + sys.stdout + sys.stderr
 所有 7Tan 工作日志实时显示在此面板中
 """
+import sys
+from datetime import datetime
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QPlainTextEdit, QScrollBar,
@@ -23,41 +27,106 @@ CONSOLE_THEME = {
 
 # ===== 全局日志信号（线程安全）=====
 class _LogSignal(QObject):
-    """线程安全的日志信号，loguru sink 通过此信号将日志投递到主线程"""
+    """线程安全的日志信号，sink/redirect 通过此信号将日志投递到主线程"""
     log_received = pyqtSignal(str)
 
 
 _global_log_signal = _LogSignal()
 
 
+# ===== stdout / stderr 重定向 =====
+class _StdoutRedirect:
+    """
+    捕获所有写入 sys.stdout / sys.stderr 的内容，
+    同时保留一份到原始流，并通过信号发送到控制台面板。
+    线程安全：write() 可在任意线程调用，信号 emit 后由 QueuedConnection 投递主线程。
+    """
+
+    def __init__(self, signal, original_stream, tag: str = ""):
+        self._signal = signal          # pyqtSignal
+        self._original = original_stream  # 原始 sys.__stdout__ / __stderr__
+        self._tag = tag                # "[STDERR]" 等前缀
+        self._buffer = ""
+
+    def write(self, text: str):
+        # 1) 投递到原始流（文件描述符级别，用于外部重定向或调试）
+        try:
+            self._original.write(text)
+        except Exception:
+            pass
+
+        # 2) 跳过纯空白行
+        if not text or text.isspace():
+            return
+
+        # 3) 累积行，遇到换行就 emit
+        self._buffer += text
+        if '\n' in self._buffer:
+            lines = self._buffer.split('\n')
+            self._buffer = lines[-1]  # 保留最后一段（可能不完整）
+            for line in lines[:-1]:
+                line = line.strip('\r')
+                if line.strip():
+                    ts = datetime.now().strftime("%H:%M:%S")
+                    prefix = f"{ts} {self._tag} " if self._tag else f"{ts} "
+                    self._signal.emit(prefix + line)
+
+    def flush(self):
+        try:
+            self._original.flush()
+        except Exception:
+            pass
+        if self._buffer.strip():
+            ts = datetime.now().strftime("%H:%M:%S")
+            prefix = f"{ts} {self._tag} " if self._tag else f"{ts} "
+            self._signal.emit(prefix + self._buffer.strip())
+            self._buffer = ""
+
+    # 代理其余属性到原始流
+    def __getattr__(self, name):
+        return getattr(self._original, name)
+
+
+# ===== loguru sink 注册 =====
 def _setup_console_log_sink():
     """注册 loguru sink，将所有日志实时推送到控制台面板"""
     try:
         from loguru import logger
-        if not hasattr(_setup_console_log_sink, '_installed'):
-            _setup_console_log_sink._installed = True
 
-            def _sink(msg):
-                try:
-                    stripped = msg.rstrip('\n')
-                    if stripped:
-                        _global_log_signal.log_received.emit(stripped)
-                except Exception:
-                    pass
+        if hasattr(_setup_console_log_sink, '_installed'):
+            return
+        _setup_console_log_sink._installed = True
 
-            logger.add(
-                _sink,
-                format="{time:HH:mm:ss} | {level: <8} | {message}",
-                level="DEBUG",
-                colorize=False,
-                enqueue=True,
-            )
+        # 移除 loguru 默认的 stderr handler（避免和我们的 stderr 重定向双写）
+        try:
+            logger.remove(0)
+        except Exception:
+            pass
+
+        def _sink(msg):
+            try:
+                stripped = msg.rstrip('\n')
+                if stripped:
+                    _global_log_signal.log_received.emit(stripped)
+            except Exception:
+                pass
+
+        logger.add(
+            _sink,
+            format="{time:HH:mm:ss} | {level: <8} | {message}",
+            level="DEBUG",
+            colorize=False,
+            enqueue=True,
+        )
     except ImportError:
         pass
 
 
+# ===== 控制台面板组件 =====
 class ConsoleViewer(QWidget):
-    """实时日志控制台 — 嵌入工作台左侧面板"""
+    """实时日志控制台 — 嵌入工作台左侧面板，捕获全部输出"""
+
+    _std_redirect_installed = False
 
     def __init__(self):
         super().__init__()
@@ -112,7 +181,7 @@ class ConsoleViewer(QWidget):
         # --- 日志输出区 ---
         self._output = QPlainTextEdit()
         self._output.setReadOnly(True)
-        self._output.setMaximumBlockCount(5000)  # 最多保留 5000 行
+        self._output.setMaximumBlockCount(5000)
         self._output.setStyleSheet(f"""
             QPlainTextEdit {{
                 background-color: #0D1117;
@@ -128,7 +197,7 @@ class ConsoleViewer(QWidget):
         layout.addWidget(self._output, 1)
 
         # --- 底部状态 ---
-        status = QLabel("💡 此处实时显示 7Tan 的所有工作日志，等同于命令行黑窗输出")
+        status = QLabel("💡 此处实时显示 7Tan 的完整工作日志（loguru + stdout + stderr）")
         status.setStyleSheet(
             f"color: {T['text_secondary']}; font-size: 11px; padding: 2px 4px;"
         )
@@ -139,8 +208,28 @@ class ConsoleViewer(QWidget):
             self._append_log, Qt.ConnectionType.QueuedConnection
         )
 
-        # 首次实例化时注册 loguru sink
+        # 注册 loguru sink
         _setup_console_log_sink()
+
+        # 安装 stdout / stderr 重定向（全局一次性）
+        self._install_std_redirect()
+
+    @classmethod
+    def _install_std_redirect(cls):
+        """重定向 sys.stdout / sys.stderr 到控制台面板（全局一次性）"""
+        if cls._std_redirect_installed:
+            return
+        cls._std_redirect_installed = True
+
+        # 保留原始流引用
+        _stdout_orig = sys.__stdout__
+        _stderr_orig = sys.__stderr__
+
+        sig = _global_log_signal.log_received
+
+        # 替换
+        sys.stdout = _StdoutRedirect(sig, _stdout_orig)
+        sys.stderr = _StdoutRedirect(sig, _stderr_orig, tag="[STDERR]")
 
     def _append_log(self, text: str):
         """追加一条日志（主线程安全）"""

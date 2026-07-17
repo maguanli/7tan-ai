@@ -20,8 +20,15 @@ from loguru import logger
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
-# 专用线程池，避免阻塞 FastAPI 事件循环
-_chat_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+# 专用线程池，避免阻塞 FastAPI 事件循环（懒加载 + 自动重创建）
+_chat_executor = None
+
+def _get_executor():
+    """获取（或重建）线程池"""
+    global _chat_executor
+    if _chat_executor is None or _chat_executor._shutdown:
+        _chat_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+    return _chat_executor
 
 
 class ChatRequest(BaseModel):
@@ -50,7 +57,7 @@ async def send_message(req: ChatRequest):
         # 在线程池中运行 Agent 循环，避免阻塞 FastAPI 事件循环
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
-            _chat_executor,
+            _get_executor(),
             lambda: run_agent_loop(
                 task=req.message,
                 session_id=session_id,

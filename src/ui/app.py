@@ -553,6 +553,7 @@ class ChatPage(QWidget):
         # 聊天消息区
         self._chat_area = QScrollArea()
         self._chat_area.setWidgetResizable(True)
+        self._chat_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._chat_area.setStyleSheet(f"""
             QScrollArea {{
                 background-color: {THEME['bg_card']};
@@ -847,6 +848,7 @@ class ChatPage(QWidget):
     def _add_message(self, role, text):
         msg = QFrame()
         msg.setProperty("role", role)
+        msg.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         if role == "user":
             msg.setStyleSheet(f"""
@@ -899,10 +901,10 @@ class ChatPage(QWidget):
         idx = self._messages_layout.count() - 1
         self._messages_layout.insertWidget(idx, msg)
 
-        # 滚动到底部
-        QTimer.singleShot(50, lambda: self._chat_area.verticalScrollBar().setValue(
-            self._chat_area.verticalScrollBar().maximum()
-        ))
+        # 滚动到底部 - 强制处理后保证布局更新完毕再滚动
+        QApplication.processEvents()
+        sb = self._chat_area.verticalScrollBar()
+        QTimer.singleShot(0, lambda sb=sb: sb.setValue(sb.maximum()))
 
 # ===== 资源管理页面（表格） =====
 class ResourceTablePage(QWidget):

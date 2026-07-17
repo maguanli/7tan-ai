@@ -30,7 +30,7 @@ def _run_code(*args, timeout: int = 10) -> dict:
 
 @register_tool(
     name="vscode_open_file",
-    description="在 VS Code 中打开文件，可跳转到指定行列。",
+    description="在 VS Code 中打开文件（仅在用户明确要求时使用，不要自动调用）。",
     parameters={
             "file_path": {"type": "string", "description": "文件完整路径"},
             "line": {"type": "integer", "description": "跳转行号（0=不跳转）", "default": 0},
@@ -72,7 +72,7 @@ def vscode_open_file(file_path: str, line: int = 0, column: int = 0) -> str:
 
 @register_tool(
     name="vscode_open_project",
-    description="在 VS Code 中打开项目文件夹。",
+    description="在 VS Code 中打开项目文件夹（仅在用户明确要求时使用，不要自动调用）。",
     parameters={"project_path": {"type": "string", "description": "项目根目录路径"}},
     category="ide"
 )
@@ -97,7 +97,7 @@ def vscode_open_project(project_path: str) -> str:
 
 @register_tool(
     name="vscode_open_multi",
-    description="在 VS Code 中同时打开多个文件。",
+    description="在 VS Code 中同时打开多个文件（仅在用户明确要求时使用，不要自动调用）。",
     parameters={"files": {"type": "string", "description": "JSON 数组格式的文件路径列表"}},
     category="ide"
 )

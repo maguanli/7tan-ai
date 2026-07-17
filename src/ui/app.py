@@ -602,6 +602,8 @@ class ChatPage(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
+        # 每次切换到对话页面时刷新模型列表，与设置页保持同步
+        self._load_model_list()
         if not self._sessions_loaded:
             self._sessions_loaded = True
             # 增加延迟确保后端完全就绪，并添加重试

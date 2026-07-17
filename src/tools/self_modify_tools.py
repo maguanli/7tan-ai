@@ -112,8 +112,13 @@ def _find_real_python() -> str:
                 logger.info(f"🔍 沙盒找到 Python (PATH): {_REAL_PYTHON}")
                 return _REAL_PYTHON
 
-    # 最后回退（很可能失败，因为 exe 不是 Python 解释器）
-    logger.warning("⚠️ 找不到独立 Python，回退到 sys.executable（可能导致沙盒不可用）")
+    # 最后回退：在 frozen 环境下找不到独立 Python 时直接报错
+    # 不要 fallback 到 sys.executable，因为它指向 exe 自身，会导致启动新 GUI 窗口
+    if is_frozen:
+        raise FileNotFoundError(
+            "找不到独立 Python 解释器。请安装 Python 3.11+ 到系统，"
+            "或将 Python 添加到 PATH 环境变量。"
+        )
     _REAL_PYTHON = sys.executable
     return _REAL_PYTHON
 
@@ -216,6 +221,10 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
 
         logger.debug(f"🔧 沙盒执行: {' '.join(cmd)}")
 
+        # 设置 SANDBOX_MODE 环境变量，防止子进程意外启动 GUI
+        env = os.environ.copy()
+        env["SANDBOX_MODE"] = "1"
+
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -224,6 +233,8 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
             errors="replace",
             timeout=timeout,
             cwd=str(SANDBOX_ROOT),
+            env=env,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
         )
 
         # 防御性处理：在某些环境下 stdout/stderr 可能为 None
@@ -287,6 +298,7 @@ def self_rebuild(build_script: str = "build.bat", timeout: int = 900) -> str:
             timeout=timeout,
             cwd=str(PROJECT_ROOT),
             env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
         )
 
         stdout = result.stdout[-5000:] if len(result.stdout) > 5000 else result.stdout

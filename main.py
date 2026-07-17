@@ -92,6 +92,10 @@ def main():
 
 def run_desktop(args):
     """启动原生桌面应用 — PyQt6 全原生控件，后端异步初始化"""
+    # 沙盒模式：由 sandbox_execute 的子进程设置，防止意外启动 GUI
+    if os.environ.get("SANDBOX_MODE") == "1":
+        return
+
     import threading
     from src.scheduler.scheduler import start_scheduler
     from src.config.loader import load_config
@@ -198,65 +202,46 @@ def run_scheduler():
         while True:
             time.sleep(60)
     except KeyboardInterrupt:
-        logger.info("👋 调度器已停止")
+        logger.info("⏰ 调度器已停止")
 
 
 def run_cli(args):
-    """交互式 CLI"""
+    """交互式 CLI 模式"""
     from src.agent.agent_loop import run_agent_loop
-    from src.agent.conversation import create_session
+    import uuid
 
-    print("\n" + "=" * 50)
-    print("  🤖 7Tan — 交互式 CLI")
-    print("  输入任务指令，AI 将自动执行")
-    print("  输入 /help 查看更多命令")
-    print("=" * 50 + "\n")
+    print("=" * 50)
+    print("🎮 7Tan AI 编辑器 — 命令行模式")
+    print("输入 /quit 退出，/help 查看帮助")
+    print("=" * 50)
 
-    session_id = create_session()
+    session_id = uuid.uuid4().hex[:12]
     model = getattr(args, 'model', None)
 
     while True:
         try:
-            user_input = input("👉 ").strip()
+            user_input = input("\n> ").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\n👋 再见!")
+            print("\n👋 再见！")
             break
 
         if not user_input:
             continue
 
-        # --- 内置命令 ---
         if user_input.startswith("/"):
-            parts = user_input.split(maxsplit=1)
-            cmd = parts[0].lower()
-            if cmd == "/help":
-                print("""
-  可用命令:
-  /help        显示帮助
-  /stats       查看统计
-  /model       切换 AI 模型
-  /quit        退出
-  /sessions    查看历史会话
-  /switch <id> 切换会话
-  直接在提示符下输入任务描述即可执行
-                """)
-            elif cmd == "/quit":
-                print("👋 再见!")
+            cmd = user_input[1:].lower()
+            if cmd == "quit" or cmd == "exit":
+                print("👋 再见！")
                 break
-            elif cmd == "/stats":
-                from src.database.db import Session
-                db = Session()
-                try:
-                    from src.database.db import Resource
-                    total = db.query(Resource).count()
-                    print(f"  总资源数: {total}")
-                finally:
-                    db.close()
-            elif cmd == "/model":
-                from src.config.loader import load_config
-                config = load_config()
-                active = config.get("ai", {}).get("active", "unknown")
-                print(f"  当前模型: {active}")
+            elif cmd == "help":
+                print("命令:")
+                print("  /quit    退出")
+                print("  /help    显示帮助")
+                print("  /new     新建对话")
+                print("  直接输入任务描述开始对话")
+            elif cmd == "new":
+                session_id = uuid.uuid4().hex[:12]
+                print(f"🆕 新对话: {session_id}")
             else:
                 print(f"  未知命令: {cmd}，输入 /help 查看帮助")
             continue

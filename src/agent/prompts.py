@@ -82,3 +82,16 @@ def list_prompts() -> dict:
             "custom": Path(f"data/prompts/{ptype}.txt").exists(),
         }
     return prompts
+
+
+def update_prompt(prompt_type: str, new_template: str, reason: str = ""):
+    """更新提示词模板（保存自定义版本并记录原因）"""
+    prompts_dir = Path("data/prompts")
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    prompt_file = prompts_dir / f"{prompt_type}.txt"
+    prompt_file.write_text(new_template, encoding="utf-8")
+    if reason:
+        log_path = prompts_dir / f"{prompt_type}.log"
+        with open(log_path, "a", encoding="utf-8") as f:
+            from datetime import datetime
+            f.write(f"[{datetime.now().isoformat()}] {reason}\n")

@@ -1,11 +1,13 @@
 """
-模型管理器 — 统一 OpenAI 兼容 API 调用 + 成本追踪
+模型管理器 — 统一 OpenAI 兼容 API 调用 + 成本追踪 + 智能重试
 支持: DeepSeek / OpenAI / Ollama / SiliconFlow / 豆包 / 自定义
 详见架构文档 §15
 """
 from typing import Any
 
 from loguru import logger
+
+from ..utils.retry import retry, is_retryable_error, classify_policy, RETRY_POLICIES
 
 
 # ===== 各模型价格（每百万 token，人民币，参考各厂商公开定价）=====
@@ -42,7 +44,7 @@ class CostTracker:
 
 
 class ModelManager:
-    """统一的 LLM 模型管理"""
+    """统一的 LLM 模型管理（带智能重试）"""
 
     def __init__(self, model_name: str):
         self.model_name = model_name
@@ -83,7 +85,16 @@ class ModelManager:
         return self._api_name
 
     def chat(self, **kwargs) -> dict:
-        """调用 LLM chat completion — 自动注入 context_window / max_tokens / temperature"""
+        """
+        调用 LLM chat completion — 带智能重试
+        
+        自动根据错误类型选择重试策略：
+        - 超时 → api_timeout (5次, 2s起步, 指数退避)
+        - 限流/429 → api_rate_limit (3次, 60s起步)
+        - 连接错误 → network (4次, 1s起步)
+        - HTTP 5xx → api_timeout
+        - 400 (参数错误) → 不重试，直接抛出
+        """
         client = self._get_client()
         # 注入默认参数（允许调用方覆盖）
         kwargs.setdefault("model", self.model_name)
@@ -94,7 +105,113 @@ class ModelManager:
         if "tools" in kwargs:
             kwargs["tools"] = self._sanitize_tools(kwargs["tools"])
 
-        return client.chat.completions.create(**kwargs)
+        return self._chat_with_retry(client, **kwargs)
+
+    def _chat_with_retry(self, client, **kwargs):
+        """带智能重试的 chat 调用"""
+        import time
+        import random
+        from openai import (
+            APIError, APITimeoutError, APIConnectionError,
+            RateLimitError, InternalServerError, BadRequestError
+        )
+
+        last_error = None
+
+        for attempt in range(6):  # 最多 5 次重试 (0~5)
+            try:
+                return client.chat.completions.create(**kwargs)
+            except BadRequestError as e:
+                # 400 错误不重试（参数/格式问题）
+                logger.error(f"❌ API 请求参数错误 (400): {e}")
+                raise
+            except RateLimitError as e:
+                last_error = e
+                if attempt >= 5:
+                    break
+                delay = min(60 * (2 ** attempt), 600) * (0.5 + random.random())
+                logger.warning(
+                    f"⏳ API 限流 (尝试 {attempt+1}/5)，{delay:.1f}s 后重试..."
+                )
+                time.sleep(delay)
+            except APITimeoutError as e:
+                last_error = e
+                if attempt >= 5:
+                    break
+                delay = min(2 * (2 ** attempt), 120) * (0.5 + random.random())
+                logger.warning(
+                    f"⏱️ API 超时 (尝试 {attempt+1}/5)，{delay:.1f}s 后重试..."
+                )
+                time.sleep(delay)
+            except APIConnectionError as e:
+                last_error = e
+                if attempt >= 5:
+                    break
+                delay = min(1 * (2 ** attempt), 60) * (0.5 + random.random())
+                logger.warning(
+                    f"🔌 API 连接错误 (尝试 {attempt+1}/5)，{delay:.1f}s 后重试..."
+                )
+                time.sleep(delay)
+            except InternalServerError as e:
+                last_error = e
+                if attempt >= 5:
+                    break
+                delay = min(2 * (2 ** attempt), 120) * (0.5 + random.random())
+                logger.warning(
+                    f"🔥 API 服务器错误 (尝试 {attempt+1}/5)，{delay:.1f}s 后重试..."
+                )
+                time.sleep(delay)
+            except APIError as e:
+                last_error = e
+                err_str = str(e).lower()
+                # 检查是否是 HTTP 状态码错误
+                if "502" in err_str or "503" in err_str or "504" in err_str:
+                    if attempt >= 5:
+                        break
+                    delay = min(3 * (2 ** attempt), 120) * (0.5 + random.random())
+                    logger.warning(
+                        f"🌐 API 网关错误 (尝试 {attempt+1}/5)，{delay:.1f}s 后重试..."
+                    )
+                    time.sleep(delay)
+                elif "429" in err_str:
+                    if attempt >= 5:
+                        break
+                    delay = min(60 * (2 ** attempt), 600) * (0.5 + random.random())
+                    logger.warning(
+                        f"⏳ API 限流 (尝试 {attempt+1}/5)，{delay:.1f}s 后重试..."
+                    )
+                    time.sleep(delay)
+                else:
+                    # 未知 API 错误也重试
+                    if attempt >= 5:
+                        break
+                    delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
+                    logger.warning(
+                        f"⚠️ API 错误 (尝试 {attempt+1}/5): {e} — {delay:.1f}s 后重试"
+                    )
+                    time.sleep(delay)
+            except Exception as e:
+                # 其他未知错误（如网络波动导致的底层异常）
+                last_error = e
+                err_str = str(e).lower()
+                if any(kw in err_str for kw in ("ssl", "connection", "timeout", "reset", "refused", "broken pipe")):
+                    if attempt >= 5:
+                        break
+                    delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
+                    logger.warning(
+                        f"🔧 网络层错误 (尝试 {attempt+1}/5): {type(e).__name__} — {delay:.1f}s 后重试"
+                    )
+                    time.sleep(delay)
+                else:
+                    # 不认识的异常不重试
+                    logger.error(f"❌ 未知错误，不重试: {type(e).__name__}: {e}")
+                    raise
+
+        # 重试耗尽
+        logger.error(f"💀 API 调用失败，已重试 5 次: {last_error}")
+        raise RuntimeError(
+            f"AI API 调用失败（已重试 5 次）: {last_error}"
+        ) from last_error
 
     @staticmethod
     def _sanitize_tools(tools: list) -> list:

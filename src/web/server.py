@@ -62,6 +62,7 @@ ws_manager = get_ws_manager()
 from .routes import (
     resources_router, tasks_router, sources_router,
     stats_router, settings_router, chat_router,
+    project_router, terminal_router,
 )
 
 app.include_router(resources_router)
@@ -70,6 +71,8 @@ app.include_router(sources_router)
 app.include_router(stats_router)
 app.include_router(settings_router)
 app.include_router(chat_router)
+app.include_router(project_router)
+app.include_router(terminal_router)
 
 # ===== 根路由 =====
 
@@ -152,7 +155,6 @@ async def _handle_ws_message(ws: WebSocket, client_id: str, data: dict):
         await _handle_resources(ws, client_id)
 
     elif msg_type == "confirm_response":
-        # 转发给 ws_manager 处理（自修改确认）
         await ws_manager.handle_message(client_id, data)
 
     elif msg_type == "get_chat_history":
@@ -166,30 +168,25 @@ async def _handle_ws_message(ws: WebSocket, client_id: str, data: dict):
 
 
 async def _handle_chat(ws: WebSocket, client_id: str, data: dict):
-    """处理 AI 对话 — 复用已有 session 或创建新的"""
+    """处理 AI 对话"""
     message = data.get("message", "")
     model = data.get("model")
-    session_id = data.get("session_id")  # 前端可能传入已有 session_id
+    session_id = data.get("session_id")
 
     from ..agent.conversation import create_session, save_message
 
-    # 如果没有传入 session_id 则创建新会话
     if not session_id:
         session_id = create_session()
 
-    # 保存用户消息到数据库
     save_message(session_id, "user", message)
-
     await ws.send_json({"type": "chat_start", "session_id": session_id})
 
-    # 使用模块级线程池（避免局部 executor 被 GC）
     loop = asyncio.get_event_loop()
 
     def run_and_report():
         try:
             from ..agent.agent_loop import run_agent_loop
             result = run_agent_loop(task=message, session_id=session_id, model_name=model)
-            # 保存 AI 回复到数据库
             save_message(session_id, "assistant", result.get("result", ""))
             asyncio.run_coroutine_threadsafe(
                 ws.send_json({
@@ -198,128 +195,86 @@ async def _handle_chat(ws: WebSocket, client_id: str, data: dict):
                     "success": result["success"],
                     "result": result["result"],
                     "cost": result.get("cost", 0),
-                    "iterations": result.get("iterations", 0),
-                }),
-                loop,
+                }), loop
             )
         except Exception as e:
-            logger.exception("Agent 执行异常")
-            save_message(session_id, "assistant", f"执行失败: {e}")
+            logger.error(f"Agent 循环异常: {e}")
             asyncio.run_coroutine_threadsafe(
                 ws.send_json({
-                    "type": "chat_done",
+                    "type": "chat_error",
                     "session_id": session_id,
-                    "success": False,
-                    "result": f"执行失败: {e}",
-                    "cost": 0,
-                }),
-                loop,
+                    "error": str(e),
+                }), loop
             )
 
-    import concurrent.futures
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    executor.submit(run_and_report)
+    loop.run_in_executor(None, run_and_report)
 
 
 async def _handle_pipeline(ws: WebSocket, client_id: str, data: dict):
-    """处理流水线任务"""
-    task_text = data.get("task", "")
-    model = data.get("model")
-    await ws.send_json({"type": "pipeline_start"})
-
-    loop = asyncio.get_event_loop()
-
-    def run_pipeline():
-        try:
-            from ..pipeline.pipeline import Pipeline
-            pipeline = Pipeline()
-            result = pipeline.run(task=task_text, model=model)
-            asyncio.run_coroutine_threadsafe(
-                ws.send_json({
-                    "type": "pipeline_done",
-                    "success": result["success"],
-                    "result": result["result"],
-                    "cost": result.get("cost", 0),
-                }),
-                loop,
-            )
-        except Exception as e:
-            logger.exception("流水线执行失败")
-            asyncio.run_coroutine_threadsafe(
-                ws.send_json({"type": "pipeline_done", "success": False, "result": str(e), "cost": 0}),
-                loop,
-            )
-
-    import concurrent.futures
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    executor.submit(run_pipeline)
+    try:
+        from ..pipeline.pipeline import run_full_pipeline
+        result = run_full_pipeline()
+        await ws.send_json({"type": "pipeline_done", "data": result})
+    except Exception as e:
+        await ws.send_json({"type": "error", "data": {"message": str(e)}})
 
 
 async def _handle_status(ws: WebSocket, client_id: str):
-    """返回系统状态"""
     try:
         from ..tools.monitor_tools import get_system_status
         status = get_system_status()
         await ws.send_json({"type": "status", "data": status})
     except Exception as e:
-        await ws.send_json({"type": "status", "data": {"error": str(e)}})
+        await ws.send_json({"type": "error", "data": {"message": str(e)}})
 
 
 async def _handle_jobs(ws: WebSocket, client_id: str):
-    """返回任务列表"""
     try:
-        from ..database.db import Session
-        from ..database.db import TaskLog
-        db = Session()
-        try:
-            jobs = db.query(TaskLog).order_by(TaskLog.created_at.desc()).limit(50).all()
-            await ws.send_json({
-                "type": "jobs",
-                "data": [{"id": j.id, "task_type": j.task_type, "status": j.status, "message": j.message} for j in jobs],
-            })
-        finally:
-            db.close()
+        from ..database.connection import get_db
+        db = get_db()
+        jobs = db.execute("SELECT * FROM task_logs ORDER BY created_at DESC LIMIT 20").fetchall()
+        await ws.send_json({
+            "type": "jobs",
+            "data": [dict(row) for row in jobs],
+        })
     except Exception as e:
-        await ws.send_json({"type": "jobs", "data": [], "error": str(e)})
+        await ws.send_json({"type": "error", "data": {"message": str(e)}})
 
 
 async def _handle_resources(ws: WebSocket, client_id: str):
-    """返回资源列表"""
     try:
-        from ..database.db import Session
-        from ..database.db import Resource
-        db = Session()
-        try:
-            resources = db.query(Resource).order_by(Resource.created_at.desc()).limit(50).all()
-            await ws.send_json({
-                "type": "resources",
-                "data": [{"id": r.id, "title": r.title, "status": r.status} for r in resources],
-            })
-        finally:
-            db.close()
+        from ..database.connection import get_db
+        db = get_db()
+        resources = db.execute("SELECT * FROM resources ORDER BY created_at DESC LIMIT 50").fetchall()
+        await ws.send_json({
+            "type": "resources",
+            "data": [dict(row) for row in resources],
+        })
     except Exception as e:
-        await ws.send_json({"type": "resources", "data": [], "error": str(e)})
+        await ws.send_json({"type": "error", "data": {"message": str(e)}})
 
 
 async def _handle_get_chat_history(ws: WebSocket, data: dict):
-    """返回聊天历史"""
     session_id = data.get("session_id")
     try:
-        from ..agent.conversation import get_messages
-        messages = get_messages(session_id)
-        await ws.send_json({"type": "chat_history", "session_id": session_id, "messages": messages})
+        from ..agent.conversation import get_session_messages
+        messages = get_session_messages(session_id) if session_id else []
+        await ws.send_json({
+            "type": "chat_history",
+            "session_id": session_id,
+            "data": messages,
+        })
     except Exception as e:
-        await ws.send_json({"type": "chat_history", "session_id": session_id, "messages": [], "error": str(e)})
+        await ws.send_json({"type": "error", "data": {"message": str(e)}})
 
 
 async def _handle_get_sessions(ws: WebSocket):
-    """返回会话列表"""
     try:
-        from ..agent.conversation import list_sessions
-        sessions = list_sessions()
+        from ..agent.conversation import get_recent_sessions
+        sessions = get_recent_sessions()
         await ws.send_json({"type": "sessions", "data": sessions})
     except Exception as e:
-        await ws.send_json({"type": "sessions", "data": [], "error": str(e)})
+        await ws.send_json({"type": "error", "data": {"message": str(e)}})
 
 
 def start_server(host: str = "0.0.0.0", port: int = 9800):

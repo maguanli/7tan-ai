@@ -26,8 +26,9 @@ def _get_data_dir() -> Path:
     
     优先级：
     1. config.yaml 中的 storage.data_dir（避免构建时被清除）
-    2. PyInstaller 打包：EXE 同目录下的 data 文件夹
-    3. 源码运行：项目根目录下的 data 文件夹
+    2. PyInstaller 打包：优先复用源码 data 目录，避免对话丢失
+    3. PyInstaller 打包回退：EXE 同目录下的 data 文件夹
+    4. 源码运行：项目根目录下的 data 文件夹
     """
     # 优先从配置文件读取自定义数据目录
     config_dir = _try_read_config_data_dir()
@@ -35,8 +36,14 @@ def _get_data_dir() -> Path:
         return config_dir
     
     if getattr(sys, 'frozen', False):
-        # PyInstaller 打包：EXE 同目录下的 data 文件夹
-        return Path(sys.executable).parent / "data"
+        # PyInstaller 打包：检测源码 data 目录是否存在（保持跨运行数据一致）
+        exe_dir = Path(sys.executable).parent          # dist/7tan-editor/
+        dist_dir = exe_dir.parent                       # dist/
+        source_data = dist_dir.parent / "data"          # 项目根/data/
+        if source_data.exists() and (source_data / "games.db").exists():
+            return source_data
+        # 回退：EXE 同级 data 目录
+        return exe_dir / "data"
     else:
         # 源码运行：项目根目录下的 data 文件夹
         return Path(__file__).parent.parent.parent / "data"

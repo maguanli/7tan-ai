@@ -591,6 +591,40 @@ class ChatPage(QWidget):
         self._sessions_loaded = False
         self._session_combo.currentIndexChanged.connect(self._on_session_changed)
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._sessions_loaded:
+            self._sessions_loaded = True
+            # 增加延迟确保后端完全就绪，并添加重试
+            QTimer.singleShot(500, self._auto_load_latest_session)
+
+    def _auto_load_latest_session(self, retry=0):
+        import requests
+        try:
+            self._session_combo.setItemText(2, "⏳ 加载中...")
+            resp = requests.get(f"{API_BASE}/api/chat/history", timeout=10)
+            sessions = resp.json().get("sessions", [])
+            if not sessions:
+                self._session_combo.setItemText(2, "No history")
+                return
+            self._session_combo.blockSignals(True)
+            while self._session_combo.count() > 2:
+                self._session_combo.removeItem(2)
+            for s in sessions:
+                title = s.get("title", "Chat")
+                if len(title) > 30:
+                    title = title[:30] + "..."
+                self._session_combo.addItem(f"* {title}", s.get("session_id", ""))
+            self._session_combo.blockSignals(False)
+            self._session_combo.setCurrentIndex(2)
+        except Exception as e:
+            if retry < 3:
+                # 后端可能还没就绪，1秒后重试
+                QTimer.singleShot(1000, lambda: self._auto_load_latest_session(retry + 1))
+            else:
+                self._session_combo.setItemText(2, f"❌ 加载失败，点击重试")
+                logger.warning(f"Auto-load failed after 3 retries: {e}")
+
     def _use_hint(self, text):
         self._input.setPlainText(text)
         self._send_message()

@@ -211,33 +211,33 @@ def run_agent_loop(
             continue
 
         for tc in tool_calls_raw:
-            # 兼容 openai 库新版返回 dict 而不是对象
-            func = tc.function if hasattr(tc, 'function') else tc.get("function", {})
-            tool_name = func.name if hasattr(func, 'name') else func.get("name", "unknown")
-            tool_args_raw = func.arguments if hasattr(func, 'arguments') else func.get("arguments", "{}")
-            tool_id = tc.id if hasattr(tc, 'id') else tc.get("id", "")
-            tool_args = json.loads(tool_args_raw) if isinstance(tool_args_raw, str) else tool_args_raw
-
-            tool_def = get_tool(tool_name)
-            logger.info(f"🔧 调用工具: {tool_name}({_truncate_args(tool_args)})")
-
-            # 检测重复调用死循环
-            call_sig = f"{tool_name}:{json.dumps(tool_args, sort_keys=True)}"
-            last_calls.append(call_sig)
-            if len(last_calls) > 5:
-                last_calls.pop(0)
-            if len(last_calls) >= 3 and len(set(last_calls[-3:])) == 1:
-                logger.warning(f"⚠️ 检测到重复调用死循环: {call_sig}")
-                return {
-                    "success": False,
-                    "result": f"⚠️ 检测到死循环 — 工具 {tool_name} 连续调用 3 次相同参数，已自动停止。\n请尝试不同的方法或简化任务。",
-                    "iterations": iteration,
-                    "cost": total_cost,
-                    "logs": all_logs,
-                }
-
-            # 执行工具（带异常保护，确保永远不会遗漏 tool 响应）
             try:
+                # 兼容 openai 库新版返回 dict 而不是对象
+                func = tc.function if hasattr(tc, 'function') else tc.get("function", {})
+                tool_name = func.name if hasattr(func, 'name') else func.get("name", "unknown")
+                tool_args_raw = func.arguments if hasattr(func, 'arguments') else func.get("arguments", "{}")
+                tool_id = tc.id if hasattr(tc, 'id') else tc.get("id", "")
+                tool_args = json.loads(tool_args_raw) if isinstance(tool_args_raw, str) else tool_args_raw
+
+                tool_def = get_tool(tool_name)
+                logger.info(f"🔧 调用工具: {tool_name}({_truncate_args(tool_args)})")
+
+                # 检测重复调用死循环
+                call_sig = f"{tool_name}:{json.dumps(tool_args, sort_keys=True)}"
+                last_calls.append(call_sig)
+                if len(last_calls) > 5:
+                    last_calls.pop(0)
+                if len(last_calls) >= 3 and len(set(last_calls[-3:])) == 1:
+                    logger.warning(f"⚠️ 检测到重复调用死循环: {call_sig}")
+                    return {
+                        "success": False,
+                        "result": f"⚠️ 检测到死循环 — 工具 {tool_name} 连续调用 3 次相同参数，已自动停止。\n请尝试不同的方法或简化任务。",
+                        "iterations": iteration,
+                        "cost": total_cost,
+                        "logs": all_logs,
+                    }
+
+                # 执行工具（带异常保护，确保永远不会遗漏 tool 响应）
                 result_str = execute_tool(tool_name, tool_args)
 
                 # 截断过长结果（硬保护，极高上限）

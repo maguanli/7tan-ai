@@ -1,7 +1,7 @@
 """
 实时控制台面板 — 嵌入工作台左侧，替代命令行黑窗
 捕获全部输出：loguru 日志 + sys.stdout + sys.stderr
-所有 7Tan 工作日志实时显示在此面板中
+模块加载时立即安装重定向，确保不丢失任何启动输出
 """
 import sys
 from datetime import datetime
@@ -39,34 +39,41 @@ class _StdoutRedirect:
     """
     捕获所有写入 sys.stdout / sys.stderr 的内容，
     同时保留一份到原始流，并通过信号发送到控制台面板。
-    线程安全：write() 可在任意线程调用，信号 emit 后由 QueuedConnection 投递主线程。
+    线程安全：write() 可在任意线程调用。
+    处理 \r（进度条）、部分行缓冲、以及无换行符的 flush。
     """
 
     def __init__(self, signal, original_stream, tag: str = ""):
-        self._signal = signal          # pyqtSignal
-        self._original = original_stream  # 原始 sys.__stdout__ / __stderr__
-        self._tag = tag                # "[STDERR]" 等前缀
+        self._signal = signal
+        self._original = original_stream
+        self._tag = tag
         self._buffer = ""
 
     def write(self, text: str):
-        # 1) 投递到原始流（文件描述符级别，用于外部重定向或调试）
+        # 1) 投递到原始流
         try:
             self._original.write(text)
         except Exception:
             pass
 
-        # 2) 跳过纯空白行
-        if not text or text.isspace():
+        # 2) 空文本跳过
+        if not text:
             return
 
-        # 3) 累积行，遇到换行就 emit
+        # 3) 处理 \r（如进度条）：\r 回到行首，覆盖当前 buffer
+        if '\r' in text and '\n' not in text:
+            # 纯 \r 行（进度条），跳过不显示（避免刷屏）
+            self._buffer = ""
+            return
+
+        # 4) 累积行，遇到 \n 就 emit
         self._buffer += text
         if '\n' in self._buffer:
             lines = self._buffer.split('\n')
-            self._buffer = lines[-1]  # 保留最后一段（可能不完整）
+            self._buffer = lines[-1]
             for line in lines[:-1]:
-                line = line.strip('\r')
-                if line.strip():
+                line = line.strip('\r').strip()
+                if line:
                     ts = datetime.now().strftime("%H:%M:%S")
                     prefix = f"{ts} {self._tag} " if self._tag else f"{ts} "
                     self._signal.emit(prefix + line)
@@ -76,13 +83,13 @@ class _StdoutRedirect:
             self._original.flush()
         except Exception:
             pass
+        # flush 时输出缓冲区剩余内容
         if self._buffer.strip():
             ts = datetime.now().strftime("%H:%M:%S")
             prefix = f"{ts} {self._tag} " if self._tag else f"{ts} "
             self._signal.emit(prefix + self._buffer.strip())
             self._buffer = ""
 
-    # 代理其余属性到原始流
     def __getattr__(self, name):
         return getattr(self._original, name)
 
@@ -122,15 +129,35 @@ def _setup_console_log_sink():
         pass
 
 
+# ===== 立即安装 stdout/stderr 重定向（模块加载时）=====
+_stdout_orig = sys.__stdout__
+_stderr_orig = sys.__stderr__
+_redirect_installed = False
+
+
+def _install_std_redirect():
+    """尽早安装 stdout/stderr 重定向，捕获全部启动输出"""
+    global _redirect_installed
+    if _redirect_installed:
+        return
+    _redirect_installed = True
+
+    sig = _global_log_signal.log_received
+    sys.stdout = _StdoutRedirect(sig, _stdout_orig)
+    sys.stderr = _StdoutRedirect(sig, _stderr_orig, tag="[STDERR]")
+
+
+_install_std_redirect()
+_setup_console_log_sink()
+
+
 # ===== 控制台面板组件 =====
 class ConsoleViewer(QWidget):
-    """实时日志控制台 — 嵌入工作台左侧面板，捕获全部输出"""
-
-    _std_redirect_installed = False
+    """实时日志控制台 — 嵌入工作台左侧面板"""
 
     def __init__(self):
         super().__init__()
-        T = CONSOLE_THEME  # 简写
+        T = CONSOLE_THEME
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -203,33 +230,10 @@ class ConsoleViewer(QWidget):
         )
         layout.addWidget(status)
 
-        # 订阅全局日志信号（QueuedConnection 确保主线程安全）
+        # 订阅全局日志信号
         _global_log_signal.log_received.connect(
             self._append_log, Qt.ConnectionType.QueuedConnection
         )
-
-        # 注册 loguru sink
-        _setup_console_log_sink()
-
-        # 安装 stdout / stderr 重定向（全局一次性）
-        self._install_std_redirect()
-
-    @classmethod
-    def _install_std_redirect(cls):
-        """重定向 sys.stdout / sys.stderr 到控制台面板（全局一次性）"""
-        if cls._std_redirect_installed:
-            return
-        cls._std_redirect_installed = True
-
-        # 保留原始流引用
-        _stdout_orig = sys.__stdout__
-        _stderr_orig = sys.__stderr__
-
-        sig = _global_log_signal.log_received
-
-        # 替换
-        sys.stdout = _StdoutRedirect(sig, _stdout_orig)
-        sys.stderr = _StdoutRedirect(sig, _stderr_orig, tag="[STDERR]")
 
     def _append_log(self, text: str):
         """追加一条日志（主线程安全）"""

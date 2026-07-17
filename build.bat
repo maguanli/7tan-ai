@@ -51,11 +51,18 @@ echo.
 :: ── 4. PyInstaller 打包 ──
 echo [4/5] PyInstaller 打包中（需要5-15分钟，请耐心等待）...
 echo.
-:: 清理旧构建
-if exist "dist\7tan-editor" rmdir /s /q "dist\7tan-editor"
-if exist "build" rmdir /s /q "build"
+:: 清理旧构建 — 先强制删除文件再用 rmdir，避免 PyInstaller 弹确认
+if exist "dist\7tan-editor" (
+    taskkill /F /IM 7tan-editor.exe >nul 2>&1
+    del /f /s /q "dist\7tan-editor\*" >nul 2>&1
+    rmdir /s /q "dist\7tan-editor" >nul 2>&1
+)
+if exist "build" (
+    del /f /s /q "build\*" >nul 2>&1
+    rmdir /s /q "build" >nul 2>&1
+)
 
-pyinstaller build.spec
+pyinstaller build.spec --noconfirm
 if errorlevel 1 (
     echo.
     echo [错误] PyInstaller 打包失败！

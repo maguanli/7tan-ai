@@ -108,16 +108,19 @@ def run_desktop(args):
 
     # 后台启动 FastAPI 服务器
     def _run_server():
-        from src.web.server import start_server
-        start_server(host=host, port=port)
+        try:
+            from src.web.server import start_server
+            start_server(host=host, port=port)
+        except Exception as e:
+            logger.exception(f"❌ 后端服务启动失败: {e}")
 
-    threading.Thread(target=_run_server, daemon=True).start()
+    threading.Thread(target=_run_server, daemon=False).start()
 
     # ===== 等待后端就绪，再启动 GUI =====
     import time as _time
     import requests as _requests
     logger.info("⏳ 等待后端服务就绪...")
-    for _i in range(30):  # 最多等 15 秒
+    for _i in range(60):  # 最多等 30 秒
         try:
             resp = _requests.get(f"http://{host}:{port}/api/health", timeout=2)
             if resp.status_code == 200:

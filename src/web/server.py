@@ -280,4 +280,9 @@ async def _handle_get_sessions(ws: WebSocket):
 def start_server(host: str = "0.0.0.0", port: int = 9800):
     """启动 FastAPI 服务器"""
     import uvicorn
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    logger.info(f"🌐 正在启动 API 服务器 on {host}:{port}...")
+    try:
+        uvicorn.run(app, host=host, port=port, log_level="info", log_config=None)
+    except Exception as e:
+        logger.exception(f"❌ API 服务器异常退出: {e}")
+        raise

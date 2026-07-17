@@ -2698,14 +2698,27 @@ class SettingsPage(QWidget):
         top_row.setSpacing(8)
 
 
-        refresh_btn = QPushButton("🔄")
-        refresh_btn.setFixedSize(36, 32)
-        refresh_btn.setToolTip("刷新本地插件列表")
+        refresh_btn = QPushButton("↻ 刷新插件")
+        refresh_btn.setFixedHeight(32)
+        refresh_btn.setToolTip("重新扫描并刷新本地插件列表")
+        refresh_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         refresh_btn.clicked.connect(self._refresh_plugins)
         refresh_btn.setStyleSheet(f"""
-            QPushButton {{ background: {THEME['accent']}; color: #000; border: none;
-                border-radius: 6px; font-size: 14px; font-weight: bold; }}
-            QPushButton:hover {{ background: {THEME['accent']}dd; }}
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {THEME['accent2']}, stop:1 {THEME['accent']});
+                color: #fff; border: none;
+                border-radius: 8px; padding: 4px 16px;
+                font-size: 13px; font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {THEME['accent2']}dd, stop:1 {THEME['accent']}dd);
+            }}
+            QPushButton:pressed {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {THEME['accent']}, stop:1 {THEME['accent2']});
+            }}
         """)
         top_row.addWidget(refresh_btn)
         layout.addLayout(top_row)

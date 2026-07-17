@@ -43,6 +43,12 @@ if sys.platform == 'win32':
     except Exception:
         pass
 
+# ⚡ 尽早导入 console_panel，触发 OS 级管道重定向（必须在 loguru 之前）
+# 原理：os.pipe() + os.dup2() 在 OS 层面重定向 fd 1/2，
+# 之后所有输出（print、loguru、C扩展、子进程）都会被管道捕获，
+# 在 GUI 实时控制台中显示，和黑窗完全一致。
+import src.ui.console_panel as _console_panel  # noqa: F401
+
 from loguru import logger
 from dotenv import load_dotenv
 
@@ -200,66 +206,18 @@ def run_scheduler():
     config = load_config()
     start_scheduler(config)
 
-    logger.info("⏰ 调度器已启动，按 Ctrl+C 停止")
+    logger.info("📅 调度器已启动，Ctrl+C 停止")
     try:
         while True:
-            time.sleep(60)
+            time.sleep(1)
     except KeyboardInterrupt:
-        logger.info("⏰ 调度器已停止")
+        logger.info("👋 调度器已停止")
 
 
 def run_cli(args):
-    """交互式 CLI 模式"""
+    """交互式命令行""""
     from src.agent.agent_loop import run_agent_loop
-    import uuid
-
-    print("=" * 50)
-    print("🎮 7Tan AI 编辑器 — 命令行模式")
-    print("输入 /quit 退出，/help 查看帮助")
-    print("=" * 50)
-
-    session_id = uuid.uuid4().hex[:12]
-    model = getattr(args, 'model', None)
-
-    while True:
-        try:
-            user_input = input("\n> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\n👋 再见！")
-            break
-
-        if not user_input:
-            continue
-
-        if user_input.startswith("/"):
-            cmd = user_input[1:].lower()
-            if cmd == "quit" or cmd == "exit":
-                print("👋 再见！")
-                break
-            elif cmd == "help":
-                print("命令:")
-                print("  /quit    退出")
-                print("  /help    显示帮助")
-                print("  /new     新建对话")
-                print("  直接输入任务描述开始对话")
-            elif cmd == "new":
-                session_id = uuid.uuid4().hex[:12]
-                print(f"🆕 新对话: {session_id}")
-            else:
-                print(f"  未知命令: {cmd}，输入 /help 查看帮助")
-            continue
-
-        # --- AI 任务执行 ---
-        print("🤔 思考中...")
-        try:
-            result = run_agent_loop(task=user_input, session_id=session_id, model_name=model)
-            print("\n" + "-" * 40)
-            print(result.get("result", "无输出"))
-            print(f"费用: ¥{result.get('cost', 0):.4f}")
-            print("-" * 40 + "\n")
-        except Exception as e:
-            logger.exception("CLI 执行失败")
-            print(f"❌ 执行失败: {e}")
+    run_agent_loop()
 
 
 if __name__ == "__main__":

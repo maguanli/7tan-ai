@@ -563,11 +563,13 @@ class ChatPage(QWidget):
         """)
 
         self._messages_container = QWidget()
+        self._messages_container.setMinimumWidth(0)
         self._messages_layout = QVBoxLayout(self._messages_container)
         self._messages_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self._messages_layout.setSpacing(8)
         self._messages_layout.addStretch()
         self._chat_area.setWidget(self._messages_container)
+        self._chat_area.viewport().installEventFilter(self)
         layout.addWidget(self._chat_area, 1)
 
         # 输入区
@@ -849,6 +851,7 @@ class ChatPage(QWidget):
         msg = QFrame()
         msg.setProperty("role", role)
         msg.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        msg.setMinimumWidth(0)
 
         if role == "user":
             msg.setStyleSheet(f"""
@@ -891,6 +894,7 @@ class ChatPage(QWidget):
 
         label = QLabel(text)
         label.setWordWrap(True)
+        label.setMinimumWidth(0)
         label.setTextFormat(Qt.TextFormat.PlainText)
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         label_layout = QVBoxLayout(msg)
@@ -905,6 +909,13 @@ class ChatPage(QWidget):
         QApplication.processEvents()
         sb = self._chat_area.verticalScrollBar()
         QTimer.singleShot(0, lambda sb=sb: sb.setValue(sb.maximum()))
+
+    def eventFilter(self, obj, event):
+        from PyQt6.QtCore import QEvent
+        if obj is self._chat_area.viewport() and event.type() == QEvent.Type.Resize:
+            w = self._chat_area.viewport().width()
+            self._messages_container.setFixedWidth(w)
+        return super().eventFilter(obj, event)
 
 # ===== 资源管理页面（表格） =====
 class ResourceTablePage(QWidget):

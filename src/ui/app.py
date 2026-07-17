@@ -535,8 +535,17 @@ class ChatPage(QWidget):
         toolbar.addWidget(del_btn)
 
         new_btn = QPushButton("+ 新对话")
-        new_btn.setFixedWidth(80)
+        new_btn.setMinimumWidth(95)
+        new_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         new_btn.clicked.connect(self._new_session)
+        new_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['accent2']}; color: #fff; border: none;
+                border-radius: 6px; padding: 6px 14px;
+                font-size: 13px; font-weight: bold;
+            }}
+            QPushButton:hover {{ background: {THEME['accent']}; }}
+        """)
         toolbar.addWidget(new_btn)
         toolbar.addStretch()
         layout.addLayout(toolbar)

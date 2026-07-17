@@ -1791,6 +1791,8 @@ class BrowserPage(QWidget):
             self._current_view.forward()
 
 
+from .console_panel import ConsoleViewer
+
 # ===== AI 工作台（浏览器 + 对话 左右分屏） =====
 class ChatBrowserSplitPage(QWidget):
     """浏览器在左、AI 对话在右，源网站/管理后台一键切换（不占空间）"""
@@ -1825,10 +1827,42 @@ class ChatBrowserSplitPage(QWidget):
         self.admin_browser.setProperty("browser_role", "admin")
         self._browser_stack.addWidget(self.source_browser)
         self._browser_stack.addWidget(self.admin_browser)
+        self.console_viewer = ConsoleViewer()
+        self._browser_stack.addWidget(self.console_viewer)
 
         self.chat = ChatPage()
 
-        splitter.addWidget(self._browser_stack)
+        # ===== 左侧顶部：面板切换按钮栏 =====
+        self._panel_bar = QHBoxLayout()
+        self._panel_bar.setContentsMargins(4, 4, 4, 2)
+        self._panel_bar.setSpacing(6)
+
+        panel_label = QLabel("📺")
+        panel_label.setStyleSheet("font-size: 14px;")
+        self._panel_bar.addWidget(panel_label)
+
+        self._btn_source = self._make_panel_btn("🌐 源网站", True)
+        self._btn_admin = self._make_panel_btn("🔧 管理后台", False)
+        self._btn_console = self._make_panel_btn("📟 控制台", False)
+
+        self._btn_source.clicked.connect(lambda: self._switch_panel(0, self._btn_source))
+        self._btn_admin.clicked.connect(lambda: self._switch_panel(1, self._btn_admin))
+        self._btn_console.clicked.connect(lambda: self._switch_panel(2, self._btn_console))
+
+        self._panel_btns = [self._btn_source, self._btn_admin, self._btn_console]
+        for b in self._panel_btns:
+            self._panel_bar.addWidget(b)
+        self._panel_bar.addStretch()
+
+        # 左侧面板容器
+        left_container = QWidget()
+        left_layout = QVBoxLayout(left_container)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
+        left_layout.addLayout(self._panel_bar)
+        left_layout.addWidget(self._browser_stack, 1)
+
+        splitter.addWidget(left_container)
         splitter.addWidget(self.chat)
         splitter.setSizes([700, 540])
         splitter.setStretchFactor(0, 3)
@@ -1853,6 +1887,34 @@ class ChatBrowserSplitPage(QWidget):
             # admin browser: 初始化时不创建tab，等切换时再加载
             # （QStackedWidget隐藏页中的 QWebEngineView 可能渲染异常）
 
+    def _make_panel_btn(self, text: str, active: bool = False):
+        """创建面板切换按钮"""
+        color = THEME['accent'] if active else THEME['text_secondary']
+        bg = f"{THEME['accent']}33" if active else "transparent"
+        btn = QPushButton(text)
+        btn.setCheckable(True)
+        btn.setChecked(active)
+        btn.setFixedHeight(28)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {bg}; color: {color};
+                border: 1px solid {THEME['border']}; border-radius: 4px;
+                padding: 2px 10px; font-size: 11px; font-weight: bold;
+            }}
+            QPushButton:checked {{ background: {THEME['accent']}44; color: {THEME['accent']}; }}
+            QPushButton:hover {{ border-color: {THEME['accent']}88; }}
+        """)
+        return btn
+
+    def _switch_panel(self, index: int, btn: QPushButton):
+        """切换左侧面板"""
+        self._browser_stack.setCurrentIndex(index)
+        for b in self._panel_btns:
+            b.setChecked(b is btn)
+        # 延迟初始化 admin/console
+        if index == 1 and len(self.admin_browser._tabs) == 0:
+            self.admin_browser._add_tab(url="https://img.7tan.cn/", title="7tan管理后台")
+
     def switch_browser(self, target: str):
         """切换显示的浏览器（线程安全 — 通过信号）"""
         self._switch_signal.emit(target)
@@ -1860,11 +1922,11 @@ class ChatBrowserSplitPage(QWidget):
     def _do_switch_browser(self, target: str):
         """实际执行浏览器切换（仅主线程通过信号触发）"""
         if target == "admin":
-            self._browser_stack.setCurrentIndex(1)
-            if len(self.admin_browser._tabs) == 0:
-                self.admin_browser._add_tab(url="https://img.7tan.cn/", title="7tan管理后台")
+            self._switch_panel(1, self._btn_admin)
+        elif target == "console":
+            self._switch_panel(2, self._btn_console)
         else:
-            self._browser_stack.setCurrentIndex(0)
+            self._switch_panel(0, self._btn_source)
 
     def _open_admin_window(self):
         """打开管理后台"""
@@ -1874,14 +1936,6 @@ class ChatBrowserSplitPage(QWidget):
     def _open_source(self):
         """切换到源网站"""
         self.switch_browser("source")
-
-        splitter.addWidget(self.browser)
-        splitter.addWidget(self.chat)
-        splitter.setSizes([700, 540])
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 2)
-
-        layout.addWidget(splitter)
 
 
 # ===== 统计分析页面 =====

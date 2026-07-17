@@ -1,10 +1,10 @@
 """
 实时控制台面板 — 嵌入工作台左侧，替代命令行黑窗
 
-三层捕获策略（从底层到高层）：
-  第1层 — loguru sink：直接注册到 loguru，捕获所有 logger 输出
-  第2层 — Python 级重定向：替换 sys.stdout / sys.stderr 为自定义对象
-  第3层 — OS 管道重定向：os.dup2() 替换 fd 1/2（有 console 时生效）
+多层捕获策略：
+  1. loguru sink — 直接注册到 loguru，捕获所有 logger 输出
+  2. Python 重定向 — 替换 sys.stdout / sys.stderr
+  3. OS 管道 — os.dup2()（有 console 时生效）
 
 确保无论 console=True/False，所有输出都能在面板中显示。
 """
@@ -21,46 +21,25 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer
 
-# ===== 本地颜色常量 =====
-CONSOLE_THEME = {
-    "accent": "#00d4ff",
-    "accent2": "#7c3aed",
-    "danger": "#ef4444",
-    "text_primary": "#e2e8f0",
-    "text_secondary": "#94a3b8",
-    "border": "#1e293b",
-    "bg_dark": "#1a1a2e",
-    "bg_input": "#1e1e3a",
-}
-
-# ===== ANSI 转义码剥离 =====
+# ===== ANSI =====
 _ANSI_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
 
 def _strip_ansi(text: str) -> str:
-    """移除 ANSI 颜色/控制码"""
     return _ANSI_RE.sub('', text)
 
 
-# ===== 全局日志队列（线程安全，纯 Python，不依赖 PyQt6）=====
+# ===== 全局日志队列 =====
 _log_queue = queue.Queue(maxsize=20000)
-
-# 用于去重的最后一行缓存
-_last_line = None
 
 
 def _enqueue(line: str):
-    """将一行文本放入队列（线程安全），自动去重连续相同行"""
-    global _last_line
+    """将一行文本放入队列"""
     line = line.strip('\r\n')
     if not line:
         return
     clean = _strip_ansi(line)
     if not clean.strip():
         return
-    # 去重：连续相同行只保留一条
-    if clean == _last_line:
-        return
-    _last_line = clean
     ts = datetime.now().strftime("%H:%M:%S")
     try:
         _log_queue.put_nowait(f"{ts} │ {clean}")
@@ -72,43 +51,42 @@ def _enqueue(line: str):
             pass
 
 
-# ===== 第1层：loguru sink =====
-def _install_loguru_sink():
-    """注册 loguru 自定义 sink，捕获所有 logger 输出"""
+# ===== 1. loguru sink =====
+_loguru_sink_id = None
+
+def _add_loguru_sink():
+    """添加 loguru 队列 sink（每次都重新注册，支持 setup_logging 后调用）"""
+    global _loguru_sink_id
     try:
         from loguru import logger
-        # 移除默认的 stderr handler 避免双重输出
-        logger.remove()
-        # 添加文件 sink（保留原有日志文件功能）
-        logger.add(
-            sys.stderr,
-            format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
-            level="DEBUG",
-            colorize=False,
-        )
-        # 添加队列 sink
-        logger.add(
-            lambda msg: _enqueue(msg.record["message"].strip()),
+        # 如果之前注册过，先移除旧的
+        if _loguru_sink_id is not None:
+            try:
+                logger.remove(_loguru_sink_id)
+            except Exception:
+                pass
+        _loguru_sink_id = logger.add(
+            lambda msg: _enqueue(str(msg).strip()),
             format="{message}",
             level="DEBUG",
             colorize=False,
         )
-        _enqueue("[系统] ✅ loguru sink 已注册")
+        _enqueue("[系统] loguru 控制台 sink 已连接")
     except ImportError:
-        _enqueue("[系统] ⚠️ loguru 未安装，跳过 sink 注册")
+        pass  # loguru 还没安装，静默跳过
     except Exception as e:
-        _enqueue(f"[系统] ⚠️ loguru sink 注册失败: {e}")
+        _enqueue(f"[系统] loguru sink 失败: {e}")
 
 
-# ===== 第2层：Python 级 stdout/stderr 重定向 =====
+# ===== 2. Python stdout/stderr 重定向 =====
 class _StreamRedirector:
-    """线程安全的类文件对象，write() 时按行放入队列"""
+    """线程安全的类文件对象"""
 
     def __init__(self):
         self._buf = ""
         self._lock = threading.Lock()
 
-    def write(self, s: str):
+    def write(self, s):
         if not s:
             return
         with self._lock:
@@ -126,105 +104,103 @@ class _StreamRedirector:
     def isatty(self):
         return False
 
+    def fileno(self):
+        """返回原始 stderr 的 fileno，兼容 loguru 等需要 fileno 的库"""
+        try:
+            return sys.__stderr__.fileno()
+        except Exception:
+            raise OSError("no fileno")
+
+
+_redirector = None
 
 def _install_python_redirect():
-    """替换 sys.stdout 和 sys.stderr"""
-    redirector = _StreamRedirector()
-    sys.stdout = redirector
-    sys.stderr = redirector
-    _enqueue("[系统] ✅ Python stdout/stderr 重定向已安装")
+    global _redirector
+    _redirector = _StreamRedirector()
+    sys.stdout = _redirector
+    sys.stderr = _redirector
+    _enqueue("[系统] Python stdout/stderr 重定向已安装")
 
 
-# ===== 第3层：OS 管道重定向（有 console 时生效）=====
-_pipe_installed = False
-_saved_stdout_fd = None
-_saved_stderr_fd = None
-
-
-def _install_os_pipe_redirect():
-    """
-    OS 级管道重定向。仅在 fd 1/2 有效时安装。
-    如果 console=False（Windows GUI 模式），静默跳过。
-    """
-    global _pipe_installed, _saved_stdout_fd, _saved_stderr_fd
-    if _pipe_installed:
-        return
-    _pipe_installed = True
-
-    # 检查 fd 1 是否有效
+# ===== 3. OS 管道 =====
+def _install_os_pipe():
     try:
         os.dup(1)
     except OSError:
-        _enqueue("[系统] ⚠️ fd 1 无效（GUI 模式），跳过 OS 管道重定向")
+        _enqueue("[系统] GUI 模式，跳过 OS 管道")
         return
 
     try:
-        _saved_stdout_fd = os.dup(1)
+        saved_out = os.dup(1)
     except OSError:
-        _saved_stdout_fd = None
-
+        saved_out = None
     try:
-        _saved_stderr_fd = os.dup(2)
+        saved_err = os.dup(2)
     except OSError:
-        _saved_stderr_fd = None
+        saved_err = None
 
-    pipe_read, pipe_write = os.pipe()
-    os.dup2(pipe_write, 1)
-    os.dup2(pipe_write, 2)
+    r, w = os.pipe()
+    os.dup2(w, 1)
+    os.dup2(w, 2)
 
-    try:
-        sys.stdout.flush()
-        sys.stderr.flush()
-    except Exception:
-        pass
-
-    def _pipe_reader():
+    def _reader():
         buf = b""
         while True:
             try:
-                chunk = os.read(pipe_read, 8192)
+                chunk = os.read(r, 8192)
                 if not chunk:
                     break
-                if _saved_stdout_fd is not None:
+                if saved_out is not None:
                     try:
-                        os.write(_saved_stdout_fd, chunk)
-                    except (OSError, ValueError):
+                        os.write(saved_out, chunk)
+                    except Exception:
                         pass
                 buf += chunk
                 while b'\n' in buf:
-                    line_bytes, buf = buf.split(b'\n', 1)
-                    line = line_bytes.decode('utf-8', errors='replace').rstrip('\r')
-                    _enqueue(line)
-            except (OSError, ValueError):
+                    lb, buf = buf.split(b'\n', 1)
+                    _enqueue(lb.decode('utf-8', errors='replace').rstrip('\r'))
+            except Exception:
                 break
 
-    t = threading.Thread(target=_pipe_reader, daemon=True, name="pipe-reader")
-    t.start()
-    _enqueue("[系统] ✅ OS 管道重定向已安装")
+    threading.Thread(target=_reader, daemon=True, name="pipe").start()
+    _enqueue("[系统] OS 管道已安装")
 
 
-# ===== 安装所有捕获层 =====
+# ===== 安装 =====
 def install_all():
-    """安装所有三层捕获（幂等，只执行一次）"""
     if getattr(install_all, '_done', False):
         return
     install_all._done = True
-
-    # 第1层：loguru sink（必须在 Python 重定向前，否则 loguru 的 stderr 被替换）
-    _install_loguru_sink()
-    # 第2层：Python stdout/stderr
     _install_python_redirect()
-    # 第3层：OS 管道
-    _install_os_pipe_redirect()
+    _install_os_pipe()
+    _add_loguru_sink()
 
 
-# ⚡ 模块加载时立即安装
+# ⚡ 模块加载时执行基础安装（loguru 可能还没导入，后面 setup_logging 会再次触发）
 install_all()
 
 
-# ===== 控制台面板 UI 组件 =====
+# ===== 供外部调用：loguru 配置完成后重新注册 sink =====
+def refresh_loguru_sink():
+    """setup_logging() 之后调用，重新注册 loguru sink"""
+    _add_loguru_sink()
+
+
+# ===== UI =====
+CONSOLE_THEME = {
+    "accent": "#00d4ff",
+    "accent2": "#7c3aed",
+    "danger": "#ef4444",
+    "text_primary": "#e2e8f0",
+    "text_secondary": "#94a3b8",
+    "border": "#1e293b",
+    "bg_dark": "#1a1a2e",
+    "bg_input": "#1e1e3a",
+}
+
+
 class ConsoleViewer(QWidget):
-    """实时日志控制台 — 三层全捕获"""
+    """实时日志控制台"""
 
     def __init__(self):
         super().__init__()
@@ -234,16 +210,13 @@ class ConsoleViewer(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
 
-        # --- 工具栏 ---
+        # 工具栏
         bar = QHBoxLayout()
         title = QLabel("📟 实时控制台")
-        title.setStyleSheet(
-            f"font-size: 14px; font-weight: bold; color: {T['text_primary']};"
-        )
+        title.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {T['text_primary']};")
         bar.addWidget(title)
         bar.addStretch()
 
-        # 自动滚动按钮
         self._auto_scroll = True
         self._auto_btn = QPushButton("🔽 自动滚动")
         self._auto_btn.setCheckable(True)
@@ -258,12 +231,9 @@ class ConsoleViewer(QWidget):
             QPushButton:checked {{ background: {T['accent']}66; }}
             QPushButton:hover {{ background: {T['accent']}44; }}
         """)
-        self._auto_btn.clicked.connect(
-            lambda: setattr(self, '_auto_scroll', self._auto_btn.isChecked())
-        )
+        self._auto_btn.clicked.connect(lambda: setattr(self, '_auto_scroll', self._auto_btn.isChecked()))
         bar.addWidget(self._auto_btn)
 
-        # 清空按钮
         clear_btn = QPushButton("🗑 清空")
         clear_btn.setFixedHeight(26)
         clear_btn.setStyleSheet(f"""
@@ -277,15 +247,12 @@ class ConsoleViewer(QWidget):
         clear_btn.clicked.connect(lambda: self._output.clear())
         bar.addWidget(clear_btn)
 
-        # 行数标签
         self._line_count = QLabel("0 行")
-        self._line_count.setStyleSheet(
-            f"color: {T['text_secondary']}; font-size: 11px; padding: 2px 6px;"
-        )
+        self._line_count.setStyleSheet(f"color: {T['text_secondary']}; font-size: 11px; padding: 2px 6px;")
         bar.addWidget(self._line_count)
         layout.addLayout(bar)
 
-        # --- 日志输出区（GitHub Dark 风格）---
+        # 输出区
         self._output = QPlainTextEdit()
         self._output.setReadOnly(True)
         self._output.setMaximumBlockCount(10000)
@@ -303,21 +270,16 @@ class ConsoleViewer(QWidget):
         """)
         layout.addWidget(self._output, 1)
 
-        # --- 底部状态 ---
-        status = QLabel("💡 三层捕获：loguru + Python stdout/stderr + OS 管道 — 与黑窗完全一致")
-        status.setStyleSheet(
-            f"color: {T['text_secondary']}; font-size: 11px; padding: 2px 4px;"
-        )
+        status = QLabel("多层捕获：loguru + Python + OS管道")
+        status.setStyleSheet(f"color: {T['text_secondary']}; font-size: 11px; padding: 2px 4px;")
         layout.addWidget(status)
 
-        # ===== QTimer 消费队列（每 50ms 从队列取日志）=====
         self._total_lines = 0
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._drain_queue)
         self._timer.start(50)
 
     def _drain_queue(self):
-        """从队列取出日志并显示（主线程安全）"""
         drained = 0
         while drained < 200:
             try:
@@ -327,12 +289,11 @@ class ConsoleViewer(QWidget):
             self._output.appendPlainText(line)
             self._total_lines += 1
             drained += 1
-
         if drained > 0:
             self._line_count.setText(f"{self._total_lines} 行")
             if self._auto_scroll:
-                scrollbar = self._output.verticalScrollBar()
-                scrollbar.setValue(scrollbar.maximum())
+                sb = self._output.verticalScrollBar()
+                sb.setValue(sb.maximum())
 
     def closeEvent(self, event):
         self._timer.stop()

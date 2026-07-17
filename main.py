@@ -58,8 +58,11 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 def setup_logging():
     """配置日志"""
-    from src.utils.logger import setup_logging
-    setup_logging()
+    from src.utils.logger import setup_logging as _setup
+    _setup()
+    # logger.remove() 会清除所有 sink，需要重新注册控制台 sink
+    import src.ui.console_panel as _cp
+    _cp.refresh_loguru_sink()
 
 
 def main():

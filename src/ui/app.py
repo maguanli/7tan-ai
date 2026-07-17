@@ -2635,31 +2635,10 @@ class SettingsPage(QWidget):
         subtitle.setWordWrap(True)
         layout.addWidget(subtitle)
 
-        # 搜索 + 刷新行
+        # 刷新行
         top_row = QHBoxLayout()
         top_row.setSpacing(8)
 
-        self._plugin_search = QLineEdit()
-        self._plugin_search.setPlaceholderText("🔍 搜索插件（名称/描述/作者），回车搜索全网...")
-        self._plugin_search.setMinimumHeight(32)
-        self._plugin_search.returnPressed.connect(self._search_online_plugins)
-        self._plugin_search.setStyleSheet(f"""
-            QLineEdit {{ background: {THEME['bg_input']}; color: {THEME['text_primary']};
-                border: 1px solid {THEME['border']}; border-radius: 6px; padding: 6px 12px; font-size: 13px; }}
-            QLineEdit:focus {{ border-color: {THEME['accent']}; }}
-        """)
-        top_row.addWidget(self._plugin_search, 1)
-
-        online_btn = QPushButton("🌐 全网搜索")
-        online_btn.setFixedSize(100, 32)
-        online_btn.setToolTip("从在线插件仓库搜索更多插件")
-        online_btn.clicked.connect(self._search_online_plugins)
-        online_btn.setStyleSheet(f"""
-            QPushButton {{ background: {THEME['accent2']}; color: #fff; border: none;
-                border-radius: 6px; font-size: 13px; font-weight: bold; }}
-            QPushButton:hover {{ background: {THEME['accent2']}dd; }}
-        """)
-        top_row.addWidget(online_btn)
 
         refresh_btn = QPushButton("🔄")
         refresh_btn.setFixedSize(36, 32)
@@ -2750,39 +2729,6 @@ class SettingsPage(QWidget):
 
         # 初始加载
         self._refresh_plugins()
-
-    def _on_plugin_search(self, text):
-        """搜索过滤插件列表"""
-        keyword = text.lower().strip()
-        for i in range(self._plugin_list.count()):
-            item = self._plugin_list.item(i)
-            item_text = item.text().lower()
-            item_data = item.data(Qt.ItemDataRole.UserRole)
-            item.setHidden(bool(keyword and keyword not in item_text and keyword not in item_data))
-
-    def _search_online_plugins(self):
-        """全网搜索插件"""
-        keyword = self._plugin_search.text().strip()
-        from src.plugins import get_manager
-        mgr = get_manager()
-
-        msg = f"🌐 正在全网搜索 '{keyword}' ..." if keyword else "🌐 正在获取在线插件列表..."
-        self._plugin_status.setText(msg)
-        QApplication.processEvents()
-
-        results = []
-        try:
-            results = mgr.search_online(keyword)
-            if results:
-                self._plugin_status.setText(f"🌐 搜索完成: 找到 {len(results)} 个插件")
-            else:
-                results = mgr._search_local(keyword)
-                self._plugin_status.setText(f"📭 全网未找到匹配插件，显示本地 {len(results)} 个")
-        except Exception as e:
-            results = mgr._search_local(keyword)
-            self._plugin_status.setText(f"⚠️ 在线仓库暂不可用（{str(e)[:50]}），显示本地 {len(results)} 个")
-
-        self._populate_plugin_list(results)
 
     def _on_plugin_selected(self, row):
         """选中插件时显示详情"""

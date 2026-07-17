@@ -215,7 +215,7 @@ def run_scheduler():
 
 
 def run_cli(args):
-    """交互式命令行""""
+    """交互式命令行"""
     from src.agent.agent_loop import run_agent_loop
     run_agent_loop()
 

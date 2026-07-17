@@ -12,3 +12,4 @@ from . import file_tools
 from . import publish_tools
 from . import self_modify_tools
 from . import monitor_tools
+from . import search_tools

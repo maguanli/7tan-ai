@@ -578,7 +578,7 @@ class ChatPage(QWidget):
         self._input.send_triggered.connect(self._send_message)
         input_layout.addWidget(self._input, 1)
 
-        send_btn = QPushButton("发送 ▶")
+        send_btn = QPushButton("发送 ▲")
         send_btn.setFixedWidth(100)
         send_btn.clicked.connect(self._send_message)
         input_layout.addWidget(send_btn)

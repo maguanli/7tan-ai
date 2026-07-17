@@ -109,9 +109,7 @@ def run_agent_loop(
             # 诊断: 打印每条消息的角色和类型
             for i, m in enumerate(messages):
                 role = m.get("role", "?")
-                tc = m.get("tool_calls")
-                tc_type = type(tc).__name__ if tc else "-"
-                logger.debug(f"  消息[{i}] role={role} tool_calls={tc_type} keys={list(m.keys())[:5]}")
+                pass  # 消息摘要已静音
 
             # 🔒 安全检查：修复孤立的 assistant tool_calls（防止 API 400 错误）
             messages = _repair_messages(messages)
@@ -244,7 +242,7 @@ def run_agent_loop(
                 if len(result_str) > 100000:
                     result_str = result_str[:100000] + "\n...(结果已截断)"
 
-                logger.debug(f"   结果: {result_str[:100]}...")
+                pass  # 结果摘要已静音
             except Exception as tool_err:
                 import traceback
                 logger.error(f"❌ 工具执行失败 [{tool_name}]: {tool_err}\n{traceback.format_exc()}")

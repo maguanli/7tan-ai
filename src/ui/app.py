@@ -1587,7 +1587,6 @@ class ChatBrowserSplitPage(QWidget):
         super().showEvent(event)
         if not self._initialized:
             self._initialized = True
-            self.browser._add_tab(url="about:blank", title="新标签页")
 
     def _make_panel_btn(self, text: str, active: bool = False):
         """创建面板切换按钮"""

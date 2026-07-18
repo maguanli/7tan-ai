@@ -5,62 +5,251 @@ import re
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QPlainTextEdit, QFileDialog, QTreeWidget, QTreeWidgetItem, QSplitter,
-    QLineEdit,
+    QPlainTextEdit, QTextEdit, QFileDialog, QTreeWidget, QTreeWidgetItem, QSplitter,
+    QLineEdit, QMessageBox,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QShortcut, QKeySequence
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QRect, QSize
+from PyQt6.QtGui import QShortcut, QKeySequence, QPainter, QTextFormat
 from PyQt6.QtGui import QFont, QColor, QSyntaxHighlighter, QTextCharFormat
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-class PythonHighlighter(QSyntaxHighlighter):
-    """Python 语法高亮器 - Dracula 配色"""
+class GenericHighlighter(QSyntaxHighlighter):
+    """多语言语法高亮器 - Dracula 配色"""
 
-    def __init__(self, parent=None):
+    _LANG_RULES = {}  # 类级缓存: lang -> [(pattern, format), ...]
+
+    def __init__(self, parent=None, language='text'):
         super().__init__(parent)
-        # 预编译所有规则
-        self._rules = []
+        self._rules = self._get_rules(language)
 
-        # 关键字 (粉红)
-        kw = QTextCharFormat(); kw.setForeground(QColor("#ff79c6")); kw.setFontWeight(700)
-        for w in ["and","as","assert","async","await","break","class","continue","def",
-                  "del","elif","else","except","finally","for","from","global","if",
-                  "import","in","is","lambda","nonlocal","not","or","pass","raise",
-                  "return","try","while","with","yield","True","False","None","self","super"]:
-            self._rules.append((rf'\b{w}\b', kw))
+    @classmethod
+    def _get_rules(cls, lang):
+        if lang in cls._LANG_RULES:
+            return cls._LANG_RULES[lang]
+        rules = []
+        # === 颜色定义 ===
+        KW = lambda: QTextCharFormat(); kw=KW(); kw.setForeground(QColor("#ff79c6")); kw.setFontWeight(700)
+        STR = lambda: QTextCharFormat(); s=STR(); s.setForeground(QColor("#f1fa8c"))
+        CM = lambda: QTextCharFormat(); c=CM(); c.setForeground(QColor("#6272a4")); c.setFontItalic(True)
+        NUM = lambda: QTextCharFormat(); n=NUM(); n.setForeground(QColor("#bd93f9"))
+        FN = lambda: QTextCharFormat(); f=FN(); f.setForeground(QColor("#50fa7b"))
+        CL = lambda: QTextCharFormat(); c=CL(); c.setForeground(QColor("#8be9fd")); c.setFontWeight(700)
+        TAG = lambda: QTextCharFormat(); t=TAG(); t.setForeground(QColor("#ff79c6")); t.setFontWeight(700)
+        ATTR = lambda: QTextCharFormat(); a=ATTR(); a.setForeground(QColor("#50fa7b"))
+        PROP = lambda: QTextCharFormat(); p=PROP(); p.setForeground(QColor("#8be9fd"))
 
-        # 字符串 (黄)
-        s = QTextCharFormat(); s.setForeground(QColor("#f1fa8c"))
-        for p in [r'"[^"\\]*(\\.[^"\\]*)*"', r"'[^'\\]*(\\.[^'\\]*)*'",
-                  r'"""[^"]*"""', r"'''[^']*'''", r'f".*?"', r"f'.*?'"]:
-            self._rules.append((p, s))
+        if lang == 'python':
+            for w in ["and","as","assert","async","await","break","class","continue","def",
+                      "del","elif","else","except","finally","for","from","global","if",
+                      "import","in","is","lambda","nonlocal","not","or","pass","raise",
+                      "return","try","while","with","yield","True","False","None","self","super"]:
+                rules.append((rf'\b{w}\b', KW()))
+            for p in [r'"[^"\\]*(\\.[^"\\]*)*"', r"'[^'\\]*(\\.[^'\\]*)*'",
+                      r'"""[^"]*"""', r"'''[^']*'''", r'f".*?"', r"f'.*?'",
+                      r'f""".*?"""', r"f'''.*?'''"]:
+                rules.append((p, STR()))
+            rules.append((r'#.*$', CM()))
+            rules.append((r'@\w+', FN()))
+            rules.append((r'\b\d+\.?\d*\b', NUM()))
+            rules.append((r'\b([a-zA-Z_]\w*)\s*\(', FN()))
+            rules.append((r'\b([A-Z][a-zA-Z0-9_]*)\b', CL()))
 
-        # 注释 (灰)
-        c = QTextCharFormat(); c.setForeground(QColor("#6272a4")); c.setFontItalic(True)
-        self._rules.append((r'#.*$', c))
+        elif lang == 'javascript' or lang == 'typescript':
+            for w in ["async","await","break","case","catch","class","const","continue",
+                      "debugger","default","delete","do","else","export","extends","finally",
+                      "for","function","if","import","in","instanceof","let","new",
+                      "of","return","super","switch","this","throw","try","typeof",
+                      "var","void","while","with","yield","true","false","null","undefined"]:
+                rules.append((rf'\b{w}\b', KW()))
+            if lang == 'typescript':
+                for w in ["interface","type","enum","namespace","module","declare","abstract",
+                          "implements","private","protected","public","readonly","static"]:
+                    rules.append((rf'\b{w}\b', KW()))
+            for p in [r'"[^"\\]*(\\.[^"\\]*)*"', r"'[^'\\]*(\\.[^'\\]*)*'",
+                      r'`[^`]*`']:
+                rules.append((p, STR()))
+            rules.append((r'//.*$', CM()))
+            rules.append((r'/\*.*?\*/', CM()))
+            rules.append((r'\b\d+\.?\d*\b', NUM()))
+            rules.append((r'\b([a-zA-Z_$]\w*)\s*\(', FN()))
+            rules.append((r'\b([A-Z][a-zA-Z0-9_$]*)\b', CL()))
 
-        # 装饰器 (绿)
-        d = QTextCharFormat(); d.setForeground(QColor("#50fa7b")); d.setFontWeight(700)
-        self._rules.append((r'@\w+', d))
+        elif lang == 'json':
+            for p in [r'"[^"\\]*(\\.[^"\\]*)*"']:
+                rules.append((p, STR()))
+            rules.append((r'\b\d+\.?\d*\b', NUM()))
+            rules.append((r'\b(true|false|null)\b', KW()))
 
-        # 数字 (紫)
-        n = QTextCharFormat(); n.setForeground(QColor("#bd93f9"))
-        self._rules.append((r'\b\d+\.?\d*\b', n))
+        elif lang in ('yaml','yml'):
+            rules.append((r'^\s*[\w-]+:', PROP()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r"'[^'\\]*(\\.[^'\\]*)*'", STR()))
+            rules.append((r'#.*$', CM()))
+            rules.append((r'\b\d+\.?\d*\b', NUM()))
+            rules.append((r'\b(true|false|null|yes|no|on|off)\b', KW()))
 
-        # 函数调用 (绿)
-        f = QTextCharFormat(); f.setForeground(QColor("#50fa7b"))
-        self._rules.append((r'\b([a-zA-Z_]\w*)\s*\(', f))
+        elif lang in ('html','xml'):
+            rules.append((r'<[!/?]?[\w-]+', TAG()))
+            rules.append((r'[\w-]+(?==)', ATTR()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r"'[^'\\]*(\\.[^'\\]*)*'", STR()))
+            rules.append((r'<!--.*?-->', CM()))
 
-        # 类名 (青)
-        cl = QTextCharFormat(); cl.setForeground(QColor("#8be9fd")); cl.setFontWeight(700)
-        self._rules.append((r'\b([A-Z][a-zA-Z0-9_]*)\b', cl))
+        elif lang == 'css':
+            rules.append((r'[.#@][\w-]+', CL()))
+            rules.append((r'[\w-]+(?=:)', PROP()))
+            rules.append((r':\s*[^;]+', STR()))
+            rules.append((r'\b\d+\.?\d*(px|em|rem|%|vh|vw|s|ms)?\b', NUM()))
+            rules.append((r'/\*.*?\*/', CM()))
+            rules.append((r'\b(important|url|none|auto|inherit|initial|unset|block|inline|flex|grid|absolute|relative|fixed)\b', KW()))
+
+        elif lang in ('c','cpp','h','java','kt','swift','go','rs'):
+            kw = ["if","else","for","while","do","switch","case","break","continue",
+                  "return","class","struct","enum","interface","extends","implements",
+                  "new","this","super","try","catch","finally","throw","throws",
+                  "public","private","protected","static","final","abstract","void",
+                  "int","long","float","double","char","boolean","byte","short",
+                  "true","false","null","package","import","const","let","var","func",
+                  "fn","mut","unsafe","type","val","fun","object","when","sealed",
+                  "data","companion","suspend","inline","operator","init","where",
+                  "defer","go","chan","map","range","select","goto"]
+            for w in kw:
+                rules.append((rf'\b{w}\b', KW()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r"'[^'\\]*(\\.[^'\\]*)*'", STR()))
+            rules.append((r'//.*$', CM()))
+            rules.append((r'/\*.*?\*/', CM()))
+            rules.append((r'\b\d+\.?\d*[fL]?\b', NUM()))
+            rules.append((r'\b([a-zA-Z_]\w*)\s*\(', FN()))
+            rules.append((r'\b([A-Z][a-zA-Z0-9_]*)\b', CL()))
+
+        elif lang in ('sh','bat'):
+            rules.append((r'#.*$', CM()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r"'[^'\\]*(\\.[^'\\]*)*'", STR()))
+            for w in ["if","then","else","elif","fi","for","while","do","done",
+                      "case","esac","in","function","return","exit","export","local",
+                      "echo","set","unset","source","alias","break","continue",
+                      "cd","ls","mkdir","rm","cp","mv","chmod","chown","grep",
+                      "awk","sed","curl","wget","git","npm","pip","python","node"]:
+                rules.append((rf'\b{w}\b', KW()))
+            rules.append((r'\b\d+\.?\d*\b', NUM()))
+
+        elif lang in ('ini','cfg','toml'):
+            rules.append((r'^\s*\[.*?\]', TAG()))
+            rules.append((r'^\s*[\w.-]+(?=\s*=)', PROP()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r"'[^'\\]*(\\.[^'\\]*)*'", STR()))
+            rules.append((r'#.*$', CM()))
+            rules.append((r'\b\d+\.?\d*\b', NUM()))
+            rules.append((r'\b(true|false|null)\b', KW()))
+
+        elif lang == 'markdown':
+            rules.append((r'^#{1,6}\s.*$', CL()))
+            rules.append((r'\*\*.*?\*\*', PROP()))
+            rules.append((r'`[^`]+`', STR()))
+            rules.append((r'\[.*?\]\(.*?\)', ATTR()))
+            rules.append((r'^[-*+]\s', FN()))
+            rules.append((r'^>\s.*$', CM()))
+
+        cls._LANG_RULES[lang] = rules
+        return rules
 
     def highlightBlock(self, text):
         for pattern, fmt in self._rules:
             for m in re.finditer(pattern, text):
                 self.setFormat(m.start(), m.end() - m.start(), fmt)
+
+
+class LineNumberArea(QWidget):
+    """行号侧边栏"""
+    def __init__(self, editor):
+        super().__init__(editor)
+        self._editor = editor
+
+    def sizeHint(self):
+        return QSize(self._editor.line_number_area_width(), 0)
+
+    def paintEvent(self, event):
+        self._editor.line_number_area_paint(event)
+
+
+class CodeEditor(QPlainTextEdit):
+    """带行号的代码编辑器"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._line_number_area = LineNumberArea(self)
+        self.blockCountChanged.connect(self._update_line_number_area_width)
+        self.updateRequest.connect(self._update_line_number_area)
+        self.cursorPositionChanged.connect(self._highlight_current_line)
+        self._update_line_number_area_width(0)
+        self._highlight_current_line()
+
+    def line_number_area_width(self):
+        digits = max(3, len(str(self.blockCount())))
+        space = 10 + self.fontMetrics().horizontalAdvance('9') * digits
+        return space
+
+    def _update_line_number_area_width(self, _):
+        self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
+
+    def _update_line_number_area(self, rect, dy):
+        if dy:
+            self._line_number_area.scroll(0, dy)
+        else:
+            self._line_number_area.update(0, rect.y(), self._line_number_area.width(), rect.height())
+        if rect.contains(self.viewport().rect()):
+            self._update_line_number_area_width(0)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        cr = self.contentsRect()
+        self._line_number_area.setGeometry(
+            QRect(cr.left(), cr.top(), self.line_number_area_width(), cr.height()))
+
+    def line_number_area_paint(self, event):
+        painter = QPainter(self._line_number_area)
+        painter.fillRect(event.rect(), QColor("#0d1117"))
+        block = self.firstVisibleBlock()
+        block_number = block.blockNumber() + 1
+        top = self.blockBoundingGeometry(block).translated(self.contentOffset()).top()
+        bottom = top + self.blockBoundingRect(block).height()
+        while block.isValid() and top <= event.rect().bottom():
+            if block.isVisible() and bottom >= event.rect().top():
+                number = str(block_number)
+                painter.setPen(QColor("#484f58"))
+                painter.setFont(QFont("Consolas", 10))
+                painter.drawText(0, int(top), self._line_number_area.width() - 4,
+                                 self.fontMetrics().height(),
+                                 Qt.AlignmentFlag.AlignRight, number)
+            block = block.next()
+            top = bottom
+            bottom = top + self.blockBoundingRect(block).height()
+            block_number += 1
+
+    def _highlight_current_line(self):
+        """高亮当前行，同时保留搜索高亮（黄色背景/下划线）"""
+        existing = self.extraSelections()
+        search_sel = []
+        for s in existing:
+            try:
+                bg = s.format.background().color().name()
+                ul = s.format.underlineStyle()
+                if bg in ("#fbbf24", "#fbbf2433") or ul != QTextFormat.UnderlineStyle.NoUnderline:
+                    search_sel.append(s)
+            except Exception:
+                search_sel.append(s)
+        extra_selections = list(search_sel)
+        if not self.isReadOnly():
+            selection = QTextEdit.ExtraSelection()
+            selection.format.setBackground(QColor("#1e3a5f"))
+            selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
+            selection.cursor = self.textCursor()
+            selection.cursor.clearSelection()
+            extra_selections.append(selection)
+        self.setExtraSelections(extra_selections)
 
 
 class CodeViewer(QWidget):
@@ -102,15 +291,18 @@ class CodeViewer(QWidget):
         self._search_count_label = self._lbl("", "#64748b", 10)
         self._search_count_label.setFixedWidth(50)
         tb.addWidget(self._search_count_label)
-        # 上下导航
-        for text, slot in [("▲", self._prev_match), ("▼", self._next_match)]:
+        # 上下导航（搜索匹配结果切换）
+        for text, slot, tip in [("▲ 上一个", self._prev_match, "上一个匹配结果"),
+                                ("▼ 下一个", self._next_match, "下一个匹配结果")]:
             btn_nav = QPushButton(text)
-            btn_nav.setFixedSize(24, 24)
+            btn_nav.setFixedSize(74, 24)
+            btn_nav.setToolTip(tip)
             btn_nav.clicked.connect(slot)
-            btn_nav.setStyleSheet("background:#334155;color:#e2e8f0;border:none;border-radius:3px;font-size:11px;")
+            btn_nav.setStyleSheet("background:#334155;color:#e2e8f0;border:none;border-radius:3px;font-size:11px;padding:0 2px;")
             btn_nav.setCursor(Qt.CursorShape.PointingHandCursor)
             tb.addWidget(btn_nav)
-        for text, color, slot in [("📂 打开", "#10b981", self._open_dialog),
+        for text, color, slot in [("💾 保存", "#f59e0b", self._save_file),
+                                   ("📂 打开", "#10b981", self._open_dialog),
                                    ("🔄 刷新", "#7c3aed", self._refresh_tree)]:
             btn = QPushButton(text); btn.setFixedHeight(26)
             btn.setFixedWidth(80 if len(text) > 2 else 36)
@@ -135,7 +327,7 @@ class CodeViewer(QWidget):
         vs.addWidget(self._tree)
 
         # 编辑器
-        self._editor = QPlainTextEdit(); self._editor.setReadOnly(True)
+        self._editor = CodeEditor()
         self._editor.setFont(QFont("Consolas", 11))
         self._editor.setStyleSheet("QPlainTextEdit{background:#1a1a2e;color:#e2e8f0;border:1px solid #1e293b;selection-background-color:#00d4ff44}")
         self._editor.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
@@ -150,12 +342,39 @@ class CodeViewer(QWidget):
 
         QTimer.singleShot(300, self._refresh_tree)
         QShortcut(QKeySequence("Ctrl+F"), self, self._focus_search)
+        QShortcut(QKeySequence("Ctrl+S"), self, self._save_file)
         QShortcut(QKeySequence("Escape"), self, self._clear_search)
 
     def _lbl(self, text, color, size, bold=False):
         w = "bold;" if bold else ""
         l = QLabel(text); l.setStyleSheet(f"color:{color};font-size:{size}px;font-weight:{w}")
         return l
+
+    def _detect_language(self, path):
+        """根据文件扩展名返回语言标识"""
+        ext = path.suffix.lower()
+        lang_map = {
+            '.py': 'python',
+            '.js': 'javascript', '.mjs': 'javascript', '.cjs': 'javascript',
+            '.ts': 'typescript', '.tsx': 'typescript',
+            '.json': 'json',
+            '.yaml': 'yaml', '.yml': 'yml',
+            '.html': 'html', '.htm': 'html',
+            '.xml': 'xml', '.svg': 'xml',
+            '.css': 'css', '.scss': 'css', '.less': 'css',
+            '.c': 'c', '.cpp': 'cpp', '.h': 'h', '.hpp': 'h',
+            '.java': 'java',
+            '.kt': 'kt', '.kts': 'kt',
+            '.swift': 'swift',
+            '.go': 'go',
+            '.rs': 'rs',
+            '.sh': 'sh', '.bash': 'sh', '.zsh': 'sh',
+            '.bat': 'bat', '.cmd': 'bat',
+            '.ini': 'ini', '.cfg': 'cfg', '.conf': 'cfg',
+            '.toml': 'toml',
+            '.md': 'markdown', '.markdown': 'markdown',
+        }
+        return lang_map.get(ext, None)
 
     def _refresh_tree(self):
         self._tree.clear()
@@ -212,8 +431,9 @@ class CodeViewer(QWidget):
             self._editor.setPlainText(content)
             if self._highlighter:
                 self._highlighter.deleteLater(); self._highlighter = None
-            if p.suffix == '.py':
-                self._highlighter = PythonHighlighter(self._editor.document())
+            lang = self._detect_language(p)
+            if lang:
+                self._highlighter = GenericHighlighter(self._editor.document(), language=lang)
             self._current_file = str(p); self._file_label.setText(p.name)
             rel = p.relative_to(PROJECT_ROOT) if str(p).startswith(str(PROJECT_ROOT)) else p
             self._status.setText(f"✅ {rel} — {len(content)} 字符, {content.count(chr(10))+1} 行")
@@ -221,6 +441,20 @@ class CodeViewer(QWidget):
             self._highlight_in_tree(str(p))
         except Exception as e:
             self._status.setText(f"❌ 打开失败: {e}")
+
+    def _save_file(self):
+        """保存当前文件"""
+        if not self._current_file:
+            self._status.setText("⚠️ 没有打开文件，无法保存")
+            return
+        try:
+            content = self._editor.toPlainText()
+            p = Path(self._current_file)
+            p.write_text(content, encoding='utf-8')
+            self._status.setText(f"💾 已保存: {p.name} — {len(content)} 字符, {content.count(chr(10)) + 1} 行")
+        except Exception as e:
+            self._status.setText(f"❌ 保存失败: {e}")
+            QMessageBox.critical(self, "保存失败", f"无法保存文件:\n{e}")
 
     def _highlight_in_tree(self, path):
         def find(items, target):
@@ -346,23 +580,24 @@ class CodeViewer(QWidget):
             )
             self._editor.setTextCursor(cursor)
             self._editor.centerCursor()
-            # 临时高亮
-            extra = self._editor.extraSelections()
-            sel = type(extra[0])() if extra else type(self._editor)()
-            fmt = sel.format if hasattr(sel, 'format') else None
-            from PyQt6.QtWidgets import QTextEdit
+            # 搜索高亮（合并当前行高亮）
+            from PyQt6.QtGui import QTextCharFormat
             sel = QTextEdit.ExtraSelection()
             sel.format.setBackground(QColor("#fbbf2433"))
             sel.format.setUnderlineStyle(
-                sel.format.UnderlineStyle.SingleUnderline
+                QTextCharFormat.UnderlineStyle.SingleUnderline
             )
             sel.format.setUnderlineColor(QColor("#fbbf24"))
             sel.cursor = cursor
-            self._editor.setExtraSelections([sel])
+            # 合并当前行高亮，不覆盖
+            current = self._editor.extraSelections()
+            current.append(sel)
+            self._editor.setExtraSelections(current)
 
     def _clear_search_highlight(self):
-        """清除搜索高亮"""
+        """清除搜索高亮，恢复当前行高亮"""
         self._editor.setExtraSelections([])
+        self._editor._highlight_current_line()
 
     def show_file(self, path):
         self.open_file(path)

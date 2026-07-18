@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 # 🔒 后端超时保护：Agent 循环最长等待时间（秒）
 # 略小于前端 HTTP 超时（310s），确保后端先返回错误而非前端 timeout
-AGENT_LOOP_TIMEOUT = 300
+AGENT_LOOP_TIMEOUT = 600
 
 
 class ChatRequest(BaseModel):

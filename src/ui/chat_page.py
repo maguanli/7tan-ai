@@ -269,7 +269,7 @@ class ChatWorker(QThread):
 
 
 
-            resp = requests.post(f"{API_BASE}/api/chat/send", json=data, timeout=310)
+            resp = requests.post(f"{API_BASE}/api/chat/send", json=data, timeout=610)
 
             resp.raise_for_status()
 
@@ -2187,7 +2187,7 @@ class ChatPage(QWidget):
 
             try:
 
-                resp = requests.post(f"{API_BASE}/api/chat/send", json=data, timeout=310)
+                resp = requests.post(f"{API_BASE}/api/chat/send", json=data, timeout=610)
 
                 resp.raise_for_status()
 

@@ -118,7 +118,7 @@ class ModelManager:
 
         last_error = None
 
-        for attempt in range(6):  # 最多 5 次重试 (0~5)
+        for attempt in range(4):  # 最多 5 次重试 (0~5)
             try:
                 return client.chat.completions.create(**kwargs)
             except BadRequestError as e:
@@ -127,38 +127,38 @@ class ModelManager:
                 raise
             except RateLimitError as e:
                 last_error = e
-                if attempt >= 5:
+                if attempt >= 3:
                     break
-                delay = min(60 * (2 ** attempt), 600) * (0.5 + random.random())
+                delay = min(30 * (2 ** attempt), 300) * (0.5 + random.random())
                 logger.warning(
-                    f"⏳ API 限流 (尝试 {attempt+1}/5)，{delay:.1f}s 后重试..."
+                    f"⏳ API 限流 (尝试 {attempt+1}/3)，{delay:.1f}s 后重试..."
                 )
                 time.sleep(delay)
             except APITimeoutError as e:
                 last_error = e
-                if attempt >= 5:
+                if attempt >= 3:
                     break
-                delay = min(2 * (2 ** attempt), 120) * (0.5 + random.random())
+                delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
                 logger.warning(
-                    f"⏱️ API 超时 (尝试 {attempt+1}/5)，{delay:.1f}s 后重试..."
+                    f"⏱️ API 超时 (尝试 {attempt+1}/3)，{delay:.1f}s 后重试..."
                 )
                 time.sleep(delay)
             except APIConnectionError as e:
                 last_error = e
-                if attempt >= 5:
+                if attempt >= 3:
                     break
-                delay = min(1 * (2 ** attempt), 60) * (0.5 + random.random())
+                delay = min(1 * (2 ** attempt), 30) * (0.5 + random.random())
                 logger.warning(
-                    f"🔌 API 连接错误 (尝试 {attempt+1}/5)，{delay:.1f}s 后重试..."
+                    f"🔌 API 连接错误 (尝试 {attempt+1}/3)，{delay:.1f}s 后重试..."
                 )
                 time.sleep(delay)
             except InternalServerError as e:
                 last_error = e
-                if attempt >= 5:
+                if attempt >= 3:
                     break
-                delay = min(2 * (2 ** attempt), 120) * (0.5 + random.random())
+                delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
                 logger.warning(
-                    f"🔥 API 服务器错误 (尝试 {attempt+1}/5)，{delay:.1f}s 后重试..."
+                    f"🔥 API 服务器错误 (尝试 {attempt+1}/3)，{delay:.1f}s 后重试..."
                 )
                 time.sleep(delay)
             except APIError as e:
@@ -166,28 +166,28 @@ class ModelManager:
                 err_str = str(e).lower()
                 # 检查是否是 HTTP 状态码错误
                 if "502" in err_str or "503" in err_str or "504" in err_str:
-                    if attempt >= 5:
+                    if attempt >= 3:
                         break
-                    delay = min(3 * (2 ** attempt), 120) * (0.5 + random.random())
+                    delay = min(3 * (2 ** attempt), 60) * (0.5 + random.random())
                     logger.warning(
-                        f"🌐 API 网关错误 (尝试 {attempt+1}/5)，{delay:.1f}s 后重试..."
+                        f"🌐 API 网关错误 (尝试 {attempt+1}/3)，{delay:.1f}s 后重试..."
                     )
                     time.sleep(delay)
                 elif "429" in err_str:
-                    if attempt >= 5:
+                    if attempt >= 3:
                         break
-                    delay = min(60 * (2 ** attempt), 600) * (0.5 + random.random())
+                    delay = min(30 * (2 ** attempt), 300) * (0.5 + random.random())
                     logger.warning(
-                        f"⏳ API 限流 (尝试 {attempt+1}/5)，{delay:.1f}s 后重试..."
+                        f"⏳ API 限流 (尝试 {attempt+1}/3)，{delay:.1f}s 后重试..."
                     )
                     time.sleep(delay)
                 else:
                     # 未知 API 错误也重试
-                    if attempt >= 5:
+                    if attempt >= 3:
                         break
                     delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
                     logger.warning(
-                        f"⚠️ API 错误 (尝试 {attempt+1}/5): {e} — {delay:.1f}s 后重试"
+                        f"⚠️ API 错误 (尝试 {attempt+1}/3): {e} — {delay:.1f}s 后重试"
                     )
                     time.sleep(delay)
             except Exception as e:
@@ -195,11 +195,11 @@ class ModelManager:
                 last_error = e
                 err_str = str(e).lower()
                 if any(kw in err_str for kw in ("ssl", "connection", "timeout", "reset", "refused", "broken pipe")):
-                    if attempt >= 5:
+                    if attempt >= 3:
                         break
                     delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
                     logger.warning(
-                        f"🔧 网络层错误 (尝试 {attempt+1}/5): {type(e).__name__} — {delay:.1f}s 后重试"
+                        f"🔧 网络层错误 (尝试 {attempt+1}/3): {type(e).__name__} — {delay:.1f}s 后重试"
                     )
                     time.sleep(delay)
                 else:
@@ -208,9 +208,9 @@ class ModelManager:
                     raise
 
         # 重试耗尽
-        logger.error(f"💀 API 调用失败，已重试 5 次: {last_error}")
+        logger.error(f"💀 API 调用失败，已重试 3 次: {last_error}")
         raise RuntimeError(
-            f"AI API 调用失败（已重试 5 次）: {last_error}"
+            f"AI API 调用失败（已重试 3 次）: {last_error}"
         ) from last_error
 
     @staticmethod
@@ -275,6 +275,7 @@ class ModelManager:
             )
 
         import openai
+        import httpx
 
         # 各 provider 的默认 base_url
         DEFAULT_URLS = {
@@ -287,7 +288,14 @@ class ModelManager:
 
         logger.info(f"🤖 连接 AI: provider={provider}, base_url={final_url}, api_key={'***' + api_key[-4:] if api_key and len(api_key) > 4 else '(none)'}")
 
-        self._client = openai.OpenAI(api_key=api_key, base_url=final_url)
+        # 🔒 配置 HTTP 超时，防止 AI API 调用无限挂起
+        # connect=10s（建连接）, read=120s（等响应）, write=30s（发请求）
+        # 单次调用最长 120s，配合重试 5 次，理论最大 ~10 分钟
+        self._client = openai.OpenAI(
+            api_key=api_key,
+            base_url=final_url,
+            timeout=httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0),
+        )
         return self._client
 
 

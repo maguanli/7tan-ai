@@ -1,3 +1,4 @@
+
 """
 实时控制台面板 — 嵌入工作台左侧，替代命令行黑窗
 
@@ -15,6 +16,8 @@
   - P5-8: 简化高亮规则，去掉过度花哨的 CSS 边框/背景
   - P6-9: _enqueue 去重逻辑加 threading.Lock()，修复并发竞态导致重复仍出现；扩大哈希环到500
   - P7-10: 修复中文边界不可靠（w是否含CJK取决于平台），改用lookbehind边界；增加Agent/User角色专属颜色；修复OK语法错误
+  - P8-11: 去重从计数哈希环改为时间窗口(3秒)，彻底解决日志量大时哈希环被挤出导致重复的问题
+  - P9-12: 增加模糊指纹(前60字符hash)，防止loguru默认sink带时间戳的格式化绕过精确去重
 """
 import os
 import sys
@@ -24,7 +27,7 @@ import queue
 import threading
 import tempfile
 from datetime import datetime
-from collections import deque as _deque
+import time as _time
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
@@ -42,36 +45,21 @@ def _strip_ansi(text: str) -> str:
 
 
 # ===== 语法高亮规则 =====
-# 规则按优先级排列：先匹配的先生效（后面的规则若重叠，不会覆盖已着色的 span）
-# 注意：\b 在中文环境下不可靠（\w 是否含 CJK 取决于 Python 编译/平台），
-#       中文关键词改用 (?<!\w)...(?!\w) 边界
 _HIGHLIGHT_RULES: list[tuple[str, str]] = [
-    # ── Agent/User 角色标签（最高优先级，防止被后续规则误染） ──
     (r'💬\s*Agent:', '#00d4ff'),
     (r'👤\s*User:', '#fbbf24'),
-    # ── 严重错误 ──
     (r'\b(ERROR|CRITICAL|FATAL|Traceback|❌|💥|🔴)\b', '#ef4444'),
-    # ── 警告 ──
     (r'\b(WARNING|WARN|⚠️|⚠|🟠)\b', '#f59e0b'),
-    # ── 成功/通过（英文，拆开避免 OK\b 语法错误） ──
     (r'\bSUCCESS\b', '#10b981'),
     (r'\bOK\b', '#10b981'),
-    # ── 信息/调试 ──
     (r'\b(INFO|ℹ️|🔵)\b', '#3b82f6'),
     (r'\b(DEBUG|🐛)\b', '#8b5cf6'),
-    # ── 进行中（中文 + 表情，用 (?<!\w)...(?!\w) 替代 \b） ──
     (r'(?<!\w)(正在|开始|启动|🚀|⏳|🔄|📦|🔧)(?!\w)', '#00d4ff'),
-    # ── 成功/完成（中文 + 表情） ──
     (r'(?<!\w)(完成|成功|就绪|通过|正常|✅|🟢|🎉)(?!\w)', '#10b981'),
-    # ── 失败/错误（中文 + 表情） ──
     (r'(?<!\w)(失败|错误|异常|超时|崩溃|拒绝|不可用)(?!\w)', '#ef4444'),
-    # ── URL ──
     (r'\bhttps?://\S+', '#60a5fa'),
-    # ── 文件名 ──
     (r'\b[A-Za-z_]+\.py\b', '#fbbf24'),
-    # ── 数值单位 ──
     (r'(?<!\w)(\d+\.?\d*)\s*(GB|MB|KB|秒|s|ms|行|条)(?!\w)', '#fb923c'),
-    # ── Python 关键字 ──
     (r'\b(True|False|None)\b', '#c084fc'),
 ]
 
@@ -79,7 +67,6 @@ _HIGHLIGHT_PATTERNS = [(re.compile(p), c) for p, c in _HIGHLIGHT_RULES]
 
 
 def _highlight_line(text: str) -> str:
-    """把一行纯文本转成带颜色 span 的 HTML"""
     escaped = _html_lib.escape(text, quote=False)
     result = escaped
     for pattern, color in _HIGHLIGHT_PATTERNS:
@@ -92,8 +79,11 @@ def _highlight_line(text: str) -> str:
 
 # ===== 全局日志队列 =====
 _log_queue = queue.Queue()
-_dedup_ring: _deque = _deque(maxlen=500)
+# 时间窗口去重 + 模糊指纹：双重防重复
+_dedup_map: dict = {}  # {hash: timestamp}
 _dedup_lock = threading.Lock()
+_DEDUP_WINDOW = 5.0  # 精确匹配窗口（秒）
+_DEDUP_FUZZY_WINDOW = 4.0  # 模糊匹配窗口（秒），比精确窗口小，避免误杀
 
 
 def _enqueue(line: str):
@@ -104,10 +94,29 @@ def _enqueue(line: str):
     if not clean.strip():
         return
     h = hash(clean)
+    # 模糊指纹：取前60字符，防止loguru默认sink格式化(带时间戳)绕过精确去重
+    h_fuzzy = hash(clean[:60])
+    now = _time.time()
     with _dedup_lock:
-        if h in _dedup_ring:
+        # 定期清理过期条目
+        if len(_dedup_map) > 3000:
+            cutoff = now - max(_DEDUP_WINDOW, _DEDUP_FUZZY_WINDOW) * 2
+            if len(_dedup_map) > 8000:
+                _dedup_map.clear()
+            else:
+                for k, v in list(_dedup_map.items()):
+                    if v < cutoff:
+                        del _dedup_map[k]
+        # 精确匹配
+        last_ts = _dedup_map.get(h)
+        if last_ts is not None and (now - last_ts) < _DEDUP_WINDOW:
             return
-        _dedup_ring.append(h)
+        # 模糊匹配（防止不同格式化绕过）
+        last_ts_fuzzy = _dedup_map.get(h_fuzzy)
+        if last_ts_fuzzy is not None and (now - last_ts_fuzzy) < _DEDUP_FUZZY_WINDOW:
+            return
+        _dedup_map[h] = now
+        _dedup_map[h_fuzzy] = now
     ts = datetime.now().strftime("%H:%M:%S")
     _log_queue.put(f"{ts} │ {clean}")
 
@@ -214,7 +223,8 @@ def _install_os_pipe():
     _enqueue("[系统] OS 管道已安装")
 
 
-_install_lock_path = os.path.join(tempfile.gettempdir(), f"7tan_console_install_{os.getpid()}.lock")
+_install_lock_path = os.path.join(tempfile.gettempdir(),
+                                  f"7tan_console_install_{os.getpid()}.lock")
 
 
 def install_all():
@@ -274,7 +284,8 @@ class ConsoleViewer(QWidget):
         # ── 顶部工具栏 ──
         bar = QHBoxLayout()
         title = QLabel("📟 实时控制台")
-        title.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {T['text_primary']};")
+        title.setStyleSheet(
+            f"font-size: 14px; font-weight: bold; color: {T['text_primary']};")
         bar.addWidget(title)
         bar.addStretch()
 
@@ -292,7 +303,8 @@ class ConsoleViewer(QWidget):
             QPushButton:checked {{ background: {T['accent']}66; }}
             QPushButton:hover {{ background: {T['accent']}44; }}
         """)
-        self._auto_btn.clicked.connect(lambda: setattr(self, '_auto_scroll', self._auto_btn.isChecked()))
+        self._auto_btn.clicked.connect(
+            lambda: setattr(self, '_auto_scroll', self._auto_btn.isChecked()))
         bar.addWidget(self._auto_btn)
 
         clear_btn = QPushButton("🗑 清空")
@@ -305,27 +317,29 @@ class ConsoleViewer(QWidget):
             }}
             QPushButton:hover {{ background: {T['danger']}44; }}
         """)
-        # _output 必须在按钮连接之前创建
         self._output = QTextEdit()
         self._output.setReadOnly(True)
         clear_btn.clicked.connect(self._output.clear)
         bar.addWidget(clear_btn)
 
         self._line_count = QLabel("0 行")
-        self._line_count.setStyleSheet(f"color: {T['text_secondary']}; font-size: 11px; padding: 2px 6px;")
+        self._line_count.setStyleSheet(
+            f"color: {T['text_secondary']}; font-size: 11px; padding: 2px 6px;")
         bar.addWidget(self._line_count)
         layout.addLayout(bar)
 
-        # ── 输出区：自动换行 + 隐藏横向滚动条 ──
+        # ── 输出区 ──
         self._output.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
-        self._output.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._output.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._output.setStyleSheet(f"""
             QTextEdit {{
                 background-color: #0D1117;
                 color: #C9D1D9;
                 border: 1px solid {T['border']};
                 border-radius: 6px;
-                font-family: "Cascadia Code", "Fira Code", "Consolas", "Courier New", monospace;
+                font-family: "Cascadia Code", "Fira Code", "Consolas",
+                             "Courier New", monospace;
                 font-size: 12px;
                 padding: 8px;
                 selection-background-color: #264F78;
@@ -334,8 +348,11 @@ class ConsoleViewer(QWidget):
         layout.addWidget(self._output, 1)
 
         # ── 底部状态 ──
-        status = QLabel("loguru + Python + OS 管道  |  语法高亮  |  去重")
-        status.setStyleSheet(f"color: {T['text_secondary']}; font-size: 11px; padding: 2px 4px;")
+        status = QLabel(
+            "loguru + Python + OS 管道  |  语法高亮  |  时间窗口去重(3s)")
+        status.setStyleSheet(
+            f"color: {T['text_secondary']}; font-size: 11px; "
+            f"padding: 2px 4px;")
         layout.addWidget(status)
 
         self._total_lines = 0
@@ -344,13 +361,19 @@ class ConsoleViewer(QWidget):
         self._timer.start(50)
 
     def _drain_queue(self):
-        """批量收集 → 一次性 insertHtml，避免频繁重绘"""
+        """批量收集 → 一次性 insertHtml（含二次去重安全网）"""
         lines = []
+        seen = set()  # 本轮去重
         while len(lines) < 200:
             try:
                 line = _log_queue.get_nowait()
             except queue.Empty:
                 break
+            # 二次去重：基于内容hash，防止_enqueue漏掉的重复
+            line_hash = hash(line)
+            if line_hash in seen:
+                continue
+            seen.add(line_hash)
             lines.append(line)
 
         if not lines:
@@ -359,19 +382,17 @@ class ConsoleViewer(QWidget):
         self._total_lines += len(lines)
         self._line_count.setText(f"{self._total_lines} 行")
 
-        # 构建 HTML，每行一个 <div>，高亮关键词
         html_parts = []
         for line in lines:
             highlighted = _highlight_line(line)
             html_parts.append(
                 f'<div style="line-height:1.55;white-space:pre-wrap;'
-                f'font-family:\'Cascadia Code\',\'Fira Code\',Consolas,monospace;'
-                f'font-size:12px;">{highlighted}</div>'
+                f'font-family:\'Cascadia Code\',\'Fira Code\',Consolas,'
+                f'monospace;font-size:12px;">{highlighted}</div>'
             )
 
         batch_html = ''.join(html_parts)
 
-        # 一次性插入
         cursor = self._output.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.insertHtml(batch_html)

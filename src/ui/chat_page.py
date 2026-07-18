@@ -1991,77 +1991,93 @@ class ChatPage(QWidget):
 
     def _auto_load_sessions(self, retry=0):
 
-        """自动加载对话列表"""
+        """自动加载对话列表（后台线程，不阻塞UI）"""
 
-        try:
+        import threading
 
-            resp = requests.get(f"{API_BASE}/api/chat/history", timeout=10)
+        def _do_load():
 
-            sessions = resp.json().get("sessions", [])
+            try:
 
-            self._sidebar_ref().load_sessions(sessions)
+                resp = requests.get(f"{API_BASE}/api/chat/history", timeout=10)
 
-            if sessions:
+                sessions = resp.json().get("sessions", [])
 
-                # 自动选中第一个
+                QTimer.singleShot(0, lambda: self._on_sessions_loaded(sessions))
 
-                self._sidebar_ref().select_session(sessions[0].get("session_id", ""))
+            except Exception as e:
 
-        except Exception as e:
+                if retry < 3:
 
-            if retry < 3:
+                    QTimer.singleShot(1500, lambda: self._auto_load_sessions(retry + 1))
 
-                QTimer.singleShot(1500, lambda: self._auto_load_sessions(retry + 1))
+                else:
 
-            else:
+                    logger.warning(f"自动加载对话失败: {e}")
 
-                logger.warning(f"自动加载对话失败: {e}")
+        threading.Thread(target=_do_load, daemon=True).start()
+
+    def _on_sessions_loaded(self, sessions):
+
+        """在主线程更新会话列表UI"""
+
+        self._sidebar_ref().load_sessions(sessions)
+
+        if sessions:
+
+            self._sidebar_ref().select_session(sessions[0].get("session_id", ""))
 
 
 
     def _load_session(self, session_id: str):
 
-        """加载指定会话的历史消息"""
+        """加载指定会话的历史消息（后台线程，不阻塞UI）"""
 
         if session_id == self._current_session_id:
 
             return
 
-        try:
+        import threading
 
-            resp = requests.get(f"{API_BASE}/api/chat/history?session_id={session_id}", timeout=5)
+        def _do_load():
 
-            data = resp.json()
+            try:
 
-            messages = data.get("messages", [])
+                resp = requests.get(f"{API_BASE}/api/chat/history?session_id={session_id}", timeout=5)
 
+                data = resp.json()
 
+                QTimer.singleShot(0, lambda: self._on_session_loaded(session_id, data))
 
-            self._current_session_id = session_id
+            except Exception as e:
 
-            self._clear_messages()
+                QTimer.singleShot(0, lambda: self._add_message("error", f"❌ 加载对话失败: {e}"))
 
+        threading.Thread(target=_do_load, daemon=True).start()
 
+    def _on_session_loaded(self, session_id: str, data: dict):
 
-            for msg in messages:
+        """在主线程更新会话消息UI"""
 
-                role = msg.get("role", "system")
+        messages = data.get("messages", [])
 
-                content = msg.get("content", "")
+        self._current_session_id = session_id
 
-                if content:
+        self._clear_messages()
 
-                    self._add_message(role, content)
+        for msg in messages:
 
+            role = msg.get("role", "system")
 
+            content = msg.get("content", "")
 
-            self._title_label.setText(f"💬 {data.get('title', '对话')}")
+            if content:
 
-            self._add_message("system", f"📋 已加载 {len(messages)} 条消息")
+                self._add_message(role, content)
 
-        except Exception as e:
+        self._title_label.setText(f"💬 {data.get('title', '对话')}")
 
-            self._add_message("error", f"❌ 加载对话失败: {e}")
+        self._add_message("system", f"📋 已加载 {len(messages)} 条消息")
 
 
 
@@ -2093,19 +2109,23 @@ class ChatPage(QWidget):
 
             return
 
-        try:
+        import threading
 
-            requests.delete(f"{API_BASE}/api/chat/session/{session_id}", timeout=5)
+        def _do_delete():
 
-            self._new_session()
+            try:
 
-            # 刷新列表
+                requests.delete(f"{API_BASE}/api/chat/session/{session_id}", timeout=5)
 
-            QTimer.singleShot(300, self._auto_load_sessions)
+                QTimer.singleShot(0, lambda: self._new_session())
 
-        except Exception as e:
+                QTimer.singleShot(300, self._auto_load_sessions)
 
-            self._add_message("error", f"❌ 删除失败: {e}")
+            except Exception as e:
+
+                QTimer.singleShot(0, lambda: self._add_message("error", f"❌ 删除失败: {e}"))
+
+        threading.Thread(target=_do_delete, daemon=True).start()
 
 
 

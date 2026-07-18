@@ -27,22 +27,17 @@ async def get_settings():
     """获取当前配置（敏感字段脱敏）"""
     config = load_config()
 
-    # 脱敏 AI 配置中的 api_key
-    ai = config.get("ai", {})
-    if "configs" in ai:
-        # 检查 active 是否指向有效配置，不匹配时自动修复
-        active = ai.get("active", "")
-        if active not in ai["configs"] or not ai["configs"].get(active):
-            # 回退到第一个可用配置
-            available = [k for k, v in ai["configs"].items() if v and isinstance(v, dict)]
-            if available and active not in ai["configs"]:
-                ai["active"] = available[0]
-        for key, cfg in ai["configs"].items():
-            if "api_key" in cfg and cfg["api_key"] and len(str(cfg["api_key"])) > 6:
-                cfg["api_key"] = _mask_secret(str(cfg["api_key"]))
-    elif "api_key" in ai:
-        # 兼容旧格式
-        ai["api_key"] = _mask_secret(str(ai["api_key"]))
+    # AI 配置从数据库读取（脱敏）
+    try:
+        from ...database.db import get_all_ai_configs, get_active_ai_config
+        ai_configs = get_all_ai_configs(mask_secrets=True)
+        active_cfg = get_active_ai_config(mask_secrets=True)
+        config["ai"] = {
+            "active": active_cfg.get("config_key", "") if active_cfg else "",
+            "configs": {c["config_key"]: c for c in ai_configs} if ai_configs else {},
+        }
+    except Exception as e:
+        logger.warning(f"从数据库读取 AI 配置失败: {e}")
 
     if "site_7tan" in config:
         if "password" in config["site_7tan"]:
@@ -63,33 +58,49 @@ async def update_settings(updates: dict):
     try:
         config = load_config()
 
-        # 深度合并（跳过被脱敏的字段）
+        # AI 配置单独处理：写入数据库
+        ai_updates = updates.pop("ai", None)
+        if ai_updates and "configs" in ai_updates:
+            from ...database.db import save_ai_config, set_active_ai_config
+            active_key = ai_updates.get("active", "")
+            for key, cfg in ai_updates["configs"].items():
+                if not isinstance(cfg, dict):
+                    continue
+                # 跳过脱敏的 api_key
+                api_key = cfg.get("api_key", "")
+                if "••••" in str(api_key):
+                    api_key = ""  # 不覆盖已有 key
+                is_active = 1 if key == active_key else 0
+                save_ai_config(
+                    config_key=key,
+                    provider=cfg.get("provider", "deepseek"),
+                    model=cfg.get("model", ""),
+                    base_url=cfg.get("base_url", ""),
+                    api_key=api_key,
+                    context_window=cfg.get("context_window", 128000),
+                    max_tokens=cfg.get("max_tokens", 16384),
+                    temperature=cfg.get("temperature", 0.7),
+                    is_active=is_active,
+                )
+            # 确保 active 正确
+            if active_key:
+                set_active_ai_config(active_key)
+            logger.info(f"⚙️ AI 配置已写入数据库")
+
+        # 其余配置写入 YAML
         def deep_merge(base: dict, overlay: dict):
             for key, value in overlay.items():
                 if isinstance(value, dict) and key in base and isinstance(base[key], dict):
                     deep_merge(base[key], value)
                 elif isinstance(value, str) and "••••" in value:
-                    # 脱敏值不覆盖真实值
                     continue
                 else:
                     base[key] = value
 
         deep_merge(config, updates)
-        logger.info(f"⚙️ 配置合并完成，准备保存 (keys: {list(updates.keys())})")
-
-        # 自动修复：如果 active 指向的配置不存在，回退到第一个可用配置
-        ai_cfg = config.get("ai", {})
-        if "configs" in ai_cfg and "active" in ai_cfg:
-            active = ai_cfg["active"]
-            if active not in ai_cfg["configs"] or not ai_cfg["configs"].get(active):
-                available = [k for k, v in ai_cfg["configs"].items() if v and isinstance(v, dict)]
-                if available:
-                    ai_cfg["active"] = available[0]
-                    logger.info(f"🔧 自动修正 ai.active: '{active}' → '{available[0]}'")
-
         save_config(config)
 
-        # 清除模型缓存，下次请求使用新配置
+        # 清除模型缓存
         try:
             from ...agent.model_manager import clear_model_cache
             clear_model_cache()

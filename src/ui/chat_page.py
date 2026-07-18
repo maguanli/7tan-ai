@@ -1372,7 +1372,8 @@ class ChatPage(QWidget):
 
         self._load_model_list()
 
-        QTimer.singleShot(500, self._auto_load_sessions)
+        self._sessions_ever_loaded = False
+        self._loading_sessions = False  # 防抖：防止并发加载导致列表被清空
 
 
 
@@ -1412,6 +1413,15 @@ class ChatPage(QWidget):
 
         sidebar.delete_session_requested.connect(self._delete_session)
 
+        # 外部侧边栏挂载后立即加载会话列表
+        QTimer.singleShot(200, self._auto_load_sessions)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # 仅在首次显示时加载（避免重复加载覆盖已有列表）
+        if not self._sessions_ever_loaded:
+            QTimer.singleShot(100, self._auto_load_sessions)
+        self._sessions_ever_loaded = True
 
 
     def _sidebar_ref(self):
@@ -1888,102 +1898,49 @@ class ChatPage(QWidget):
 
 
     def _load_model_list(self):
-
-        """加载 AI 模型列表"""
-
+        """加载 AI 模型列表（从数据库）"""
         try:
-
-            from ..config.loader import load_config
-
-            config = load_config()
-
-            ai = config.get("ai", {})
-
-            active_key = ai.get("active", "deepseek")
-
-            configs = ai.get("configs", {})
-
-
+            from ..database.db import get_all_ai_configs, get_active_ai_config
+            configs = get_all_ai_configs(mask_secrets=True)
+            active_cfg = get_active_ai_config(mask_secrets=True)
+            active_key = active_cfg.get("config_key", "") if active_cfg else ""
 
             self._model_combo.blockSignals(True)
-
             self._model_combo.clear()
-
-            for key, cfg in configs.items():
-
+            for cfg in configs:
+                key = cfg.get("config_key", "")
                 model_name = cfg.get("model", key)
-
                 display = f"{key} ({model_name})"
-
                 if key == active_key:
-
                     display = f"⭐ {display}"
-
                 self._model_combo.addItem(display, key)
 
-
-
             idx = self._model_combo.findData(active_key)
-
             if idx >= 0:
-
                 self._model_combo.setCurrentIndex(idx)
-
                 self._current_model_key = active_key
-
             self._model_combo.blockSignals(False)
-
         except Exception as e:
-
             logger.warning(f"加载模型列表失败: {e}")
 
-
-
     def _on_model_changed(self, index):
-
         """切换 AI 模型"""
-
         if index < 0:
-
             return
-
         config_key = self._model_combo.itemData(index)
-
         if not config_key or config_key == self._current_model_key:
-
             return
-
         try:
-
-            from ..config.loader import load_config, save_config
-
+            from ..database.db import set_active_ai_config
             from ..agent.model_manager import clear_model_cache
-
-            config = load_config()
-
-            ai = config.get("ai", {})
-
-            ai["active"] = config_key
-
-            config["ai"] = ai
-
-            save_config(config)
-
+            set_active_ai_config(config_key)
             clear_model_cache()
-
             self._current_model_key = config_key
-
             self._add_message("system", f"✅ 已切换到模型: {config_key}")
-
             # 刷新列表
-
             self._load_model_list()
-
         except Exception as e:
-
             self._add_message("error", f"❌ 切换模型失败: {e}")
-
-
 
     # ==================== 会话管理 ====================
 
@@ -1992,6 +1949,12 @@ class ChatPage(QWidget):
     def _auto_load_sessions(self, retry=0):
 
         """自动加载对话列表（后台线程，不阻塞UI）"""
+
+        # 防抖：如果已有加载进行中且非重试，跳过
+        if self._loading_sessions and retry == 0:
+            logger.debug("[ChatPage] 跳过重复加载请求（已有加载进行中）")
+            return
+        self._loading_sessions = True
 
         import threading
 
@@ -2003,9 +1966,13 @@ class ChatPage(QWidget):
 
                 sessions = resp.json().get("sessions", [])
 
+                logger.info(f"[ChatPage] 加载到 {len(sessions)} 个会话 (retry={retry})")
+
                 QTimer.singleShot(0, lambda: self._on_sessions_loaded(sessions))
 
             except Exception as e:
+
+                logger.warning(f"[ChatPage] 自动加载对话失败 (retry={retry}): {e}")
 
                 if retry < 3:
 
@@ -2013,7 +1980,9 @@ class ChatPage(QWidget):
 
                 else:
 
-                    logger.warning(f"自动加载对话失败: {e}")
+                    self._loading_sessions = False
+
+                    logger.warning(f"自动加载对话最终失败: {e}")
 
         threading.Thread(target=_do_load, daemon=True).start()
 
@@ -2021,11 +1990,33 @@ class ChatPage(QWidget):
 
         """在主线程更新会话列表UI"""
 
-        self._sidebar_ref().load_sessions(sessions)
+        try:
 
-        if sessions:
+            sidebar = self._sidebar_ref()
 
-            self._sidebar_ref().select_session(sessions[0].get("session_id", ""))
+            if sidebar is None:
+
+                logger.warning("[ChatPage] _on_sessions_loaded: sidebar 引用为空，跳过加载")
+
+                self._loading_sessions = False
+
+                return
+
+            sidebar.load_sessions(sessions)
+
+            logger.info(f"[ChatPage] 会话列表已更新: {len(sessions)} 条")
+
+            if sessions:
+
+                sidebar.select_session(sessions[0].get("session_id", ""))
+
+        except Exception as e:
+
+            logger.warning(f"[ChatPage] _on_sessions_loaded 失败: {e}", exc_info=True)
+
+        finally:
+
+            self._loading_sessions = False
 
 
 
@@ -2165,13 +2156,17 @@ class ChatPage(QWidget):
 
             if model_key:
 
-                from ..config.loader import load_config
+                from ..database.db import get_ai_config_by_key
 
-                cfg = load_config()
+                cfg = get_ai_config_by_key(model_key, mask_secrets=False)
 
-                model_cfg = cfg.get("ai", {}).get("configs", {}).get(model_key, {})
+                if cfg:
 
-                model = model_cfg.get("model", model_key)
+                    model = cfg.get("model", model_key)
+
+                else:
+
+                    model = model_key
 
 
 
@@ -2625,7 +2620,15 @@ class ChatPage(QWidget):
 
             sessions = resp.json().get("sessions", [])
 
-            self._sidebar.load_sessions(sessions)
+            if sessions:
+
+                sidebar = self._sidebar_ref()
+
+                if sidebar is not None:
+
+                    sidebar.load_sessions(sessions)
+
+                    logger.debug(f"[ChatPage] 会话列表已刷新: {len(sessions)} 条")
 
         except Exception:
             logger.warning("加载会话历史失败", exc_info=True)

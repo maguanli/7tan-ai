@@ -19,13 +19,19 @@ MAX_ITERATIONS = 300  # 浏览列表多页任务需要更多步数
 
 
 def _get_active_ai_config(config: dict) -> dict:
-    """从多配置 AI 中获取当前活跃配置（兼容新旧格式）"""
+    """从数据库获取当前活跃 AI 配置"""
+    try:
+        from ..database.db import get_active_ai_config_raw
+        cfg = get_active_ai_config_raw()
+        if cfg:
+            return cfg
+    except Exception:
+        pass
+    # 回退：从 config dict 读取（兼容旧格式）
     ai = config.get("ai", {})
-    # 新格式：{active: "xxx", configs: {...}}
     if "configs" in ai:
         active_key = ai.get("active", "deepseek")
         return ai["configs"].get(active_key, {})
-    # 旧格式：{provider: "xxx", model: "xxx", ...}
     return ai
 
 

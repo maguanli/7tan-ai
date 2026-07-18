@@ -56,28 +56,16 @@ class ModelManager:
         self._load_config_defaults()
 
     def _load_config_defaults(self):
-        """从配置加载 context_window / max_tokens / temperature"""
+        """从数据库加载 context_window / max_tokens / temperature"""
         try:
-            from ..config.loader import load_config
-            config = load_config()
-            ai_cfg = config.get("ai", {})
-            # 兼容新格式（ai.configs）和旧格式（直接 ai.xxx）
-            if "configs" in ai_cfg:
-                active_key = ai_cfg.get("active", "deepseek")
-                active_cfg = ai_cfg["configs"].get(active_key)
-                # 如果 active 指向的配置不存在，回退到第一个可用配置
-                if not active_cfg:
-                    available = [k for k, v in ai_cfg["configs"].items() if v and isinstance(v, dict)]
-                    if available:
-                        active_key = available[0]
-                        active_cfg = ai_cfg["configs"][active_key]
-                    else:
-                        active_cfg = {}
+            from ..database.db import get_active_ai_config_raw
+            cfg = get_active_ai_config_raw()
+            if cfg:
+                self.context_window = cfg.get("context_window", 128000)
+                self.max_tokens = cfg.get("max_tokens", 4096)
+                self.temperature = cfg.get("temperature", 0.7)
             else:
-                active_cfg = ai_cfg
-            self.context_window = active_cfg.get("context_window", ai_cfg.get("context_window", 128000))
-            self.max_tokens = active_cfg.get("max_tokens", ai_cfg.get("max_tokens", 4096))
-            self.temperature = active_cfg.get("temperature", ai_cfg.get("temperature", 0.7))
+                logger.warning("未找到活跃 AI 配置，使用默认值")
         except Exception as e:
             logger.warning(f"加载 AI 配置失败，使用默认值: {e}")
 
@@ -233,45 +221,36 @@ class ModelManager:
         return sanitized
 
     def _get_client(self):
-        """获取 OpenAI 兼容客户端 — 统一从 config.ai 读取（兼容多配置格式，带缓存）"""
+        """获取 OpenAI 兼容客户端 — 从数据库读取活跃 AI 配置（带缓存）"""
         if self._client is not None:
             return self._client
 
-        from ..config.loader import load_config
-        config = load_config()
-        ai_cfg = config.get("ai", {})
+        from ..database.db import get_active_ai_config_raw, get_all_ai_configs
 
-        # 兼容新格式（ai.configs.active_key）和旧格式（ai.provider）
-        if "configs" in ai_cfg:
-            active_key = ai_cfg.get("active", "deepseek")
-            active_cfg = ai_cfg["configs"].get(active_key)
-            # 如果 active 指向的配置不存在，回退到第一个可用配置
-            if not active_cfg:
-                available = [k for k, v in ai_cfg["configs"].items() if v and isinstance(v, dict)]
-                if available:
-                    active_key = available[0]
-                    active_cfg = ai_cfg["configs"][active_key]
-                    logger.warning(f"配置 ai.active='{ai_cfg.get('active')}' 无效，已回退到 '{active_key}'")
-                else:
-                    active_cfg = {}
-            provider = active_cfg.get("provider", "deepseek") if active_cfg else "deepseek"
-            api_key = active_cfg.get("api_key", "") if active_cfg else ""
-            base_url = (active_cfg.get("base_url", "") or "").strip() if active_cfg else ""
-            if not api_key and provider != "ollama":
-                logger.error(f"❌ 活跃模型 '{active_key}' 未配置 api_key，请检查 config.yaml 中 ai.configs.{active_key}.api_key")
+        cfg = get_active_ai_config_raw()
+        if not cfg:
+            # 回退：尝试从数据库加载任何配置
+            configs = get_all_ai_configs(mask_secrets=False)
+            if configs:
+                cfg = configs[0]
+                logger.warning(f"没有活跃配置，回退到: {cfg.get('config_key')}")
+
+        if cfg:
+            provider = cfg.get("provider", "deepseek")
+            api_key = cfg.get("api_key", "")
+            base_url = (cfg.get("base_url", "") or "").strip()
+            config_key = cfg.get("config_key", "unknown")
         else:
-            provider = ai_cfg.get("provider", "deepseek")
-            api_key = ai_cfg.get("api_key", "")
-            base_url = ai_cfg.get("base_url", "").strip()
-            if not api_key and provider != "ollama":
-                logger.error("❌ AI 配置中未找到 api_key，请检查 config.yaml 中 ai.api_key 或 ai.configs.<active>.api_key")
+            provider = "deepseek"
+            api_key = ""
+            base_url = ""
+            config_key = "none"
 
         if not api_key and provider != "ollama":
             raise ValueError(
                 "AI API Key 未配置！\n"
-                "请在设置页面的「AI 模型」Tab 中配置 API Key，\n"
-                "或手动编辑 config/config.yaml 中的 api_key 字段。\n"
-                "也可以切换到 Ollama 本地模型（无需 API Key）。"
+                "请在「AI 设置」对话框中配置 API Key，\n"
+                "或切换到 Ollama 本地模型（无需 API Key）。"
             )
 
         import openai
@@ -286,7 +265,7 @@ class ModelManager:
 
         final_url = base_url or DEFAULT_URLS.get(provider, "https://api.openai.com/v1")
 
-        logger.info(f"🤖 连接 AI: provider={provider}, base_url={final_url}, api_key={'***' + api_key[-4:] if api_key and len(api_key) > 4 else '(none)'}")
+        logger.info(f"🤖 连接 AI [{config_key}]: provider={provider}, model={cfg.get('model','?') if cfg else '?'}, base_url={final_url}")
 
         # 🔒 配置 HTTP 超时，防止 AI API 调用无限挂起
         # connect=10s（建连接）, read=120s（等响应）, write=30s（发请求）

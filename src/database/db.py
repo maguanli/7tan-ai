@@ -1,6 +1,6 @@
 """
 数据库模块 — SQLite + SQLAlchemy ORM
-四张表: resources / task_logs / source_sites / conversation_history
+五张表: resources / task_logs / source_sites / ai_configs / conversation_history
 """
 import base64
 import os
@@ -299,6 +299,51 @@ class SourceSite(Base):
         return decrypt_password(self.login_password or "")
 
 
+
+
+class AiConfig(Base):
+    """AI 模型配置表 — 替代 YAML 中的 ai.configs，集中管理所有 AI 模型设置"""
+    __tablename__ = "ai_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    config_key = Column(String, nullable=False, unique=True)  # 如 'deepseek', 'glm-5.2'
+    provider = Column(String, default="deepseek")
+    model = Column(String, nullable=False)
+    base_url = Column(String)
+    api_key = Column(String)  # 加密存储
+    context_window = Column(Integer, default=128000)
+    max_tokens = Column(Integer, default=16384)
+    temperature = Column(Float, default=0.7)
+    is_active = Column(Integer, default=0)  # 1=当前激活
+    extra_config = Column(JSON)  # 扩展配置
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self, mask_secrets: bool = False) -> dict:
+        api_key = self.api_key or ""
+        if mask_secrets and len(api_key) > 6:
+            api_key = api_key[:3] + "••••" + api_key[-3:]
+        return {
+            "id": self.id, "config_key": self.config_key,
+            "provider": self.provider, "model": self.model,
+            "base_url": self.base_url, "api_key": api_key,
+            "context_window": self.context_window,
+            "max_tokens": self.max_tokens, "temperature": self.temperature,
+            "is_active": self.is_active,
+            "extra_config": self.extra_config,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def get_api_key(self) -> str:
+        """解密获取 API Key"""
+        return decrypt_password(self.api_key or "")
+
+    def set_api_key(self, plaintext: str):
+        """加密存储 API Key"""
+        self.api_key = encrypt_password(plaintext) if plaintext else ""
+
+
 class ConversationHistory(Base):
     """对话历史表"""
     __tablename__ = "conversation_history"
@@ -359,7 +404,230 @@ def get_session() -> Session:
 
 
 def init_db(db_path: str = None):
-    """初始化数据库（创建所有表）"""
+    """初始化数据库（创建所有表 + 迁移 AI 配置）"""
     engine = get_engine(db_path)
     Base.metadata.create_all(engine)
+    # 从 YAML 迁移 AI 配置到数据库（仅首次）
+    try:
+        ensure_default_ai_config()
+    except Exception as e:
+        logger.warning(f"AI 配置迁移跳过: {e}")
     logger.info("✅ 数据库初始化完成")
+
+
+# ===== AI 配置管理 =====
+
+def get_all_ai_configs(mask_secrets: bool = True) -> list:
+    """获取所有 AI 配置"""
+    session = get_session()
+    try:
+        configs = session.query(AiConfig).order_by(AiConfig.id).all()
+        return [c.to_dict(mask_secrets=mask_secrets) for c in configs]
+    finally:
+        session.close()
+
+
+def get_active_ai_config(mask_secrets: bool = False) -> dict | None:
+    """获取当前激活的 AI 配置"""
+    session = get_session()
+    try:
+        cfg = session.query(AiConfig).filter(AiConfig.is_active == 1).first()
+        return cfg.to_dict(mask_secrets=mask_secrets) if cfg else None
+    finally:
+        session.close()
+
+
+def get_ai_config_by_key(config_key: str, mask_secrets: bool = False) -> dict | None:
+    """按 config_key 获取 AI 配置"""
+    session = get_session()
+    try:
+        cfg = session.query(AiConfig).filter(AiConfig.config_key == config_key).first()
+        return cfg.to_dict(mask_secrets=mask_secrets) if cfg else None
+    finally:
+        session.close()
+
+
+def save_ai_config(config_key: str, provider: str, model: str, base_url: str = "",
+                   api_key: str = "", context_window: int = 128000,
+                   max_tokens: int = 16384, temperature: float = 0.7,
+                   is_active: int = 0, extra_config: dict = None) -> AiConfig:
+    """保存或更新 AI 配置"""
+    session = get_session()
+    try:
+        cfg = session.query(AiConfig).filter(AiConfig.config_key == config_key).first()
+        if cfg is None:
+            cfg = AiConfig(config_key=config_key)
+            session.add(cfg)
+        cfg.provider = provider
+        cfg.model = model
+        cfg.base_url = base_url
+        cfg.context_window = context_window
+        cfg.max_tokens = max_tokens
+        cfg.temperature = temperature
+        cfg.is_active = is_active
+        cfg.extra_config = extra_config or {}
+        if api_key and "••••" not in api_key:
+            cfg.set_api_key(api_key)
+        # 如果设置 is_active=1，先清除其他配置的激活状态
+        if is_active:
+            session.query(AiConfig).filter(
+                AiConfig.config_key != config_key
+            ).update({"is_active": 0})
+        session.commit()
+        logger.info(f"💾 AI 配置已保存: {config_key} ({model})")
+        return cfg
+    except Exception as e:
+        session.rollback()
+        logger.error(f"保存 AI 配置失败: {e}")
+        raise
+    finally:
+        session.close()
+
+
+def set_active_ai_config(config_key: str) -> bool:
+    """切换激活的 AI 配置"""
+    session = get_session()
+    try:
+        # 先清除所有
+        session.query(AiConfig).update({"is_active": 0})
+        # 设置目标
+        result = session.query(AiConfig).filter(
+            AiConfig.config_key == config_key
+        ).update({"is_active": 1})
+        session.commit()
+        if result:
+            logger.info(f"✅ 已激活 AI 配置: {config_key}")
+            return True
+        logger.warning(f"⚠️ 未找到 AI 配置: {config_key}")
+        return False
+    except Exception as e:
+        session.rollback()
+        logger.error(f"切换 AI 配置失败: {e}")
+        return False
+    finally:
+        session.close()
+
+
+def delete_ai_config(config_key: str) -> bool:
+    """删除 AI 配置"""
+    session = get_session()
+    try:
+        result = session.query(AiConfig).filter(AiConfig.config_key == config_key).delete()
+        session.commit()
+        if result:
+            logger.info(f"🗑️ 已删除 AI 配置: {config_key}")
+        return result > 0
+    except Exception as e:
+        session.rollback()
+        logger.error(f"删除 AI 配置失败: {e}")
+        return False
+    finally:
+        session.close()
+
+
+def migrate_ai_configs_from_yaml(yaml_config: dict):
+    """将 YAML 中的 AI 配置迁移到数据库（首次初始化时调用）"""
+    ai = yaml_config.get("ai", {})
+    configs = ai.get("configs", {})
+    active_key = ai.get("active", "")
+    
+    if not configs:
+        return
+    
+    session = get_session()
+    try:
+        existing = session.query(AiConfig).count()
+        if existing > 0:
+            logger.info(f"📋 数据库已有 {existing} 条 AI 配置，跳过 YAML 迁移")
+            return
+        
+        for key, cfg in configs.items():
+            if not isinstance(cfg, dict):
+                continue
+            is_active = 1 if key == active_key else 0
+            aicfg = AiConfig(
+                config_key=key,
+                provider=cfg.get("provider", "deepseek"),
+                model=cfg.get("model", ""),
+                base_url=cfg.get("base_url", ""),
+                context_window=cfg.get("context_window", 128000),
+                max_tokens=cfg.get("max_tokens", 16384),
+                temperature=cfg.get("temperature", 0.7),
+                is_active=is_active,
+            )
+            api_key = cfg.get("api_key", "")
+            if api_key and not api_key.startswith("$"):
+                aicfg.set_api_key(api_key)
+            else:
+                aicfg.api_key = api_key  # 保留 ${VAR} 引用
+            session.add(aicfg)
+            logger.info(f"📥 迁移 AI 配置: {key} ({cfg.get('model')})")
+        
+        session.commit()
+        logger.info(f"✅ 已从 YAML 迁移 {len(configs)} 条 AI 配置到数据库")
+    except Exception as e:
+        session.rollback()
+        logger.warning(f"⚠️ YAML 迁移失败（可能已存在）: {e}")
+    finally:
+        session.close()
+
+
+def get_active_ai_config_raw() -> dict | None:
+    """获取活跃配置的原始数据（含解密后的 api_key），用于 model_manager"""
+    session = get_session()
+    try:
+        cfg = session.query(AiConfig).filter(AiConfig.is_active == 1).first()
+        if not cfg:
+            return None
+        return {
+            "config_key": cfg.config_key,
+            "provider": cfg.provider,
+            "model": cfg.model,
+            "base_url": cfg.base_url,
+            "api_key": cfg.get_api_key() or "",
+            "context_window": cfg.context_window,
+            "max_tokens": cfg.max_tokens,
+            "temperature": cfg.temperature,
+        }
+    finally:
+        session.close()
+
+
+def ensure_default_ai_config():
+    """确保至少有一条 AI 配置（从 YAML 迁移或创建默认）"""
+    session = get_session()
+    try:
+        count = session.query(AiConfig).count()
+        if count > 0:
+            return
+    finally:
+        session.close()
+    
+    # 尝试从 YAML 迁移
+    from ..config.loader import load_config
+    config = load_config()
+    if config:
+        migrate_ai_configs_from_yaml(config)
+    
+    # 再次检查
+    session2 = get_session()
+    try:
+        count2 = session2.query(AiConfig).count()
+        if count2 == 0:
+            # 创建默认 deepseek 配置
+            cfg = AiConfig(
+                config_key="deepseek",
+                provider="deepseek",
+                model="deepseek-v4-pro",
+                base_url="https://api.deepseek.com/v1",
+                context_window=128000,
+                max_tokens=16384,
+                temperature=0.7,
+                is_active=1,
+            )
+            session2.add(cfg)
+            session2.commit()
+            logger.info("📝 已创建默认 AI 配置: deepseek")
+    finally:
+        session2.close()
+

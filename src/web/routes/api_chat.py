@@ -20,6 +20,10 @@ from loguru import logger
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
+# 🔒 后端超时保护：Agent 循环最长等待时间（秒）
+# 略小于前端 HTTP 超时（310s），确保后端先返回错误而非前端 timeout
+AGENT_LOOP_TIMEOUT = 300
+
 
 class ChatRequest(BaseModel):
     message: str
@@ -60,7 +64,18 @@ async def send_message(req: ChatRequest):
                 loop.call_soon_threadsafe(future.set_exception, e)
 
         threading.Thread(target=_run_agent, daemon=True).start()
-        result = await future
+
+        # 🔒 超时保护：最长等待 AGENT_LOOP_TIMEOUT 秒
+        # 防止 AI API 调用挂起时后端无限等待
+        try:
+            result = await asyncio.wait_for(future, timeout=AGENT_LOOP_TIMEOUT)
+        except asyncio.TimeoutError:
+            logger.error(f"⏰ Agent 循环超时 ({AGENT_LOOP_TIMEOUT}s)，会话: {session_id}")
+            save_message(session_id, "assistant", f"⏰ 请求超时（{AGENT_LOOP_TIMEOUT}秒），请重试或简化问题。")
+            raise HTTPException(
+                status_code=504,
+                detail=f"AI 请求超时（{AGENT_LOOP_TIMEOUT}秒），请稍后重试。如果是复杂任务，尝试分步执行。"
+            )
 
         # 保存 AI 回复
         save_message(session_id, "assistant", result.get("result", ""))
@@ -72,12 +87,24 @@ async def send_message(req: ChatRequest):
             cost=result.get("cost", 0),
             iterations=result.get("iterations", 0),
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"对话失败: {e}")
         save_message(session_id, "assistant", f"❌ {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ThreadPoolExecutor 用于 SSE 流式响应（惰性初始化）
+_executor = None
+
+
+def _get_executor():
+    global _executor
+    if _executor is None:
+        import concurrent.futures
+        _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="chat-stream")
+    return _executor
 
 
 @router.post("/send/stream")

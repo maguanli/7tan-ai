@@ -269,7 +269,7 @@ class ChatWorker(QThread):
 
 
 
-            resp = requests.post(f"{API_BASE}/api/chat/send", json=data, timeout=1800)
+            resp = requests.post(f"{API_BASE}/api/chat/send", json=data, timeout=310)
 
             resp.raise_for_status()
 
@@ -659,7 +659,7 @@ class MessageBubble(QFrame):
 
         # 复制按钮
 
-        copy_btn = QPushButton("📋 复制")
+        copy_btn = QPushButton("复制")
 
         copy_btn.setFixedHeight(22)
 
@@ -671,7 +671,7 @@ class MessageBubble(QFrame):
 
             QPushButton {{
 
-                background: transparent; color: {THEME['text_primary']};
+                background: transparent; color: {text_color};
 
                 border: none; font-size: 10px; padding: 0 6px;
 
@@ -684,26 +684,26 @@ class MessageBubble(QFrame):
         actions.addWidget(copy_btn)
 
         # edit button
-        edit_btn = QPushButton(".. edit")
+        edit_btn = QPushButton("编辑")
         edit_btn.setFixedHeight(22)
         edit_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         edit_btn.clicked.connect(lambda: self._edit_message())
-        edit_btn.setStyleSheet(f"QPushButton{{background:transparent;color:{THEME['text_primary']};border:none;font-size:10px;padding:0 6px;}}QPushButton:hover{{color:{THEME['accent']};}}")
+        edit_btn.setStyleSheet(f"QPushButton{{background:transparent;color:{text_color};border:none;font-size:10px;padding:0 6px;}}QPushButton:hover{{color:{THEME['accent']};}}")
         actions.addWidget(edit_btn)
 
         # delete button
-        del_btn = QPushButton(".. del")
+        del_btn = QPushButton("删除")
         del_btn.setFixedHeight(22)
         del_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         del_btn.clicked.connect(lambda: self._delete_self())
-        del_btn.setStyleSheet(f"QPushButton{{background:transparent;color:{THEME['text_primary']};border:none;font-size:10px;padding:0 6px;}}QPushButton:hover{{color:{THEME['danger']};}}")
+        del_btn.setStyleSheet(f"QPushButton{{background:transparent;color:{text_color};border:none;font-size:10px;padding:0 6px;}}QPushButton:hover{{color:{THEME['danger']};}}")
         actions.addWidget(del_btn)
 
         # 重试按钮（仅 assistant）
 
         if role == "assistant" and session_id:
 
-            retry_btn = QPushButton("🔄 重试")
+            retry_btn = QPushButton("重试")
 
             retry_btn.setFixedHeight(22)
 
@@ -801,11 +801,7 @@ class MessageBubble(QFrame):
 
                 '<span style="font-weight:bold;color:#a6e22e;">' + lang + '</span>'
 
-                '<button onclick="navigator.clipboard.writeText(this.getAttribute(&quot;data-code&quot;))" '
-
-                'data-code="' + esc + '" '
-
-                'style="background:#49483e;color:#e6db74;border:none;border-radius:3px;padding:2px 10px;cursor:pointer;font-size:11px;">f4cb 复制</button>'
+                '<span style="color:#75715e;font-size:10px;">[Ctrl+C 复制]</span>'
 
                 '</div>'
 
@@ -915,10 +911,15 @@ class MessageBubble(QFrame):
         return w
 
     def _copy_content(self):
-
         """复制消息内容到剪贴板"""
-
         QApplication.clipboard().setText(self._content)
+        # 短暂反馈
+        sender = self.sender()
+        if isinstance(sender, QPushButton):
+            original = sender.text()
+            sender.setText("已复制")
+            QTimer.singleShot(1500, lambda: sender.setText(original))
+        logger.info("已复制到剪贴板")
 
     def _edit_message(self):
         dlg = QDialog(self)
@@ -932,7 +933,11 @@ class MessageBubble(QFrame):
         ly.addWidget(ed)
         br = QHBoxLayout()
         sv = QPushButton("保存")
-        sv.clicked.connect(lambda: (setattr(self, '_content', ed.toPlainText()), self.update_content(ed.toPlainText()), dlg.accept()))
+        def do_save():
+            self._content = ed.toPlainText()
+            self.update_content(self._content)
+            dlg.accept()
+        sv.clicked.connect(do_save)
         cc = QPushButton("取消")
         cc.clicked.connect(dlg.reject)
         br.addWidget(sv); br.addWidget(cc)
@@ -940,12 +945,14 @@ class MessageBubble(QFrame):
         dlg.exec()
 
     def _delete_self(self):
-        reply = QMessageBox.question(self, "确认删除", "确定要删除这条消息吗？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        reply = QMessageBox.question(
+            self, "确认删除", "确定要删除这条消息吗？删除后无法恢复。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
         if reply == QMessageBox.StandardButton.Yes:
             self.setVisible(False)
             self.deleteLater()
-
-        logger.info("📋 已复制到剪贴板")
 
 
 
@@ -995,48 +1002,6 @@ class MessageBubble(QFrame):
 
 
 
-
-
-# ============================================================
-
-#  会话侧边栏
-
-# ============================================================
-
-    def _edit_message(self):
-        """Inline edit this message"""
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Edit message")
-        dlg.setMinimumSize(420, 220)
-        dlg.setStyleSheet(f"background:{THEME['bg_card']};color:{THEME['text_primary']};")
-        l = QVBoxLayout(dlg)
-        ed = QPlainTextEdit()
-        ed.setPlainText(self._content)
-        ed.setStyleSheet(f"background:{THEME['bg_input']};color:{THEME['text_primary']};border:1px solid {THEME['border']};border-radius:6px;")
-        l.addWidget(ed)
-        br = QHBoxLayout()
-        save = QPushButton("Save")
-        def do_save():
-            self._content = ed.toPlainText()
-            self.update_content(self._content)
-            dlg.accept()
-        save.clicked.connect(do_save)
-        cancel = QPushButton("Cancel")
-        cancel.clicked.connect(dlg.reject)
-        br.addWidget(save); br.addWidget(cancel)
-        l.addLayout(br)
-        dlg.exec()
-
-    def _delete_self(self):
-        """Remove this message bubble with confirmation"""
-        reply = QMessageBox.question(
-            self, "确认删除", "确定要删除这条消息吗？删除后无法恢复。",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            self.setVisible(False)
-            self.deleteLater()
 
 
 class SessionSidebar(QFrame):
@@ -2222,7 +2187,7 @@ class ChatPage(QWidget):
 
             try:
 
-                resp = requests.post(f"{API_BASE}/api/chat/send", json=data, timeout=1800)
+                resp = requests.post(f"{API_BASE}/api/chat/send", json=data, timeout=310)
 
                 resp.raise_for_status()
 
@@ -2642,9 +2607,8 @@ class ChatPage(QWidget):
 
             self._sidebar.load_sessions(sessions)
 
-        except:
-
-            pass
+        except Exception:
+            logger.warning("加载会话历史失败", exc_info=True)
 
 
 

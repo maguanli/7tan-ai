@@ -265,6 +265,11 @@ API_BASE = f"http://127.0.0.1:{_API_PORT}"
 
 
 # ===== 后台请求线程 =====
+
+
+# ============================================================
+#  API Worker - 后台线程
+# ============================================================
 class ApiWorker(QThread):
     """后台 HTTP 请求线程，避免阻塞 UI"""
     finished = pyqtSignal(dict)
@@ -296,6 +301,11 @@ class ApiWorker(QThread):
 
 
 # ===== 统计卡片组件 =====
+
+
+# ============================================================
+#  StatCard - 统计卡片组件
+# ============================================================
 class StatCard(QFrame):
     def __init__(self, title, value="0", subtitle="", color=THEME["accent"]):
         super().__init__()
@@ -332,6 +342,11 @@ class StatCard(QFrame):
 
 
 # ===== 侧边栏 =====
+
+
+# ============================================================
+#  Sidebar - 侧边栏导航
+# ============================================================
 class Sidebar(QFrame):
     page_changed = pyqtSignal(str)
 
@@ -451,6 +466,11 @@ class Sidebar(QFrame):
 
 
 # ===== 仪表盘页面 =====
+
+
+# ============================================================
+#  DashboardPage - 仪表盘
+# ============================================================
 class DashboardPage(QWidget):
     def __init__(self):
         super().__init__()
@@ -545,6 +565,11 @@ from .chat_page import ChatPage, MessageInput, SessionSidebar
 
 
 # ===== 资源管理页面（表格） =====
+
+
+# ============================================================
+#  ResourceTablePage - 资源列表
+# ============================================================
 class ResourceTablePage(QWidget):
     def __init__(self):
         super().__init__()
@@ -669,6 +694,11 @@ class ResourceTablePage(QWidget):
 
 
 # ===== 任务监控页面 =====
+
+
+# ============================================================
+#  TasksPage - 任务管理
+# ============================================================
 class TasksPage(QWidget):
     def __init__(self):
         super().__init__()
@@ -746,6 +776,11 @@ class TasksPage(QWidget):
 
 
 # ===== 数据源管理页面 =====
+
+
+# ============================================================
+#  SourcesPage - 源站管理
+# ============================================================
 class SourcesPage(QWidget):
     def __init__(self):
         super().__init__()
@@ -839,6 +874,11 @@ class SourcesPage(QWidget):
 
 
 # ===== 独立浏览器窗口 =====
+
+
+# ============================================================
+#  DetachedBrowserWindow - 独立浏览器窗口
+# ============================================================
 class DetachedBrowserWindow(QMainWindow):
     """弹出式独立浏览器窗口"""
 
@@ -872,6 +912,11 @@ class DetachedBrowserWindow(QMainWindow):
 
 
 # ===== 浏览器页面 =====
+
+
+# ============================================================
+#  BrowserPage - 浏览器页面 (核心)
+# ============================================================
 class BrowserPage(QWidget):
     """内置浏览器 — 多标签页，使用 PyQt6 QWebEngineView 原生渲染网页"""
 
@@ -1446,6 +1491,11 @@ from .console_panel import ConsoleViewer
 from .code_viewer import CodeViewer
 
 # ===== AI 工作台（浏览器 + 对话 左右分屏） =====
+
+
+# ============================================================
+#  ChatBrowserSplitPage - AI对话+浏览器分屏
+# ============================================================
 class ChatBrowserSplitPage(QWidget):
     """浏览器在左、AI 对话在右，浏览器与控制台一键切换"""
 
@@ -1601,6 +1651,11 @@ class ChatBrowserSplitPage(QWidget):
 
 
 # ===== 统计分析页面 =====
+
+
+# ============================================================
+#  AnalyticsPage - 数据分析
+# ============================================================
 class AnalyticsPage(QWidget):
     def __init__(self):
         super().__init__()
@@ -1669,6 +1724,11 @@ class AnalyticsPage(QWidget):
 
 
 # ===== 设置页面 =====
+
+
+# ============================================================
+#  SettingsPage - 设置页面
+# ============================================================
 class SettingsPage(QWidget):
     def __init__(self):
         super().__init__()
@@ -2137,7 +2197,10 @@ class SettingsPage(QWidget):
         self._config_list.blockSignals(False)
         # 如果列表为空，不创建兜底默认配置（避免覆盖真实数据）
         if self._config_list.count() == 0:
-            self._ai_configs = {"deepseek": {"provider": "deepseek", "model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1", "api_key": ""}}
+            self._ai_configs = {"deepseek": {
+                "provider": "deepseek", "model": "deepseek-chat",
+                "base_url": "https://api.deepseek.com/v1", "api_key": ""
+            }}
             self._active_config = "deepseek"
             self._refresh_config_list()
         self._suppress_change = False
@@ -2214,7 +2277,10 @@ class SettingsPage(QWidget):
         self._active_config = ai.get("active", next(iter(self._ai_configs.keys())) if self._ai_configs else "deepseek")
 
         if not self._ai_configs:
-            self._ai_configs = {"deepseek": {"provider": "deepseek", "model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1", "api_key": ""}}
+            self._ai_configs = {"deepseek": {
+                "provider": "deepseek", "model": "deepseek-chat",
+                "base_url": "https://api.deepseek.com/v1", "api_key": ""
+            }}
             self._active_config = "deepseek"
 
         self._config_list.blockSignals(True)
@@ -2632,6 +2698,11 @@ class SettingsPage(QWidget):
 
 
 # ===== 主窗口 =====
+
+
+# ============================================================
+#  MainWindow - 主窗口
+# ============================================================
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()

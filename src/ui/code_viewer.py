@@ -6,8 +6,10 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QPlainTextEdit, QFileDialog, QTreeWidget, QTreeWidgetItem, QSplitter,
+    QLineEdit,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtGui import QShortcut, QKeySequence
 from PyQt6.QtGui import QFont, QColor, QSyntaxHighlighter, QTextCharFormat
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -70,6 +72,9 @@ class CodeViewer(QWidget):
         super().__init__()
         self._current_file = None
         self._highlighter = None
+        self._search_results = []  # [(file_path, line_no, line_text), ...]
+        self._search_idx = -1
+        self._file_cache = {}  # path -> content, for fast search
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -80,10 +85,35 @@ class CodeViewer(QWidget):
         tb.addWidget(self._lbl("📝 代码", "#e2e8f0", 13, True))
         self._file_label = self._lbl("未打开文件", "#64748b", 11)
         tb.addWidget(self._file_label, 1)
+        # 搜索框
+        self._search_input = QLineEdit()
+        self._search_input.setPlaceholderText("🔍 搜索文件名或代码...")
+        self._search_input.setFixedHeight(26)
+        self._search_input.setFixedWidth(220)
+        self._search_input.setStyleSheet(
+            "QLineEdit{background:#0f0f23;color:#e2e8f0;border:1px solid #334155;"
+            "border-radius:4px;font-size:12px;padding:2px 8px;}"
+            "QLineEdit:focus{border-color:#00d4ff;}")
+        self._search_input.setClearButtonEnabled(True)
+        self._search_input.returnPressed.connect(self._on_search)
+        self._search_input.textChanged.connect(self._on_search_text_changed)
+        tb.addWidget(self._search_input)
+        # 搜索结果计数
+        self._search_count_label = self._lbl("", "#64748b", 10)
+        self._search_count_label.setFixedWidth(50)
+        tb.addWidget(self._search_count_label)
+        # 上下导航
+        for text, slot in [("▲", self._prev_match), ("▼", self._next_match)]:
+            btn_nav = QPushButton(text)
+            btn_nav.setFixedSize(24, 24)
+            btn_nav.clicked.connect(slot)
+            btn_nav.setStyleSheet("background:#334155;color:#e2e8f0;border:none;border-radius:3px;font-size:11px;")
+            btn_nav.setCursor(Qt.CursorShape.PointingHandCursor)
+            tb.addWidget(btn_nav)
         for text, color, slot in [("📂 打开", "#10b981", self._open_dialog),
-                                   ("🔄", "#7c3aed", self._refresh_tree)]:
+                                   ("🔄 刷新", "#7c3aed", self._refresh_tree)]:
             btn = QPushButton(text); btn.setFixedHeight(26)
-            btn.setFixedWidth(70 if len(text) > 2 else 36)
+            btn.setFixedWidth(80 if len(text) > 2 else 36)
             btn.clicked.connect(slot)
             btn.setStyleSheet(f"background:{color};color:#fff;border:none;border-radius:4px;font-size:12px;font-weight:bold;")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -119,6 +149,8 @@ class CodeViewer(QWidget):
         layout.addWidget(self._status)
 
         QTimer.singleShot(300, self._refresh_tree)
+        QShortcut(QKeySequence("Ctrl+F"), self, self._focus_search)
+        QShortcut(QKeySequence("Escape"), self, self._clear_search)
 
     def _lbl(self, text, color, size, bold=False):
         w = "bold;" if bold else ""
@@ -199,6 +231,138 @@ class CodeViewer(QWidget):
                 if find(it, target): return True
             return False
         find(self._tree.invisibleRootItem(), path)
+
+    # ========== 搜索功能 ==========
+    def _focus_search(self):
+        """Ctrl+F 聚焦搜索框并全选"""
+        self._search_input.setFocus()
+        self._search_input.selectAll()
+
+    def _clear_search(self):
+        """Esc 清空搜索"""
+        self._search_input.clear()
+        self._search_results.clear()
+        self._search_idx = -1
+        self._search_count_label.setText("")
+        self._clear_search_highlight()
+
+    def _on_search_text_changed(self, text):
+        """搜索文本变化时实时搜索"""
+        if len(text) >= 2:
+            self._on_search()
+        elif len(text) == 0:
+            self._search_results.clear()
+            self._search_idx = -1
+            self._search_count_label.setText("")
+            self._clear_search_highlight()
+
+    def _on_search(self):
+        """执行搜索：先搜文件名，再搜代码内容"""
+        query = self._search_input.text().strip()
+        if len(query) < 2:
+            self._search_count_label.setText("≥2字")
+            return
+        self._search_results.clear()
+        self._search_idx = -1
+        qlower = query.lower()
+        # 1) 搜索文件名
+        file_matches = []
+        code_matches = []
+        self._collect_all_files(PROJECT_ROOT, qlower, file_matches, code_matches)
+        # 文件名匹配放前面
+        self._search_results = file_matches + code_matches
+        count = len(self._search_results)
+        self._search_count_label.setText(f"{count}个")
+        if count > 0:
+            self._search_idx = 0
+            self._goto_result(0)
+        else:
+            self._search_count_label.setText("0个")
+
+    def _collect_all_files(self, dir_path, qlower, file_matches, code_matches):
+        """递归收集匹配文件"""
+        try:
+            for e in sorted(dir_path.iterdir(), key=lambda x: x.name.lower()):
+                if e.name.startswith('.') or e.name in (
+                    '__pycache__','node_modules','.git','dist','build',
+                    '.venv','venv','.idea','.vscode','egg-info'):
+                    continue
+                if e.is_dir():
+                    self._collect_all_files(e, qlower, file_matches, code_matches)
+                elif e.suffix in (
+                    '.py','.json','.yaml','.yml','.txt','.md','.html','.css',
+                    '.js','.ts','.toml','.cfg','.ini','.bat','.sh','.xml',
+                    '.kt','.java','.swift','.c','.cpp','.h','.rs','.go'):
+                    # 文件名匹配
+                    if qlower in e.name.lower():
+                        file_matches.append((str(e), -1, f"📄 文件名匹配: {e.name}"))
+                    # 代码内容匹配
+                    try:
+                        content = e.read_text(encoding='utf-8', errors='replace')
+                        self._file_cache[str(e)] = content
+                        lines = content.split('\n')
+                        for i, line in enumerate(lines):
+                            if qlower in line.lower():
+                                code_matches.append((str(e), i + 1, line.strip()[:120]))
+                                if len(code_matches) >= 200:
+                                    return
+                    except Exception:
+                        pass
+        except PermissionError:
+            pass
+
+    def _goto_result(self, idx):
+        """跳转到第 idx 个搜索结果"""
+        if not self._search_results:
+            return
+        self._search_idx = idx % len(self._search_results)
+        file_path, line_no, line_text = self._search_results[self._search_idx]
+        self._search_count_label.setText(f"{self._search_idx + 1}/{len(self._search_results)}")
+        # 打开文件
+        self.open_file(file_path)
+        # 如果是代码行匹配，跳转到对应行并高亮
+        if line_no > 0:
+            self._highlight_line(line_no)
+
+    def _next_match(self):
+        if self._search_results:
+            self._goto_result((self._search_idx + 1) % len(self._search_results))
+
+    def _prev_match(self):
+        if self._search_results:
+            self._goto_result((self._search_idx - 1) % len(self._search_results))
+
+    def _highlight_line(self, line_no):
+        """高亮并滚动到指定行"""
+        doc = self._editor.document()
+        block = doc.findBlockByLineNumber(line_no - 1)
+        if block.isValid():
+            cursor = self._editor.textCursor()
+            cursor.setPosition(block.position())
+            cursor.movePosition(
+                cursor.MoveOperation.NextCharacter,
+                cursor.MoveMode.KeepAnchor,
+                min(block.length() - 1, 200)
+            )
+            self._editor.setTextCursor(cursor)
+            self._editor.centerCursor()
+            # 临时高亮
+            extra = self._editor.extraSelections()
+            sel = type(extra[0])() if extra else type(self._editor)()
+            fmt = sel.format if hasattr(sel, 'format') else None
+            from PyQt6.QtWidgets import QTextEdit
+            sel = QTextEdit.ExtraSelection()
+            sel.format.setBackground(QColor("#fbbf2433"))
+            sel.format.setUnderlineStyle(
+                sel.format.UnderlineStyle.SingleUnderline
+            )
+            sel.format.setUnderlineColor(QColor("#fbbf24"))
+            sel.cursor = cursor
+            self._editor.setExtraSelections([sel])
+
+    def _clear_search_highlight(self):
+        """清除搜索高亮"""
+        self._editor.setExtraSelections([])
 
     def show_file(self, path):
         self.open_file(path)

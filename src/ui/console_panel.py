@@ -13,6 +13,8 @@
   - P3-6: QPlainTextEdit → QTextEdit + insertHtml 语法高亮，不再逐行 appendPlainText
   - P4-7: _enqueue 加去重哈希环(最近200条)，消除三层捕获导致的2~3倍重复日志
   - P5-8: 简化高亮规则，去掉过度花哨的 CSS 边框/背景
+  - P6-9: _enqueue 去重逻辑加 threading.Lock()，修复并发竞态导致重复仍出现；扩大哈希环到500
+  - P7-10: 修复中文边界不可靠（w是否含CJK取决于平台），改用lookbehind边界；增加Agent/User角色专属颜色；修复OK语法错误
 """
 import os
 import sys
@@ -40,18 +42,36 @@ def _strip_ansi(text: str) -> str:
 
 
 # ===== 语法高亮规则 =====
+# 规则按优先级排列：先匹配的先生效（后面的规则若重叠，不会覆盖已着色的 span）
+# 注意：\b 在中文环境下不可靠（\w 是否含 CJK 取决于 Python 编译/平台），
+#       中文关键词改用 (?<!\w)...(?!\w) 边界
 _HIGHLIGHT_RULES: list[tuple[str, str]] = [
+    # ── Agent/User 角色标签（最高优先级，防止被后续规则误染） ──
+    (r'💬\s*Agent:', '#00d4ff'),
+    (r'👤\s*User:', '#fbbf24'),
+    # ── 严重错误 ──
     (r'\b(ERROR|CRITICAL|FATAL|Traceback|❌|💥|🔴)\b', '#ef4444'),
+    # ── 警告 ──
     (r'\b(WARNING|WARN|⚠️|⚠|🟠)\b', '#f59e0b'),
-    (r'\b(SUCCESS|✅|🟢|OK\b)', '#10b981'),
+    # ── 成功/通过（英文，拆开避免 OK\b 语法错误） ──
+    (r'\bSUCCESS\b', '#10b981'),
+    (r'\bOK\b', '#10b981'),
+    # ── 信息/调试 ──
     (r'\b(INFO|ℹ️|🔵)\b', '#3b82f6'),
     (r'\b(DEBUG|🐛)\b', '#8b5cf6'),
-    (r'\b(正在|开始|启动|🚀|⏳|🔄|📦|🔧)\b', '#00d4ff'),
-    (r'\b(完成|成功|就绪|通过|正常|🎉)\b', '#10b981'),
-    (r'\b(失败|错误|异常|超时|崩溃|拒绝|不可用)\b', '#ef4444'),
+    # ── 进行中（中文 + 表情，用 (?<!\w)...(?!\w) 替代 \b） ──
+    (r'(?<!\w)(正在|开始|启动|🚀|⏳|🔄|📦|🔧)(?!\w)', '#00d4ff'),
+    # ── 成功/完成（中文 + 表情） ──
+    (r'(?<!\w)(完成|成功|就绪|通过|正常|✅|🟢|🎉)(?!\w)', '#10b981'),
+    # ── 失败/错误（中文 + 表情） ──
+    (r'(?<!\w)(失败|错误|异常|超时|崩溃|拒绝|不可用)(?!\w)', '#ef4444'),
+    # ── URL ──
     (r'\bhttps?://\S+', '#60a5fa'),
+    # ── 文件名 ──
     (r'\b[A-Za-z_]+\.py\b', '#fbbf24'),
-    (r'\b(\d+\.\d+)\s*(GB|MB|KB|秒|s|ms|行|条)\b', '#fb923c'),
+    # ── 数值单位 ──
+    (r'(?<!\w)(\d+\.?\d*)\s*(GB|MB|KB|秒|s|ms|行|条)(?!\w)', '#fb923c'),
+    # ── Python 关键字 ──
     (r'\b(True|False|None)\b', '#c084fc'),
 ]
 
@@ -72,7 +92,8 @@ def _highlight_line(text: str) -> str:
 
 # ===== 全局日志队列 =====
 _log_queue = queue.Queue()
-_dedup_ring: _deque = _deque(maxlen=200)
+_dedup_ring: _deque = _deque(maxlen=500)
+_dedup_lock = threading.Lock()
 
 
 def _enqueue(line: str):
@@ -83,9 +104,10 @@ def _enqueue(line: str):
     if not clean.strip():
         return
     h = hash(clean)
-    if h in _dedup_ring:
-        return
-    _dedup_ring.append(h)
+    with _dedup_lock:
+        if h in _dedup_ring:
+            return
+        _dedup_ring.append(h)
     ts = datetime.now().strftime("%H:%M:%S")
     _log_queue.put(f"{ts} │ {clean}")
 
@@ -294,7 +316,9 @@ class ConsoleViewer(QWidget):
         bar.addWidget(self._line_count)
         layout.addLayout(bar)
 
-        # ── 输出区样式 ──
+        # ── 输出区：自动换行 + 隐藏横向滚动条 ──
+        self._output.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self._output.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._output.setStyleSheet(f"""
             QTextEdit {{
                 background-color: #0D1117;
@@ -340,7 +364,7 @@ class ConsoleViewer(QWidget):
         for line in lines:
             highlighted = _highlight_line(line)
             html_parts.append(
-                f'<div style="line-height:1.55;white-space:pre;'
+                f'<div style="line-height:1.55;white-space:pre-wrap;'
                 f'font-family:\'Cascadia Code\',\'Fira Code\',Consolas,monospace;'
                 f'font-size:12px;">{highlighted}</div>'
             )

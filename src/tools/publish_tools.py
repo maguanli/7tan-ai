@@ -68,7 +68,7 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
                     for sp in shots_list:
                         if not _os.path.exists(str(sp)):
                             missing.append(f"截图 (文件不存在: {sp})")
-            except:
+            except (json.JSONDecodeError, Exception):
                 missing.append("截图 (格式解析失败)")
         if not intro or len(intro) < 20:
             missing.append("简介 (太短，需要≥100字)")

@@ -12,6 +12,11 @@ import yaml
 from dotenv import load_dotenv
 
 
+import logging
+_logger = logging.getLogger("config.loader")
+if not _logger.handlers:
+    _logger.addHandler(logging.NullHandler())
+
 def _get_root_dir():
     """获取项目根目录 — 兼容开发模式和 PyInstaller 打包"""
     if getattr(sys, 'frozen', False):
@@ -290,6 +295,8 @@ def _ensure_infrastructure():
 
 def cli_first_time_setup() -> dict:
     """CLI 交互式首次启动引导，返回答案字典"""
+
+    # NOTE: 以下 print() 是交互式 CLI 引导，直接输出到终端，不使用 logger
     print("\n" + "=" * 44)
     print("  🤖 7坛AI小编 - 首次启动引导")
     print("=" * 44)
@@ -379,7 +386,7 @@ def ensure_initialized(interactive: bool = True) -> dict:
 
     if not CONFIG_PATH.exists():
         if interactive:
-            print("⚠️  首次运行，正在启动配置引导...")
+            _logger.warning("首次运行，正在启动配置引导...")
             answers = cli_first_time_setup()
         else:
             # GUI 模式：自动生成默认配置，用户可在设置页面修改
@@ -417,7 +424,7 @@ def ensure_initialized(interactive: bool = True) -> dict:
 
         # 检查云存储
         if config.get("oss", {}).get("provider") == "none":
-            print("⚠️  未配置云存储！游戏/软件安装包将无法上传，发布时无下载链接。")
-            print("   请编辑 config.yaml 添加 oss 段配置，或进入对话模式输入「配置云存储」。")
+            _logger.warning("未配置云存储！游戏/软件安装包将无法上传，发布时无下载链接。")
+            _logger.info("请编辑 config.yaml 添加 oss 段配置，或进入对话模式输入「配置云存储」。")
 
     return load_config()

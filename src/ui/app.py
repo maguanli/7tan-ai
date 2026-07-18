@@ -391,6 +391,12 @@ class Sidebar(QFrame):
             self._buttons[key] = btn
             layout.addWidget(btn)
 
+        # 对话列表 — 放在设置下方，仅 AI 工作台时可见
+        self._session_sidebar = SessionSidebar()
+        self._session_sidebar.setFixedWidth(184)
+        self._session_sidebar.hide()
+        layout.addWidget(self._session_sidebar)
+
         layout.addStretch()
 
         # 底部信息
@@ -401,7 +407,13 @@ class Sidebar(QFrame):
 
     def _on_click(self, key):
         self.set_active(key)
+        # 仅在 AI 工作台时显示对话列表
+        self._session_sidebar.setVisible(key == "workspace")
         self.page_changed.emit(key)
+
+    @property
+    def session_sidebar(self):
+        return self._session_sidebar
 
     def set_active(self, key):
         btn_active_style = f"""
@@ -1431,6 +1443,7 @@ class BrowserPage(QWidget):
 
 
 from .console_panel import ConsoleViewer
+from .code_viewer import CodeViewer
 
 # ===== AI 工作台（浏览器 + 对话 左右分屏） =====
 class ChatBrowserSplitPage(QWidget):
@@ -1458,17 +1471,19 @@ class ChatBrowserSplitPage(QWidget):
             }}
         """)
 
-        # 浏览器区 — 单个 BrowserPage（源网站 + 管理后台统一用标签页切换）
+        # 浏览器区 — 3个面板：浏览器 / 源代码 / 控制台
         self._browser_stack = QStackedWidget()
         self.browser = BrowserPage()
         self.browser.setProperty("browser_role", "source")
-        self._browser_stack.addWidget(self.browser)
+        self._browser_stack.addWidget(self.browser)        # 索引 0
+        self.code_viewer = CodeViewer()
+        self._browser_stack.addWidget(self.code_viewer)     # 索引 1
         self.console_viewer = ConsoleViewer()
-        self._browser_stack.addWidget(self.console_viewer)
+        self._browser_stack.addWidget(self.console_viewer)  # 索引 2
 
         self.chat = ChatPage()
 
-        # ===== 左侧顶部：面板切换按钮栏（2个按钮：浏览器 + 控制台）=====
+        # ===== 左侧顶部：面板切换按钮栏（3个按钮：浏览器 + 源代码 + 控制台）=====
         self._panel_bar = QHBoxLayout()
         self._panel_bar.setContentsMargins(8, 6, 8, 4)
         self._panel_bar.setSpacing(8)
@@ -1478,12 +1493,14 @@ class ChatBrowserSplitPage(QWidget):
         self._panel_bar.addWidget(panel_label)
 
         self._btn_browser = self._make_panel_btn("🌐 浏览器", True)
+        self._btn_code = self._make_panel_btn("📝 源代码", False)
         self._btn_console = self._make_panel_btn("📟 控制台", False)
 
         self._btn_browser.clicked.connect(lambda: self._switch_panel(0, self._btn_browser))
-        self._btn_console.clicked.connect(lambda: self._switch_panel(1, self._btn_console))
+        self._btn_code.clicked.connect(lambda: self._switch_panel(1, self._btn_code))
+        self._btn_console.clicked.connect(lambda: self._switch_panel(2, self._btn_console))
 
-        self._panel_btns = [self._btn_browser, self._btn_console]
+        self._panel_btns = [self._btn_browser, self._btn_code, self._btn_console]
         for b in self._panel_btns:
             self._panel_bar.addWidget(b)
         self._panel_bar.addStretch()
@@ -1495,13 +1512,6 @@ class ChatBrowserSplitPage(QWidget):
         left_layout.setSpacing(0)
         left_layout.addLayout(self._panel_bar)
 
-        # 对话列表 — 直接放在控制栏下方
-        self._workspace_sidebar = SessionSidebar()
-        self._workspace_sidebar.setFixedHeight(160)
-        self._workspace_sidebar.setMinimumWidth(0)
-        self._workspace_sidebar.setMaximumWidth(16777215)
-        left_layout.addWidget(self._workspace_sidebar)
-
         # 浏览器/控制台 — 填充剩余空间
         left_layout.addWidget(self._browser_stack, 1)
 
@@ -1510,9 +1520,6 @@ class ChatBrowserSplitPage(QWidget):
         splitter.setSizes([700, 540])
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
-
-        # 将左侧对话列表连接到 ChatPage（隐藏 ChatPage 内部侧边栏）
-        self.chat.attach_external_sidebar(self._workspace_sidebar)
 
         layout.addWidget(splitter)
         self._admin_window = None
@@ -1568,7 +1575,7 @@ class ChatBrowserSplitPage(QWidget):
             self._switch_panel(0, self._btn_browser)
             self._navigate_to_admin()
         elif target == "console":
-            self._switch_panel(1, self._btn_console)
+            self._switch_panel(2, self._btn_console)
         else:
             # source / 默认
             self._switch_panel(0, self._btn_browser)
@@ -2666,6 +2673,9 @@ class MainWindow(QMainWindow):
             self._stack.addWidget(page)
 
         main_layout.addWidget(self._stack, 1)
+
+        # 将侧边栏对话列表连接到 AI 工作台
+        self._pages["workspace"].chat.attach_external_sidebar(self._sidebar.session_sidebar)
 
         # 状态栏
         self._status = QStatusBar()

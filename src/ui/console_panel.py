@@ -283,6 +283,9 @@ class ConsoleViewer(QWidget):
             }}
             QPushButton:hover {{ background: {T['danger']}44; }}
         """)
+        # _output 必须在按钮连接之前创建
+        self._output = QTextEdit()
+        self._output.setReadOnly(True)
         clear_btn.clicked.connect(self._output.clear)
         bar.addWidget(clear_btn)
 
@@ -291,9 +294,7 @@ class ConsoleViewer(QWidget):
         bar.addWidget(self._line_count)
         layout.addLayout(bar)
 
-        # ── 输出区：QTextEdit 替代 QPlainTextEdit，完整支持 HTML ──
-        self._output = QTextEdit()
-        self._output.setReadOnly(True)
+        # ── 输出区样式 ──
         self._output.setStyleSheet(f"""
             QTextEdit {{
                 background-color: #0D1117;

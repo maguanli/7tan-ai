@@ -1016,11 +1016,16 @@ class SessionSidebar(QFrame):
 
 
 
+    sessions_loaded_signal = pyqtSignal(list)
+
+
     def __init__(self, parent=None):
 
         super().__init__(parent)
 
         self.setFixedWidth(200)
+
+        self.sessions_loaded_signal.connect(self.load_sessions)  # 线程安全
 
         self.setStyleSheet(f"background-color: {THEME['bg_sidebar']};")
 
@@ -1134,11 +1139,33 @@ class SessionSidebar(QFrame):
 
         self._sessions = []
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        # 每次显示都重新加载
+        QTimer.singleShot(300, self._load_from_api)
+
+    def _load_from_api(self):
+        """直接从 API 加载会话列表（后台线程 → 主线程 signal）"""
+        import threading, requests
+        def _do():
+            try:
+                resp = requests.get(f"{API_BASE}/api/chat/history", timeout=10)
+                sessions = resp.json().get("sessions", [])
+                from loguru import logger
+                logger.info(f"[SessionSidebar] API 返回 {len(sessions)} 个会话")
+                self.sessions_loaded_signal.emit(sessions)  # 线程安全地传到主线程
+            except Exception as e:
+                from loguru import logger
+                logger.warning(f"[SessionSidebar] 加载失败: {e}")
+                QTimer.singleShot(2000, self._load_from_api)
+        threading.Thread(target=_do, daemon=True).start()
 
 
     def load_sessions(self, sessions: list):
 
         """加载会话列表"""
+        from loguru import logger
+        logger.info(f"[SessionSidebar] load_sessions 被调用, {len(sessions)} 个会话")
 
         self._list.blockSignals(True)
 
@@ -1231,7 +1258,8 @@ class SessionSidebar(QFrame):
             sid = current.data(Qt.ItemDataRole.UserRole)
 
             if sid:
-
+                from loguru import logger
+                logger.info(f"[SessionSidebar] 选中会话: {sid[:8]}...")
                 self.session_selected.emit(sid)
 
 
@@ -1418,10 +1446,8 @@ class ChatPage(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
-        # 仅在首次显示时加载（避免重复加载覆盖已有列表）
-        if not self._sessions_ever_loaded:
-            QTimer.singleShot(100, self._auto_load_sessions)
-        self._sessions_ever_loaded = True
+        # 每次显示都重新加载会话列表（带短延迟确保 sidebar 就绪）
+        QTimer.singleShot(300, self._auto_load_sessions)
 
 
     def _sidebar_ref(self):
@@ -1986,36 +2012,25 @@ class ChatPage(QWidget):
 
         threading.Thread(target=_do_load, daemon=True).start()
 
-    def _on_sessions_loaded(self, sessions):
+    def _on_sessions_loaded(self, sessions, attempt=0):
 
         """在主线程更新会话列表UI"""
-
         try:
-
             sidebar = self._sidebar_ref()
-
             if sidebar is None:
-
-                logger.warning("[ChatPage] _on_sessions_loaded: sidebar 引用为空，跳过加载")
-
+                if attempt < 5:
+                    QTimer.singleShot(500, lambda: self._on_sessions_loaded(sessions, attempt + 1))
+                    return
                 self._loading_sessions = False
-
                 return
 
             sidebar.load_sessions(sessions)
-
             logger.info(f"[ChatPage] 会话列表已更新: {len(sessions)} 条")
-
             if sessions:
-
                 sidebar.select_session(sessions[0].get("session_id", ""))
-
         except Exception as e:
-
             logger.warning(f"[ChatPage] _on_sessions_loaded 失败: {e}", exc_info=True)
-
         finally:
-
             self._loading_sessions = False
 
 

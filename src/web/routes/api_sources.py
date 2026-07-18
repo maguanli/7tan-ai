@@ -45,13 +45,44 @@ class SourceUpdate(BaseModel):
 
 @router.get("")
 async def list_sources():
-    """获取源站列表"""
+    """获取源站列表（合并数据库 + config.yaml 中的源站）"""
+    all_sources = {}
+    
+    # 1. 从数据库读取
     session = get_session()
     try:
-        sources = session.query(SourceSite).order_by(SourceSite.name).all()
-        return {"sources": [s.to_dict() for s in sources]}
+        db_sources = session.query(SourceSite).order_by(SourceSite.name).all()
+        for s in db_sources:
+            all_sources[s.name] = s.to_dict()
     finally:
         session.close()
+    
+    # 2. 从 config.yaml 读取（补充数据库中没有的）
+    try:
+        from ...config.loader import load_config
+        config = load_config()
+        sources_cfg = config.get("sources", {})
+        config_sites = sources_cfg.get("sites", []) if isinstance(sources_cfg, dict) else []
+        
+        for site in config_sites:
+            if not isinstance(site, dict):
+                continue
+            name = site.get("name", "")
+            if name and name not in all_sources:
+                all_sources[name] = {
+                    "id": 0,
+                    "name": name,
+                    "url": site.get("url", ""),
+                    "site_type": site.get("type", site.get("site_type", "game")),
+                    "need_login": 0,
+                    "enabled": 1 if site.get("enabled", True) else 0,
+                    "last_crawl_at": site.get("last_crawl_at"),
+                    "crawl_interval": site.get("crawl_interval", 360),
+                }
+    except Exception as e:
+        logger.warning(f"从 config.yaml 读取源站失败: {e}")
+    
+    return {"sources": list(all_sources.values())}
 
 
 @router.post("")

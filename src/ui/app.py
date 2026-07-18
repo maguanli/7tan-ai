@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QFormLayout, QTabWidget, QTabBar, QListWidget, QListWidgetItem,
     QAbstractItemView, QMenu, QDialog, QDialogButtonBox,
     QPlainTextEdit, QStatusBar, QInputDialog, QCompleter,
+    QTimeEdit,
 )
 from PyQt6.QtGui import (
     QFont, QColor, QPalette, QIcon, QAction, QPixmap, QPainter,
@@ -27,6 +28,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, QTimer, QSize, QUrl, QObject,
     QPropertyAnimation, QEasingCurve, QRect, QRectF, QPointF,
+    QTime, QDateTime,
 )
 from PyQt6.QtWebSockets import QWebSocket
 from PyQt6.QtCharts import (
@@ -697,7 +699,7 @@ class ResourceTablePage(QWidget):
 
 
 # ============================================================
-#  TasksPage - 任务管理
+#  TasksPage - 任务管理 + 定时采集
 # ============================================================
 class TasksPage(QWidget):
     def __init__(self):
@@ -709,6 +711,109 @@ class TasksPage(QWidget):
         title = QLabel("⚙️ 任务监控")
         title.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {THEME['text_primary']};")
         layout.addWidget(title)
+
+        # ===== 定时采集设置 =====
+        sched_group = QGroupBox("⏰ 定时采集")
+        sched_group.setStyleSheet(f"""
+            QGroupBox {{
+                font-size: 15px; font-weight: bold; color: {THEME['text_primary']};
+                border: 1px solid {THEME['border']}; border-radius: 8px;
+                margin-top: 12px; padding: 20px 16px 16px 16px;
+            }}
+            QGroupBox::title {{ subcontrol-origin: margin; left: 16px; padding: 0 8px; }}
+        """)
+        sched_layout = QVBoxLayout(sched_group)
+        sched_layout.setSpacing(10)
+
+        # 开关行
+        toggle_row = QHBoxLayout()
+        toggle_label = QLabel("定时采集:")
+        toggle_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 13px; font-weight: normal;")
+        
+        self._sched_enable_btn = QPushButton("▶ 启用采集")
+        self._sched_enable_btn.setFixedWidth(140)
+        self._sched_enable_btn.clicked.connect(lambda: self._toggle_scheduler(True))
+        self._sched_enable_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['success']}; color: #fff; border: none;
+                border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: bold;
+            }}
+            QPushButton:hover {{ background: #059669; }}
+        """)
+        
+        self._sched_disable_btn = QPushButton("⏸ 关闭采集")
+        self._sched_disable_btn.setFixedWidth(140)
+        self._sched_disable_btn.clicked.connect(lambda: self._toggle_scheduler(False))
+        self._sched_disable_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['danger']}; color: #fff; border: none;
+                border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: bold;
+            }}
+            QPushButton:hover {{ background: #dc2626; }}
+        """)
+        
+        self._sched_status = QLabel("")
+        self._sched_status.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 13px;")
+        
+        toggle_row.addWidget(toggle_label)
+        toggle_row.addWidget(self._sched_enable_btn)
+        toggle_row.addWidget(self._sched_disable_btn)
+        toggle_row.addWidget(self._sched_status)
+        toggle_row.addStretch()
+        sched_layout.addLayout(toggle_row)
+
+        # 三个时间选择器
+        times_layout = QHBoxLayout()
+        times_layout.setSpacing(16)
+        
+        self._time_pickers = {}
+        for label, name, default_h in [
+            ("🌅 早间", "每日早间更新", "08"),
+            ("☀️ 午间", "每日午间更新", "12"),
+            ("🌙 晚间", "每日晚间更新", "18"),
+        ]:
+            col = QVBoxLayout()
+            lbl = QLabel(label)
+            lbl.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px; font-weight: normal;")
+            col.addWidget(lbl)
+            
+            time_edit = QTimeEdit(QTime(int(default_h), 0))
+            time_edit.setDisplayFormat("HH:mm")
+            time_edit.setStyleSheet(f"""
+                QTimeEdit {{
+                    background: {THEME['bg_dark']}; color: {THEME['text_primary']};
+                    border: 1px solid {THEME['border']}; border-radius: 6px;
+                    padding: 8px 12px; font-size: 15px; font-weight: bold;
+                }}
+                QTimeEdit:hover {{ border-color: {THEME['accent']}; }}
+            """)
+            col.addWidget(time_edit)
+            self._time_pickers[name] = time_edit
+            times_layout.addLayout(col)
+        
+        sched_layout.addLayout(times_layout)
+
+        # 按钮行
+        btn_row = QHBoxLayout()
+        self._sched_save_btn = QPushButton("💾 保存设置")
+        self._sched_save_btn.clicked.connect(self._save_scheduler_config)
+        self._sched_save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['accent']}; color: #000; border: none;
+                border-radius: 6px; padding: 8px 20px; font-size: 13px; font-weight: bold;
+            }}
+            QPushButton:hover {{ background: #33ddff; }}
+        """)
+        
+        self._sched_next_label = QLabel("")
+        self._sched_next_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
+        
+        btn_row.addWidget(self._sched_save_btn)
+        btn_row.addWidget(self._sched_next_label)
+        btn_row.addStretch()
+        sched_layout.addLayout(btn_row)
+
+        layout.addWidget(sched_group)
 
         # 统计
         stats_layout = QHBoxLayout()
@@ -736,10 +841,78 @@ class TasksPage(QWidget):
         self._timer = QTimer()
         self._timer.timeout.connect(self.refresh)
 
+    def _toggle_scheduler(self, enable: bool):
+        times = {name: picker.time().toString("HH:mm") for name, picker in self._time_pickers.items()}
+        payload = {"enabled": enable, "times": times}
+        
+        worker = ApiWorker("PUT", f"{API_BASE}/api/settings/scheduler", payload)
+        worker.finished.connect(lambda d: self._on_scheduler_saved(enable))
+        worker.error.connect(lambda e: QMessageBox.warning(self, "错误", f"操作失败: {e}"))
+        worker.start()
+        self._keep_worker(worker)
+
+    def _on_scheduler_saved(self, enabled: bool):
+        if enabled:
+            self._sched_status.setText("✅ 采集已启用")
+            self._sched_status.setStyleSheet(f"color: {THEME['success']}; font-size: 13px; font-weight: bold;")
+        else:
+            self._sched_status.setText("⏸ 采集已停止")
+            self._sched_status.setStyleSheet(f"color: {THEME['danger']}; font-size: 13px; font-weight: bold;")
+        self._load_scheduler_config()
+
+    def _save_scheduler_config(self):
+        self._toggle_scheduler(True)
+
+    def _load_scheduler_config(self):
+        worker = ApiWorker("GET", f"{API_BASE}/api/settings/scheduler")
+        worker.finished.connect(self._on_scheduler_data)
+        worker.error.connect(lambda e: logger.warning(f"加载调度配置失败: {e}"))
+        worker.start()
+        self._keep_worker(worker)
+
+    def _on_scheduler_data(self, data):
+        enabled = data.get("enabled", True)
+        if enabled:
+            self._sched_status.setText("✅ 采集已启用")
+            self._sched_status.setStyleSheet(f"color: {THEME['success']}; font-size: 13px; font-weight: bold;")
+        else:
+            self._sched_status.setText("⏸ 采集已停止")
+            self._sched_status.setStyleSheet(f"color: {THEME['danger']}; font-size: 13px; font-weight: bold;")
+        
+        # 加载时间
+        times = data.get("times", {})
+        for name, picker in self._time_pickers.items():
+            time_str = times.get(name, "")
+            if time_str:
+                h, m = time_str.split(":") if ":" in time_str else (time_str, "0")
+                picker.setTime(QTime(int(h), int(m)))
+        
+        # 显示下次运行时间
+        next_jobs = data.get("next_jobs", [])
+        if next_jobs:
+            lines = ["下次采集:"]
+            for job in next_jobs[:3]:
+                t = job.get("next_run", "")
+                if t:
+                    dt = t.replace("T", " ")[:16]
+                    lines.append(f"  {job['name'][:4]} {dt}")
+            self._sched_next_label.setText("\n".join(lines))
+        else:
+            self._sched_next_label.setText("调度器未运行")
+
+    def _keep_worker(self, worker):
+        """保持 worker 引用防止 GC"""
+        if not hasattr(self, '_workers'):
+            self._workers = []
+        self._workers.append(worker)
+        worker.finished.connect(lambda d, w=worker: self._workers.remove(w) if w in self._workers else None)
+        worker.error.connect(lambda e, w=worker: self._workers.remove(w) if w in self._workers else None)
+
     def showEvent(self, event):
         super().showEvent(event)
         self._timer.start(5000)
         self.refresh()
+        self._load_scheduler_config()
 
     def hideEvent(self, event):
         super().hideEvent(event)
@@ -750,6 +923,7 @@ class TasksPage(QWidget):
         self._worker.finished.connect(self._on_data)
         self._worker.error.connect(lambda e: logger.error(f"任务加载失败: {e}"))
         self._worker.start()
+        self._keep_worker(self._worker)
 
     def _on_data(self, data):
         stats = data.get("stats", {})
@@ -792,19 +966,42 @@ class SourcesPage(QWidget):
         title.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {THEME['text_primary']};")
         layout.addWidget(title)
 
+        # 按钮行
+        btn_row = QHBoxLayout()
         add_btn = QPushButton("+ 添加源站")
         add_btn.clicked.connect(self._add_source)
         add_btn.setFixedWidth(120)
-        layout.addWidget(add_btn)
+        btn_row.addWidget(add_btn)
+        
+        self._edit_btn = QPushButton("✏️ 编辑选中")
+        self._edit_btn.clicked.connect(self._edit_selected)
+        self._edit_btn.setFixedWidth(120)
+        btn_row.addWidget(self._edit_btn)
+        
+        self._del_btn = QPushButton("🗑 删除选中")
+        self._del_btn.clicked.connect(self._delete_selected)
+        self._del_btn.setFixedWidth(120)
+        self._del_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['danger']}; color: #fff; border: none;
+                border-radius: 6px; padding: 8px 16px; font-size: 13px;
+            }}
+            QPushButton:hover {{ background: #dc2626; }}
+        """)
+        btn_row.addWidget(self._del_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
 
         self._table = QTableWidget()
-        self._table.setColumnCount(6)
-        self._table.setHorizontalHeaderLabels(["名称", "URL", "类型", "需登录", "状态", "上次爬取"])
+        self._table.setColumnCount(7)
+        self._table.setHorizontalHeaderLabels(["ID", "名称", "URL", "类型", "需登录", "状态", "上次爬取"])
         self._table.horizontalHeader().setStretchLastSection(True)
-        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self._table.setColumnHidden(0, True)  # 隐藏 ID 列
         self._table.verticalHeader().setVisible(False)
         self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         layout.addWidget(self._table, 1)
 
         refresh_btn = QPushButton("🔄 刷新")
@@ -825,15 +1022,90 @@ class SourcesPage(QWidget):
         sources = data.get("sources", [])
         self._table.setRowCount(len(sources))
         for i, s in enumerate(sources):
-            self._table.setItem(i, 0, QTableWidgetItem(s.get("name", "")))
-            self._table.setItem(i, 1, QTableWidgetItem(s.get("url", "")))
-            self._table.setItem(i, 2, QTableWidgetItem(s.get("site_type", "")))
-            self._table.setItem(i, 3, QTableWidgetItem("是" if s.get("need_login") else "否"))
+            self._table.setItem(i, 0, QTableWidgetItem(str(s.get("id", ""))))
+            self._table.setItem(i, 1, QTableWidgetItem(s.get("name", "")))
+            self._table.setItem(i, 2, QTableWidgetItem(s.get("url", "")))
+            self._table.setItem(i, 3, QTableWidgetItem(s.get("site_type", "")))
+            self._table.setItem(i, 4, QTableWidgetItem("是" if s.get("need_login") else "否"))
             enabled = s.get("enabled", True)
             status_item = QTableWidgetItem("启用" if enabled else "禁用")
             status_item.setForeground(QColor(THEME["success"] if enabled else THEME["danger"]))
-            self._table.setItem(i, 4, status_item)
-            self._table.setItem(i, 5, QTableWidgetItem(str(s.get("last_crawl_at", "—"))))
+            self._table.setItem(i, 5, status_item)
+            self._table.setItem(i, 6, QTableWidgetItem(str(s.get("last_crawl_at", "—"))))
+
+    def _get_selected_source(self):
+        row = self._table.currentRow()
+        if row < 0:
+            QMessageBox.information(self, "提示", "请先在表格中选择一个源站")
+            return None
+        return {
+            "id": self._table.item(row, 0).text(),
+            "name": self._table.item(row, 1).text(),
+            "url": self._table.item(row, 2).text(),
+            "site_type": self._table.item(row, 3).text(),
+            "need_login": self._table.item(row, 4).text() == "是",
+            "enabled": self._table.item(row, 5).text() == "启用",
+        }
+
+    def _edit_selected(self):
+        source = self._get_selected_source()
+        if not source:
+            return
+        self._open_edit_dialog(source)
+
+    def _open_edit_dialog(self, source: dict):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"编辑源站 - {source['name']}")
+        dialog.setMinimumWidth(450)
+        dialog_layout = QFormLayout(dialog)
+
+        name_edit = QLineEdit(source.get("name", ""))
+        url_edit = QLineEdit(source.get("url", ""))
+        type_combo = QComboBox()
+        type_combo.addItems(["game", "software", "both", "other"])
+        type_combo.setCurrentText(source.get("site_type", "game"))
+        need_login = QCheckBox()
+        need_login.setChecked(source.get("need_login", False))
+        enabled_check = QCheckBox()
+        enabled_check.setChecked(source.get("enabled", True))
+
+        dialog_layout.addRow("名称:", name_edit)
+        dialog_layout.addRow("URL:", url_edit)
+        dialog_layout.addRow("类型:", type_combo)
+        dialog_layout.addRow("需要登录:", need_login)
+        dialog_layout.addRow("启用:", enabled_check)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        dialog_layout.addRow(buttons)
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            worker = ApiWorker("PUT", f"{API_BASE}/api/sources/{source['id']}", {
+                "name": name_edit.text(),
+                "url": url_edit.text(),
+                "site_type": type_combo.currentText(),
+                "need_login": need_login.isChecked(),
+                "enabled": enabled_check.isChecked(),
+            })
+            worker.finished.connect(lambda d: self.refresh())
+            worker.error.connect(lambda e: QMessageBox.warning(self, "错误", f"编辑失败: {e}"))
+            worker.start()
+
+    def _delete_selected(self):
+        source = self._get_selected_source()
+        if not source:
+            return
+        reply = QMessageBox.question(self, "确认删除",
+            f"确定要删除源站 '{source['name']}' 吗？\n此操作不可撤销。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            worker = ApiWorker("DELETE", f"{API_BASE}/api/sources/{source['id']}")
+            worker.finished.connect(lambda d: self.refresh())
+            worker.error.connect(lambda e: QMessageBox.warning(self, "错误", f"删除失败: {e}"))
+            worker.start()
 
     def _add_source(self):
         dialog = QDialog(self)
@@ -844,7 +1116,7 @@ class SourcesPage(QWidget):
         name_edit = QLineEdit()
         url_edit = QLineEdit()
         type_combo = QComboBox()
-        type_combo.addItems(["game", "software", "other"])
+        type_combo.addItems(["game", "software", "both", "other"])
         need_login = QCheckBox()
 
         dialog_layout.addRow("名称:", name_edit)

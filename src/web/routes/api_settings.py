@@ -119,3 +119,87 @@ async def restart():
     logger.info("🔄 收到重启请求")
     restart_self()
     return {"success": True, "message": "正在重启..."}
+
+
+# ===== 调度器 API =====
+
+@router.get("/scheduler")
+async def get_scheduler_config():
+    """获取定时采集配置"""
+    config = load_config()
+    sched_cfg = config.get("scheduler", {})
+    cron_jobs = sched_cfg.get("cron_jobs", [])
+    
+    # 提取每日三次采集的时间
+    times = {}
+    for job in cron_jobs:
+        name = job.get("name", "")
+        cron = job.get("cron", "")
+        # cron格式: "0 8 * * *" → 提取小时: "08:00"
+        parts = cron.split()
+        if len(parts) >= 2:
+            times[name] = f"{parts[1].zfill(2)}:00"
+    
+    # 获取调度器状态
+    from ...scheduler.scheduler import get_scheduler
+    sched = get_scheduler()
+    is_running = sched.running if sched else False
+    
+    # 获取下次运行时间
+    next_jobs = []
+    if is_running:
+        for job in sched.get_jobs():
+            next_jobs.append({
+                "name": job.name,
+                "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
+            })
+    
+    return {
+        "enabled": sched_cfg.get("auto_publish", True),
+        "is_running": is_running,
+        "times": times,
+        "next_jobs": next_jobs,
+    }
+
+
+@router.put("/scheduler")
+async def update_scheduler_config(data: dict):
+    """更新定时采集配置"""
+    config = load_config()
+    sched_cfg = config.setdefault("scheduler", {})
+    
+    # 更新启用状态
+    if "enabled" in data:
+        sched_cfg["auto_publish"] = bool(data["enabled"])
+    
+    # 更新采集时间（三个每日定时）
+    if "times" in data and isinstance(data["times"], dict):
+        cron_map = {
+            "每日早间更新": "0 8 * * *",
+            "每日午间更新": "0 12 * * *",
+            "每日晚间更新": "0 18 * * *",
+        }
+        for name, time_str in data["times"].items():
+            if name in cron_map and time_str:
+                try:
+                    hour = str(int(time_str.split(":")[0]))
+                    cron_map[name] = f"0 {hour} * * *"
+                except (ValueError, IndexError):
+                    pass
+        
+        sched_cfg["cron_jobs"] = [
+            {"name": name, "cron": cron, "task": name}
+            for name, cron in cron_map.items()
+        ]
+    
+    save_config(config)
+    
+    # 重启调度器以应用新配置
+    try:
+        from ...scheduler.scheduler import stop_scheduler, start_scheduler
+        stop_scheduler()
+        start_scheduler(config)
+    except Exception as e:
+        logger.warning(f"重启调度器失败: {e}")
+    
+    return {"success": True, "message": "定时采集配置已更新"}

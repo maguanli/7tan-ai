@@ -30,15 +30,21 @@ class GenericHighlighter(QSyntaxHighlighter):
             return cls._LANG_RULES[lang]
         rules = []
         # === 颜色定义 ===
-        KW = lambda: QTextCharFormat(); kw=KW(); kw.setForeground(QColor("#ff79c6")); kw.setFontWeight(700)
-        STR = lambda: QTextCharFormat(); s=STR(); s.setForeground(QColor("#f1fa8c"))
-        CM = lambda: QTextCharFormat(); c=CM(); c.setForeground(QColor("#6272a4")); c.setFontItalic(True)
-        NUM = lambda: QTextCharFormat(); n=NUM(); n.setForeground(QColor("#bd93f9"))
-        FN = lambda: QTextCharFormat(); f=FN(); f.setForeground(QColor("#50fa7b"))
-        CL = lambda: QTextCharFormat(); c=CL(); c.setForeground(QColor("#8be9fd")); c.setFontWeight(700)
-        TAG = lambda: QTextCharFormat(); t=TAG(); t.setForeground(QColor("#ff79c6")); t.setFontWeight(700)
-        ATTR = lambda: QTextCharFormat(); a=ATTR(); a.setForeground(QColor("#50fa7b"))
-        PROP = lambda: QTextCharFormat(); p=PROP(); p.setForeground(QColor("#8be9fd"))
+        def _fmt(fg, bold=False, italic=False):
+            f = QTextCharFormat()
+            f.setForeground(QColor(fg))
+            if bold: f.setFontWeight(700)
+            if italic: f.setFontItalic(True)
+            return f
+        KW = lambda: _fmt("#ff79c6", bold=True)
+        STR = lambda: _fmt("#f1fa8c")
+        CM = lambda: _fmt("#6272a4", italic=True)
+        NUM = lambda: _fmt("#bd93f9")
+        FN = lambda: _fmt("#50fa7b")
+        CL = lambda: _fmt("#8be9fd", bold=True)
+        TAG = lambda: _fmt("#ff79c6", bold=True)
+        ATTR = lambda: _fmt("#50fa7b")
+        PROP = lambda: _fmt("#8be9fd")
 
         if lang == 'python':
             for w in ["and","as","assert","async","await","break","class","continue","def",
@@ -154,6 +160,153 @@ class GenericHighlighter(QSyntaxHighlighter):
             rules.append((r'^[-*+]\s', FN()))
             rules.append((r'^>\s.*$', CM()))
 
+
+        elif lang == "sql":
+            sql_kw = ["select","from","where","insert","update","delete",
+                      "create","alter","drop","table","index","view",
+                      "join","inner","left","right","outer","on","and",
+                      "or","not","null","is","in","like","between",
+                      "order","by","group","having","asc","desc","limit",
+                      "offset","union","all","distinct","as","set",
+                      "primary","key","foreign","references","constraint",
+                      "default","values","into","exists","case","when",
+                      "then","else","end","begin","commit","rollback"]
+            for w in sql_kw:
+                rules.append((rf'\b{w}\b', KW()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r"'[^'\\]*(\\.[^'\\]*)*'", STR()))
+            rules.append((r'--.*$', CM()))
+            rules.append((r'\b\d+\.?\d*\b', NUM()))
+
+        elif lang == "vue":
+            rules.append((r'<[!/?]?[\w-]+', TAG()))
+            rules.append((r'[\w-]+(?==)', ATTR()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r'<!--.*?-->', CM()))
+            rules.append((r'\{\{.*?\}\}', FN()))
+            vue_kw = ["export","default","import","from","const","let",
+                      "var","function","return","if","else","for",
+                      "this","new","true","false","null"]
+            for w in vue_kw:
+                rules.append((rf'\b{w}\b', KW()))
+
+        elif lang == "ruby":
+            rb_kw = ["def","end","class","module","if","else","elsif",
+                     "unless","while","until","for","do","begin",
+                     "rescue","ensure","return","yield","self","super",
+                     "true","false","nil","and","or","not",
+                     "require","include","extend","attr_accessor"]
+            for w in rb_kw:
+                rules.append((rf'\b{w}\b', KW()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r"'[^'\\]*(\\.[^'\\]*)*'", STR()))
+            rules.append((r'#.*$', CM()))
+            rules.append((r'\b\d+\.?\d*\b', NUM()))
+            rules.append((r'\b([a-z_]\w*)\s*\(', FN()))
+            rules.append((r'\b([A-Z][a-zA-Z0-9_]*)\b', CL()))
+
+        elif lang == "php":
+            php_kw = ["echo","print","return","if","else","elseif",
+                      "while","for","foreach","function","class",
+                      "public","private","protected","static","new",
+                      "this","extends","implements","namespace","use",
+                      "require","include","true","false","null",
+                      "try","catch","finally","throw"]
+            for w in php_kw:
+                rules.append((rf'\b{w}\b', KW()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r"'[^'\\]*(\\.[^'\\]*)*'", STR()))
+            rules.append((r'//.*$', CM()))
+            rules.append((r'/\*.*?\*/', CM()))
+            rules.append((r'\b\d+\.?\d*\b', NUM()))
+            rules.append((r'\$[a-zA-Z_]\w*', PROP()))
+
+        elif lang == "csharp":
+            cs_kw = ["using","namespace","class","struct","interface",
+                     "public","private","protected","internal","static",
+                     "void","int","string","bool","double","float",
+                     "var","new","return","if","else","for","foreach",
+                     "while","do","switch","case","break","continue",
+                     "try","catch","finally","throw","async","await",
+                     "true","false","null","this","base","virtual",
+                     "override","abstract","sealed","readonly","const"]
+            for w in cs_kw:
+                rules.append((rf'\b{w}\b', KW()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r'//.*$', CM()))
+            rules.append((r'/\*.*?\*/', CM()))
+            rules.append((r'\b\d+\.?\d*[fLm]?\b', NUM()))
+            rules.append((r'\b([A-Z][a-zA-Z0-9_]*)\b', CL()))
+
+        elif lang == "dart":
+            dart_kw = ["class","extends","implements","with","import",
+                       "export","void","int","double","String","bool",
+                       "var","final","const","static","new","return",
+                       "if","else","for","while","do","switch",
+                       "case","break","continue","try","catch","finally",
+                       "throw","async","await","true","false","null"]
+            for w in dart_kw:
+                rules.append((rf'\b{w}\b', KW()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r'//.*$', CM()))
+            rules.append((r'\b\d+\.?\d*\b', NUM()))
+            rules.append((r'\b([a-zA-Z_]\w*)\s*\(', FN()))
+            rules.append((r'\b([A-Z][a-zA-Z0-9_]*)\b', CL()))
+
+        elif lang == "lua":
+            lua_kw = ["function","end","if","then","else","elseif",
+                      "for","while","do","repeat","until","return",
+                      "local","nil","true","false","and","or","not",
+                      "break","goto"]
+            for w in lua_kw:
+                rules.append((rf'\b{w}\b', KW()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r'--.*$', CM()))
+            rules.append((r'\b\d+\.?\d*\b', NUM()))
+
+        elif lang == "r":
+            r_kw = ["function","if","else","for","while","repeat",
+                    "return","library","require","TRUE","FALSE","NULL",
+                    "NA","Inf","NaN","in","next","break"]
+            for w in r_kw:
+                rules.append((rf'\b{w}\b', KW()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r'#.*$', CM()))
+            rules.append((r'\b\d+\.?\d*\b', NUM()))
+            rules.append((r'\b([a-zA-Z.]\w*)\s*<-', FN()))
+
+        elif lang == "elixir":
+            ex_kw = ["def","defp","defmodule","defstruct","do","end",
+                     "if","else","unless","case","cond","for",
+                     "fn","true","false","nil","when","and","or",
+                     "not","import","alias","require","use","raise",
+                     "rescue","try","catch","after","throw"]
+            for w in ex_kw:
+                rules.append((rf'\b{w}\b', KW()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+            rules.append((r'#.*$', CM()))
+            rules.append((r'\b\d+\.?\d*\b', NUM()))
+            rules.append((r'\b:[a-z_]\w*', ATTR()))
+
+        elif lang == "dockerfile":
+            df_kw = ["FROM","RUN","CMD","ENTRYPOINT","COPY","ADD",
+                     "WORKDIR","ENV","ARG","EXPOSE","VOLUME","LABEL",
+                     "USER","HEALTHCHECK","ONBUILD","STOPSIGNAL","SHELL"]
+            for w in df_kw:
+                rules.append((rf'\b{w}\b', KW()))
+            rules.append((r'#.*$', CM()))
+            rules.append((r'"[^"\\]*(\\.[^"\\]*)*"', STR()))
+
+        elif lang == "makefile":
+            rules.append((r'#.*$', CM()))
+            rules.append((r'^\s*[\w.-]+\s*[:+!?]=', PROP()))
+            mf_kw = ["ifneq","ifeq","else","endif","include","export","define","endef"]
+            for w in mf_kw:
+                rules.append((rf'\b{w}\b', KW()))
+            rules.append((r'\$\([^)]+\)', ATTR()))
+
+        elif lang == "text":
+            pass
         cls._LANG_RULES[lang] = rules
         return rules
 
@@ -354,38 +507,67 @@ class CodeViewer(QWidget):
         """根据文件扩展名返回语言标识"""
         ext = path.suffix.lower()
         lang_map = {
-            '.py': 'python',
+            '.py': 'python', '.pyw': 'python', '.pyx': 'python', '.pxd': 'python',
             '.js': 'javascript', '.mjs': 'javascript', '.cjs': 'javascript',
-            '.ts': 'typescript', '.tsx': 'typescript',
-            '.json': 'json',
+            '.ts': 'typescript', '.tsx': 'typescript', '.jsx': 'javascript',
+            '.json': 'json', '.jsonc': 'json',
             '.yaml': 'yaml', '.yml': 'yml',
-            '.html': 'html', '.htm': 'html',
-            '.xml': 'xml', '.svg': 'xml',
+            '.html': 'html', '.htm': 'html', '.xhtml': 'html',
+            '.xml': 'xml', '.svg': 'xml', '.wsdl': 'xml', '.xsd': 'xml',
             '.css': 'css', '.scss': 'css', '.less': 'css',
-            '.c': 'c', '.cpp': 'cpp', '.h': 'h', '.hpp': 'h',
+            '.c': 'c', '.cpp': 'cpp', '.cc': 'cpp', '.cxx': 'cpp',
+            '.h': 'h', '.hpp': 'h', '.hh': 'h', '.hxx': 'h',
             '.java': 'java',
-            '.kt': 'kt', '.kts': 'kt',
+            '.kt': 'kt', '.kts': 'kt', '.ktm': 'kt',
             '.swift': 'swift',
             '.go': 'go',
             '.rs': 'rs',
-            '.sh': 'sh', '.bash': 'sh', '.zsh': 'sh',
-            '.bat': 'bat', '.cmd': 'bat',
-            '.ini': 'ini', '.cfg': 'cfg', '.conf': 'cfg',
+            '.sh': 'sh', '.bash': 'sh', '.zsh': 'sh', '.fish': 'sh',
+            '.bat': 'bat', '.cmd': 'bat', '.ps1': 'bat',
+            '.ini': 'ini', '.cfg': 'cfg', '.conf': 'cfg', '.cnf': 'cfg',
             '.toml': 'toml',
-            '.md': 'markdown', '.markdown': 'markdown',
+            '.md': 'markdown', '.markdown': 'markdown', '.rst': 'markdown',
+            '.sql': 'sql', '.psql': 'sql',
+            '.vue': 'vue',
+            '.rb': 'ruby', '.rake': 'ruby', '.gemspec': 'ruby',
+            '.php': 'php', '.phtml': 'php', '.php3': 'php', '.php4': 'php',
+            '.cs': 'csharp',
+            '.dart': 'dart',
+            '.lua': 'lua',
+            '.r': 'r',
+            '.ex': 'elixir', '.exs': 'elixir', '.eex': 'elixir',
+            '.txt': 'text', '.text': 'text', '.log': 'text',
+            '.env': 'ini',
         }
-        return lang_map.get(ext, None)
+        if ext in lang_map:
+            return lang_map[ext]
+        name = path.name.lower()
+        if name == 'dockerfile' or name.startswith('dockerfile.'):
+            return 'dockerfile'
+        if name in ('makefile', 'gnumakefile', 'makefile.in'):
+            return 'makefile'
+        if name in ('.gitignore', '.dockerignore', '.editorconfig'):
+            return 'ini'
+        if name in ('license', 'changelog', 'readme', 'authors', 'contributing',
+                     'notice', 'code_of_conduct', 'security'):
+            return 'text'
+        return None
 
     def _refresh_tree(self):
-        self._tree.clear()
-        self._add_dir(PROJECT_ROOT, self._tree.invisibleRootItem())
-        self._tree.expandToDepth(1)
+        try:
+            self._tree.clear()
+            self._add_dir(PROJECT_ROOT, self._tree.invisibleRootItem())
+            self._tree.expandToDepth(1)
+            count = self._tree.topLevelItemCount()
+            self._status.setText(f"🔄 已刷新 — {count} 个顶级目录")
+        except Exception as e:
+            self._status.setText(f"❌ 刷新失败: {e}")
 
     def _add_dir(self, path, parent):
         try:
             entries = sorted(path.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower()))
             for i, e in enumerate(entries):
-                if i >= 60 or e.name.startswith('.'):
+                if i >= 60 or (e.name.startswith('.') and e.name not in ('.env','.gitignore','.dockerignore','.editorconfig','.htaccess')):
                     continue
                 if e.name in ('__pycache__','node_modules','.git','dist','build','.venv','venv','.idea','.vscode','egg-info'):
                     continue
@@ -395,14 +577,26 @@ class CodeViewer(QWidget):
                     node.setData(0, Qt.ItemDataRole.UserRole + 1, True)
                     if parent is self._tree.invisibleRootItem():
                         self._add_dir(e, node)
-                elif e.suffix in ('.py','.json','.yaml','.yml','.txt','.md','.html','.css',
-                                   '.js','.ts','.toml','.cfg','.ini','.bat','.sh','.xml',
-                                   '.kt','.java','.swift','.c','.cpp','.h','.rs','.go'):
-                    ico = {'py':'🐍','json':'📋','yaml':'⚙️','yml':'⚙️','txt':'📄','md':'📝',
-                           'html':'🌐','css':'🎨','js':'📜','ts':'📘','toml':'⚙️','cfg':'⚙️',
-                           'ini':'⚙️','bat':'⚡','sh':'🐚','xml':'📋','kt':'🅱️','java':'☕',
-                           'swift':'🦅','c':'⚙️','cpp':'⚙️','h':'⚙️','rs':'🦀','go':'🐹'}.get(e.suffix,'📄')
+                elif e.suffix in ('.py','.pyw','.pyx','.pxd','.json','.jsonc','.yaml','.yml','.txt','.md','.rst','.html','.htm','.xhtml','.css','.scss','.less',
+                                   '.js','.mjs','.cjs','.jsx','.ts','.tsx','.toml','.cfg','.conf','.cnf','.ini','.bat','.cmd','.ps1','.sh','.bash','.zsh','.fish','.xml','.svg','.wsdl','.xsd',
+                                   '.kt','.kts','.ktm','.java','.swift','.c','.cpp','.cc','.cxx','.h','.hpp','.hh','.hxx','.rs','.go',
+                                   '.sql','.psql','.vue','.rb','.rake','.gemspec','.php','.phtml','.cs','.dart','.lua','.r','.ex','.exs','.eex'):
+                    ico = {'py':'🐍','pyw':'🐍','pyx':'🐍','pxd':'🐍','json':'📋','jsonc':'📋','yaml':'⚙️','yml':'⚙️','txt':'📄','md':'📝','rst':'📝',
+                           'html':'🌐','htm':'🌐','xhtml':'🌐','css':'🎨','scss':'🎨','less':'🎨','js':'📜','mjs':'📜','cjs':'📜','jsx':'📜','ts':'📘','tsx':'📘',
+                           'toml':'⚙️','cfg':'⚙️','conf':'⚙️','cnf':'⚙️','ini':'⚙️','bat':'⚡','cmd':'⚡','ps1':'⚡','sh':'🐚','bash':'🐚','zsh':'🐚','fish':'🐚',
+                           'xml':'📋','svg':'📋','wsdl':'📋','xsd':'📋','kt':'🅱️','kts':'🅱️','java':'☕','swift':'🦅',
+                           'c':'⚙️','cpp':'⚙️','cc':'⚙️','cxx':'⚙️','h':'⚙️','hpp':'⚙️','hh':'⚙️','hxx':'⚙️','rs':'🦀','go':'🐹',
+                           'sql':'🗄️','psql':'🗄️','vue':'💚','rb':'💎','rake':'💎','gemspec':'💎','php':'🐘','phtml':'🐘','cs':'🟣','dart':'🎯','lua':'🌙','r':'📊','ex':'🧪','exs':'🧪','eex':'🧪'}.get(e.suffix,'📄')
                     node = QTreeWidgetItem(parent, [f"{ico} {e.name}"])
+                    node.setData(0, Qt.ItemDataRole.UserRole, str(e))
+                    node.setData(0, Qt.ItemDataRole.UserRole + 1, False)
+                elif e.is_file() and e.suffix == '' and e.name.lower() in (
+                    'dockerfile','makefile','gnumakefile','license','changelog',
+                    'readme','authors','contributing','notice','code_of_conduct','security'):
+                    ico2 = {'dockerfile':'🐳','makefile':'🔧','gnumakefile':'🔧','license':'⚖️',
+                            'changelog':'📝','readme':'📖','authors':'👥','contributing':'🤝',
+                            'notice':'📢','code_of_conduct':'📜','security':'🔒'}.get(e.name.lower(),'📄')
+                    node = QTreeWidgetItem(parent, [f"{ico2} {e.name}"])
                     node.setData(0, Qt.ItemDataRole.UserRole, str(e))
                     node.setData(0, Qt.ItemDataRole.UserRole + 1, False)
         except PermissionError:
@@ -421,13 +615,25 @@ class CodeViewer(QWidget):
         if p:
             self.open_file(p)
 
+    def _read_file_smart(self, path: Path) -> str:
+        """智能读取文件：自动检测编码 UTF-8 -> GBK -> Latin-1"""
+        raw = path.read_bytes()
+        if raw[:3] == b'\xef\xbb\xbf':
+            raw = raw[3:]
+        for enc in ('utf-8', 'gbk', 'gb2312', 'latin-1'):
+            try:
+                return raw.decode(enc)
+            except (UnicodeDecodeError, LookupError):
+                continue
+        return raw.decode('utf-8', errors='replace')
+
     def open_file(self, path):
         try:
             p = Path(path)
             if not p.exists():
                 self._status.setText(f"❌ 文件不存在: {path}")
                 return
-            content = p.read_text(encoding='utf-8', errors='replace')
+            content = self._read_file_smart(p)
             self._editor.setPlainText(content)
             if self._highlighter:
                 self._highlighter.deleteLater(); self._highlighter = None
@@ -524,9 +730,10 @@ class CodeViewer(QWidget):
                 if e.is_dir():
                     self._collect_all_files(e, qlower, file_matches, code_matches)
                 elif e.suffix in (
-                    '.py','.json','.yaml','.yml','.txt','.md','.html','.css',
-                    '.js','.ts','.toml','.cfg','.ini','.bat','.sh','.xml',
-                    '.kt','.java','.swift','.c','.cpp','.h','.rs','.go'):
+                    '.py','.pyw','.pyx','.pxd','.json','.jsonc','.yaml','.yml','.txt','.md','.rst','.html','.htm','.xhtml','.css','.scss','.less',
+                    '.js','.mjs','.cjs','.jsx','.ts','.tsx','.toml','.cfg','.conf','.cnf','.ini','.bat','.cmd','.ps1','.sh','.bash','.zsh','.fish','.xml','.svg','.wsdl','.xsd',
+                    '.kt','.kts','.ktm','.java','.swift','.c','.cpp','.cc','.cxx','.h','.hpp','.hh','.hxx','.rs','.go',
+                    '.sql','.psql','.vue','.rb','.rake','.gemspec','.php','.phtml','.cs','.dart','.lua','.r','.ex','.exs','.eex'):
                     # 文件名匹配
                     if qlower in e.name.lower():
                         file_matches.append((str(e), -1, f"📄 文件名匹配: {e.name}"))
@@ -542,6 +749,15 @@ class CodeViewer(QWidget):
                                     return
                     except Exception:
                         pass
+                elif e.is_file() and e.suffix == '' and e.name.lower() in (
+                    'dockerfile','makefile','gnumakefile','license','changelog',
+                    'readme','authors','contributing','notice','code_of_conduct','security'):
+                    ico2 = {'dockerfile':'🐳','makefile':'🔧','gnumakefile':'🔧','license':'⚖️',
+                            'changelog':'📝','readme':'📖','authors':'👥','contributing':'🤝',
+                            'notice':'📢','code_of_conduct':'📜','security':'🔒'}.get(e.name.lower(),'📄')
+                    node = QTreeWidgetItem(parent, [f"{ico2} {e.name}"])
+                    node.setData(0, Qt.ItemDataRole.UserRole, str(e))
+                    node.setData(0, Qt.ItemDataRole.UserRole + 1, False)
         except PermissionError:
             pass
 

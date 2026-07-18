@@ -2761,6 +2761,20 @@ class MainWindow(QMainWindow):
             self._stack.setCurrentWidget(self._pages[key])
             self._status.showMessage(f"📍 {key}")
 
+    def closeEvent(self, event):
+        """关闭窗口时清理线程，避免 QThread 警告"""
+        import time
+        import threading
+        # 等待非 daemon 线程结束
+        for t in threading.enumerate():
+            if t is threading.main_thread() or t.daemon:
+                continue
+            try:
+                t.join(timeout=2)
+            except Exception:
+                pass
+        super().closeEvent(event)
+
 
 # ===== 启动入口 =====
 def launch_app():

@@ -1318,6 +1318,9 @@ class ChatPage(QWidget):
 
     """全新 AI 对话页面 — 左侧会话列表 + 右侧聊天区"""
 
+    session_loaded_signal = pyqtSignal(str, dict)  # (session_id, data)
+    error_signal = pyqtSignal(str)  # error message
+
 
 
     def __init__(self, parent=None):
@@ -1329,6 +1332,10 @@ class ChatPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         layout.setSpacing(0)
+
+        # 线程安全的信号连接
+        self.session_loaded_signal.connect(self._on_session_loaded)
+        self.error_signal.connect(lambda msg: self._add_message("error", msg))
 
 
 
@@ -2038,9 +2045,11 @@ class ChatPage(QWidget):
     def _load_session(self, session_id: str):
 
         """加载指定会话的历史消息（后台线程，不阻塞UI）"""
+        from loguru import logger
+        logger.info(f"[ChatPage] _load_session 被调用: {session_id[:8]}... current={self._current_session_id[:8] if self._current_session_id else 'None'}...")
 
         if session_id == self._current_session_id:
-
+            logger.info(f"[ChatPage] 跳过重复加载: {session_id[:8]}...")
             return
 
         import threading
@@ -2052,12 +2061,14 @@ class ChatPage(QWidget):
                 resp = requests.get(f"{API_BASE}/api/chat/history?session_id={session_id}", timeout=5)
 
                 data = resp.json()
+                logger.info(f"[ChatPage] API返回 {len(data.get('messages',[]))} 条消息")
 
-                QTimer.singleShot(0, lambda: self._on_session_loaded(session_id, data))
+                # 用 signal 线程安全地更新 UI
+                self.session_loaded_signal.emit(session_id, data)
 
             except Exception as e:
-
-                QTimer.singleShot(0, lambda: self._add_message("error", f"❌ 加载对话失败: {e}"))
+                logger.warning(f"[ChatPage] 加载会话失败: {e}")
+                self.error_signal.emit(f"❌ 加载对话失败: {e}")
 
         threading.Thread(target=_do_load, daemon=True).start()
 

@@ -19,7 +19,7 @@ from .registry import register_tool
 from ..utils.retry import retry, RETRY_POLICIES
 
 # 自修改沙盒配置
-SANDBOX_ROOT = Path("data/sandbox")
+SANDBOX_ROOT = PROJECT_ROOT / "data/sandbox"
 SANDBOX_TIMEOUT = 30  # 秒
 MAX_OUTPUT_SIZE = 100 * 1024  # 100KB
 
@@ -351,8 +351,8 @@ def self_update_prompt(prompt_type: str, new_template: str, reason: str) -> str:
 )
 def verify_integrity() -> str:
     """验证完整性"""
-    from ..security.integrity import verify_all
-    return verify_all()
+    from ..security.integrity import verify_integrity
+    return verify_integrity()
 
 
 @register_tool(

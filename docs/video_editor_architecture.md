@@ -572,7 +572,7 @@ class Clip:
     source_end: float      # 裁剪结束
     duration: float        # 持续时长
     speed: float           # 播放速度（1.0=正常）
-    volume: float          # 音量（0.0~1.0，仅 audio）
+    properties: dict = field(default_factory=dict)  # 音量/滤镜参数等
     filters: list[FilterConfig]   # 滤镜链（亮度/对比度/饱和度/模糊/LUT 等）
     keyframes: list[Keyframe]     # 关键帧动画（不透明度/缩放/位置等）
     # 注：type="image" 的片段放在视频轨 (track_index=0)，默认持续 5 秒
@@ -665,9 +665,23 @@ class CoverTemplate:
 class FilterConfig:
     """调色滤镜配置 — 附加到 Clip.filters 链，导出时按顺序应用"""
     id: str
-    filter_type: str             # brightness / contrast / saturation / hue / blur / sharpen / vignette / lut / custom
-    params: dict                 # 参数
-    enabled: bool = True         # 是否启用
+    type: str = "color"            # color / blur / sharpen / vignette / lut / custom
+    enabled: bool = True           # 是否启用
+    # 色彩调整
+    brightness: float = 0.0        # -1.0 ~ 1.0
+    contrast: float = 1.0          # 0.0 ~ 3.0
+    saturation: float = 1.0        # 0.0 ~ 3.0
+    hue: float = 0.0               # 色相旋转角度
+    gamma: float = 1.0             # 伽马值
+    # 模糊/锐化
+    blur_strength: float = 0.0     # 高斯模糊 sigma
+    sharpen_strength: float = 0.0  # 锐化强度
+    # 暗角
+    vignette_strength: float = 0.0 # 0.0 ~ 1.0
+    # LUT
+    lut_path: str = ""             # 3D LUT 文件路径 (.cube)
+    # 自定义 FFmpeg 滤镜字符串
+    custom_filter: str = ""
 
 class Keyframe:
     """关键帧 — 附加到 Clip.keyframes，控制属性随时间变化"""
@@ -676,7 +690,7 @@ class Keyframe:
     property: str                # opacity / scale_x / scale_y / position_x / position_y / rotation / volume
     value: float                 # 目标值
     easing: str = "linear"       # linear / ease_in / ease_out / ease_in_out
-    params: dict | None = None   # 扩展参数
+    params: dict = field(default_factory=dict)  # 扩展参数
 
 class Transition:
     """转场效果 — 两个相邻片段之间的过渡（参见第三章 Phase 6）"""

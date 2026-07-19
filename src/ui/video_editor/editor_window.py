@@ -1,7 +1,9 @@
 """
 视频剪辑器 — 主窗口 (VideoEditorPage)
 
-Phase 6: +滤镜 +转场 +关键帧动画 +项目保存/加载
+Phase 1~6 全部完成。底部工具栏：
+  💾保存 | 📂打开 | 🎥录屏 | 🎙️AI配音 | 📝AI字幕 |
+  🎨滤镜 | 🎬转场 | 🎯关键帧 | 🖼️封面 | 📤导出
 """
 from pathlib import Path
 from typing import Optional

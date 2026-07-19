@@ -1,7 +1,7 @@
 """
 视频剪辑器 — 主窗口 (VideoEditorPage)
 
-Phase 4: +录屏模块
+Phase 6: +滤镜 +转场 +关键帧动画 +项目保存/加载
 """
 from pathlib import Path
 from typing import Optional
@@ -35,6 +35,9 @@ from src.ui.video_editor.ai_dub_engine import AIDubEngine
 from src.ui.video_editor.ai_subtitle_engine import AISubtitleEngine
 from src.ui.video_editor.cover_editor import CoverEditor
 from src.ui.video_editor.cover_ai_engine import CoverAIEngine
+from src.ui.video_editor.color_filter import ColorFilterEngine
+from src.ui.video_editor.transition_engine import TransitionEngine, ALL_TRANSITIONS
+from src.ui.video_editor.keyframe import KeyframeManager
 from src.ui.video_editor.styles import (
     EDITOR_BG, TIMELINE_BG, PLAYER_CONTROL_STYLESHEET,
     TOOLBAR_STYLESHEET, MEDIA_BIN_STYLESHEET,
@@ -140,7 +143,7 @@ class VideoEditorPage(QWidget):
         self.timeline = TimelineView()
         self.timeline.playhead_moved.connect(self._on_timeline_playhead_moved)
         self.timeline.clip_selected.connect(self._on_timeline_clip_selected)
-self.timeline.clip_added_to_timeline.connect(self._on_timeline_clip_added)
+        self.timeline.clip_added_to_timeline.connect(self._on_timeline_clip_added)
         self.timeline.cut_requested.connect(self._on_cut)
         self.timeline.delete_requested.connect(self._on_delete_clip)
         layout.addWidget(self.timeline, 2)
@@ -248,9 +251,14 @@ self.timeline.clip_added_to_timeline.connect(self._on_timeline_clip_added)
         l.setSpacing(8)
 
         btns = [
+            ("💾 保存", self._on_save_project),
+            ("📂 打开", self._on_load_project),
             ("🎥 录屏", self._on_start_recording),
             ("🎙️ AI配音", self._on_ai_dub),
             ("📝 AI字幕", self._on_ai_subtitle),
+            ("🎨 滤镜", self._on_filter_panel),
+            ("🎬 转场", self._on_add_transition),
+            ("🎯 关键帧", self._on_keyframe_panel),
             ("🖼️ 封面", self._on_open_cover),
             ("📤 导出", self._on_export),
         ]
@@ -633,3 +641,98 @@ self.timeline.clip_added_to_timeline.connect(self._on_timeline_clip_added)
     def _update_clip_display(self, clip: Clip):
         """更新单个片段的显示"""
         self.timeline.set_project(self.project)
+
+    # ==================================================================
+    #  Phase 6: 保存 / 加载
+    # ==================================================================
+
+    def _on_save_project(self):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        if not self.project.file_path:
+            path, _ = QFileDialog.getSaveFileName(
+                self, "保存项目", self.project.name + ".7tanproj",
+                "7tan 项目 (*.7tanproj);;所有文件 (*.*)"
+            )
+            if not path:
+                return
+            self.project.file_path = path
+        ok = self._pm.save(self.project)
+        if ok:
+            self._status.setText(f"💾 已保存: {self.project.file_path}")
+        else:
+            QMessageBox.warning(self, "保存失败", "项目保存失败，请检查磁盘空间。")
+
+    def _on_load_project(self):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        path, _ = QFileDialog.getOpenFileName(
+            self, "打开项目", "",
+            "7tan 项目 (*.7tanproj);;所有文件 (*.*)"
+        )
+        if not path:
+            return
+        p = self._pm.load(path)
+        if p:
+            self.project = p
+            self.timeline.set_project(p)
+            self._status.setText(f"📂 已打开: {path}")
+        else:
+            QMessageBox.warning(self, "打开失败", "无法加载项目文件。")
+
+    # ==================================================================
+    #  Phase 6: 滤镜
+    # ==================================================================
+
+    def _on_filter_panel(self):
+        clips = self.project.all_clips
+        if not clips:
+            self._status.setText("⚠️ 请先添加视频片段")
+            return
+        from src.ui.video_editor.filter_panel import FilterPanel
+        dlg = FilterPanel(clips[0], self)
+        dlg.filter_applied.connect(lambda c: self._on_filter_applied(c))
+        dlg.exec()
+
+    def _on_filter_applied(self, clip: "Clip"):
+        self._status.setText(f"🎨 滤镜已应用: {clip.id[:8]}")
+        self._update_project_tracks()
+
+    # ==================================================================
+    #  Phase 6: 转场
+    # ==================================================================
+
+    def _on_add_transition(self):
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        pairs = TransitionEngine.get_clip_pairs_for_transitions(self.project.tracks)
+        if not pairs:
+            QMessageBox.information(self, "转场", "需要至少两个相邻的视频片段才能添加转场。")
+            return
+        names = list(ALL_TRANSITIONS.keys())
+        name, ok = QInputDialog.getItem(self, "添加转场", "选择转场类型:", names, 0, False)
+        if not ok or not name:
+            return
+        dur_str, ok2 = QInputDialog.getDouble(self, "转场时长", "持续秒数:", 0.5, 0.1, 5.0, 1)
+        if not ok2:
+            return
+        prev_clip, next_clip, _ = pairs[0]
+        TransitionEngine.apply_transition(self.project, prev_clip.id, next_clip.id, name, dur_str)
+        td = ALL_TRANSITIONS.get(name)
+        self._status.setText(f"🎬 已添加转场: {td.display_name if td else name} ({dur_str}s)")
+
+    # ==================================================================
+    #  Phase 6: 关键帧
+    # ==================================================================
+
+    def _on_keyframe_panel(self):
+        clips = self.project.all_clips
+        if not clips:
+            self._status.setText("⚠️ 请先添加视频片段")
+            return
+        from src.ui.video_editor.keyframe_panel import KeyframePanel
+        dlg = KeyframePanel(clips[0], self)
+        dlg.keyframes_changed.connect(lambda c: self._on_keyframes_changed(c))
+        dlg.exec()
+
+    def _on_keyframes_changed(self, clip: "Clip"):
+        kf_count = len(getattr(clip, 'keyframes', []) or [])
+        self._status.setText(f"🎯 关键帧已更新: {clip.id[:8]} ({kf_count} 个)")
+        self._update_project_tracks()

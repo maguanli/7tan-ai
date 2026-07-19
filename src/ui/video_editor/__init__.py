@@ -1,7 +1,7 @@
 """
 7Tan Video Editor（代号"青锋"）— 轻量级 AI 驱动视频剪辑器
 
-Phase 5: +AI剪辑引擎 +AI配音 +AI字幕 +封面制作
+Phase 6: +调色滤镜 +转场 +关键帧动画 +项目保存/加载
 """
 
 from src.ui.video_editor.editor_window import VideoEditorPage
@@ -17,9 +17,15 @@ from src.ui.video_editor.ai_dub_engine import AIDubEngine
 from src.ui.video_editor.ai_subtitle_engine import AISubtitleEngine
 from src.ui.video_editor.cover_editor import CoverEditor
 from src.ui.video_editor.cover_ai_engine import CoverAIEngine
+from src.ui.video_editor.color_filter import ColorFilterEngine
+from src.ui.video_editor.transition_engine import TransitionEngine, ALL_TRANSITIONS
+from src.ui.video_editor.keyframe import KeyframeManager
+from src.ui.video_editor.filter_panel import FilterPanel
+from src.ui.video_editor.keyframe_panel import KeyframePanel
 from src.ui.video_editor.data_models import (
     Clip, SubtitleClip, Track, Project, ProjectData,
     RecordingConfig, ExporterConfig, CoverTemplate, Transition,
+    FilterConfig, Keyframe,
 )
 
 __all__ = [
@@ -36,6 +42,12 @@ __all__ = [
     "AISubtitleEngine",
     "CoverEditor",
     "CoverAIEngine",
+    "ColorFilterEngine",
+    "TransitionEngine", "ALL_TRANSITIONS",
+    "KeyframeManager",
+    "FilterPanel",
+    "KeyframePanel",
     "Clip", "SubtitleClip", "Track", "Project", "ProjectData",
     "RecordingConfig", "ExporterConfig", "CoverTemplate", "Transition",
+    "FilterConfig", "Keyframe",
 ]

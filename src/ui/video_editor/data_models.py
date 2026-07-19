@@ -9,6 +9,40 @@ from typing import Optional
 
 
 @dataclass
+class Keyframe:
+    """关键帧 — 动画插值点（参见 Phase 6）"""
+    id: str
+    time: float = 0.0                 # 时间位置（秒）
+    property: str = "opacity"          # 动画属性: opacity / scale_x / scale_y / pos_x / pos_y / rotation
+    value: float = 1.0                # 属性值
+    easing: str = "linear"            # 缓动: linear / ease_in / ease_out / ease_in_out
+    params: dict = field(default_factory=dict)
+
+
+@dataclass
+class FilterConfig:
+    """滤镜配置 — 应用于单个 Clip（参见 Phase 6）"""
+    id: str
+    type: str = "color"               # color / blur / sharpen / vignette / lut / custom
+    enabled: bool = True
+    # 色彩调整
+    brightness: float = 0.0           # -1.0 ~ 1.0
+    contrast: float = 1.0             # 0.0 ~ 3.0
+    saturation: float = 1.0           # 0.0 ~ 3.0
+    hue: float = 0.0                  # 色相旋转角度
+    gamma: float = 1.0                # 伽马值
+    # 模糊/锐化
+    blur_strength: float = 0.0        # 高斯模糊 sigma
+    sharpen_strength: float = 0.0     # 锐化强度
+    # 暗角
+    vignette_strength: float = 0.0    # 0.0 ~ 1.0
+    # LUT
+    lut_path: str = ""                # 3D LUT 文件路径 (.cube)
+    # 自定义 FFmpeg 滤镜字符串
+    custom_filter: str = ""
+
+
+@dataclass
 class Clip:
     """时间轴上的一个片段
 
@@ -25,12 +59,18 @@ class Clip:
     duration: float = 0.0        # 持续时长
     speed: float = 1.0           # 播放速度（1.0=正常）
     properties: dict = field(default_factory=dict)  # 音量/滤镜参数等
+    filters: list = field(default_factory=list)     # list[FilterConfig] — Phase 6
+    keyframes: list = field(default_factory=list)   # list[Keyframe] — Phase 6
 
     def __post_init__(self):
         if self.duration <= 0:
             self.duration = self.source_end - self.source_start
         if self.duration < 0:
             self.duration = 0.0
+        if not isinstance(self.filters, list):
+            self.filters = []
+        if not isinstance(self.keyframes, list):
+            self.keyframes = []
 
     @property
     def effective_duration(self) -> float:
@@ -115,6 +155,16 @@ class Project:
     undo_stack: list = field(default_factory=list)
     transitions: list = field(default_factory=list)  # list[Transition]
 
+    @property
+    def all_clips(self) -> list:
+        """获取所有轨道上的 Clip（不含 SubtitleClip）"""
+        result = []
+        for t in self.tracks:
+            for c in t.clips:
+                if isinstance(c, Clip):
+                    result.append(c)
+        return result
+
     def to_data(self) -> "ProjectData":
         """转为可持久化的 ProjectData"""
         return ProjectData(
@@ -128,6 +178,7 @@ class Project:
             duration=self.duration,
             created_at=self.created_at,
             modified_at=self.modified_at,
+            transitions=self.transitions,
         )
 
 
@@ -147,6 +198,7 @@ class ProjectData:
     duration: float = 0.0
     created_at: str = ""
     modified_at: str = ""
+    transitions: list = field(default_factory=list)  # list[Transition]
 
     def to_project(self, file_path: str = "") -> Project:
         """还原为运行时 Project 对象"""
@@ -162,6 +214,7 @@ class ProjectData:
             duration=self.duration,
             created_at=self.created_at,
             modified_at=self.modified_at,
+            transitions=self.transitions,
         )
 
 
@@ -199,9 +252,9 @@ class CoverTemplate:
     """封面模板（参见 9.6）"""
     name: str = ""
     style: str = ""                   # 游戏/Vlog/教程/搞笑/科技/自定义
-    bg_color: str = "#1a1a2e"         # 默认背景色 HEX
-    gradient: Optional[str] = None    # 渐变CSS样式
-    font: str = "Microsoft YaHei"     # 默认标题字体
-    title_position: tuple = (640, 360)   # 标题 (x, y)
+    bg_color: str = "#1a1a2e"
+    gradient: Optional[str] = None
+    font: str = "Microsoft YaHei"
+    title_position: tuple = (540, 200)
     subtitle_position: Optional[tuple] = None
     decor_elements: list = field(default_factory=list)

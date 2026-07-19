@@ -1797,17 +1797,17 @@ class ChatBrowserSplitPage(QWidget):
             }}
         """)
 
-        # 浏览器区 — 3个面板：浏览器 / 源代码 / 控制台
+        # 浏览器区 — 4个面板：浏览器 / 源代码 / 视频剪辑器 / 控制台
         self._browser_stack = QStackedWidget()
         self.browser = BrowserPage()
         self.browser.setProperty("browser_role", "source")
         self._browser_stack.addWidget(self.browser)        # 索引 0
         self.code_viewer = CodeViewer()
         self._browser_stack.addWidget(self.code_viewer)     # 索引 1
-        self.console_viewer = ConsoleViewer()
-        self._browser_stack.addWidget(self.console_viewer)  # 索引 2
         self.video_editor = VideoEditorPage()
-        self._browser_stack.addWidget(self.video_editor)     # 索引 3
+        self._browser_stack.addWidget(self.video_editor)     # 索引 2
+        self.console_viewer = ConsoleViewer()
+        self._browser_stack.addWidget(self.console_viewer)  # 索引 3
 
         self.chat = ChatPage()
 

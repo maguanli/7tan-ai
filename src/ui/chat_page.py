@@ -1631,6 +1631,10 @@ class ChatPage(QWidget):
 
         self._messages_layout.setContentsMargins(12, 12, 12, 12)
 
+        self._messages_layout.addStretch()
+
+
+
         # 欢迎消息
 
         self._show_welcome()
@@ -1863,7 +1867,9 @@ class ChatPage(QWidget):
 
             ml.addWidget(label)
 
-            self._messages_layout.addWidget(msg)
+            idx = self._messages_layout.count() - 1
+
+            self._messages_layout.insertWidget(idx, msg)
 
             self._messages.append(msg)
 
@@ -1893,7 +1899,9 @@ class ChatPage(QWidget):
 
 
 
-        self._messages_layout.addWidget(bubble)
+        idx = self._messages_layout.count() - 1
+
+        self._messages_layout.insertWidget(idx, bubble)
 
         self._messages.append(bubble)
 
@@ -1905,19 +1913,11 @@ class ChatPage(QWidget):
 
     def _scroll_to_bottom(self):
 
-        """滚动到底部 — 用 ensureVisible 精准定位最后一条消息，避免空白区域"""
+        """滚动到底部 — 安全版：不调用 processEvents 避免重入崩溃"""
 
-        if self._messages:
+        sb = self._scroll.verticalScrollBar()
 
-            last_msg = self._messages[-1]
-
-            QTimer.singleShot(30, lambda: self._scroll.ensureVisible(
-
-                0, last_msg.pos().y() + last_msg.height() + 20,
-
-                0, 0
-
-            ))
+        QTimer.singleShot(50, lambda: sb.setValue(sb.maximum()))
 
 
 
@@ -1925,7 +1925,7 @@ class ChatPage(QWidget):
 
         """清除所有消息"""
 
-        while self._messages_layout.count() > 0:
+        while self._messages_layout.count() > 1:
 
             item = self._messages_layout.takeAt(0)
 

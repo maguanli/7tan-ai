@@ -351,6 +351,7 @@ class StatCard(QFrame):
 # ============================================================
 class Sidebar(QFrame):
     page_changed = pyqtSignal(str)
+    open_url = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -417,9 +418,12 @@ class Sidebar(QFrame):
         layout.addStretch()
 
         # 底部信息
-        version = QLabel("v5.1.0")
+        version = QLabel("7tan.com v5.1.0")
         version.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 10px; padding: 8px;")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        version.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        version.setToolTip("在浏览器中打开 https://www.7tan.com/")
+        version.mousePressEvent = lambda e: self.open_url.emit("https://www.7tan.com/")
         layout.addWidget(version)
 
     def _on_click(self, key):
@@ -1911,6 +1915,11 @@ class ChatBrowserSplitPage(QWidget):
         # 打开管理后台
         self.browser._add_tab(url=self._admin_url, title="7tan管理后台")
 
+    def navigate_to_url(self, url: str):
+        """在浏览器中打开指定 URL（供侧边栏等外部调用）"""
+        self._switch_panel(0, self._btn_browser)
+        self.browser._add_tab(url=url, title=url.replace("https://", "").replace("http://", "")[:30])
+
     def _open_admin_window(self):
         """打开管理后台"""
         self._navigate_to_admin()
@@ -2991,6 +3000,7 @@ class MainWindow(QMainWindow):
         # 侧边栏
         self._sidebar = Sidebar()
         self._sidebar.page_changed.connect(self._switch_page)
+        self._sidebar.open_url.connect(self._on_open_url)
         main_layout.addWidget(self._sidebar)
 
         # 分隔线
@@ -3032,6 +3042,13 @@ class MainWindow(QMainWindow):
         if key in self._pages:
             self._stack.setCurrentWidget(self._pages[key])
             self._status.showMessage(f"📍 {key}")
+
+    def _on_open_url(self, url: str):
+        """侧边栏点击链接 → 切换到 AI 工作台并在浏览器打开"""
+        self._sidebar.set_active("workspace")
+        self._stack.setCurrentWidget(self._pages["workspace"])
+        self._status.showMessage(f"🌐 正在打开 {url}...")
+        self._pages["workspace"].navigate_to_url(url)
 
     def closeEvent(self, event):
         """关闭窗口时清理线程，避免 QThread 警告"""

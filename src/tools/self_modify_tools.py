@@ -19,11 +19,6 @@ from .registry import register_tool
 from ..utils.retry import retry, RETRY_POLICIES
 
 # 自修改沙盒配置
-SANDBOX_ROOT = PROJECT_ROOT / "data/sandbox"
-SANDBOX_TIMEOUT = 30  # 秒
-MAX_OUTPUT_SIZE = 100 * 1024  # 100KB
-
-
 def _get_project_root():
     """获取可靠的项目根目录 — 兼容 PyInstaller 打包和开发模式"""
     root = Path(__file__).resolve().parent.parent.parent  # src/tools/xxx.py → 项目根
@@ -53,6 +48,11 @@ def _get_project_root():
 
 
 PROJECT_ROOT = _get_project_root()
+
+# 自修改沙盒配置
+SANDBOX_ROOT = PROJECT_ROOT / "data/sandbox"
+SANDBOX_TIMEOUT = 30  # 秒
+MAX_OUTPUT_SIZE = 100 * 1024  # 100KB
 
 # 缓存真实 Python 解释器路径
 _REAL_PYTHON = None

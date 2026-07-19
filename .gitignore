@@ -2,6 +2,31 @@
 data/.encryption_key
 data/.encryption_salt
 
+# 数据库文件（含密码等敏感数据）
+data/games.db
+data/games.db-shm
+data/games.db-wal
+data/*.db
+
+# 配置文件（含 API Key）
+config/config.yaml
+
+# 费用记录
+data/costs.json
+
+# 下载包和截图（体积大）
+downloads/
+data/screenshots/
+
+# 大型安装文件
+tools/*.exe
+
+# 沙盒临时文件
+data/sandbox/
+
+# 备份文件
+*.bak
+
 # Python
 __pycache__/
 *.pyc

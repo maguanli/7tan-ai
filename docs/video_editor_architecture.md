@@ -1,4 +1,4 @@
-# 🎬 7Tan Video Editor（代号「青锋」）— 架构设计文档 v1.6
+﻿# 🎬 7Tan Video Editor（代号「青锋」）— 架构设计文档 v1.6
 
 > 最后更新：2026-07-19
 > v1.6 更新：新增 Transition、统一 Project/ProjectData、cover_path→cover_data、封面版本历史、RecordingConfig+mic_device_id、导出支持封面/音频、VLC/MPV双引擎说明、AI撤销指令、QPainter入选型表
@@ -564,6 +564,7 @@ class Clip:
     duration: float        # 持续时长
     speed: float           # 播放速度（1.0=正常）
     properties: dict       # 音量/滤镜参数等
+    # 注：type="image" 的片段放在视频轨 (track_index=0)，默认持续 5 秒
 
 class SubtitleClip:
     """字幕片段（独立模型，不走 Clip）"""
@@ -648,7 +649,7 @@ class CoverTemplate:
     decor_elements: list[str]    # 装饰元素
 
 class Transition:
-    """转场效果 — 两个相邻片段之间的过渡（参见第三章 Phase 4）"""
+    """转场效果 — 两个相邻片段之间的过渡（参见第三章 Phase 6）"""
     id: str
     type: str                    # fade / dissolve / wipe / slide / zoom / none
     duration: float              # 转场持续秒数（默认 0.5）

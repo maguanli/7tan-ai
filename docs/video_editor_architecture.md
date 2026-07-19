@@ -74,7 +74,7 @@
 | 系统音频 | WASAPI loopback，不装虚拟声卡直接捕获系统声音 |
 | 麦克风混音 | 系统声音 + 麦克风同时录制（游戏解说必备） |
 | 悬浮控制条 | 录制中显示计时器 + 暂停/停止按钮 |
-| 快捷键 | Ctrl+Shift+R 开始/停止，Ctrl+Shift+P 暂停/继续（详见第十三章） |
+| 快捷键 | Ctrl+Shift+R 开始/停止，Ctrl+Shift+P 暂停/继续（详见 8.6） |
 | 自动导入 | 录完通过回调通知 media_bin.refresh() 刷新素材面板 |
 
 
@@ -106,7 +106,7 @@
 | **UI 框架** | PyQt6 | 7Tan 已有，不引入新依赖 |
 | **播放器内核** | VLC (python-vlc) | 成熟稳定，逐帧/倍速/截图全支持 |
 | **时间轴渲染** | QGraphicsScene | 高性能 2D 场景，适合自定义时间轴 |
-| **视频合成** | FFmpeg CLI | 已有，导出用 concat demuxer |
+| **视频合成** | FFmpeg CLI | 已有，导出用 filter_complex（多轨叠加），简单拼接可用 concat demuxer 加速 |
 | **缩略图生成** | FFmpeg thumbnail | 已有，素材导入时自动生成 |
 | **屏幕捕获** | mss 库 | 跨平台、高性能屏幕截图 |
 | **系统音频** | WASAPI (Windows) | 无需虚拟声卡，loopback 直录系统声音 |
@@ -153,7 +153,8 @@ D:\7tan\7tanAI\src\ui\video_editor\
 ├── exporter.py               # 导出执行引擎（FFmpeg + 编码参数）
 ├── project_manager.py        # 项目保存/加载（.7tanproj JSON）
 ├── ai_tools_panel.py         # AI 配音/字幕面板
-├── cover_maker.py            # 封面制作模块
+├── cover_editor.py           # 封面编辑器（手动模式画布 + QPainter 渲染）
+├── cover_ai_engine.py        # 封面 AI 引擎（对话式生成 + SD 模型调用）
 ├── ai_clip_engine.py         # AI 剪辑引擎（自然语言→操作）
 ├── commands.py               # 命令模式（ClipCommand / UndoManager）
 ├── editor_api.py             # 剪辑器 API（供 AI 调用）
@@ -163,7 +164,7 @@ D:\7tan\7tanAI\src\ui\video_editor\
 ├── styles.py                 # 样式常量
 └── utils.py                  # 工具函数
 ```
-（共 20 个模块）
+（共 21 个模块）
 
 ### 五-A、导出引擎设计（exporter.py）
 
@@ -599,6 +600,7 @@ class Project:
     duration: float
     cover_data: dict | None     # 封面图层树，None=无封面
     undo_stack: list       # 撤销命令历史
+    transitions: list[Transition]  # 转场效果列表（参见 Transition 模型）
 
 class RecordingConfig:
     """录屏配置"""
@@ -634,6 +636,7 @@ class ProjectData:
     tracks: list[Track]
     cover_data: dict | None      # 封面图层树，与 Project.cover_data 一致
     undo_stack: list
+    duration: float
     created_at: str
     modified_at: str
 
@@ -668,7 +671,7 @@ class Transition:
 |------|------|:--:|
 | **Phase 1** | 面板壳子 + 按钮接入 + editor_api 骨架 | 让按钮可用 |
 | **Phase 2** | 播放器 + 素材导入 + 时间轴显示 | 能看到视频 |
-| **Phase 3** | 切割 + 拖拽排列 + 基础导出 | 能剪视频 |
+| **Phase 3** | 切割 + 拖拽排列 + 基础导出（仅 H.264 MP4，固定预设） | 能剪视频 |
 | **Phase 4** | 录屏模块（mss + WASAPI + 悬浮条） | 能录屏 |
 | **Phase 5** | AI 剪辑引擎 + 封面制作 | 🌟 亮点实现 |
 | **Phase 6** | 滤镜 + 转场 + 项目保存/加载 | 成熟产品 |

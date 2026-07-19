@@ -1389,10 +1389,15 @@ class ChatPage(QWidget):
         # ===== 状态（必须在 _build_chat_panel 之前初始化）=====
 
         self._current_session_id = None
-
         self._current_model_key = None
-
-        self._messages = []  # 存储消息气泡引用
+        self._messages = []
+        self._message_data = []
+        self._rendered_start = 0
+        self._rendered_end = 0
+        self._all_rendered = True
+        self._lazy_loading = False
+        self._HISTORY_CHUNK = 30
+        self._LAZY_CHUNK = 20
 
 
 
@@ -1831,11 +1836,16 @@ class ChatPage(QWidget):
 
                      tool_calls: list = None, is_streaming: bool = False) -> MessageBubble:
 
-        """添加消息气泡"""
-
-        import sys; sys.stderr.write(f"[_add_message] ENTER role={role}\n"); sys.stderr.flush()
-
-        logger.info(f"[ChatPage] _add_message role={role} content_start={content[:20]}")
+        """添加消息气泡（延迟渲染：仅可见范围创建重量 Widget）"""
+        # 存储原始数据（即使不渲染也保存）
+        ts = timestamp or datetime.now().strftime("%H:%M:%S")
+        self._message_data.append({
+            "role": role, "content": content, "timestamp": ts,
+            "cost": cost, "iterations": iterations, "tool_calls": tool_calls,
+        })
+        logger.info(f"[ChatPage] _add_message role={role} data_idx={len(self._message_data)-1}")
+        # 新消息始终在末尾渲染，更新范围
+        self._rendered_end = len(self._message_data)
 
         if content.startswith("<h") or content.startswith("<p"):
 
@@ -1926,6 +1936,10 @@ class ChatPage(QWidget):
                 item.widget().deleteLater()
 
         self._messages.clear()
+        self._message_data.clear()
+        self._rendered_start = 0
+        self._rendered_end = 0
+        self._all_rendered = True
 
 
 
@@ -2089,52 +2103,153 @@ class ChatPage(QWidget):
         threading.Thread(target=_do_load, daemon=True).start()
 
     def _on_session_loaded(self, session_id: str, data: dict):
-
-        """在主线程一次性渲染全部历史消息 — 禁用刷新避免闪烁"""
-
+        """在主线程渲染历史消息 — 仅渲染最后 N 条，其余延迟加载"""
         messages = data.get("messages", [])
-
         self._current_session_id = session_id
-
         self._clear_messages()
-
         self._title_label.setText(f"💬 {data.get('title', '对话')}")
 
         if not messages:
             self._add_message("system", "📋 已加载 0 条消息")
             return
 
+        total = len(messages)
+        chunk = self._HISTORY_CHUNK
+        start_idx = max(0, total - chunk)
+
         # 禁用刷新，一次性渲染防止 UI 不断重绘
         self._scroll.setUpdatesEnabled(False)
         try:
-            for msg in messages:
+            # 如果前面有未渲染的消息，显示提示
+            if start_idx > 0:
+                self._add_message("system",
+                    f"📜 以上还有 {start_idx} 条历史消息（向上滚动自动加载）")
+
+            for msg in messages[start_idx:]:
                 role = msg.get("role", "system")
                 content = msg.get("content", "")
                 if content:
                     self._add_message(role, content)
+
+            self._rendered_start = start_idx
+            self._rendered_end = len(self._message_data)
+            self._all_rendered = (start_idx == 0)
         finally:
             self._scroll.setUpdatesEnabled(True)
             self._messages_container.adjustSize()
             self._messages_container.updateGeometry()
             QTimer.singleShot(50, self._scroll_to_bottom)
 
+        # 连接滚动监听（仅当还有未加载的历史时）
+        if not self._all_rendered:
+            try:
+                self._scroll.verticalScrollBar().valueChanged.disconnect(
+                    self._on_history_scroll)
+            except TypeError:
+                pass
+            self._scroll.verticalScrollBar().valueChanged.connect(
+                self._on_history_scroll)
+
     def _scroll_to_bottom(self):
         scroll = self._scroll
         vbar = scroll.verticalScrollBar()
         vbar.setValue(vbar.maximum())
-        # 刷新布局消除底部空白
         self._messages_container.adjustSize()
         self._messages_container.updateGeometry()
+
+    def _on_history_scroll(self, value: int):
+        """滚动到顶部时自动加载更多历史消息"""
+        if self._all_rendered or self._lazy_loading:
+            return
+        if value > 80:  # 距离顶部 80px 以内触发
+            return
+        self._lazy_loading = True
+        self._load_more_history()
+
+    def _load_more_history(self):
+        """加载更早的历史消息（每次 20 条）"""
+        if self._rendered_start <= 0:
+            self._all_rendered = True
+            self._lazy_loading = False
+            return
+
+        chunk = self._LAZY_CHUNK
+        new_start = max(0, self._rendered_start - chunk)
+        old_messages = self._message_data[new_start:self._rendered_start]
+
+        # 记录当前滚动位置，用于加载后恢复
+        sb = self._scroll.verticalScrollBar()
+        old_max = sb.maximum()
+
+        self._scroll.setUpdatesEnabled(False)
+        try:
+            # 逆序插入到布局顶部（在 placeholder 之后）
+            for md in reversed(old_messages):
+                self._insert_message_at_top(md)
+
+            self._rendered_start = new_start
+            if new_start <= 0:
+                self._all_rendered = True
+                # 移除"加载更多"提示
+                for i in range(self._messages_layout.count()):
+                    w = self._messages_layout.itemAt(i).widget()
+                    if w and hasattr(w, '_content') and '以上还有' in getattr(w, '_content', ''):
+                        self._messages.remove(w)
+                        item = self._messages_layout.takeAt(i)
+                        if item.widget():
+                            item.widget().deleteLater()
+                        # 同步清理 _message_data
+                        for j, md in enumerate(self._message_data):
+                            if md.get("role") == "system" and '以上还有' in md.get("content", ""):
+                                self._message_data.pop(j)
+                                self._rendered_end -= 1
+                                self._rendered_start -= 1
+                                break
+                        break
+        finally:
+            self._scroll.setUpdatesEnabled(True)
+            self._messages_container.adjustSize()
+            self._messages_container.updateGeometry()
+
+        # 恢复滚动位置（新消息在老消息之上，需要补偿偏移）
+        new_max = sb.maximum()
+        delta = new_max - old_max
+        QTimer.singleShot(50, lambda: sb.setValue(sb.value() + delta))
+        self._lazy_loading = False
+
+    def _insert_message_at_top(self, md: dict):
+        """在布局顶部插入一条消息"""
+        # 找到第一个非 system 提示的 widget 位置
+        insert_pos = 0
+        for i in range(self._messages_layout.count()):
+            w = self._messages_layout.itemAt(i).widget()
+            if w and hasattr(w, '_content') and '以上还有' in getattr(w, '_content', ''):
+                insert_pos = i + 1
+                break
+
+        bubble = MessageBubble(
+            role=md["role"], content=md["content"],
+            timestamp=md.get("timestamp", ""),
+            cost=md.get("cost", 0), iterations=md.get("iterations", 0),
+            tool_calls=md.get("tool_calls"), is_streaming=False,
+            session_id=self._current_session_id
+        )
+        bubble.retry_requested.connect(lambda t, r=md["role"]: self._retry_message(t))
+        self._messages_layout.insertWidget(insert_pos, bubble)
+        self._messages.insert(insert_pos, bubble)
 
 
 
 
     def _new_session(self):
-
         """新建对话"""
-
         self._current_session_id = None
-
+        # 断开历史滚动加载
+        try:
+            self._scroll.verticalScrollBar().valueChanged.disconnect(
+                self._on_history_scroll)
+        except TypeError:
+            pass
         self._clear_messages()
 
         self._show_welcome()
@@ -2638,23 +2753,22 @@ class ChatPage(QWidget):
 
 
     def _remove_message(self, msg):
-
-        """移除指定消息"""
-
+        """移除指定消息（同步清理数据）"""
         logger.info(f"[ChatPage] _remove_message called")
-
         if msg and msg in self._messages:
-
+            # 从数据层移除
+            msg_idx = self._messages.index(msg)
+            if msg_idx < len(self._message_data):
+                self._message_data.pop(msg_idx)
+                if self._rendered_end > msg_idx:
+                    self._rendered_end -= 1
+                if self._rendered_start > msg_idx:
+                    self._rendered_start -= 1
             self._messages.remove(msg)
-
             idx = self._messages_layout.indexOf(msg)
-
             if idx >= 0:
-
                 item = self._messages_layout.takeAt(idx)
-
                 if item.widget():
-
                     item.widget().deleteLater()
 
 

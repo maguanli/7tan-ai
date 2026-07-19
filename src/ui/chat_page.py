@@ -425,7 +425,8 @@ class MessageBubble(QFrame):
 
                  tool_calls: list = None, is_streaming: bool = False,
 
-                 session_id: str = None, parent=None):
+                 session_id: str = None, pre_parsed_html: str = None,
+                 parent=None):
 
         super().__init__(parent)
 
@@ -617,11 +618,10 @@ class MessageBubble(QFrame):
 
             margin = "0"
 
-        logger.info(f"[MessageBubble] md_to_html start ({len(content)} chars) text_color={text_color}")
-
-        html = self._md_to_html(content, text_color)
-
-        logger.info(f"[MessageBubble] md_to_html done ({len(html)} chars), setting text...")
+        if pre_parsed_html:
+            html = pre_parsed_html
+        else:
+            html = self._md_to_html(content, text_color)
 
         self._content_label.setText(html)
 
@@ -1331,6 +1331,7 @@ class ChatPage(QWidget):
 
     session_loaded_signal = pyqtSignal(str, dict)  # (session_id, data)
     error_signal = pyqtSignal(str)  # error message
+    messages_parsed_signal = pyqtSignal(str, list, int, int)  # session_id, parsed_msgs, start_idx, total
 
 
 
@@ -1346,6 +1347,7 @@ class ChatPage(QWidget):
 
         # 线程安全的信号连接
         self.session_loaded_signal.connect(self._on_session_loaded)
+        self.messages_parsed_signal.connect(self._on_messages_parsed)
         self.error_signal.connect(lambda msg: self._add_message("error", msg))
 
 
@@ -1392,10 +1394,12 @@ class ChatPage(QWidget):
         self._current_model_key = None
         self._messages = []
         self._message_data = []
+        self._current_parsed_data = []  # ALL parsed messages (including unrendered)
         self._rendered_start = 0
         self._rendered_end = 0
         self._all_rendered = True
         self._lazy_loading = False
+        self._batch_rendering = False  # suppress _scroll_to_bottom during batch
         self._HISTORY_CHUNK = 30
         self._LAZY_CHUNK = 20
 
@@ -1828,13 +1832,83 @@ class ChatPage(QWidget):
 
     # ==================== 消息管理 ====================
 
+    @staticmethod
+    def _pre_parse_single(content: str, role: str) -> str:
+        """预解析单条消息的 Markdown→HTML（线程安全，可在后台调用）"""
+        if not content:
+            return ""
+        if role == "user":
+            text_color = "#000000"
+        elif role == "error":
+            text_color = THEME["danger"]
+        else:
+            text_color = THEME["text_primary"]
+        try:
+            import markdown as _md
+            html = _md.markdown(content, extensions=['fenced_code', 'tables'], output_format='html')
+            html = ChatPage._pygments_static(html)
+            html = html.replace('<a ', '<a style="color:#00d4ff;" ')
+            html = html.replace('<table>', f'<table style="border-collapse:collapse;margin:8px 0;width:100%;">')
+            html = html.replace('<th>', f'<th style="border:1px solid {THEME["border"]};padding:6px 10px;background:{THEME["bg_dark"]};">')
+            html = html.replace('<td>', f'<td style="border:1px solid {THEME["border"]};padding:4px 10px;">')
+            html = html.replace('<blockquote>', '<blockquote style="border-left:3px solid #00d4ff;padding-left:12px;margin:4px 0;color:#94a3b8;">')
+            html = html.replace('<hr>', '<hr style="border-color:#1e293b;margin:8px 0;">')
+            html = html.replace('<hr/>', '<hr style="border-color:#1e293b;margin:8px 0;">')
+            return f'<div style="color:{text_color};font-size:13px;line-height:1.6;word-break:break-word;overflow-wrap:break-word;max-width:100%;">{html}</div>'
+        except ImportError:
+            esc = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            return f'<div style="color:{text_color};font-size:13px;line-height:1.6;white-space:pre-wrap;max-width:100%;">{esc}</div>'
 
+    @staticmethod
+    def _pygments_static(html: str) -> str:
+        """Pygments 语法高亮（静态版本，线程安全）"""
+        import re as _re
+        from pygments import highlight
+        from pygments.lexers import get_lexer_by_name, TextLexer
+        from pygments.formatters import HtmlFormatter
+        def _hl(match):
+            try:
+                lang = match.group(1) or "text"
+            except IndexError:
+                lang = "text"
+            code = match.group(2)
+            try:
+                lexer = get_lexer_by_name(lang, stripall=True)
+            except Exception:
+                lexer = TextLexer()
+            formatter = HtmlFormatter(style="monokai", nowrap=True, noclasses=True)
+            highlighted = highlight(code, lexer, formatter)
+            return (
+                '<div style="position:relative;margin:8px 0;border-radius:6px;overflow:hidden;border:1px solid #3e3d32;">'
+                '<div style="background:#272822;color:#75715e;font-size:11px;padding:4px 14px;'
+                'display:flex;justify-content:space-between;align-items:center;">'
+                '<span style="font-weight:bold;color:#a6e22e;">' + lang + '</span>'
+                '<span style="color:#75715e;font-size:10px;">[Ctrl+C 复制]</span>'
+                '</div>'
+                '<pre style="background:#272822;padding:12px;margin:0;overflow-x:auto;font-size:12px;line-height:1.5;border-radius:0 0 6px 6px;">' + highlighted + '</pre>'
+                '</div>'
+            )
+        return _re.sub(r'<pre><code(?:\s+class="language-(\w+)")?>([\s\S]*?)</code></pre>', _hl, html)
+
+    def _remove_last_system_message(self):
+        """移除最后一条系统消息（加载提示等）"""
+        if self._messages_layout.count() == 0:
+            return
+        item = self._messages_layout.takeAt(self._messages_layout.count() - 1)
+        if item.widget():
+            item.widget().deleteLater()
+        if self._messages:
+            self._messages.pop()
+        if self._message_data:
+            self._message_data.pop()
+        self._rendered_end = max(0, self._rendered_end - 1)
 
     def _add_message(self, role: str, content: str, timestamp: str = "",
 
                      cost: float = 0, iterations: int = 0,
 
-                     tool_calls: list = None, is_streaming: bool = False) -> MessageBubble:
+                     tool_calls: list = None, is_streaming: bool = False,
+                     pre_parsed_html: str = None) -> MessageBubble:
 
         """添加消息气泡（延迟渲染：仅可见范围创建重量 Widget）"""
         # 存储原始数据（即使不渲染也保存）
@@ -1842,6 +1916,7 @@ class ChatPage(QWidget):
         self._message_data.append({
             "role": role, "content": content, "timestamp": ts,
             "cost": cost, "iterations": iterations, "tool_calls": tool_calls,
+            "html": pre_parsed_html,
         })
         logger.info(f"[ChatPage] _add_message role={role} data_idx={len(self._message_data)-1}")
         # 新消息始终在末尾渲染，更新范围
@@ -1895,7 +1970,9 @@ class ChatPage(QWidget):
 
             tool_calls=tool_calls, is_streaming=is_streaming,
 
-            session_id=self._current_session_id
+            session_id=self._current_session_id,
+
+            pre_parsed_html=pre_parsed_html
 
         )
 
@@ -1907,7 +1984,8 @@ class ChatPage(QWidget):
 
         self._messages.append(bubble)
 
-        self._scroll_to_bottom()
+        if not self._batch_rendering:
+            self._scroll_to_bottom()
 
         return bubble
 
@@ -1937,6 +2015,7 @@ class ChatPage(QWidget):
 
         self._messages.clear()
         self._message_data.clear()
+        self._current_parsed_data.clear()
         self._rendered_start = 0
         self._rendered_end = 0
         self._all_rendered = True
@@ -2103,7 +2182,7 @@ class ChatPage(QWidget):
         threading.Thread(target=_do_load, daemon=True).start()
 
     def _on_session_loaded(self, session_id: str, data: dict):
-        """在主线程渲染历史消息 — 仅渲染最后 N 条，其余延迟加载"""
+        """在主线程渲染历史消息 — 后台预解析 HTML 后渲染"""
         messages = data.get("messages", [])
         self._current_session_id = session_id
         self._clear_messages()
@@ -2116,31 +2195,68 @@ class ChatPage(QWidget):
         total = len(messages)
         chunk = self._HISTORY_CHUNK
         start_idx = max(0, total - chunk)
+        batch = messages[start_idx:]
 
-        # 禁用刷新，一次性渲染防止 UI 不断重绘
+        # 显示加载提示
+        self._add_message("system", f"⏳ 正在准备 {len(batch)} 条消息...")
+
+        # 后台线程预解析 Markdown→HTML
+        import threading
+        def do_parse():
+            parsed = []
+            for msg in batch:
+                role = msg.get("role", "system")
+                content = msg.get("content", "")
+                html = self._pre_parse_single(content, role) if content else None
+                parsed.append({
+                    "role": role, "content": content,
+                    "html": html,
+                    "timestamp": msg.get("timestamp", ""),
+                    "cost": msg.get("cost", 0),
+                    "tool_calls": msg.get("tool_calls"),
+                })
+            self.messages_parsed_signal.emit(session_id, parsed, start_idx, total)
+
+        threading.Thread(target=do_parse, daemon=True).start()
+
+    def _on_messages_parsed(self, session_id: str, parsed: list, start_idx: int, total: int):
+        """后台解析完成后，在主线程渲染 Widget"""
+        if session_id != self._current_session_id:
+            return  # 用户已切换会话，丢弃过期数据
+
+        # 缓存所有解析数据（供 _load_more_history 使用）
+        self._current_parsed_data = parsed
+
+        # 移除加载提示
+        self._remove_last_system_message()
+
+        self._batch_rendering = True
         self._scroll.setUpdatesEnabled(False)
         try:
-            # 如果前面有未渲染的消息，显示提示
             if start_idx > 0:
                 self._add_message("system",
                     f"📜 以上还有 {start_idx} 条历史消息（向上滚动自动加载）")
 
-            for msg in messages[start_idx:]:
-                role = msg.get("role", "system")
-                content = msg.get("content", "")
-                if content:
-                    self._add_message(role, content)
+            for msg in parsed:
+                if msg["content"]:
+                    self._add_message(
+                        msg["role"], msg["content"],
+                        timestamp=msg.get("timestamp", ""),
+                        cost=msg.get("cost", 0),
+                        tool_calls=msg.get("tool_calls"),
+                        pre_parsed_html=msg.get("html"),
+                    )
 
             self._rendered_start = start_idx
             self._rendered_end = len(self._message_data)
             self._all_rendered = (start_idx == 0)
         finally:
+            self._batch_rendering = False
             self._scroll.setUpdatesEnabled(True)
             self._messages_container.adjustSize()
             self._messages_container.updateGeometry()
             QTimer.singleShot(50, self._scroll_to_bottom)
 
-        # 连接滚动监听（仅当还有未加载的历史时）
         if not self._all_rendered:
             try:
                 self._scroll.verticalScrollBar().valueChanged.disconnect(
@@ -2175,7 +2291,16 @@ class ChatPage(QWidget):
 
         chunk = self._LAZY_CHUNK
         new_start = max(0, self._rendered_start - chunk)
-        old_messages = self._message_data[new_start:self._rendered_start]
+        # 从预解析缓存读取旧消息（含 HTML）
+        parsed_slice = self._current_parsed_data[new_start:self._rendered_start] if self._current_parsed_data else []
+        old_messages = []
+        for msg in reversed(parsed_slice):
+            md = {"role": msg["role"], "content": msg["content"], "timestamp": msg.get("timestamp", ""), "cost": msg.get("cost", 0), "tool_calls": msg.get("tool_calls"), "html": msg.get("html")}
+            old_messages.append(md)
+            self._message_data.insert(new_start, md)
+        # Fallback: if no parsed cache, read from _message_data
+        if not old_messages:
+            old_messages = list(reversed(self._message_data[new_start:self._rendered_start]))
 
         # 记录当前滚动位置，用于加载后恢复
         sb = self._scroll.verticalScrollBar()
@@ -2183,8 +2308,8 @@ class ChatPage(QWidget):
 
         self._scroll.setUpdatesEnabled(False)
         try:
-            # 逆序插入到布局顶部（在 placeholder 之后）
-            for md in reversed(old_messages):
+            # 插入到布局顶部（old_messages 已是旧→新顺序）
+            for md in old_messages:
                 self._insert_message_at_top(md)
 
             self._rendered_start = new_start
@@ -2232,7 +2357,8 @@ class ChatPage(QWidget):
             timestamp=md.get("timestamp", ""),
             cost=md.get("cost", 0), iterations=md.get("iterations", 0),
             tool_calls=md.get("tool_calls"), is_streaming=False,
-            session_id=self._current_session_id
+            session_id=self._current_session_id,
+            pre_parsed_html=md.get("html")
         )
         bubble.retry_requested.connect(lambda t, r=md["role"]: self._retry_message(t))
         self._messages_layout.insertWidget(insert_pos, bubble)

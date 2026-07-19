@@ -255,7 +255,7 @@ class TimelineView(QGraphicsView):
                     # 从场景移除
                     if clip_id in self._clip_items:
                         item = self._clip_items.pop(clip_id)
-                        self._scene.removeItem(item)
+    self._scene.removeItem(item)
                     self._update_project_duration()
                     self._refresh_all_snap_points()
                     return True
@@ -356,7 +356,7 @@ class TimelineView(QGraphicsView):
         for track in self._project.tracks:
             for clip in track.clips:
                 if isinstance(clip, Clip) and clip.id == clip_id:
-                    clip.timeline_start = new_start
+clip.timeline_start = new_start
                     self._update_project_duration()
                     self._refresh_all_snap_points()
                     return

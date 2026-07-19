@@ -4,7 +4,7 @@
 复用 7Tan 全局主题色，扩展剪辑器专用样式。
 """
 
-from ..theme import THEME  # noqa: F401 — 复用全局主题
+from src.ui.app import THEME  # noqa: F401 — 复用全局主题
 
 # ===== 剪辑器专用颜色 =====
 EDITOR_BG = "#0d1117"           # 编辑器主背景（比全局更深）

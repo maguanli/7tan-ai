@@ -1144,9 +1144,19 @@ class SessionSidebar(QFrame):
         # 每次显示都重新加载
         QTimer.singleShot(300, self._load_from_api)
 
+    # 模块级防抖：1秒内不重复请求（showEvent 重复触发时）
+    _last_api_load_time = 0
+
     def _load_from_api(self):
-        """直接从 API 加载会话列表（后台线程 → 主线程 signal）"""
-        import threading, requests
+        """直接从 API 加载会话列表（后台线程 → 主线程 signal，带防抖）"""
+        import threading, requests, time
+        now = time.time()
+        if now - SessionSidebar._last_api_load_time < 1.0:
+            from loguru import logger
+            logger.debug("[SessionSidebar] 防抖：跳过重复请求")
+            return
+        SessionSidebar._last_api_load_time = now
+
         def _do():
             try:
                 resp = requests.get(f"{API_BASE}/api/chat/history", timeout=10)
@@ -1157,6 +1167,7 @@ class SessionSidebar(QFrame):
             except Exception as e:
                 from loguru import logger
                 logger.warning(f"[SessionSidebar] 加载失败: {e}")
+                SessionSidebar._last_api_load_time = 0  # 失败重置，允许重试
                 QTimer.singleShot(2000, self._load_from_api)
         threading.Thread(target=_do, daemon=True).start()
 
@@ -1979,17 +1990,28 @@ class ChatPage(QWidget):
 
 
 
+    # 模块级防抖时间戳（与 SessionSidebar 共享防抖逻辑）
+    _last_auto_load_time = 0
+
     def _auto_load_sessions(self, retry=0):
 
-        """自动加载对话列表（后台线程，不阻塞UI）"""
+        """自动加载对话列表（后台线程，不阻塞UI，带双重防抖）"""
 
-        # 防抖：如果已有加载进行中且非重试，跳过
+        import threading, time
+
+        # 防抖1：如果已有加载进行中且非重试，跳过
         if self._loading_sessions and retry == 0:
             logger.debug("[ChatPage] 跳过重复加载请求（已有加载进行中）")
             return
-        self._loading_sessions = True
 
-        import threading
+        # 防抖2：1秒内不重复请求（showEvent 与 Sidebar.showEvent 同时触发时）
+        now = time.time()
+        if retry == 0 and now - ChatPage._last_auto_load_time < 1.0:
+            logger.debug("[ChatPage] 防抖：跳过重复请求（1秒内已加载过）")
+            return
+        ChatPage._last_auto_load_time = now
+
+        self._loading_sessions = True
 
         def _do_load():
 
@@ -2014,6 +2036,8 @@ class ChatPage(QWidget):
                 else:
 
                     self._loading_sessions = False
+
+                    ChatPage._last_auto_load_time = 0
 
                     logger.warning(f"自动加载对话最终失败: {e}")
 
@@ -2074,7 +2098,7 @@ class ChatPage(QWidget):
 
     def _on_session_loaded(self, session_id: str, data: dict):
 
-        """在主线程更新会话消息UI"""
+        """在主线程分批渲染消息UI（每批5条，避免阻塞UI线程导致光标转圈）"""
 
         messages = data.get("messages", [])
 
@@ -2082,19 +2106,34 @@ class ChatPage(QWidget):
 
         self._clear_messages()
 
-        for msg in messages:
-
-            role = msg.get("role", "system")
-
-            content = msg.get("content", "")
-
-            if content:
-
-                self._add_message(role, content)
-
         self._title_label.setText(f"💬 {data.get('title', '对话')}")
 
-        self._add_message("system", f"📋 已加载 {len(messages)} 条消息")
+        # 分批渲染：每批 5 条，批次间让 UI 呼吸
+        self._pending_messages = messages
+        self._msg_render_index = 0
+        BATCH_SIZE = 5
+
+        def render_batch():
+            i = self._msg_render_index
+            batch = self._pending_messages[i:i + BATCH_SIZE]
+            for msg in batch:
+                role = msg.get("role", "system")
+                content = msg.get("content", "")
+                if content:
+                    self._add_message(role, content)
+            self._msg_render_index += BATCH_SIZE
+            if self._msg_render_index < len(self._pending_messages):
+                # 还有更多消息，下一批用 QTimer 延迟执行
+                QTimer.singleShot(10, render_batch)
+            else:
+                # 全部完成
+                self._add_message("system", f"📋 已加载 {len(messages)} 条消息")
+                self._pending_messages = []
+
+        if messages:
+            QTimer.singleShot(0, render_batch)
+        else:
+            self._add_message("system", "📋 已加载 0 条消息")
 
 
 

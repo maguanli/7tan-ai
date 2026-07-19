@@ -258,3 +258,35 @@ class CoverTemplate:
     title_position: tuple = (540, 200)
     subtitle_position: Optional[tuple] = None
     decor_elements: list = field(default_factory=list)
+
+
+@dataclass
+class SceneScript:
+    """AI 视频制作 — 单个分镜头脚本（参见第十五章）"""
+    index: int = 0
+    text: str = ""                     # 配音文案
+    image_prompt: str = ""             # AI 生图提示词（可选）
+    duration: float = 10.0             # 预估时长（秒）
+    transition: str = "fade"           # 转场类型
+    image_path: Optional[str] = None   # 生成的图片路径
+    audio_path: Optional[str] = None   # 生成的配音路径
+
+
+@dataclass
+class VideoScript:
+    """AI 视频制作 — 完整视频脚本（参见第十五章）"""
+    title: str = ""
+    style: str = "professional"        # professional / casual / tech / funny
+    scenes: list = field(default_factory=list)  # list[SceneScript]
+    total_duration: float = 0.0
+
+
+@dataclass
+class AIVideoTask:
+    """AI 视频制作 — 任务状态跟踪（参见第十五章）"""
+    id: str = ""
+    status: str = "idle"               # idle / scripting / generating_images / dubbing / arranging / done / failed
+    script: Optional['VideoScript'] = None
+    progress: float = 0.0              # 0.0 ~ 1.0
+    message: str = ""
+    created_at: str = ""

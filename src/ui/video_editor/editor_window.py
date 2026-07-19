@@ -1,9 +1,9 @@
 """
 视频剪辑器 — 主窗口 (VideoEditorPage)
 
-Phase 1~6 全部完成。底部工具栏：
+Phase 1~7 全部完成。底部工具栏：
   💾保存 | 📂打开 | 🎥录屏 | 🎙️AI配音 | 📝AI字幕 |
-  🎨滤镜 | 🎬转场 | 🎯关键帧 | 🖼️封面 | 📤导出
+  🎨滤镜 | 🎬转场 | 🎯关键帧 | 🖼️封面 | 🤖AI视频 | 📤导出
 """
 from pathlib import Path
 from typing import Optional
@@ -37,6 +37,8 @@ from src.ui.video_editor.ai_dub_engine import AIDubEngine
 from src.ui.video_editor.ai_subtitle_engine import AISubtitleEngine
 from src.ui.video_editor.cover_editor import CoverEditor
 from src.ui.video_editor.cover_ai_engine import CoverAIEngine
+from src.ui.video_editor.ai_video_maker import AIVideoMaker
+from src.ui.video_editor.ai_video_panel import AIVideoPanel
 from src.ui.video_editor.color_filter import ColorFilterEngine
 from src.ui.video_editor.transition_engine import TransitionEngine, ALL_TRANSITIONS
 from src.ui.video_editor.keyframe import KeyframeManager
@@ -91,6 +93,8 @@ class VideoEditorPage(QWidget):
         self._cover_editor: CoverEditor | None = None
         self._cover_ai = CoverAIEngine()
         self._cover_ai.finished.connect(self._on_cover_ai_finished)
+        self._ai_video_maker = None
+        self._ai_video_panel = None
         self._setup_ui()
 
     @property
@@ -262,6 +266,7 @@ class VideoEditorPage(QWidget):
             ("🎬 转场", self._on_add_transition),
             ("🎯 关键帧", self._on_keyframe_panel),
             ("🖼️ 封面", self._on_open_cover),
+            ("🤖 AI视频", self._on_ai_video),
             ("📤 导出", self._on_export),
         ]
         for text, handler in btns:
@@ -738,3 +743,71 @@ class VideoEditorPage(QWidget):
         kf_count = len(getattr(clip, 'keyframes', []) or [])
         self._status.setText(f"🎯 关键帧已更新: {clip.id[:8]} ({kf_count} 个)")
         self._update_project_tracks()
+
+    # ==================================================================
+    #  Phase 7: AI 视频制作（图文成片）
+    # ==================================================================
+
+    def _on_ai_video(self):
+        if not self._ai_video_maker:
+            self._ai_video_maker = AIVideoMaker(
+                editor_api=self._api, dub_engine=self._dub_engine,
+                media_bin=self.media_bin)
+        self._ai_video_panel = AIVideoPanel()
+        self._ai_video_panel.script_generated.connect(self._on_ai_video_script_generated)
+        self._ai_video_panel.pipeline_requested.connect(self._on_ai_video_pipeline)
+        self._ai_video_panel.setWindowTitle("🤖 AI 视频制作 — 青锋")
+        self._ai_video_panel.resize(520, 600)
+        self._ai_video_panel.show()
+
+    def _on_ai_video_script_generated(self, params: dict):
+        topic = params.get("topic", "")
+        style = params.get("style", "professional")
+        target_duration = params.get("duration", 180)
+        self._status.setText(f"🤖 AI 正在生成脚本: {topic[:40]}…")
+        try:
+            import threading
+            def _gen():
+                script = self._ai_video_maker.generate_script(topic, style, target_duration)
+                from PyQt6.QtCore import QMetaObject, Qt as Qtc, Q_ARG
+                if self._ai_video_panel:
+                    QMetaObject.invokeMethod(self._ai_video_panel, "set_script",
+                        Qtc.ConnectionType.QueuedConnection, Q_ARG(object, script))
+                    QMetaObject.invokeMethod(self._ai_video_panel, "on_generation_done",
+                        Qtc.ConnectionType.QueuedConnection)
+                self._status.setText(f"✅ 脚本: {script.title} ({len(script.scenes)} 个场景)")
+            threading.Thread(target=_gen, daemon=True).start()
+        except Exception as e:
+            self._status.setText(f"❌ 脚本生成失败: {e}")
+            if self._ai_video_panel:
+                self._ai_video_panel.on_generation_done()
+
+    def _on_ai_video_pipeline(self, params: dict):
+        topic = params.get("topic", "")
+        mode = params.get("mode", "text_only")
+        style = params.get("style", "professional")
+        target_duration = params.get("duration", 180)
+        voice = params.get("voice", "female_gentle")
+        self._status.setText(f"🚀 AI 视频制作开始: {topic[:40]}…")
+        import threading
+        def _run():
+            def on_progress(status, progress, message):
+                from PyQt6.QtCore import QMetaObject, Qt as Qtc, Q_ARG
+                from src.ui.video_editor.data_models import AIVideoTask
+                t = AIVideoTask(status=status, progress=progress, message=message)
+                if self._ai_video_panel:
+                    QMetaObject.invokeMethod(self._ai_video_panel, "set_task",
+                        Qtc.ConnectionType.QueuedConnection, Q_ARG(object, t))
+                self._status.setText(f"🤖 [{status}] {message}")
+            task = self._ai_video_maker.run_full_pipeline(
+                topic=topic, project=self.project, mode=mode,
+                style=style, target_duration=target_duration,
+                voice=voice, on_progress=on_progress)
+            from PyQt6.QtCore import QMetaObject, Qt as Qtc
+            if self._ai_video_panel:
+                QMetaObject.invokeMethod(self._ai_video_panel, "on_pipeline_done",
+                    Qtc.ConnectionType.QueuedConnection)
+            self._update_project_tracks()
+            ok = "✅" if task.status == "done" else "❌"
+            self._status.setText(f"{ok} {task.message}")
+        threading.Thread(target=_run, daemon=True).start()

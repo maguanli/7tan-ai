@@ -18,7 +18,7 @@ from src.ui.video_editor.keyframe import (
     KeyframeManager, create_fade_in_keyframes,
     create_fade_out_keyframes, create_zoom_in_keyframes, EASING_FUNCTIONS,
 )
-from src.ui.app import THEME
+from ..theme import THEME
 
 
 PROPERTY_NAMES = ["opacity", "scale_x", "scale_y", "pos_x", "pos_y", "rotation"]

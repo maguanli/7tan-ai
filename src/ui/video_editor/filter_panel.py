@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 
 from src.ui.video_editor.data_models import Clip, FilterConfig
 from src.ui.video_editor.color_filter import ColorFilterEngine, PRESETS, FilterPreset
-from src.ui.app import THEME
+from ..theme import THEME
 
 
 class FilterPanel(QDialog):

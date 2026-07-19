@@ -17,7 +17,7 @@ from PyQt6.QtGui import QFont
 
 from loguru import logger
 
-from src.ui.app import THEME
+from ..theme import THEME
 from src.ui.video_editor.data_models import (
     Project, RecordingConfig, Track, Clip, ExporterConfig, SubtitleClip,
 )

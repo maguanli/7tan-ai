@@ -39,23 +39,9 @@ from PyQt6.QtCharts import (
 import requests
 from loguru import logger
 
+from .theme import THEME
+
 # ===== 颜色主题 =====
-THEME = {
-    "bg_dark": "#1a1a2e",
-    "bg_card": "#16213e",
-    "bg_sidebar": "#0f0f23",
-    "bg_input": "#1e1e3a",
-    "accent": "#00d4ff",
-    "accent2": "#7c3aed",
-    "success": "#10b981",
-    "warning": "#f59e0b",
-    "danger": "#ef4444",
-    "text_primary": "#e2e8f0",
-    "text_secondary": "#94a3b8",
-    "text_muted": "#64748b",
-    "border": "#1e293b",
-    "hover": "#1e3a5f",
-}
 
 DARK_STYLESHEET = f"""
 QMainWindow, QWidget {{
@@ -1765,6 +1751,7 @@ class BrowserPage(QWidget):
 
 from .console_panel import ConsoleViewer
 from .code_viewer import CodeViewer
+from .video_editor.editor_window import VideoEditorPage
 
 # ===== AI 工作台（浏览器 + 对话 左右分屏） =====
 

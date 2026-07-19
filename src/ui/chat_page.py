@@ -1583,7 +1583,7 @@ class ChatPage(QWidget):
 
         self._scroll = QScrollArea()
 
-        self._scroll.setWidgetResizable(True)
+        self._scroll.setWidgetResizable(False)
 
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
@@ -1639,6 +1639,8 @@ class ChatPage(QWidget):
 
         self._scroll.setWidget(self._messages_container)
 
+        # 初始化宽度：setWidgetResizable(False) 下需手动同步
+        self._messages_container.setFixedWidth(self._scroll.viewport().width() or 400)
         self._scroll.viewport().installEventFilter(self)
 
         self._messages_container.installEventFilter(self)
@@ -1905,19 +1907,11 @@ class ChatPage(QWidget):
 
     def _scroll_to_bottom(self):
 
-        """滚动到底部 — 用 ensureVisible 精准定位最后一条消息，避免空白区域"""
+        """滚动到底部 — setWidgetResizable(False) 下 widget 高度=内容高度，直接用 scrollbar 最大值"""
 
-        if self._messages:
-
-            last_msg = self._messages[-1]
-
-            QTimer.singleShot(30, lambda: self._scroll.ensureVisible(
-
-                0, last_msg.pos().y() + last_msg.height() + 20,
-
-                0, 0
-
-            ))
+        sb = self._scroll.verticalScrollBar()
+        # 延迟到布局完成后执行
+        QTimer.singleShot(10, lambda: sb.setValue(sb.maximum()))
 
 
 

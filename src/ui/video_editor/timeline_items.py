@@ -3,18 +3,19 @@
 
 包含片段块、轨道背景、时间标尺、播放头等可绘制元素。
 
-Phase 2: 片段显示 + 拖拽移动 + 播放头 + 时间标尺
+Phase 3: 右键菜单支持 + 吸附增强
 """
 
 from typing import Optional
 
 from PyQt6.QtWidgets import (
     QGraphicsRectItem, QGraphicsTextItem, QGraphicsLineItem,
-    QGraphicsItem, QGraphicsScene, QGraphicsView,
+    QGraphicsItem, QGraphicsScene, QGraphicsView, QMenu, QApplication,
 )
 from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal, QObject
 from PyQt6.QtGui import (
     QColor, QPen, QBrush, QFont, QLinearGradient, QPainter,
+    QCursor,
 )
 
 from src.ui.video_editor.config import (
@@ -40,6 +41,8 @@ class TimelineSignals(QObject):
     clip_moved = pyqtSignal(str, float, float)      # clip_id, old_start, new_start
     playhead_moved = pyqtSignal(float)              # new_time
     clip_right_clicked = pyqtSignal(str, QPointF)   # clip_id, scene_pos
+    clip_drag_finished = pyqtSignal(str, float)     # clip_id, final_timeline_start
+    context_menu_requested = pyqtSignal(str, int, QPointF)  # clip_id, track_idx, screen_pos
 
 
 # ====================================================================
@@ -49,12 +52,13 @@ class TimelineSignals(QObject):
 class ClipItem(QGraphicsRectItem):
     """时间轴上的一个片段块
 
-    支持拖拽移动、拉伸首尾。
+    支持拖拽移动、拉伸首尾、右键菜单。
     颜色根据类型：视频=蓝 / 音频=绿 / 图片=橙。
     """
 
     HANDLE_WIDTH = 8         # 拖拽手柄宽度（首尾）
     MIN_VISUAL_WIDTH = 12    # 最小可见宽度（px）
+    SNAP_THRESHOLD = 8       # 吸附阈值（px）
 
     def __init__(self, clip_data: dict, parent=None):
         """
@@ -68,6 +72,7 @@ class ClipItem(QGraphicsRectItem):
         self._drag_start_time = 0.0
         self._resizing = False
         self._resize_edge = ""  # "left" / "right"
+        self._snap_points: list[float] = []  # 外部注入的吸附点（秒）
 
         super().__init__(parent)
 
@@ -93,6 +98,10 @@ class ClipItem(QGraphicsRectItem):
     def track_index(self) -> int:
         return self._data.get("track_index", 0)
 
+    @track_index.setter
+    def track_index(self, v: int):
+        self._data["track_index"] = v
+
     @property
     def timeline_start(self) -> float:
         return self._data.get("timeline_start", 0.0)
@@ -106,8 +115,24 @@ class ClipItem(QGraphicsRectItem):
         return self._data.get("duration", 0.0)
 
     @property
+    def source_start(self) -> float:
+        return self._data.get("source_start", 0.0)
+
+    @property
+    def source_end(self) -> float:
+        return self._data.get("source_end", 0.0)
+
+    @property
     def clip_name(self) -> str:
         return self._data.get("name", "?")
+
+    @property
+    def speed(self) -> float:
+        return self._data.get("speed", 1.0)
+
+    def set_snap_points(self, points: list[float]):
+        """设置吸附参考点（秒）"""
+        self._snap_points = list(points) if points else []
 
     # ---- 绘制 ----
 
@@ -184,14 +209,56 @@ class ClipItem(QGraphicsRectItem):
                 self._drag_start_pos = event.scenePos()
                 self._drag_start_time = self.timeline_start
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
+        elif event.button() == Qt.MouseButton.RightButton:
+            # 右键 → 通知父级显示上下文菜单
+            self.setSelected(True)
+            scene = self.scene()
+            if scene:
+                views = scene.views()
+                if views:
+                    screen_pos = views[0].mapToGlobal(
+                        views[0].mapFromScene(event.scenePos())
+                    )
+                    # 通过 scene 的自定义属性传递
+                    if hasattr(scene, 'context_menu_callback'):
+                        scene.context_menu_callback(self.clip_id, self.track_index, screen_pos)
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         if self._dragging:
             delta = event.scenePos() - self._drag_start_pos
-            new_start = self._drag_start_time + delta.x() / PPS
+            raw_start = self._drag_start_time + delta.x() / PPS
+            new_start = max(0, raw_start)
+
+            # ---- 吸附 ----
+            snapped = False
+            snap_threshold = self.SNAP_THRESHOLD / PPS  # 转换为秒
+            new_start_px = new_start * PPS
+
+            for sp in self._snap_points:
+                sp_px = sp * PPS
+                if abs(new_start_px - sp_px) < self.SNAP_THRESHOLD:
+                    new_start = sp
+                    snapped = True
+                    break
+
+            # 也检查片段两端吸附
+            clip_end_px = (new_start + self.duration) * PPS
+            for sp in self._snap_points:
+                sp_px = sp * PPS
+                if abs(clip_end_px - sp_px) < self.SNAP_THRESHOLD:
+                    new_start = sp - self.duration
+                    snapped = True
+                    break
+
             self.timeline_start = new_start
             self.setPos(self.timeline_start * PPS, 0)
+
+            # 更新吸附指示线（通过 scene 获取）
+            if snapped:
+                scene = self.scene()
+                if scene and hasattr(scene, 'show_snap_line'):
+                    scene.show_snap_line(new_start * PPS)
         elif self._resizing:
             delta = event.scenePos() - self._drag_start_pos
             if self._resize_edge == "right":
@@ -211,6 +278,13 @@ class ClipItem(QGraphicsRectItem):
     def mouseReleaseEvent(self, event):
         if self._dragging:
             self.setCursor(Qt.CursorShape.OpenHandCursor)
+            # 通知拖拽完成
+            scene = self.scene()
+            if scene and hasattr(scene, 'clip_drag_finished_callback'):
+                scene.clip_drag_finished_callback(self.clip_id, self.timeline_start)
+            # 隐藏吸附线
+            if scene and hasattr(scene, 'hide_snap_line'):
+                scene.hide_snap_line()
         self._dragging = False
         self._resizing = False
         super().mouseReleaseEvent(event)

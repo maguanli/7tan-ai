@@ -1,14 +1,14 @@
 """
 视频剪辑器 — 主窗口 (VideoEditorPage)
 
-Phase 2: 集成播放器 + 素材库 + 时间轴
+Phase 3: +切割 +拖拽排列 +基础导出(H.264 MP4)
 """
 from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QLabel,
-    QPushButton, QSlider, QFrame, QFileDialog,
+    QPushButton, QSlider, QFrame, QFileDialog, QApplication,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -16,13 +16,15 @@ from PyQt6.QtGui import QFont
 from loguru import logger
 
 from src.ui.app import THEME
-from src.ui.video_editor.data_models import Project, RecordingConfig, Track, Clip
+from src.ui.video_editor.data_models import Project, RecordingConfig, Track, Clip, ExporterConfig
 from src.ui.video_editor.project_manager import ProjectManager
 from src.ui.video_editor.commands import UndoManager
 from src.ui.video_editor.editor_api import EditorAPI
 from src.ui.video_editor.player import VideoPlayer
 from src.ui.video_editor.media_bin import MediaBin
 from src.ui.video_editor.timeline import TimelineView
+from src.ui.video_editor.cut_tool import CutTool
+from src.ui.video_editor.exporter import Exporter
 from src.ui.video_editor.styles import (
     EDITOR_BG, TIMELINE_BG, PLAYER_CONTROL_STYLESHEET,
     TOOLBAR_STYLESHEET, MEDIA_BIN_STYLESHEET,
@@ -52,8 +54,10 @@ class VideoEditorPage(QWidget):
         self._pm = ProjectManager()
         self._undo_manager = UndoManager()
         self._api = EditorAPI(self)
-        self.project = self._pm.new_project()
+self.project = self._pm.new_project()
         self._playing = False
+        self._cut_tool = CutTool()
+        self._exporter = Exporter()
         self._setup_ui()
 
     @property
@@ -108,7 +112,9 @@ class VideoEditorPage(QWidget):
         self.timeline = TimelineView()
         self.timeline.playhead_moved.connect(self._on_timeline_playhead_moved)
         self.timeline.clip_selected.connect(self._on_timeline_clip_selected)
-        self.timeline.clip_added_to_timeline.connect(self._on_timeline_clip_added)
+self.timeline.clip_added_to_timeline.connect(self._on_timeline_clip_added)
+        self.timeline.cut_requested.connect(self._on_cut)
+        self.timeline.delete_requested.connect(self._on_delete_clip)
         layout.addWidget(self.timeline, 2)
 
         # ---- 底部工具栏 ----
@@ -335,41 +341,94 @@ class VideoEditorPage(QWidget):
             self.media_bin.add_media_batch(files)
 
     # ==================================================================
-    #  占位功能（Phase 3-6）
+    #  Phase 3: 切割 + 导出
     # ==================================================================
 
+    def _on_cut(self):
+        """在播放头位置切割"""
+        t = self.timeline.get_playhead_time()
+        count = self._cut_tool.cut_at_playhead(self.project, t)
+        if count > 0:
+            self.timeline.set_project(self.project)
+            self._status.setText(f"✂️ 切割 {count} 个片段 @{format_time(t)}")
+        else:
+            self._status.setText(f"⚠️ 当前位置无可切割片段")
+
+    def _on_delete_clip(self, clip_id: str):
+        """删除选中片段"""
+        if self.timeline.remove_clip(clip_id):
+            self._update_project_tracks()
+            self._status.setText(f"🗑️ 已删除片段")
+
+    def _on_export(self):
+        """导出视频"""
+        from PyQt6.QtWidgets import QMessageBox
+
+        if not self.project or not any(
+            t.clips for t in self.project.tracks
+        ):
+            QMessageBox.information(self, "导出", "时间轴上没有素材，请先添加片段。")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "导出视频", self.project.name + ".mp4",
+            "MP4 视频 (*.mp4);;所有文件 (*.*)"
+        )
+        if not path:
+            return
+
+        self._status.setText("📤 正在导出…")
+        QApplication.processEvents()
+
+        def on_progress(pct: float, msg: str):
+            self._status.setText(f"📤 {msg}")
+            QApplication.processEvents()
+
+        ok = self._exporter.export(
+            self.project, path,
+            progress_callback=on_progress,
+        )
+        if ok:
+            self._status.setText(f"✅ 导出完成: {path}")
+        else:
+            self._status.setText("❌ 导出失败")
+
+    def _export_video(self, output_path: str, resolution: str,
+                       fps: int, codec: str) -> bool:
+        """AI 调用导出"""
+        from src.ui.video_editor.data_models import ExporterConfig
+        w, h = 1920, 1080
+        if "x" in resolution:
+            parts = resolution.split("x")
+            w, h = int(parts[0]), int(parts[1])
+        config = ExporterConfig(
+            export_type="video", resolution=(w, h), fps=fps,
+            codec=codec, output_format="mp4",
+        )
+        return self._exporter.export(self.project, output_path, config=config)
+
+    # ---- 占位功能（Phase 4-6） ----
+
     def _on_start_recording(self):
-        logger.info("录屏功能 — Phase 4 实现")
         self._status.setText("🎥 录屏功能将在 Phase 4 实现")
 
-    def _start_recording(self, config: Optional[RecordingConfig] = None) -> bool:
+    def _start_recording(self, config=None) -> bool:
         return False
 
-    def _stop_recording(self) -> Optional[str]:
+    def _stop_recording(self):
         return None
 
     def _on_ai_dub(self):
-        logger.info("AI配音 — Phase 5 实现")
         self._status.setText("🎙️ AI配音功能将在 Phase 5 实现")
 
     def _on_ai_subtitle(self):
-        logger.info("AI字幕 — Phase 5 实现")
         self._status.setText("📝 AI字幕功能将在 Phase 5 实现")
 
     def _on_open_cover(self):
-        logger.info("封面 — Phase 5 实现")
         self._status.setText("🖼️ 封面制作功能将在 Phase 5 实现")
 
     def _open_cover_editor(self):
         pass
 
-    def _ai_generate_cover(self, prompt: str) -> Optional[dict]:
+    def _ai_generate_cover(self, prompt: str):
         return None
-
-    def _on_export(self):
-        logger.info("导出 — Phase 3 实现")
-        self._status.setText("📤 导出功能将在 Phase 3 实现")
-
-    def _export_video(self, output_path: str, resolution: str,
-                       fps: int, codec: str) -> bool:
-        return False

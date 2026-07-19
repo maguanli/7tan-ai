@@ -3,12 +3,12 @@
 
 基于 QGraphicsView/QGraphicsScene，支持多轨道显示、片段拖拽、播放头、缩放。
 
-Phase 2: 多轨道显示 + 片段拖拽 + 播放头 + 时间标尺 + 缩放
+Phase 3: +切割/删除快捷键 +右键菜单 +吸附 +拖拽排列
 """
 
 from typing import Optional
 
-from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QWidget, QVBoxLayout
+from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QWidget, QVBoxLayout, QMenu
 from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal
 from PyQt6.QtGui import (
     QWheelEvent, QMouseEvent, QKeyEvent, QPainter,
@@ -44,6 +44,8 @@ class TimelineView(QGraphicsView):
     clip_selected = pyqtSignal(str, int, int)
     playhead_moved = pyqtSignal(float)
     clip_added_to_timeline = pyqtSignal(dict)
+    cut_requested = pyqtSignal()
+    delete_requested = pyqtSignal(str)
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -131,6 +133,12 @@ class TimelineView(QGraphicsView):
         # 吸附线
         self._snap = SnapIndicator()
         self._scene.addItem(self._snap)
+
+        # Phase 3: 场景回调（右键菜单 + 吸附线）
+        self._scene.context_menu_callback = self._on_clip_context_menu
+        self._scene.clip_drag_finished_callback = self._on_clip_drag_finished
+        self._scene.show_snap_line = self._show_snap_line
+        self._scene.hide_snap_line = self._hide_snap_line
 
     def _rebuild_scene(self):
         """根据项目数据重建场景"""
@@ -247,8 +255,9 @@ class TimelineView(QGraphicsView):
                     # 从场景移除
                     if clip_id in self._clip_items:
                         item = self._clip_items.pop(clip_id)
-                        self._scene.removeItem(item)
+    self._scene.removeItem(item)
                     self._update_project_duration()
+                    self._refresh_all_snap_points()
                     return True
         return False
 
@@ -297,6 +306,7 @@ class TimelineView(QGraphicsView):
 
         self._scene.addItem(item)
         self._clip_items[clip.id] = item
+        item.set_snap_points(self._collect_snap_points())
 
     def _add_subtitle_item(self, sub: SubtitleClip, y: float):
         """添加字幕片段到场景"""
@@ -330,8 +340,9 @@ class TimelineView(QGraphicsView):
         for track in self._project.tracks:
             for clip in track.clips:
                 if isinstance(clip, Clip) and clip.id == clip_id:
-                    clip.timeline_start = new_start
+clip.timeline_start = new_start
                     self._update_project_duration()
+                    self._refresh_all_snap_points()
                     return
 
     def _update_project_duration(self):
@@ -362,8 +373,104 @@ class TimelineView(QGraphicsView):
         self.scale(self._zoom, 1.0)
 
     # ==================================================================
+    #  Phase 3: 吸附 + 右键菜单 + 快捷键
+    # ==================================================================
+
+    def _collect_snap_points(self) -> list[float]:
+        """收集所有吸附参考点（每个片段的首尾 + 播放头）"""
+        points = [self._playhead_time]
+        if not self._project:
+            return points
+        for track in self._project.tracks:
+            for clip in track.clips:
+                if isinstance(clip, Clip):
+                    points.append(clip.timeline_start)
+                    points.append(clip.timeline_start + clip.effective_duration)
+                elif isinstance(clip, SubtitleClip):
+                    points.append(clip.start_time)
+                    points.append(clip.end_time)
+        return sorted(set(points))
+
+    def _refresh_all_snap_points(self):
+        """刷新所有 ClipItem 的吸附参考点"""
+        snap_pts = self._collect_snap_points()
+        for item in self._clip_items.values():
+            item.set_snap_points(snap_pts)
+
+    def _on_clip_context_menu(self, clip_id: str, track_idx: int, screen_pos):
+        """右键菜单"""
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{ background:{THEME['bg_card']}; color:{THEME['text_primary']}; border:1px solid {THEME['border']}; }}
+            QMenu::item {{ padding:6px 24px; }}
+            QMenu::item:selected {{ background:{THEME['accent']}44; }}
+        """)
+        cut_action = menu.addAction("✂️ 在此切割")
+        del_action = menu.addAction("🗑️ 删除")
+        action = menu.exec(screen_pos)
+        if action == cut_action:
+            self.set_playhead(self._playhead_time)
+            self.cut_requested.emit()
+        elif action == del_action:
+            self.delete_requested.emit(clip_id)
+
+    def _on_clip_drag_finished(self, clip_id: str, final_start: float):
+        """片段拖拽完成 → 同步数据模型 + 刷新吸附点"""
+        if not self._project:
+            return
+        for track in self._project.tracks:
+            for clip in track.clips:
+                if isinstance(clip, Clip) and clip.id == clip_id:
+                    clip.timeline_start = final_start
+                    self._update_project_duration()
+                    self._refresh_all_snap_points()
+                    return
+
+    def _show_snap_line(self, x: float):
+        """显示吸附参考线"""
+        ruler_h = TimeRuler.HEIGHT
+        total_h = self._scene.sceneRect().height()
+        self._snap.show_at(x, ruler_h, total_h - ruler_h)
+
+    def _hide_snap_line(self):
+        """隐藏吸附参考线"""
+        self._snap.hide_indicator()
+
+    def get_selected_clip_id(self) -> str:
+        """获取当前选中的片段 ID"""
+        for item in self._scene.selectedItems():
+            if isinstance(item, ClipItem):
+                return item.clip_id
+        return ""
+
+    def get_clip_track_and_index(self, clip_id: str) -> tuple:
+        """根据 clip_id 查找轨道和索引"""
+        if not self._project:
+            return (-1, -1)
+        for ti, track in enumerate(self._project.tracks):
+            for ci, clip in enumerate(track.clips):
+                cid = getattr(clip, 'id', '')
+                if cid == clip_id:
+                    return (ti, ci)
+        return (-1, -1)
+
+    # ==================================================================
     #  事件处理
     # ==================================================================
+
+    def keyPressEvent(self, event):
+        """键盘快捷键"""
+        if event.key() == Qt.Key.Key_S or (
+            event.key() == Qt.Key.Key_K and
+            event.modifiers() & Qt.KeyboardModifier.ControlModifier
+        ):
+            self.cut_requested.emit()
+        elif event.key() == Qt.Key.Key_Delete:
+            cid = self.get_selected_clip_id()
+            if cid:
+                self.delete_requested.emit(cid)
+        else:
+            super().keyPressEvent(event)
 
     def wheelEvent(self, event: QWheelEvent):
         """Ctrl+滚轮缩放"""

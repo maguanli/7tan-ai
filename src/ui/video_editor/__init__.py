@@ -1,7 +1,7 @@
 """
 7Tan Video Editor（代号「青锋」）— 轻量级 AI 驱动视频剪辑器
 
-Phase 2: 播放器 + 素材导入 + 时间轴显示
+Phase 3: +切割 +拖拽排列 +基础导出(H.264 MP4)
 """
 
 from src.ui.video_editor.editor_window import VideoEditorPage

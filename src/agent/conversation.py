@@ -39,8 +39,11 @@ def get_session_messages(session_id: str, limit: int = 100) -> list:
     try:
         messages = session.query(ConversationHistory).filter(
             ConversationHistory.session_id == session_id
-        ).order_by(ConversationHistory.created_at.asc()).limit(limit).all()
-        return [m.to_dict() for m in messages]
+        ).order_by(ConversationHistory.created_at.desc()).limit(limit).all()
+        # desc 取最近 N 条，再反转回升序（时间正序）
+        messages_list = [m.to_dict() for m in messages]
+        messages_list.reverse()
+        return messages_list
     finally:
         session.close()
 

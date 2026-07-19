@@ -1,44 +1,28 @@
+# 加密密钥 - 绝对不能提交！
+data/.encryption_key
+data/.encryption_salt
+
 # Python
 __pycache__/
-*.py[cod]
-*.egg-info/
+*.pyc
+*.pyo
 .venv/
-dist/
-build/
+venv/
 
-# 大型二进制文件（发布时手动包含）
-tools/python-*.exe
-
-# 运行时数据（排除 prompts — 那是代码的一部分）
-data/screenshots/
-data/web_cache/
-data/sandbox/
-data/costs.json
-data/games.db
-downloads/
-logs/
-*.db
-*.sqlite3
-
-# 环境变量（包含敏感信息）
-.env
-!.env.example
-
-# 敏感配置
-config/config.yaml
-
-# 备份文件
-backup/
-*.bak
+# 临时文件
+*.tmp
+*.log
+downloads/temp/
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
 
-# OS
-.DS_Store
-Thumbs.db
-data/*.db-shm
-data/*.db-wal
+# 构建产物
+dist/
+build/
+*.spec
+
+# 环境变量
+.env
+.env.local

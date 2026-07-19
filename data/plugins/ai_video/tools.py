@@ -1,351 +1,398 @@
 
 """
-AI视频生成工具集
-- Edge TTS 免费配音（中文多音色）
-- MoviePy 视频剪辑合成
-- FFmpeg 转码/加字幕
-- ComfyUI API 调用（可选）
+AI视频生成插件 - 整合 FFmpeg、MoviePy、edge-tts、ComfyUI
 """
 
-import subprocess
 import os
-import asyncio
+import sys
+import subprocess
 import json
+import asyncio
 from pathlib import Path
 
 # === 配置 ===
-COMFYUI_PATH = r"G:\AI_Tools\ComfyUI"
-FFMPEG_PATH = r"G:\AI_Tools\FFmpeg\ffmpeg-8.1.2-essentials_build\bin\ffmpeg.exe"
-OUTPUT_DIR = r"G:\AI_Video\projects"
+BASE_DIR = Path("G:/AI_Video")
+FFMPEG_EXE = BASE_DIR / "ffmpeg/ffmpeg-8.1.2-essentials_build/bin/ffmpeg.exe"
+COMFYUI_DIR = BASE_DIR / "comfyui/ComfyUI"
+OUTPUT_DIR = BASE_DIR / "output"
+MODELS_DIR = BASE_DIR / "models"
+SCRIPTS_DIR = BASE_DIR / "scripts"
+
+# 确保输出目录存在
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def tts_generate(text: str, voice: str = "zh-CN-XiaoxiaoNeural", output: str = None, rate: str = "+0%") -> dict:
+async def generate_tts_audio(text: str, voice: str = "zh-CN-XiaoxiaoNeural", output_filename: str = "tts_output.mp3") -> dict:
     """
-    使用 Edge TTS 生成配音（免费，中文多音色）
-    
-    常用中文音色:
-    - zh-CN-XiaoxiaoNeural (女，温柔)
-    - zh-CN-YunxiNeural (男，沉稳)
-    - zh-CN-XiaoyiNeural (女，活泼)
-    - zh-CN-YunjianNeural (男，老成)
+    将文案转为配音音频（使用微软 Edge TTS，免费）
     
     参数:
-    - text: 要配音的文本
-    - voice: 音色名称
-    - output: 输出mp3路径（默认自动生成）
-    - rate: 语速，如 "+20%" 或 "-10%"
-    
-    返回: {"success": bool, "path": str, "size": int}
+        text: 要配音的文案文本
+        voice: 配音音色，默认"zh-CN-XiaoxiaoNeural"(女声-晓晓)
+               常用中文音色:
+               - zh-CN-XiaoxiaoNeural (女-晓晓，活泼)
+               - zh-CN-YunxiNeural (男-云希，磁性)
+               - zh-CN-XiaoyiNeural (女-晓伊，温柔)
+               - zh-CN-YunjianNeural (男-云健，沉稳)
+               - zh-CN-YunxiaNeural (男-云夏，轻快)
+        output_filename: 输出文件名
     """
-    if output is None:
-        import tempfile, time
-        output = os.path.join(OUTPUT_DIR, f"tts_{int(time.time())}.mp3")
+    import edge_tts
     
-    os.makedirs(os.path.dirname(output) or OUTPUT_DIR, exist_ok=True)
+    output_path = OUTPUT_DIR / output_filename
     
-    try:
-        result = subprocess.run(
-            ["edge-tts", "--voice", voice, "--text", text, "--rate", rate, "--write-media", output],
-            capture_output=True, text=True, timeout=120
-        )
-        if result.returncode == 0 and os.path.exists(output):
-            size = os.path.getsize(output)
-            return {"success": True, "path": output, "size": size, "text_length": len(text)}
-        return {"success": False, "error": result.stderr}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def video_from_images(image_dir: str, audio_path: str, output: str = None, 
-                      fps: int = 2, duration_per_image: float = None) -> dict:
-    """
-    将图片序列+配音合成视频
+    communicate = edge_tts.Communicate(text, voice)
+    await communicate.save(str(output_path))
     
-    参数:
-    - image_dir: 图片目录（按文件名排序）
-    - audio_path: 配音mp3路径
-    - output: 输出mp4路径
-    - fps: 帧率
-    - duration_per_image: 每张图时长（秒），不指定则按音频时长均分
-    
-    返回: {"success": bool, "path": str}
-    """
-    from moviepy import ImageSequenceClip, AudioFileClip
-    import time
-    
-    if output is None:
-        output = os.path.join(OUTPUT_DIR, f"video_{int(time.time())}.mp4")
-    
-    os.makedirs(os.path.dirname(output) or OUTPUT_DIR, exist_ok=True)
-    
-    try:
-        # 收集图片
-        images = sorted([
-            os.path.join(image_dir, f) for f in os.listdir(image_dir)
-            if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))
-        ])
-        
-        if not images:
-            return {"success": False, "error": f"在 {image_dir} 中没找到图片"}
-        
-        # 加载音频获取时长
-        audio = AudioFileClip(audio_path)
-        
-        if duration_per_image:
-            durations = [duration_per_image] * len(images)
-        else:
-            dur = audio.duration / len(images)
-            durations = [dur] * len(images)
-        
-        # 合成
-        clip = ImageSequenceClip(images, durations=durations)
-        clip = clip.with_audio(audio)
-        clip.write_videofile(output, fps=fps, codec='libx264', audio_codec='aac')
-        
-        clip.close()
-        audio.close()
-        
-        return {"success": True, "path": output, "image_count": len(images), "duration": audio.duration}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def add_subtitle(video_path: str, srt_path: str, output: str = None) -> dict:
-    """
-    给视频添加SRT字幕（用FFmpeg）
-    
-    参数:
-    - video_path: 视频路径
-    - srt_path: SRT字幕文件路径
-    - output: 输出路径
-    
-    返回: {"success": bool, "path": str}
-    """
-    if output is None:
-        base, ext = os.path.splitext(video_path)
-        output = f"{base}_subbed{ext}"
-    
-    try:
-        # FFmpeg subtitles filter
-        srt_abs = os.path.abspath(srt_path).replace('\\', '/').replace(':', '\\\\:')
-        result = subprocess.run([
-            FFMPEG_PATH, "-i", video_path, "-vf", f"subtitles='{srt_abs}'",
-            "-c:a", "copy", "-y", output
-        ], capture_output=True, text=True, timeout=300)
-        
-        if result.returncode == 0 and os.path.exists(output):
-            return {"success": True, "path": output}
-        return {"success": False, "error": result.stderr[-500:]}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def video_concat(video_list: list, output: str = None) -> dict:
-    """
-    拼接多个视频（用FFmpeg concat）
-    
-    参数:
-    - video_list: 视频路径列表
-    - output: 输出路径
-    
-    返回: {"success": bool, "path": str}
-    """
-    import tempfile, time
-    
-    if output is None:
-        output = os.path.join(OUTPUT_DIR, f"concat_{int(time.time())}.mp4")
-    
-    os.makedirs(os.path.dirname(output) or OUTPUT_DIR, exist_ok=True)
-    
-    try:
-        # 写concat列表文件
-        list_file = os.path.join(tempfile.gettempdir(), f"concat_list_{int(time.time())}.txt")
-        with open(list_file, 'w', encoding='utf-8') as f:
-            for v in video_list:
-                f.write(f"file '{os.path.abspath(v).replace(chr(39), chr(39)+chr(92)+chr(39)+chr(39))}'\n")
-        
-        result = subprocess.run([
-            FFMPEG_PATH, "-f", "concat", "-safe", "0", "-i", list_file,
-            "-c", "copy", "-y", output
-        ], capture_output=True, text=True, timeout=300)
-        
-        os.remove(list_file) if os.path.exists(list_file) else None
-        
-        if result.returncode == 0:
-            return {"success": True, "path": output, "count": len(video_list)}
-        return {"success": False, "error": result.stderr[-500:]}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def video_info(video_path: str) -> dict:
-    """
-    获取视频信息（时长/分辨率/编码等）
-    """
-    try:
-        result = subprocess.run([
-            FFMPEG_PATH, "-i", video_path
-        ], capture_output=True, text=True, timeout=30)
-        # ffmpeg info goes to stderr
-        info = result.stderr
-        return {"success": True, "info": info}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def text_to_srt(text: str, duration: float, output: str = None) -> dict:
-    """
-    将文本转为SRT字幕（单条或每条一行自动分段）
-    
-    参数:
-    - text: 文本（每行一条字幕）
-    - duration: 总时长（秒）
-    - output: SRT输出路径
-    
-    返回: {"success": bool, "path": str}
-    """
-    import time
-    
-    if output is None:
-        output = os.path.join(OUTPUT_DIR, f"subtitle_{int(time.time())}.srt")
-    
-    os.makedirs(os.path.dirname(output) or OUTPUT_DIR, exist_ok=True)
-    
-    lines = [l.strip() for l in text.split('\n') if l.strip()]
-    dur_per_line = duration / len(lines)
-    
-    with open(output, 'w', encoding='utf-8') as f:
-        for i, line in enumerate(lines):
-            start = i * dur_per_line
-            end = start + dur_per_line
-            
-            def fmt(t):
-                h = int(t // 3600)
-                m = int((t % 3600) // 60)
-                s = int(t % 60)
-                ms = int((t % 1) * 1000)
-                return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
-            
-            f.write(f"{i+1}\n")
-            f.write(f"{fmt(start)} --> {fmt(end)}\n")
-            f.write(f"{line}\n\n")
-    
-    return {"success": True, "path": output, "lines": len(lines)}
-
-
-def comfyui_generate(prompt: str, workflow_type: str = "txt2img", 
-                     negative_prompt: str = "", steps: int = 20,
-                     width: int = 512, height: int = 512) -> dict:
-    """
-    调用 ComfyUI API 生成图片（需先启动 ComfyUI 服务）
-    
-    启动ComfyUI: cd G:\AI_Tools\ComfyUI && python main.py --cpu
-    
-    参数:
-    - prompt: 正向提示词
-    - workflow_type: txt2img / img2img
-    - negative_prompt: 负向提示词
-    - steps: 采样步数
-    - width/height: 图片尺寸
-    """
-    import requests
-    import uuid
-    
-    comfy_url = "http://127.0.0.1:8188"
-    
-    # 简单文生图workflow
-    workflow = {
-        "3": {"class_type": "KSampler", "inputs": {
-            "seed": 42, "steps": steps, "cfg": 7.0,
-            "sampler_name": "euler", "scheduler": "normal",
-            "denoise": 1.0,
-            "model": ["4", 0], "positive": ["6", 0], "negative": ["7", 0],
-            "latent_image": ["5", 0]
-        }},
-        "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "sd_xl_base_1.0.safetensors"}},
-        "5": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
-        "6": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["4", 1]}},
-        "7": {"class_type": "CLIPTextEncode", "inputs": {"text": negative_prompt, "clip": ["4", 1]}},
-        "8": {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["4", 2]}},
-        "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "ai_video", "images": ["8", 0]}},
+    return {
+        "success": True,
+        "output_path": str(output_path),
+        "voice": voice,
+        "text_length": len(text),
+        "file_size": output_path.stat().st_size if output_path.exists() else 0
     }
-    
-    try:
-        client_id = str(uuid.uuid4())
-        resp = requests.post(f"{comfy_url}/prompt", json={
-            "prompt": workflow, "client_id": client_id
-        }, timeout=300)
-        
-        if resp.status_code == 200:
-            prompt_id = resp.json().get("prompt_id")
-            return {"success": True, "prompt_id": prompt_id, "message": "生成任务已提交，图片保存在 ComfyUI/output/"}
-        return {"success": False, "error": resp.text}
-    except requests.ConnectionError:
-        return {"success": False, "error": "ComfyUI服务未启动，请先运行: cd G:\\AI_Tools\\ComfyUI && python main.py --cpu"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
 
 
-# === 一键生成短视频 ===
-async def quick_short_video(script: str, voice: str = "zh-CN-XiaoxiaoNeural",
-                            image_prompts: list = None, title: str = "AI视频") -> dict:
+def compose_video(
+    image_paths: str,
+    audio_path: str = None,
+    output_filename: str = "composed_video.mp4",
+    duration_per_image: float = 3.0,
+    subtitle_text: str = None,
+    fps: int = 30,
+    resolution: str = "1920x1080"
+) -> dict:
     """
-    一键生成AI短视频流程（文案→配音→字幕→输出）
+    将多张图片+配音+字幕合成视频
     
     参数:
-    - script: 口播文案（每行一段，自动分句配字幕）
-    - voice: Edge TTS 音色
-    - image_prompts: 每段对应的AI生图提示词（可选）
-    - title: 视频标题
-    
-    返回: {"success": bool, "audio": str, "srt": str}
+        image_paths: 图片路径列表，JSON数组字符串如 '["img1.jpg","img2.jpg"]'
+        audio_path: 配音/背景音乐路径（可选）
+        output_filename: 输出视频文件名
+        duration_per_image: 每张图片显示秒数
+        subtitle_text: SRT格式字幕文本（可选）
+        fps: 帧率
+        resolution: 分辨率 WxH
     """
-    import time
+    from moviepy import ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+    import numpy as np
     
-    project_dir = os.path.join(OUTPUT_DIR, f"quick_{int(time.time())}")
-    os.makedirs(project_dir, exist_ok=True)
+    images = json.loads(image_paths) if isinstance(image_paths, str) else image_paths
+    output_path = OUTPUT_DIR / output_filename
     
-    results = {}
+    width, height = map(int, resolution.split('x'))
     
-    # 1. 生成配音
-    audio_path = os.path.join(project_dir, f"{title}_audio.mp3")
-    tts_result = tts_generate(text=script, voice=voice, output=audio_path)
-    results["audio"] = tts_result
+    clips = []
+    for img_path in images:
+        clip = ImageClip(img_path, duration=duration_per_image)
+        clip = clip.resized((width, height))
+        clips.append(clip)
     
-    if not tts_result["success"]:
-        return {"success": False, "step": "tts", "error": tts_result["error"]}
+    video = concatenate_videoclips(clips, method="compose")
     
-    # 2. 生成字幕
-    import subprocess as sp
-    # 获取音频时长
-    probe = sp.run([FFMPEG_PATH, "-i", audio_path], capture_output=True, text=True)
-    # 从stderr提取duration
-    duration = 10.0  # 默认
-    for line in probe.stderr.split('\n'):
-        if "Duration" in line:
-            import re
-            m = re.search(r"Duration: (\d+):(\d+):(\d+)\.(\d+)", line)
-            if m:
-                duration = int(m.group(1))*3600 + int(m.group(2))*60 + int(m.group(3)) + int(m.group(4))/100
+    if audio_path and os.path.exists(audio_path):
+        audio = AudioFileClip(audio_path)
+        # 如果音频比视频短，循环；比视频长，截断
+        if audio.duration < video.duration:
+            from moviepy import afx
+            audio = audio.with_effects([afx.AudioLoop(duration=video.duration)])
+        else:
+            audio = audio.subclipped(0, video.duration)
+        video = video.with_audio(audio)
     
-    srt_path = os.path.join(project_dir, f"{title}_subtitle.srt")
-    srt_result = text_to_srt(text=script, duration=duration, output=srt_path)
-    results["srt"] = srt_result
+    video.write_videofile(str(output_path), fps=fps, codec='libx264', audio_codec='aac')
     
-    results["project_dir"] = project_dir
-    
-    return {"success": True, **results, "message": f"配音和字幕已生成在 {project_dir}，如需合成视频请提供图片"}
+    return {
+        "success": True,
+        "output_path": str(output_path),
+        "duration": video.duration,
+        "resolution": resolution,
+        "image_count": len(images),
+        "has_audio": audio_path is not None,
+        "file_size": output_path.stat().st_size if output_path.exists() else 0
+    }
 
 
-# 工具注册
-TOOLS = {
-    "tts_generate": tts_generate,
-    "video_from_images": video_from_images,
-    "add_subtitle": add_subtitle,
-    "video_concat": video_concat,
-    "video_info": video_info,
-    "text_to_srt": text_to_srt,
-    "comfyui_generate": comfyui_generate,
-    "quick_short_video": quick_short_video,
-}
-"""
+def video_add_subtitle(
+    video_path: str,
+    subtitle_text: str,
+    output_filename: str = "subtitled_video.mp4",
+    font_size: int = 40,
+    font_color: str = "white",
+    bg_color: str = "black@0.5"
+) -> dict:
+    """
+    给视频添加字幕（使用 FFmpeg）
+    
+    参数:
+        video_path: 输入视频路径
+        subtitle_text: SRT 格式字幕内容
+        output_filename: 输出文件名
+        font_size: 字体大小
+        font_color: 字体颜色
+        bg_color: 字幕背景色（如 black@0.5 半透明黑底）
+    """
+    output_path = OUTPUT_DIR / output_filename
+    
+    # 写入临时字幕文件
+    srt_path = OUTPUT_DIR / "temp_subtitle.srt"
+    with open(srt_path, 'w', encoding='utf-8') as f:
+        f.write(subtitle_text)
+    
+    cmd = [
+        str(FFMPEG_EXE),
+        "-i", str(video_path),
+        "-vf", f"subtitles={srt_path}:force_style='FontSize={font_size},PrimaryColour=&H{font_color},BackColour=&H{bg_color}'",
+        "-c:a", "copy",
+        "-y",
+        str(output_path)
+    ]
+    
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+    
+    # 清理临时文件
+    if srt_path.exists():
+        srt_path.unlink()
+    
+    return {
+        "success": output_path.exists(),
+        "output_path": str(output_path),
+        "stderr": result.stderr[-500:] if result.stderr else "",
+        "file_size": output_path.stat().st_size if output_path.exists() else 0
+    }
+
+
+def comfyui_status() -> dict:
+    """查看 ComfyUI 运行状态"""
+    import httpx
+    
+    try:
+        resp = httpx.get("http://127.0.0.1:8188/system_stats", timeout=5)
+        stats = resp.json()
+        return {
+            "running": True,
+            "version": stats.get("system", {}).get("comfyui_version", "unknown"),
+            "device": stats.get("system", {}).get("device", "unknown"),
+            "python_version": stats.get("system", {}).get("python_version", "unknown"),
+            "ram_usage": f"{stats.get('system', {}).get('ram_total', 0) - stats.get('system', {}).get('ram_free', 0)}MB / {stats.get('system', {}).get('ram_total', 0)}MB",
+            "installed_nodes": stats.get("system", {}).get("installed_nodes", 0)
+        }
+    except Exception as e:
+        return {
+            "running": False,
+            "error": str(e),
+            "tip": "ComfyUI 未启动，使用 comfyui_launch() 启动"
+        }
+
+
+def comfyui_launch(
+    port: int = 8188,
+    listen: bool = False,
+    highvram: bool = False
+) -> dict:
+    """
+    启动 ComfyUI 服务
+    
+    参数:
+        port: 监听端口，默认 8188
+        listen: 是否允许外部访问（0.0.0.0）
+        highvram: 高显存模式（无GPU则忽略）
+    """
+    import subprocess
+    
+    cmd = [
+        sys.executable,
+        str(COMFYUI_DIR / "main.py"),
+        "--port", str(port),
+        "--cpu",
+        "--output-directory", str(OUTPUT_DIR),
+        "--input-directory", str(BASE_DIR / "input"),
+    ]
+    
+    if listen:
+        cmd.append("--listen")
+    if highvram:
+        cmd.append("--highvram")
+    
+    # 后台启动
+    log_file = BASE_DIR / "comfyui.log"
+    with open(log_file, 'w') as f:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            cwd=str(COMFYUI_DIR)
+        )
+    
+    return {
+        "success": True,
+        "pid": proc.pid,
+        "port": port,
+        "url": f"http://127.0.0.1:{port}",
+        "log_file": str(log_file),
+        "tip": "启动需要30-60秒，用 comfyui_status() 检查是否就绪"
+    }
+
+
+def comfyui_stop() -> dict:
+    """停止 ComfyUI 服务"""
+    import signal
+    import subprocess
+    
+    # 查找并终止 ComfyUI 进程
+    result = subprocess.run(
+        ['taskkill', '/F', '/IM', 'python.exe', '/FI', 'WINDOWTITLE eq ComfyUI*'],
+        capture_output=True, text=True
+    )
+    
+    return {
+        "success": True,
+        "message": "已尝试终止 ComfyUI 进程",
+        "detail": result.stdout.strip()
+    }
+
+
+def generate_srt_subtitles(
+    text_segments: str,
+    segment_duration: float = 3.0
+) -> dict:
+    """
+    生成 SRT 格式字幕
+    
+    参数:
+        text_segments: 字幕文本列表，JSON数组如 '["第一段文字","第二段文字"]'
+        segment_duration: 每段字幕持续秒数
+    """
+    segments = json.loads(text_segments) if isinstance(text_segments, str) else text_segments
+    
+    srt_content = []
+    for i, seg in enumerate(segments):
+        start = i * segment_duration
+        end = (i + 1) * segment_duration
+        
+        start_str = f"{int(start//3600):02d}:{int((start%3600)//60):02d}:{int(start%60):02d},{int((start%1)*1000):03d}"
+        end_str = f"{int(end//3600):02d}:{int((end%3600)//60):02d}:{int(end%60):02d},{int((end%1)*1000):03d}"
+        
+        srt_content.append(f"{i+1}\n{start_str} --> {end_str}\n{seg}\n")
+    
+    srt_text = "\n".join(srt_content)
+    srt_path = OUTPUT_DIR / "generated_subtitles.srt"
+    with open(srt_path, 'w', encoding='utf-8') as f:
+        f.write(srt_text)
+    
+    return {
+        "success": True,
+        "srt_path": str(srt_path),
+        "srt_content": srt_text,
+        "segment_count": len(segments)
+    }
+
+
+def video_concat(
+    video_paths: str,
+    output_filename: str = "merged_video.mp4"
+) -> dict:
+    """
+    合并多个视频文件
+    
+    参数:
+        video_paths: 视频路径列表，JSON数组
+        output_filename: 输出文件名
+    """
+    videos = json.loads(video_paths) if isinstance(video_paths, str) else video_paths
+    output_path = OUTPUT_DIR / output_filename
+    
+    # 使用 FFmpeg concat
+    concat_file = OUTPUT_DIR / "concat_list.txt"
+    with open(concat_file, 'w', encoding='utf-8') as f:
+        for v in videos:
+            f.write(f"file '{v}'\n")
+    
+    cmd = [
+        str(FFMPEG_EXE),
+        "-f", "concat",
+        "-safe", "0",
+        "-i", str(concat_file),
+        "-c", "copy",
+        "-y",
+        str(output_path)
+    ]
+    
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+    
+    if concat_file.exists():
+        concat_file.unlink()
+    
+    return {
+        "success": output_path.exists(),
+        "output_path": str(output_path),
+        "video_count": len(videos),
+        "file_size": output_path.stat().st_size if output_path.exists() else 0
+    }
+
+
+def text_to_video_pipeline(
+    script_text: str,
+    voice: str = "zh-CN-XiaoxiaoNeural",
+    output_name: str = "ai_video",
+    subtitle_style: str = "bottom"
+) -> dict:
+    """
+    一键文案转视频流水线：
+    1. 生成配音
+    2. 生成字幕
+    3. 合成视频（需要先用 ComfyUI 生成关键帧图片）
+    
+    参数:
+        script_text: 完整文案（用 \\n\\n 分段）
+        voice: 配音音色
+        output_name: 输出文件名前缀
+        subtitle_style: 字幕样式 "bottom"/"center"
+    """
+    import asyncio
+    
+    paragraphs = [p.strip() for p in script_text.split('\n\n') if p.strip()]
+    
+    # Step 1: 生成配音
+    full_text = ''.join(paragraphs)
+    audio_result = asyncio.run(generate_tts_audio(full_text, voice, f"{output_name}_audio.mp3"))
+    
+    # Step 2: 生成字幕
+    srt_result = generate_srt_subtitles(json.dumps(paragraphs), segment_duration=3.0)
+    
+    return {
+        "success": True,
+        "audio_path": audio_result["output_path"],
+        "srt_path": srt_result["srt_path"],
+        "paragraph_count": len(paragraphs),
+        "next_step": f"用 ComfyUI 生成 {len(paragraphs)} 张关键帧图片，然后用 compose_video() 合成最终视频",
+        "tip": "关键帧图片命名建议: frame_001.png, frame_002.png ..."
+    }
+
+
+# === 环境信息 ===
+def get_environment_info() -> dict:
+    """获取 AI 视频环境信息"""
+    return {
+        "base_dir": str(BASE_DIR),
+        "ffmpeg": str(FFMPEG_EXE),
+        "ffmpeg_exists": FFMPEG_EXE.exists(),
+        "comfyui_dir": str(COMFYUI_DIR),
+        "comfyui_exists": COMFYUI_DIR.exists(),
+        "output_dir": str(OUTPUT_DIR),
+        "models_dir": str(MODELS_DIR),
+        "python_version": sys.version,
+        "gpu_available": _check_gpu(),
+        "disk_free_gb": round(
+            __import__('shutil').disk_usage(str(BASE_DIR)).free / (1024**3), 1
+        )
+    }
+
+
+def _check_gpu() -> bool:
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except:
+        return False

@@ -1631,10 +1631,6 @@ class ChatPage(QWidget):
 
         self._messages_layout.setContentsMargins(12, 12, 12, 12)
 
-        self._messages_layout.addStretch()
-
-
-
         # 欢迎消息
 
         self._show_welcome()
@@ -1867,9 +1863,7 @@ class ChatPage(QWidget):
 
             ml.addWidget(label)
 
-            idx = self._messages_layout.count() - 1
-
-            self._messages_layout.insertWidget(idx, msg)
+            self._messages_layout.addWidget(msg)
 
             self._messages.append(msg)
 
@@ -1899,9 +1893,7 @@ class ChatPage(QWidget):
 
 
 
-        idx = self._messages_layout.count() - 1
-
-        self._messages_layout.insertWidget(idx, bubble)
+        self._messages_layout.addWidget(bubble)
 
         self._messages.append(bubble)
 
@@ -1925,7 +1917,7 @@ class ChatPage(QWidget):
 
         """清除所有消息"""
 
-        while self._messages_layout.count() > 1:
+        while self._messages_layout.count() > 0:
 
             item = self._messages_layout.takeAt(0)
 

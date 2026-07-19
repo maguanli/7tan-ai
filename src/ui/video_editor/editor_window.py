@@ -1,7 +1,7 @@
 """
 视频剪辑器 — 主窗口 (VideoEditorPage)
 
-Phase 3: +切割 +拖拽排列 +基础导出(H.264 MP4)
+Phase 4: +录屏模块
 """
 from pathlib import Path
 from typing import Optional
@@ -25,6 +25,9 @@ from src.ui.video_editor.media_bin import MediaBin
 from src.ui.video_editor.timeline import TimelineView
 from src.ui.video_editor.cut_tool import CutTool
 from src.ui.video_editor.exporter import Exporter
+from src.ui.video_editor.screen_recorder import ScreenRecorder
+from src.ui.video_editor.recorder_overlay import RecorderOverlay
+from src.ui.video_editor.recorder_settings import RecorderSettingsDialog
 from src.ui.video_editor.styles import (
     EDITOR_BG, TIMELINE_BG, PLAYER_CONTROL_STYLESHEET,
     TOOLBAR_STYLESHEET, MEDIA_BIN_STYLESHEET,
@@ -58,6 +61,15 @@ self.project = self._pm.new_project()
         self._playing = False
         self._cut_tool = CutTool()
         self._exporter = Exporter()
+        self._recorder = ScreenRecorder()
+        self._recorder.on_time_updated = self._on_recording_time
+        self._recorder.on_state_changed = self._on_recording_state
+        self._recorder.on_error = self._on_recording_error
+        self._overlay = RecorderOverlay()
+        self._overlay.pause_clicked.connect(self._on_overlay_pause)
+        self._overlay.resume_clicked.connect(self._on_overlay_resume)
+        self._overlay.stop_clicked.connect(self._on_overlay_stop)
+        self._overlay.overlay_closed.connect(self._on_overlay_closed)
         self._setup_ui()
 
     @property
@@ -407,16 +419,62 @@ self.timeline.clip_added_to_timeline.connect(self._on_timeline_clip_added)
         )
         return self._exporter.export(self.project, output_path, config=config)
 
-    # ---- 占位功能（Phase 4-6） ----
+    # ---- Phase 4: 录屏 ----
 
     def _on_start_recording(self):
-        self._status.setText("🎥 录屏功能将在 Phase 4 实现")
+        dlg = RecorderSettingsDialog(
+            RecordingConfig(output_dir=self.media_bin._root_dir if hasattr(self.media_bin, '_root_dir') else ''),
+            self,
+        )
+        dlg.config_changed.connect(self._start_recording_with_config)
+        dlg.exec()
+
+    def _start_recording_with_config(self, config: RecordingConfig):
+        if self._recorder.start(config):
+            self._overlay.show()
+            self._status.setText("🔴 正在录制…")
+        else:
+            self._status.setText("❌ 录制启动失败")
 
     def _start_recording(self, config=None) -> bool:
-        return False
+        cfg = config or RecordingConfig()
+        return self._recorder.start(cfg)
 
     def _stop_recording(self):
-        return None
+        self._overlay.hide()
+        result = self._recorder.stop()
+        if result:
+            self.media_bin.add_media_batch([result])
+            self._status.setText(f"✅ 录制完成: {result}")
+        return result
+
+    def _on_recording_time(self, seconds: float):
+        self._overlay.set_time(seconds)
+
+    def _on_recording_state(self, state: str):
+        if state == "paused":
+            self._status.setText("⏸ 录制已暂停")
+        elif state == "recording":
+            self._status.setText("🔴 正在录制…")
+        elif state == "stopped":
+            self._status.setText("✅ 录制已停止")
+
+    def _on_recording_error(self, msg: str):
+        self._status.setText(f"❌ 录制错误: {msg}")
+        self._overlay.hide()
+
+    def _on_overlay_pause(self):
+        self._recorder.pause()
+
+    def _on_overlay_resume(self):
+        self._recorder.resume()
+
+    def _on_overlay_stop(self):
+        self._stop_recording()
+
+    def _on_overlay_closed(self):
+        if self._recorder.is_recording:
+            self._recorder.stop()
 
     def _on_ai_dub(self):
         self._status.setText("🎙️ AI配音功能将在 Phase 5 实现")

@@ -1,7 +1,7 @@
 """
 7Tan Video Editor（代号「青锋」）— 轻量级 AI 驱动视频剪辑器
 
-Phase 3: +切割 +拖拽排列 +基础导出(H.264 MP4)
+Phase 4: +录屏模块
 """
 
 from src.ui.video_editor.editor_window import VideoEditorPage
@@ -9,6 +9,9 @@ from src.ui.video_editor.editor_api import EditorAPI
 from src.ui.video_editor.player import VideoPlayer
 from src.ui.video_editor.media_bin import MediaBin
 from src.ui.video_editor.timeline import TimelineView
+from src.ui.video_editor.screen_recorder import ScreenRecorder
+from src.ui.video_editor.recorder_overlay import RecorderOverlay
+from src.ui.video_editor.recorder_settings import RecorderSettingsDialog
 from src.ui.video_editor.data_models import (
     Clip, SubtitleClip, Track, Project, ProjectData,
     RecordingConfig, ExporterConfig, CoverTemplate, Transition,
@@ -20,6 +23,9 @@ __all__ = [
     "VideoPlayer",
     "MediaBin",
     "TimelineView",
+    "ScreenRecorder",
+    "RecorderOverlay",
+    "RecorderSettingsDialog",
     "Clip", "SubtitleClip", "Track", "Project", "ProjectData",
     "RecordingConfig", "ExporterConfig", "CoverTemplate", "Transition",
 ]

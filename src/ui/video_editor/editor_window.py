@@ -16,7 +16,9 @@ from PyQt6.QtGui import QFont
 from loguru import logger
 
 from src.ui.app import THEME
-from src.ui.video_editor.data_models import Project, RecordingConfig, Track, Clip, ExporterConfig
+from src.ui.video_editor.data_models import (
+    Project, RecordingConfig, Track, Clip, ExporterConfig, SubtitleClip,
+)
 from src.ui.video_editor.project_manager import ProjectManager
 from src.ui.video_editor.commands import UndoManager
 from src.ui.video_editor.editor_api import EditorAPI
@@ -28,6 +30,11 @@ from src.ui.video_editor.exporter import Exporter
 from src.ui.video_editor.screen_recorder import ScreenRecorder
 from src.ui.video_editor.recorder_overlay import RecorderOverlay
 from src.ui.video_editor.recorder_settings import RecorderSettingsDialog
+from src.ui.video_editor.ai_clip_engine import AIClipEngine
+from src.ui.video_editor.ai_dub_engine import AIDubEngine
+from src.ui.video_editor.ai_subtitle_engine import AISubtitleEngine
+from src.ui.video_editor.cover_editor import CoverEditor
+from src.ui.video_editor.cover_ai_engine import CoverAIEngine
 from src.ui.video_editor.styles import (
     EDITOR_BG, TIMELINE_BG, PLAYER_CONTROL_STYLESHEET,
     TOOLBAR_STYLESHEET, MEDIA_BIN_STYLESHEET,
@@ -57,7 +64,7 @@ class VideoEditorPage(QWidget):
         self._pm = ProjectManager()
         self._undo_manager = UndoManager()
         self._api = EditorAPI(self)
-self.project = self._pm.new_project()
+        self.project = self._pm.new_project()
         self._playing = False
         self._cut_tool = CutTool()
         self._exporter = Exporter()
@@ -70,6 +77,15 @@ self.project = self._pm.new_project()
         self._overlay.resume_clicked.connect(self._on_overlay_resume)
         self._overlay.stop_clicked.connect(self._on_overlay_stop)
         self._overlay.overlay_closed.connect(self._on_overlay_closed)
+        # Phase 5: AI 引擎
+        self._ai_clip = AIClipEngine(self)
+        self._dub_engine = AIDubEngine()
+        self._dub_engine.finished.connect(self._on_dub_finished)
+        self._subtitle_engine = AISubtitleEngine()
+        self._subtitle_engine.finished.connect(self._on_subtitle_finished)
+        self._cover_editor: CoverEditor | None = None
+        self._cover_ai = CoverAIEngine()
+        self._cover_ai.finished.connect(self._on_cover_ai_finished)
         self._setup_ui()
 
     @property
@@ -476,17 +492,144 @@ self.timeline.clip_added_to_timeline.connect(self._on_timeline_clip_added)
         if self._recorder.is_recording:
             self._recorder.stop()
 
+    # ==================================================================
+    #  Phase 5: AI 引擎集成
+    # ==================================================================
+
+    # ---- AI 剪辑 ----
+
+    def process_ai_command(self, text: str) -> str:
+        """ChatPage 调用入口：处理 AI 剪辑指令"""
+        return self._ai_clip.process(text)
+
+    # ---- AI 配音 ----
+
     def _on_ai_dub(self):
-        self._status.setText("🎙️ AI配音功能将在 Phase 5 实现")
+        """打开 AI 配音对话框"""
+        from PyQt6.QtWidgets import QInputDialog
+        text, ok = QInputDialog.getMultiLineText(
+            self, "AI 配音", "输入要配音的文字:"
+        )
+        if ok and text.strip():
+            self._on_ai_dub_real(text.strip())
+
+    def _on_ai_dub_real(self, text: str):
+        """真实 AI 配音执行"""
+        self._status.setText(f"🎙️ AI配音中: {text[:30]}…")
+        self._dub_engine.speak(text)
+
+    def _on_dub_finished(self, result):
+        """配音完成 → 导入素材库 + 时间轴"""
+        from src.ui.video_editor.data_models import Clip
+        self.media_bin.add_media_batch([result.audio_path])
+        self._status.setText(f"✅ AI配音完成 ({result.duration:.1f}s, {result.engine})")
+
+    # ---- AI 字幕 ----
 
     def _on_ai_subtitle(self):
-        self._status.setText("📝 AI字幕功能将在 Phase 5 实现")
+        """打开 AI 字幕对话框"""
+        files, _ = QFileDialog.getOpenFileNames(
+            self, "选择视频/音频文件", "",
+            "媒体文件 (*.mp4 *.mov *.avi *.mkv *.mp3 *.wav);;所有文件 (*.*)"
+        )
+        if files:
+            self._on_ai_subtitle_real(files[0])
+
+    def _on_ai_subtitle_real(self, source: str = ""):
+        """真实 AI 字幕生成"""
+        if not source:
+            # 使用当前项目中的第一个视频
+            clips = self.project.all_clips
+            video_clips = [c for c in clips if c.type == "video"]
+            if video_clips:
+                source = video_clips[0].source_path
+            else:
+                self._status.setText("⚠️ 请先导入视频文件")
+                return
+        ext = Path(source).suffix.lower()
+        self._status.setText(f"📝 AI字幕识别中…")
+        if ext in (".mp4", ".mov", ".avi", ".mkv"):
+            self._subtitle_engine.generate_from_video(source)
+        else:
+            self._subtitle_engine.generate_from_audio(source)
+
+    def _on_subtitle_finished(self, clips_data: list):
+        """字幕识别完成 → 添加到字幕轨"""
+        if not clips_data:
+            self._status.setText("⚠️ 未识别到语音内容")
+            return
+        for cd in clips_data:
+            sc = SubtitleClip(
+                id=generate_clip_id(),
+                text=cd["text"], start_time=cd["start_time"],
+                end_time=cd["end_time"], track_index=3,
+                font=cd.get("font", "Microsoft YaHei"),
+                font_size=cd.get("font_size", 28),
+                color=cd.get("color", "#FFFFFF"),
+                position=cd.get("position", "bottom"),
+                has_outline=cd.get("has_outline", True),
+            )
+            self.timeline.add_subtitle(sc)
+        self._status.setText(f"✅ 已生成 {len(clips_data)} 条字幕")
+
+    # ---- 封面制作 ----
 
     def _on_open_cover(self):
-        self._status.setText("🖼️ 封面制作功能将在 Phase 5 实现")
+        """打开封面编辑器"""
+        self._cover_editor = CoverEditor()
+        self._cover_editor.finished.connect(self._on_cover_exported)
+        # 如果有已保存的封面数据，恢复
+        if self.project.cover_data:
+            self._cover_editor.load_cover_data(self.project.cover_data)
+        self._cover_editor.setWindowTitle("封面制作 — 青锋")
+        self._cover_editor.resize(1100, 700)
+        self._cover_editor.show()
+
+    def _on_cover_exported(self, path: str):
+        """封面导出完成"""
+        self.project.cover_data = self._cover_editor.get_cover_data() if self._cover_editor else None
+        self._status.setText(f"🖼️ 封面已导出: {path}")
+
+    def _on_ai_generate_cover_real(self, title: str):
+        """AI 生成封面 → 打开编辑器预览"""
+        self._status.setText(f"🤖 AI封面生成中: {title}")
+        result = self._cover_ai.generate(title)
+        # 打开编辑器预览
+        if not self._cover_editor:
+            self._cover_editor = CoverEditor()
+            self._cover_editor.finished.connect(self._on_cover_exported)
+        self._cover_editor.load_result(result)
+        self._cover_editor.setWindowTitle(f"封面制作 — {title}")
+        self._cover_editor.resize(1100, 700)
+        self._cover_editor.show()
+        self._status.setText(f"🖼️ AI封面已生成，可在编辑器中微调")
+
+    def _on_cover_ai_finished(self, result: dict):
+        """AI 封面引擎异步完成"""
+        if self._cover_editor:
+            self._cover_editor.load_result(result)
 
     def _open_cover_editor(self):
-        pass
+        """API 兼容：打开封面编辑器"""
+        self._on_open_cover()
 
     def _ai_generate_cover(self, prompt: str):
-        return None
+        """API 兼容：AI 生成封面"""
+        self._on_ai_generate_cover_real(prompt)
+
+    # ---- AI 剪辑辅助方法 ----
+
+    def _delete_clip_by_index(self, idx: int):
+        """按索引删除片段"""
+        clips = self.project.all_clips
+        if 0 <= idx < len(clips):
+            self.timeline.remove_clip(clips[idx].id)
+            self._update_project_tracks()
+
+    def _sync_timeline(self):
+        """同步 project 到 timeline 显示"""
+        self.timeline.set_project(self.project)
+
+    def _update_clip_display(self, clip: Clip):
+        """更新单个片段的显示"""
+        self.timeline.set_project(self.project)

@@ -261,6 +261,22 @@ class TimelineView(QGraphicsView):
                     return True
         return False
 
+    def add_subtitle(self, sub: "SubtitleClip") -> bool:
+        """添加字幕片段到项目（Phase 5）"""
+        if not self._project:
+            return False
+        # 找到字幕轨
+        subtitle_tracks = [t for t in self._project.tracks if t.type == "subtitle"]
+        if not subtitle_tracks:
+            from src.ui.video_editor.data_models import Track
+            track = Track(type="subtitle", clips=[])
+            self._project.tracks.append(track)
+            subtitle_tracks = [track]
+        subtitle_tracks[0].clips.append(sub)
+        self._rebuild_scene()
+        self._update_project_duration()
+        return True
+
     def zoom_in(self):
         """放大时间轴"""
         self._set_zoom(self._zoom * 1.25)

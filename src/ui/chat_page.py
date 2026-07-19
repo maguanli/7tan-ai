@@ -1400,8 +1400,11 @@ class ChatPage(QWidget):
         self._all_rendered = True
         self._lazy_loading = False
         self._batch_rendering = False  # suppress _scroll_to_bottom during batch
-        self._HISTORY_CHUNK = 30
-        self._LAZY_CHUNK = 20
+        self._HISTORY_CHUNK = 15
+        self._LAZY_CHUNK = 10
+        self._render_queue: list = []
+        self._render_timer = None
+        self._render_insert_pos: int = 0
 
 
 
@@ -2005,6 +2008,10 @@ class ChatPage(QWidget):
 
         """清除所有消息"""
 
+                # 停止渐进渲染
+        if self._render_timer:
+            self._render_timer.stop()
+        self._render_queue.clear()
         while self._messages_layout.count() > 0:
 
             item = self._messages_layout.takeAt(0)
@@ -2220,42 +2227,91 @@ class ChatPage(QWidget):
         threading.Thread(target=do_parse, daemon=True).start()
 
     def _on_messages_parsed(self, session_id: str, parsed: list, start_idx: int, total: int):
-        """后台解析完成后，在主线程渲染 Widget"""
+        """后台解析完成后，在主线程渐进渲染（先秒出5条，再逐条渲染）"""
         if session_id != self._current_session_id:
-            return  # 用户已切换会话，丢弃过期数据
+            return
 
-        # 缓存所有解析数据（供 _load_more_history 使用）
         self._current_parsed_data = parsed
-
-        # 移除加载提示
         self._remove_last_system_message()
 
+        self._rendered_start = start_idx
+        self._rendered_end = start_idx
+        self._all_rendered = (start_idx == 0)
+
+        # 先渲染提示（如果有）
         self._batch_rendering = True
         self._scroll.setUpdatesEnabled(False)
         try:
             if start_idx > 0:
                 self._add_message("system",
                     f"📜 以上还有 {start_idx} 条历史消息（向上滚动自动加载）")
-
-            for msg in parsed:
-                if msg["content"]:
-                    self._add_message(
-                        msg["role"], msg["content"],
-                        timestamp=msg.get("timestamp", ""),
-                        cost=msg.get("cost", 0),
-                        tool_calls=msg.get("tool_calls"),
-                        pre_parsed_html=msg.get("html"),
-                    )
-
-            self._rendered_start = start_idx
-            self._rendered_end = len(self._message_data)
-            self._all_rendered = (start_idx == 0)
         finally:
             self._batch_rendering = False
             self._scroll.setUpdatesEnabled(True)
+
+        # 过滤有效消息
+        valid = [m for m in parsed if m.get("content")]
+        FIRST = min(5, len(valid))
+
+        # 第一批：秒渲 5 条
+        self._scroll.setUpdatesEnabled(False)
+        try:
+            for msg in valid[:FIRST]:
+                self._add_message(
+                    msg["role"], msg["content"],
+                    timestamp=msg.get("timestamp", ""),
+                    cost=msg.get("cost", 0),
+                    tool_calls=msg.get("tool_calls"),
+                    pre_parsed_html=msg.get("html"),
+                )
+                self._rendered_end += 1
+        finally:
+            self._scroll.setUpdatesEnabled(True)
             self._messages_container.adjustSize()
             self._messages_container.updateGeometry()
-            QTimer.singleShot(50, self._scroll_to_bottom)
+            QTimer.singleShot(30, self._scroll_to_bottom)
+
+        # 剩余 → 渐进队列（每 10ms 渲染 1 条）
+        if len(valid) > FIRST:
+            self._render_queue = valid[FIRST:]
+            self._render_insert_pos = -1
+            if self._render_timer is None:
+                self._render_timer = QTimer(self)
+                self._render_timer.timeout.connect(self._render_next_batch)
+            self._render_timer.start(10)
+        else:
+            self._finish_render()
+
+    def _render_next_batch(self):
+        """渐进渲染队列中的下一条消息（仅限末尾追加）"""
+        if not self._render_queue:
+            if self._render_timer:
+                self._render_timer.stop()
+            self._finish_render()
+            return
+        msg = self._render_queue.pop(0)
+        self._scroll.setUpdatesEnabled(False)
+        try:
+            self._add_message(
+                msg["role"], msg["content"],
+                timestamp=msg.get("timestamp", ""),
+                cost=msg.get("cost", 0),
+                tool_calls=msg.get("tool_calls"),
+                pre_parsed_html=msg.get("html"),
+            )
+            self._rendered_end += 1
+        finally:
+            self._scroll.setUpdatesEnabled(True)
+        if not self._render_queue:
+            if self._render_timer:
+                self._render_timer.stop()
+            self._finish_render()
+
+    def _finish_render(self):
+        """渐进渲染完成后的收尾"""
+        self._rendered_end = len(self._message_data)
+        self._messages_container.adjustSize()
+        self._messages_container.updateGeometry()
 
         if not self._all_rendered:
             try:
@@ -2265,6 +2321,7 @@ class ChatPage(QWidget):
                 pass
             self._scroll.verticalScrollBar().valueChanged.connect(
                 self._on_history_scroll)
+
 
     def _scroll_to_bottom(self):
         scroll = self._scroll

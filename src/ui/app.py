@@ -1806,10 +1806,12 @@ class ChatBrowserSplitPage(QWidget):
         self._browser_stack.addWidget(self.code_viewer)     # 索引 1
         self.console_viewer = ConsoleViewer()
         self._browser_stack.addWidget(self.console_viewer)  # 索引 2
+        self.video_editor = VideoEditorPage()
+        self._browser_stack.addWidget(self.video_editor)     # 索引 3
 
         self.chat = ChatPage()
 
-        # ===== 左侧顶部：面板切换按钮栏（3个按钮：浏览器 + 源代码 + 控制台）=====
+        # ===== 左侧顶部：面板切换按钮栏（4个按钮：浏览器 + 源代码 + 剪辑器 + 控制台）=====
         self._panel_bar = QHBoxLayout()
         self._panel_bar.setContentsMargins(8, 6, 8, 4)
         self._panel_bar.setSpacing(8)
@@ -1821,12 +1823,14 @@ class ChatBrowserSplitPage(QWidget):
         self._btn_browser = self._make_panel_btn("🌐 浏览器", True)
         self._btn_code = self._make_panel_btn("📝 源代码", False)
         self._btn_console = self._make_panel_btn("📟 控制台", False)
+        self._btn_video_editor = self._make_panel_btn("🎬 视频剪辑器", False)
 
         self._btn_browser.clicked.connect(lambda: self._switch_panel(0, self._btn_browser))
         self._btn_code.clicked.connect(lambda: self._switch_panel(1, self._btn_code))
-        self._btn_console.clicked.connect(lambda: self._switch_panel(2, self._btn_console))
+        self._btn_video_editor.clicked.connect(lambda: self._switch_panel(2, self._btn_video_editor))
+        self._btn_console.clicked.connect(lambda: self._switch_panel(3, self._btn_console))
 
-        self._panel_btns = [self._btn_browser, self._btn_code, self._btn_console]
+        self._panel_btns = [self._btn_browser, self._btn_code, self._btn_video_editor, self._btn_console]
         for b in self._panel_btns:
             self._panel_bar.addWidget(b)
         self._panel_bar.addStretch()
@@ -1900,7 +1904,7 @@ class ChatBrowserSplitPage(QWidget):
             self._switch_panel(0, self._btn_browser)
             self._navigate_to_admin()
         elif target == "console":
-            self._switch_panel(2, self._btn_console)
+            self._switch_panel(3, self._btn_console)
         else:
             # source / 默认
             self._switch_panel(0, self._btn_browser)

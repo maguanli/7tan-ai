@@ -1,6 +1,8 @@
-﻿# 🎬 7Tan Video Editor（代号「青锋」）— 架构设计文档 v1.6
+﻿# 🎬 7Tan Video Editor（代号「青锋」）— 架构设计文档 v1.8
 
-> 最后更新：2026-07-19
+> 最后更新：2026-07-22
+> v1.8 更新：同步 Phase 1~6 代码实现 — 文件列表从 21→28 个模块、新增 FilterConfig/Keyframe/Transition 数据模型、ProjectData 补全 transitions、工具栏从 5→10 按钮、导出引擎方法签名与代码对齐
+> v1.7 更新：cover_maker→cover_editor+cover_ai_engine、ProjectData+transitions、Transition 接入 Project、FFmpeg 同步 filter_complex、Phase3导出界限明确、快捷键引用修正
 > v1.6 更新：新增 Transition、统一 Project/ProjectData、cover_path→cover_data、封面版本历史、RecordingConfig+mic_device_id、导出支持封面/音频、VLC/MPV双引擎说明、AI撤销指令、QPainter入选型表
 > v1.5 更新：补充数据模型、封面模块交互说明、AI导出指令、filter_complex说明、录屏刷新机制、修正文件计数
 > v1.4 更新：修复 Track/SubtitleClip、补充 AI 封面否定意图闭环、新增 pip 依赖清单、明确 SD 模型路径
@@ -143,28 +145,35 @@ pip install python-mpv          # mpv 播放器绑定。VLC 为主力引擎，mp
 ```
 D:\7tan\7tanAI\src\ui\video_editor\
 ├── __init__.py               # 模块导出
+├── config.py                 # FFmpeg 路径、默认参数常量
+├── data_models.py            # 数据模型（Clip/Track/Project/Transition 等）
 ├── editor_window.py          # 剪辑器主窗口（VideoEditorPage）
 ├── media_bin.py              # 素材管理面板
 ├── player.py                 # 视频播放器（VLC 内核）
 ├── timeline.py               # 时间轴组件
 ├── timeline_items.py         # 时间轴视图层（QGraphicsScene item）
 ├── cut_tool.py               # 切割工具
-├── export_dialog.py          # 导出设置对话框
-├── exporter.py               # 导出执行引擎（FFmpeg + 编码参数）
+├── exporter.py               # 导出执行引擎（FFmpeg filter_complex）
 ├── project_manager.py        # 项目保存/加载（.7tanproj JSON）
-├── ai_tools_panel.py         # AI 配音/字幕面板
+├── ai_clip_engine.py         # AI 剪辑引擎（自然语言→操作）
+├── ai_dub_engine.py          # AI 配音引擎（Edge TTS 封装）
+├── ai_subtitle_engine.py     # AI 字幕引擎（语音识别→SRT）
 ├── cover_editor.py           # 封面编辑器（手动模式画布 + QPainter 渲染）
 ├── cover_ai_engine.py        # 封面 AI 引擎（对话式生成 + SD 模型调用）
-├── ai_clip_engine.py         # AI 剪辑引擎（自然语言→操作）
 ├── commands.py               # 命令模式（ClipCommand / UndoManager）
 ├── editor_api.py             # 剪辑器 API（供 AI 调用）
 ├── screen_recorder.py        # 录屏核心（mss + FFmpeg + PyAudio）
 ├── recorder_overlay.py       # 悬浮控制条（录制中显示）
 ├── recorder_settings.py      # 录屏设置面板
+├── color_filter.py           # 调色滤镜引擎（亮度/对比度/饱和度/LUT）
+├── filter_panel.py           # 滤镜面板 UI
+├── keyframe.py               # 关键帧管理器（插值/缓动/预设）
+├── keyframe_panel.py         # 关键帧面板 UI
+├── transition_engine.py      # 转场引擎（23 种 xfade + acrossfade）
 ├── styles.py                 # 样式常量
 └── utils.py                  # 工具函数
 ```
-（共 21 个模块）
+（共 28 个模块）
 
 ### 五-A、导出引擎设计（exporter.py）
 
@@ -182,13 +191,12 @@ D:\7tan\7tanAI\src\ui\video_editor\
 
 ```python
 class VideoExporter:
-    def export(self, project, output_path, resolution, fps,
-               codec, bitrate, on_progress) -> bool: ...
-    def export_cover(self, cover_data, output_path,
-                     format, quality) -> bool: ...
-    def export_audio(self, project, output_path,
-                     format, bitrate) -> bool: ...
-    def estimate_size(self, project, codec) -> str: ...
+    def export(self, project, output_path, config=None,
+               progress_callback=None) -> bool: ...
+    # 以下方法预留，Phase 6 后按需实现：
+    # def export_cover(self, cover_data, output_path, format, quality) -> bool: ...
+    # def export_audio(self, project, output_path, format, bitrate) -> bool: ...
+    # def estimate_size(self, project, codec) -> str: ...
 ```
 
 ### 五-B、项目管理设计（project_manager.py）
@@ -239,9 +247,9 @@ class ProjectManager:
 |  | 💬 字幕轨                            |   |
 |  +--------------------------------------+   |
 |                                              |
-+----------------------------------------------+
-| 🎥录屏 | 🎙️AI配音 | 📝AI字幕 | 🖼️封面 | 📤导出 |
-+----------------------------------------------+
++------------------------------------------------------------------------------------+
+| 💾保存 | 📂打开 | 🎥录屏 | 🎙️AI配音 | 📝AI字幕 | 🎨滤镜 | 🎬转场 | 🎯关键帧 | 🖼️封面 | 📤导出 |
++------------------------------------------------------------------------------------+
 ```
 
 ---
@@ -564,7 +572,9 @@ class Clip:
     source_end: float      # 裁剪结束
     duration: float        # 持续时长
     speed: float           # 播放速度（1.0=正常）
-    properties: dict       # 音量/滤镜参数等
+    volume: float          # 音量（0.0~1.0，仅 audio）
+    filters: list[FilterConfig]   # 滤镜链（亮度/对比度/饱和度/模糊/LUT 等）
+    keyframes: list[Keyframe]     # 关键帧动画（不透明度/缩放/位置等）
     # 注：type="image" 的片段放在视频轨 (track_index=0)，默认持续 5 秒
 
 class SubtitleClip:
@@ -636,6 +646,7 @@ class ProjectData:
     tracks: list[Track]
     cover_data: dict | None      # 封面图层树，与 Project.cover_data 一致
     undo_stack: list
+    transitions: list[Transition]  # 转场效果列表，与 Project.transitions 一致
     duration: float
     created_at: str
     modified_at: str
@@ -650,6 +661,22 @@ class CoverTemplate:
     title_position: tuple[int,int]  # 标题(x,y)
     subtitle_position: tuple[int,int] | None
     decor_elements: list[str]    # 装饰元素
+
+class FilterConfig:
+    """调色滤镜配置 — 附加到 Clip.filters 链，导出时按顺序应用"""
+    id: str
+    filter_type: str             # brightness / contrast / saturation / hue / blur / sharpen / vignette / lut / custom
+    params: dict                 # 参数
+    enabled: bool = True         # 是否启用
+
+class Keyframe:
+    """关键帧 — 附加到 Clip.keyframes，控制属性随时间变化"""
+    id: str
+    time: float                  # 时间点（秒，相对于片段起始）
+    property: str                # opacity / scale_x / scale_y / position_x / position_y / rotation / volume
+    value: float                 # 目标值
+    easing: str = "linear"       # linear / ease_in / ease_out / ease_in_out
+    params: dict | None = None   # 扩展参数
 
 class Transition:
     """转场效果 — 两个相邻片段之间的过渡（参见第三章 Phase 6）"""

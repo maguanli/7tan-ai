@@ -2090,7 +2090,7 @@ class ChatPage(QWidget):
 
     def _on_session_loaded(self, session_id: str, data: dict):
 
-        """在主线程分批渲染消息UI（每批5条，避免阻塞UI线程导致光标转圈）"""
+        """在主线程一次性渲染全部历史消息 — 禁用刷新避免闪烁"""
 
         messages = data.get("messages", [])
 
@@ -2100,32 +2100,32 @@ class ChatPage(QWidget):
 
         self._title_label.setText(f"💬 {data.get('title', '对话')}")
 
-        # 分批渲染：每批 5 条，批次间让 UI 呼吸
-        self._pending_messages = messages
-        self._msg_render_index = 0
-        BATCH_SIZE = 5
+        if not messages:
+            self._add_message("system", "📋 已加载 0 条消息")
+            return
 
-        def render_batch():
-            i = self._msg_render_index
-            batch = self._pending_messages[i:i + BATCH_SIZE]
-            for msg in batch:
+        # 禁用刷新，一次性渲染防止 UI 不断重绘
+        self._scroll.setUpdatesEnabled(False)
+        try:
+            for msg in messages:
                 role = msg.get("role", "system")
                 content = msg.get("content", "")
                 if content:
                     self._add_message(role, content)
-            self._msg_render_index += BATCH_SIZE
-            if self._msg_render_index < len(self._pending_messages):
-                # 还有更多消息，下一批用 QTimer 延迟执行
-                QTimer.singleShot(10, render_batch)
-            else:
-                # 全部完成
-                self._add_message("system", f"📋 已加载 {len(messages)} 条消息")
-                self._pending_messages = []
+        finally:
+            self._scroll.setUpdatesEnabled(True)
+            self._messages_container.adjustSize()
+            self._messages_container.updateGeometry()
+            QTimer.singleShot(50, self._scroll_to_bottom)
 
-        if messages:
-            QTimer.singleShot(0, render_batch)
-        else:
-            self._add_message("system", "📋 已加载 0 条消息")
+    def _scroll_to_bottom(self):
+        scroll = self._scroll
+        vbar = scroll.verticalScrollBar()
+        vbar.setValue(vbar.maximum())
+        # 刷新布局消除底部空白
+        self._messages_container.adjustSize()
+        self._messages_container.updateGeometry()
+
 
 
 

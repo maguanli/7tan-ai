@@ -1749,6 +1749,7 @@ class BrowserPage(QWidget):
 
 from .console_panel import ConsoleViewer
 from .code_viewer import CodeViewer
+from .video_editor.editor_window import VideoEditorPage
 
 # ===== AI 工作台（浏览器 + 对话 左右分屏） =====
 

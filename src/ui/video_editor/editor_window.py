@@ -368,21 +368,8 @@ class VideoEditorPage(QWidget):
             self._status.setText(f"❌ 添加失败: {info.get('name', '未知')}")
 
     def _on_media_selected(self, info: dict):
-        """素材库选中 → 预览（VLC crash 保护）"""
-        try:
-            mt = info.get("type", "")
-            if mt in ("video", "audio"):
-                if self.player.vlc_available:
-                    self.player.load_media(info["path"])
-                    # 延迟播放，让 VLC 有时间解析
-                    from PyQt6.QtCore import QTimer
-                    QTimer.singleShot(300, self.player.play)
-                else:
-                    self._status.setText(f"🎬 选中: {info['name']} (VLC 不可用)")
-            elif mt == "image":
-                self._status.setText(f"🖼️ 选中图片: {info['name']}")
-        except Exception as e:
-            logger.warning(f"预览媒体失败: {e}")
+        """素材库选中 → 仅预览信息，不自动播放（避免VLC崩溃）"""
+        self._status.setText(f"🎬 选中: {info.get('name', '?')}")
 
     def _on_player_time_changed(self, time_sec: float):
         """播放器时间更新 → 同步进度条 + 播放头"""

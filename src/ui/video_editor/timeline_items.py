@@ -249,7 +249,14 @@ class ClipItem(QGraphicsRectItem):
     # ---- 绘制 ----
 
     def paint(self, painter: QPainter, option, widget=None):
-        """自定义绘制带渐变的片段块"""
+        """自定义绘制带渐变的片段块 + 帧缩略图"""
+        try:
+            self._paint_safe(painter, option, widget)
+        except Exception:
+            # 绘制失败则回退到简单绘制
+            self._paint_fallback(painter)
+
+    def _paint_safe(self, painter: QPainter, option, widget=None):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         rect = self.rect()
@@ -340,6 +347,23 @@ class ClipItem(QGraphicsRectItem):
             painter.setFont(font2)
             painter.drawText(dur_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                              format_time(self.duration))
+
+    def _paint_fallback(self, painter: QPainter):
+        """简单绘制回退（渐变块+文件名）"""
+        rect = self.rect()
+        base = QColor(CLIP_VIDEO_COLOR)
+        grad = QLinearGradient(0, rect.top(), 0, rect.bottom())
+        grad.setColorAt(0, base.lighter(130))
+        grad.setColorAt(1, base.darker(120))
+        painter.setBrush(QBrush(grad))
+        painter.setPen(QPen(base.darker(150), 1))
+        painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 4, 4)
+        if rect.width() > 30:
+            painter.setPen(QColor("#fff"))
+            painter.setFont(QFont("Microsoft YaHei", 8))
+            painter.drawText(rect.adjusted(6, 1, -6, -1),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                             self.clip_name[:20])
 
     # ---- 鼠标交互 ----
 

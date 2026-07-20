@@ -83,7 +83,7 @@ class VideoPlayer(QWidget):
         self._video_widget = QWidget()
         self._video_widget.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
         self._video_widget.setStyleSheet(f"background-color:#000;")
-        self._video_widget.setMinimumSize(480, 270)
+        self._video_widget.setMinimumSize(480, 370)
         layout.addWidget(self._video_widget)
 
     # ==================================================================

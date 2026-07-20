@@ -358,14 +358,20 @@ class VideoEditorPage(QWidget):
 
     def _on_media_to_timeline(self, info: dict):
         """素材库双击 → 添加到时间轴"""
+        logger.info(f"[双击] 开始添加素材: {info.get('name','?')} type={info.get('type')}")
         try:
+            logger.info("[双击] 调用 timeline.add_clip...")
             cid = self.timeline.add_clip(info)
+            logger.info(f"[双击] add_clip 返回: {cid}")
             if cid:
                 self._status.setText(f"✅ 已添加: {info['name']}")
+                logger.info("[双击] 调用 _update_project_tracks...")
                 self._update_project_tracks()
+                logger.info("[双击] _update_project_tracks 完成")
         except Exception as e:
-            logger.error(f"添加素材到时间轴失败: {e}")
+            logger.exception(f"添加素材到时间轴失败: {e}")
             self._status.setText(f"❌ 添加失败: {info.get('name', '未知')}")
+        logger.info("[双击] _on_media_to_timeline 完成")
 
     def _on_media_selected(self, info: dict):
         """素材库选中 → 仅预览信息，不自动播放（避免VLC崩溃）"""

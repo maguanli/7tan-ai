@@ -238,12 +238,18 @@ class TimelineView(QGraphicsView):
         # 添加到场景
         ruler_height = TimeRuler.HEIGHT
         y = ruler_height + track_index * TRACK_HEIGHT_DEFAULT
+        
+        logger.info(f"[add_clip] 创建 ClipItem: clip={cid[:8]} y={y}")
         self._add_clip_item(clip, y)
+        logger.info(f"[add_clip] ClipItem 创建完成")
 
         # 更新项目时长
+        logger.info("[add_clip] 更新项目时长...")
         self._update_project_duration()
+        logger.info("[add_clip] 项目时长更新完成")
 
         logger.info(f"添加片段: {clip.id} → 轨道{track_index} @{format_time(timeline_start)}")
+        logger.info(f"[add_clip] 完成，返回 cid={cid}")
         return cid
 
     def remove_clip(self, clip_id: str) -> bool:
@@ -303,6 +309,7 @@ class TimelineView(QGraphicsView):
 
     def _add_clip_item(self, clip: Clip, y: float):
         """在场景中添加一个 ClipItem"""
+        logger.info(f"[_add_clip_item] type={clip.type} y={y:.1f} dur={clip.duration:.1f}s")
         data = {
             "id": clip.id,
             "type": clip.type,
@@ -315,17 +322,22 @@ class TimelineView(QGraphicsView):
             "source_path": clip.source_path,
             "name": clip.source_path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1],
         }
+        logger.info(f"[_add_clip_item] data构建完成, 创建 ClipItem")
 
         width = max(clip.duration * PPS, ClipItem.MIN_VISUAL_WIDTH)
         h = TRACK_HEIGHT_DEFAULT - 4
         item = ClipItem(data)
+        logger.info(f"[_add_clip_item] ClipItem构造完成")
         item.setRect(0, 2, width, h)
         item.setPos(clip.timeline_start * PPS, y)
         item.setZValue(50)
+        logger.info(f"[_add_clip_item] 添加到 scene...")
 
         self._scene.addItem(item)
+        logger.info(f"[_add_clip_item] scene.addItem 完成")
         self._clip_items[clip.id] = item
         item.set_snap_points(self._collect_snap_points())
+        logger.info(f"[_add_clip_item] 完成")
 
     def _add_subtitle_item(self, sub: SubtitleClip, y: float):
         """添加字幕片段到场景"""

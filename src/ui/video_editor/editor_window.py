@@ -76,6 +76,7 @@ class VideoEditorPage(QWidget):
         self._cut_tool = CutTool()
         self._exporter = Exporter()
         self._recorder = ScreenRecorder()
+        self._last_preview_path = ""  # 防重复预览
         self._recorder.on_time_updated = self._on_recording_time
         self._recorder.on_state_changed = self._on_recording_state
         self._recorder.on_error = self._on_recording_error
@@ -374,12 +375,17 @@ class VideoEditorPage(QWidget):
         logger.info("[双击] _on_media_to_timeline 完成")
 
     def _on_media_selected(self, info: dict):
-        """素材库选中 → 预览播放"""
+        """素材库选中 → 预览播放（不重复加载同一文件）"""
         try:
             mt = info.get("type", "")
             if mt in ("video", "audio"):
                 if self.player.vlc_available:
-                    self.player.load_media(info["path"])
+                    path = info["path"]
+                    # 同一文件不重复加载/播放
+                    if getattr(self, '_last_preview_path', '') == path:
+                        return
+                    self._last_preview_path = path
+                    self.player.load_media(path)
                     from PyQt6.QtCore import QTimer
                     QTimer.singleShot(500, self.player.play)
             elif mt == "image":

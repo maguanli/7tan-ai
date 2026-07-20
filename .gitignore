@@ -52,8 +52,8 @@ build/
 .env
 .env.local
 
-# 崩溃日志
-logs/crash_*.txt
+# 日志文件
+logs/*.txt
 
 # 视频编辑器缩略图缓存
 data/video_editor/thumbs/

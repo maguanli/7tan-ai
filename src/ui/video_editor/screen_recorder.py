@@ -278,43 +278,44 @@ class ScreenRecorder:
         return subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
 
     def _detect_loopback_device(self) -> str:
-        """自动检测 Windows WASAPI 环回设备名"""
-        # Windows 系统音频环回设备常见名称（按优先级）
+        """自动检测 Windows WASAPI 环回设备名（结果缓存）"""
+        if hasattr(self, '_cached_loopback'):
+            return self._cached_loopback
         candidates = [
-            "audio=立体声混音",       # 中文 Windows
-            "audio=Stereo Mix",       # 英文 Windows
-            "audio=What U Hear",      # 部分声卡
-            "audio=Wave Out Mix",     # 旧版驱动
-            "audio=Loopback",         # 通用
+            "audio=立体声混音",
+            "audio=Stereo Mix",
+            "audio=What U Hear",
+            "audio=Wave Out Mix",
+            "audio=Loopback",
         ]
-        # 先用 ffmpeg 列出设备，尝试匹配
         try:
             result = subprocess.run(
                 [str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg",
                  "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, text=True, timeout=3,
             )
             stderr = (result.stderr or "") + (result.stdout or "")
             for line in stderr.split("\n"):
                 line_lower = line.strip().lower()
                 if "stereo mix" in line_lower or "loopback" in line_lower or "立体声混音" in line:
-                    # 提取 dshow 设备名
                     if '"' in line:
                         dev = line.split('"')[1]
-                        return f"audio={dev}"
+                        self._cached_loopback = f"audio={dev}"
+                        return self._cached_loopback
         except Exception:
             pass
-        # 逐个试
-        return candidates[0]
+        self._cached_loopback = candidates[0]
+        return self._cached_loopback
 
     def _detect_mic_device(self, device_id: Optional[int] = None) -> str:
-        """自动检测麦克风 dshow 设备名"""
-        # 先尝试用 PyAudio 获取设备名
+        """自动检测麦克风 dshow 设备名（结果缓存）"""
+        if hasattr(self, '_cached_mic'):
+            return self._cached_mic
         if device_id is not None:
             try:
                 import pyaudio
@@ -323,15 +324,15 @@ class ScreenRecorder:
                 p.terminate()
                 name = info.get("name", "")
                 if name:
-                    return f"audio={name}"
+                    self._cached_mic = f"audio={name}"
+                    return self._cached_mic
             except Exception:
                 pass
-        # 用 ffmpeg 列出音频设备
         try:
             result = subprocess.run(
                 [str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg",
                  "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, text=True, timeout=3,
             )
             stderr = (result.stderr or "") + (result.stdout or "")
             for line in stderr.split("\n"):
@@ -339,7 +340,8 @@ class ScreenRecorder:
                 if "microphone" in line_lower or "mic" in line_lower or "麦克风" in line:
                     if '"' in line:
                         dev = line.split('"')[1]
-                        return f"audio={dev}"
+                        self._cached_mic = f"audio={dev}"
+                        return self._cached_mic
         except Exception:
             pass
         return "audio=麦克风"

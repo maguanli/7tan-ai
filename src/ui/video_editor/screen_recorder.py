@@ -85,6 +85,7 @@ class ScreenRecorder:
         self._paused = False
         self._elapsed = 0.0
         self._frame_count = 0
+        self._est_elapsed = 0.0  # gdigrab 模式估算时间
         self._audio_failed = False
 
         try:
@@ -202,7 +203,7 @@ class ScreenRecorder:
             return True  # 无法检查时放行
 
     def _build_ffmpeg_pipe(self, config: RecordingConfig) -> subprocess.Popen:
-        """构建 FFmpeg 子进程管道"""
+        """构建 FFmpeg 子进程（gdigrab 直接抓屏，不占 Python GIL）"""
         ffmpeg = str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg"
 
         # 输出路径
@@ -211,65 +212,33 @@ class ScreenRecorder:
         os.makedirs(output_dir, exist_ok=True)
         output_file = os.path.join(output_dir, f"recording_{timestamp}.mp4")
 
-        # 输入参数
-        w, h = config.region_rect[2], config.region_rect[3]
-        cmd = [
-            ffmpeg,
-            "-y",                           # 覆盖输出
-            "-f", "rawvideo",               # 原始视频流
-            "-vcodec", "rawvideo",
-            "-s", f"{w}x{h}",               # 分辨率
-            "-pix_fmt", "bgra",             # mss 输出格式
-            "-r", str(config.fps),          # 帧率
-            "-i", "-",                      # stdin 输入
-        ]
+        x, y, w, h = config.region_rect
 
-        # 系统音频输入（WASAPI loopback）
-        if config.capture_system_audio:
-            cmd += [
-                "-f", "dshow",
-                "-i", self._detect_loopback_device(),     # Windows WASAPI
+        if config.mode == "region":
+            # gdigrab 区域录制
+            cmd = [
+                ffmpeg, "-y",
+                "-f", "gdigrab", "-framerate", str(config.fps),
+                "-offset_x", str(x), "-offset_y", str(y),
+                "-video_size", f"{w}x{h}",
+                "-i", "desktop",
             ]
-        elif config.capture_mic:
-            # 仅麦克风时仍需音频输入占位
-            cmd += [
-                "-f", "lavfi",
-                "-i", "anullsrc=r=44100:cl=stereo",
-            ]
-
-        # 麦克风输入
-        if config.capture_mic and config.capture_system_audio:
-            # 系统音频 + 麦克风 → FFmpeg 混音
-            mic_device = self._detect_mic_device(config.mic_device_id)
-            cmd += [
-                "-f", "dshow",
-                "-i", mic_device,
-                "-filter_complex",
-                "[1:a][2:a]amix=inputs=2:duration=first:weights=1 0.8[outa]",
-            ]
-            audio_map = ["-map", "0:v", "-map", "[outa]"]
-        elif config.capture_mic:
-            mic_device = self._detect_mic_device(config.mic_device_id)
-            cmd += [
-                "-f", "dshow",
-                "-i", mic_device,
-            ]
-            audio_map = ["-map", "0:v", "-map", "1:a"]
-        elif config.capture_system_audio:
-            audio_map = ["-map", "0:v", "-map", "1:a"]
         else:
-            audio_map = ["-map", "0:v"]
+            # 全屏
+            cmd = [
+                ffmpeg, "-y",
+                "-f", "gdigrab", "-framerate", str(config.fps),
+                "-video_size", f"{w}x{h}",
+                "-i", "desktop",
+            ]
 
-        # 编码参数
-        cmd += audio_map
+        # 跳过音频（默认关闭）
         cmd += [
             "-c:v", config.codec,
             "-crf", str(config.quality),
-            "-preset", "ultrafast",         # 录屏优先速度
+            "-preset", "ultrafast",
             "-pix_fmt", "yuv420p",
-            "-c:a", "aac",
-            "-b:a", "192k",
-            "-shortest",
+            "-an",
             output_file,
         ]
 
@@ -277,7 +246,7 @@ class ScreenRecorder:
 
         return subprocess.Popen(
             cmd,
-            stdin=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
@@ -408,55 +377,23 @@ class ScreenRecorder:
             pass
 
     def _capture_loop(self):
-        """主捕获循环（在子线程中运行，低CPU占用避免GIL卡死GUI）"""
-        if not self._process or not self._process.stdin:
+        """监控 ffmpeg 进程（gdigrab 模式无需手动截图）"""
+        if not self._process or not self._config:
             return
 
-        fps = self._config.fps if self._config else RECORDING_DEFAULT_FPS
+        fps = self._config.fps
         frame_interval = 1.0 / fps
 
-        with mss.mss() as sct:
-            monitor = self._get_monitor(sct)
+        while self._running and self._process.poll() is None:
+            if not self._paused:
+                self._frame_count += 1
+                if self._frame_count % 30 == 0 and self.on_time_updated:
+                    self._est_elapsed += 30 * frame_interval
+                    self.on_time_updated(self._est_elapsed)
+            time.sleep(frame_interval)
 
-            while self._running:
-                loop_start = time.time()
-
-                if not self._paused:
-                    try:
-                        # 截图
-                        img = sct.grab(monitor)
-                        # 写入 FFmpeg stdin
-                        self._process.stdin.write(img.bgra)
-                        self._frame_count += 1
-                    except (BrokenPipeError, OSError) as e:
-                        logger.error(f"写入 FFmpeg 管道失败: {e}")
-                        if self.on_error:
-                            self.on_error(f"录制中断: {e}")
-                        self._running = False
-                        break
-                    except Exception as e:
-                        logger.error(f"截屏失败: {e}")
-                        if self.on_error:
-                            self.on_error(f"截屏失败: {e}")
-
-                # 时间回调
-                if self.on_time_updated and self._frame_count % 5 == 0:
-                    self.on_time_updated(self.elapsed)
-
-                # 帧率控制 + 释放 GIL
-                elapsed_frame = time.time() - loop_start
-                sleep_time = frame_interval - elapsed_frame
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
-                else:
-                    time.sleep(0.001)  # 始终让出 GIL，防止 GUI 卡死
-
-        # 安全关闭 stdin
-        try:
-            if self._process and self._process.stdin:
-                self._process.stdin.close()
-        except Exception:
-            pass
+        # ffmpeg 已退出
+        self._running = False
 
     def _get_monitor(self, sct) -> dict:
         """根据配置获取 mss 监视器参数"""
@@ -492,29 +429,23 @@ class ScreenRecorder:
             return sct.monitors[1]
 
     def _finalize(self) -> Optional[str]:
-        """等待 FFmpeg 完成编码"""
+        """停止 ffmpeg 并获取输出文件"""
         if not self._process:
             return None
 
+        # gdigrag 模式：发送 SIGTERM 让 ffmpeg 正常结束编码
         try:
-            self._process.stdin.close()
-        except Exception:
-            pass
-
-        try:
-            self._process.wait(timeout=30)
+            self._process.terminate()
+            self._process.wait(timeout=15)
         except subprocess.TimeoutExpired:
-            logger.warning("FFmpeg 超时，强制终止")
             self._process.kill()
             self._process.wait()
 
         # 从命令中提取输出路径
         if self._process.args:
-            # args 是列表，输出文件是最后一个非选项参数
             for arg in reversed(self._process.args):
                 if not arg.startswith("-") and arg.endswith(".mp4"):
                     return arg
-
         return None
 
 

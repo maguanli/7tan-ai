@@ -364,7 +364,8 @@ class ScreenRecorder:
                 # 检测音频设备打开失败
                 lower = text.lower()
                 if any(kw in lower for kw in [
-                    "audio=", "dshow", "device", "microphone",
+                    "audio=", "dshow", "cannot open audio",
+                    "cannot find audio", "microphone",
                     "cannot open", "no such", "input/output error",
                     "立体声混音", "immediate exit"
                 ]):

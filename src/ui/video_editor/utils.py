@@ -5,6 +5,7 @@
 import re
 import os
 import hashlib
+import time
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -112,57 +113,143 @@ def get_media_type(file_path: str) -> str:
     return "unknown"
 
 
+def _parse_duration_from_ffmpeg_stderr(stderr: str) -> Optional[float]:
+    """从 ffmpeg stderr 中解析时长"""
+    # 方式1: "Duration: 00:01:23.45"
+    m = re.search(r"Duration:\s*(\d+):(\d+):([\d.]+)", stderr)
+    if m:
+        dur = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+        if dur > 0:
+            return dur
+    # 方式2: "time=00:01:23.45"（处理到末尾的时间戳）
+    times = re.findall(r"time=(\d+):(\d+):([\d.]+)", stderr)
+    if times:
+        h, mi, s = times[-1]
+        dur = int(h) * 3600 + int(mi) * 60 + float(s)
+        if dur > 0:
+            return dur
+    return None
+
+
 def get_media_duration_ffprobe(file_path: str) -> Optional[float]:
-    """用 ffprobe 或 ffmpeg 获取视频/音频时长（秒）"""
+    """用 ffprobe 或 ffmpeg 获取视频/音频时长（秒）
+
+    三级回退策略：
+      1. ffprobe（imageio_ffmpeg 自带或系统 PATH）
+      2. ffmpeg -i 解析 stderr
+      3. 返回 None，由调用方用 VLC 兜底
+    """
     import subprocess
     import shutil as _shutil
-    import re
 
-    # 1. 优先 ffprobe
-    ffprobe = None
+    # ================================================================
+    #  第 1 级：ffprobe
+    # ================================================================
+    ffprobe_paths = []
+
+    # 1a. imageio_ffmpeg 自带的 ffprobe
     try:
         import imageio_ffmpeg
         _ff = Path(imageio_ffmpeg.get_ffmpeg_exe())
         _ffprobe = _ff.parent / _ff.name.replace("ffmpeg", "ffprobe")
         if _ffprobe.exists():
-            ffprobe = _ffprobe
+            ffprobe_paths.append(_ffprobe)
+        # 有些版本 ffprobe 和 ffmpeg 是同一个文件（软链接），也试试 ffmpeg
+        if _ff.exists():
+            ffprobe_paths.append(_ff)
     except Exception:
         pass
-    if ffprobe is None:
-        _found = _shutil.which("ffprobe")
-        if _found:
-            ffprobe = Path(_found)
 
-    if ffprobe and ffprobe.exists():
+    # 1b. 系统 PATH
+    for name in ("ffprobe", "ffprobe.exe"):
+        found = _shutil.which(name)
+        if found:
+            ffprobe_paths.append(Path(found))
+            break
+
+    # 1c. config 中的 FFMPEG_PATH 目录下找 ffprobe
+    try:
+        from src.ui.video_editor.config import FFMPEG_PATH
+        if FFMPEG_PATH and FFMPEG_PATH.exists():
+            ffprobe_dir = FFMPEG_PATH.parent
+            ffprobe_candidate = ffprobe_dir / "ffprobe.exe"
+            if ffprobe_candidate.exists():
+                ffprobe_paths.append(ffprobe_candidate)
+    except Exception:
+        pass
+
+    for ffprobe in ffprobe_paths:
         try:
+            logger.debug(f"尝试 ffprobe: {ffprobe}")
             result = subprocess.run(
                 [str(ffprobe), "-v", "quiet", "-show_entries",
                  "format=duration", "-of", "csv=p=0", file_path],
                 capture_output=True, text=True, timeout=15,
             )
             if result.returncode == 0 and result.stdout.strip():
-                return float(result.stdout.strip())
-        except Exception:
-            pass
+                dur = float(result.stdout.strip())
+                if dur > 0:
+                    logger.info(f"ffprobe 获取时长: {dur:.1f}s ({ffprobe})")
+                    return dur
+        except Exception as e:
+            logger.debug(f"ffprobe 失败 ({ffprobe}): {e}")
 
-    # 2. 用 ffmpeg 兜底（imageio_ffmpeg 没带 ffprobe）
-    from src.ui.video_editor.config import FFMPEG_PATH
-    if FFMPEG_PATH and FFMPEG_PATH.exists():
+    # ================================================================
+    #  第 2 级：ffmpeg -i 解析 Duration
+    # ================================================================
+    ffmpeg_paths = []
+    # 2a. imageio_ffmpeg
+    try:
+        import imageio_ffmpeg
+        _ff = Path(imageio_ffmpeg.get_ffmpeg_exe())
+        if _ff.exists():
+            ffmpeg_paths.append(_ff)
+    except Exception:
+        pass
+    # 2b. config
+    try:
+        from src.ui.video_editor.config import FFMPEG_PATH
+        if FFMPEG_PATH and FFMPEG_PATH.exists():
+            ffmpeg_paths.append(FFMPEG_PATH)
+    except Exception:
+        pass
+    # 2c. PATH
+    found = _shutil.which("ffmpeg")
+    if found:
+        ffmpeg_paths.append(Path(found))
+
+    for ffmpeg in ffmpeg_paths:
         try:
+            logger.debug(f"尝试 ffmpeg: {ffmpeg}")
             result = subprocess.run(
-                [str(FFMPEG_PATH), "-i", file_path],
+                [str(ffmpeg), "-i", file_path],
                 capture_output=True, text=True, encoding='utf-8',
-                errors='replace', timeout=15,
+                errors='replace', timeout=30,
             )
             stderr = result.stderr or ""
-            # ffmpeg 输出: "Duration: 00:01:23.45"
-            m = re.search(r"Duration:\s*(\d+):(\d+):([\d.]+)", stderr)
-            if m:
-                return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+            dur = _parse_duration_from_ffmpeg_stderr(stderr)
+            if dur:
+                logger.info(f"ffmpeg 解析时长: {dur:.1f}s ({ffmpeg})")
+                return dur
+        except subprocess.TimeoutExpired:
+            logger.warning(f"ffmpeg 超时 ({ffmpeg})")
         except Exception as e:
-            logger.warning(f"ffmpeg 获取时长失败: {e}")
+            logger.warning(f"ffmpeg 失败 ({ffmpeg}): {e}")
 
-    logger.warning("FFprobe/FFFmpeg 不可用，无法获取时长")
+    # ================================================================
+    #  第 3 级：文件大小估算（最后兜底）
+    # ================================================================
+    try:
+        size_bytes = os.path.getsize(file_path)
+        # 假设 2 Mbps 平均码率
+        estimated = size_bytes * 8 / (2_000_000)
+        if estimated > 0.5:
+            logger.info(f"文件大小估算时长: {estimated:.1f}s (size={size_bytes})")
+            return estimated
+    except Exception:
+        pass
+
+    logger.warning(f"所有方式均无法获取时长: {file_path}")
     return None
 
 
@@ -204,15 +291,7 @@ def estimate_export_size(duration_sec: float, bitrate_mbps: float) -> str:
         bitrate_mbps: 码率（Mbps）
 
     Returns:
-        人类可读的大小字符串
+        人类可读的大小
     """
     bits = duration_sec * bitrate_mbps * 1_000_000
-    bytes_total = int(bits / 8)
-    # 加上 10% 的容器开销
-    bytes_total = int(bytes_total * 1.1)
-    return human_readable_size(bytes_total)
-
-
-def now_iso() -> str:
-    """返回当前时间的 ISO 格式字符串"""
-    return datetime.now().isoformat()
+    return human_readable_size(int(bits / 8))

@@ -185,9 +185,18 @@ class VideoPlayer(QWidget):
     # ==================================================================
 
     def load_media(self, file_path: str) -> bool:
-        """加载媒体文件"""
+        """Load media file.
+
+        Duration detection (4-level fallback):
+          1. ffprobe/ffmpeg (utils.get_media_duration_ffprobe)
+          2. VLC media.parse_with_options + get_duration
+          3. VLC get_duration retry (up to 5 times, 200ms each)
+          4. VLC MediaPlayer.get_length
+        """
+        import time as _time
+
         if not Path(file_path).exists():
-            msg = f"文件不存在: {file_path}"
+            msg = f"File not found: {file_path}"
             logger.warning(msg)
             self.error.emit(msg)
             return False
@@ -195,19 +204,44 @@ class VideoPlayer(QWidget):
         self._media_path = file_path
         self.stop()
 
-        # 获取时长
+        # ---- Level 1: ffprobe/ffmpeg ----
         self._duration = get_media_duration_ffprobe(file_path) or 0.0
+        logger.info(f"[Duration] L1(ffprobe): {self._duration:.1f}s")
 
         if self._media_player and self._vlc_instance:
             media = self._vlc_instance.media_new(file_path)
             self._media_player.set_media(media)
 
-            # 等待 VLC 解析完媒体信息
-            media.parse_with_options(vlc.MediaParseFlag.local, 5000)
-            # 如果 FFprobe 失败则用 VLC 的时长兜底
+            # ---- Level 2: VLC parse + get_duration ----
+            try:
+                media.parse_with_options(vlc.MediaParseFlag.local, 5000)
+                vlc_dur = media.get_duration() / 1000.0
+                logger.info(f"[Duration] L2(VLC parse): {vlc_dur:.1f}s")
+                if self._duration <= 0 and vlc_dur > 0:
+                    self._duration = vlc_dur
+            except Exception as e:
+                logger.warning(f"VLC parse error: {e}")
+
+            # ---- Level 3: retry get_duration ----
+            if self._duration <= 0:
+                for retry in range(5):
+                    _time.sleep(0.2)
+                    try:
+                        vlc_dur = media.get_duration() / 1000.0
+                        if vlc_dur > 0:
+                            self._duration = vlc_dur
+                            logger.info(f"[Duration] L3(retry#{retry+1}): {vlc_dur:.1f}s")
+                            break
+                    except Exception:
+                        pass
+
+            # ---- Level 4: MediaPlayer.get_length ----
             if self._duration <= 0:
                 try:
-                    self._duration = media.get_duration() / 1000.0
+                    mp_dur = self._media_player.get_length() / 1000.0
+                    if mp_dur > 0:
+                        self._duration = mp_dur
+                        logger.info(f"[Duration] L4(MediaPlayer): {mp_dur:.1f}s")
                 except Exception:
                     pass
 
@@ -217,9 +251,8 @@ class VideoPlayer(QWidget):
             "duration_str": format_time(self._duration),
         })
 
-        logger.info(f"加载媒体: {Path(file_path).name} ({format_time(self._duration)})")
+        logger.info(f"Loaded: {Path(file_path).name} ({format_time(self._duration)})")
         return True
-
     def play(self):
         """播放（VLC crash 保护）"""
         if not self._media_player or self._current_state == "playing":

@@ -9,7 +9,7 @@ Phase 2: 基础播放 + 帧步进 + 音量控制
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QDialog, QApplication
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QApplication
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRectF
 from PyQt6.QtGui import QFont, QPainter, QPen, QColor, QBrush, QPolygonF, QPainterPath
 
@@ -180,7 +180,7 @@ class VideoPlayer(QWidget):
         self._btn_fullscreen.raise_()
 
         # 全屏窗口（延迟创建）
-        self._fullscreen_win: Optional[QDialog] = None
+        self._fullscreen_win: Optional[QWidget] = None
         self._is_fullscreen: bool = False
 
     # ==================================================================
@@ -467,8 +467,19 @@ class VideoPlayer(QWidget):
         self._is_fullscreen = True
         self._btn_fullscreen.set_fullscreen_state(True)
 
-        # 创建无边框全屏窗口
-        self._fullscreen_win = QDialog(
+        # ---- save state and pause BEFORE hwnd switch ----
+        self._fs_saved_pos = self.get_time()
+        was_playing = (self._current_state == "playing")
+        if was_playing:
+            try:
+                self._media_player.pause()
+            except Exception:
+                pass
+            self._tick_timer.stop()
+            self._end_check_timer.stop()
+
+        # create fullscreen window
+        self._fullscreen_win = QWidget(
             None,
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint,
@@ -518,47 +529,73 @@ class VideoPlayer(QWidget):
         self._fullscreen_win.showFullScreen()
         QApplication.processEvents()  # 确保 native window 创建完成
 
-        # 保存播放状态
-        was_playing = (self._current_state == "playing")
-        saved_pos = self.get_time() if was_playing else 0.0
+        # ---- force native window creation ----
+        _ = self._fs_video.winId()
+        QApplication.processEvents()
 
-        # 把 VLC 渲染切到全屏窗口
+        # ---- switch VLC render target ----
         fs_win_id = int(self._fs_video.winId())
         self._media_player.set_hwnd(fs_win_id)
 
-        # 恢复播放
-        if was_playing and self._media_player:
-            self._media_player.play()
-            self._media_player.set_time(int(saved_pos * 1000))
-            self._tick_timer.start()
-            self._end_check_timer.start()
+        # ---- delayed resume (VLC needs 200ms to rebuild render context) ----
+        if was_playing:
+            QTimer.singleShot(200, self._resume_after_fullscreen)
 
         self._fullscreen_win.setFocus()
+        logger.info("entered fullscreen")
 
-        logger.info("进入全屏播放")
+    def _resume_after_fullscreen(self):
+        """Resume playback after fullscreen hwnd switch."""
+        if not self._media_player or not self._is_fullscreen:
+            return
+        try:
+            self._media_player.play()
+            if hasattr(self, "_fs_saved_pos") and self._fs_saved_pos > 0.1:
+                self._media_player.set_time(int(self._fs_saved_pos * 1000))
+            import time
+            time.sleep(0.05)
+            if self._media_player.get_state() == vlc.State.Paused:
+                self._media_player.play()
+            self._current_state = "playing"
+            self._tick_timer.start()
+            self._end_check_timer.start()
+        except Exception as e:
+            logger.warning(f"fullscreen resume failed: {e}")
+            try:
+                self._media_player.play()
+                self._current_state = "playing"
+                self._tick_timer.start()
+                self._end_check_timer.start()
+            except Exception:
+                pass
 
     def _exit_fullscreen(self):
         """退出全屏：VLC 渲染切回原窗口"""
         self._is_fullscreen = False
         self._btn_fullscreen.set_fullscreen_state(False)
 
-        # 保存播放状态
-        was_playing = (self._current_state == "playing")
-        saved_pos = self.get_time() if was_playing else 0.0
+        # ---- save state and pause ----
+        was_playing_exit = (self._current_state == "playing")
+        saved_pos_exit = self.get_time() if was_playing_exit else 0.0
+        if was_playing_exit:
+            try:
+                self._media_player.pause()
+            except Exception:
+                pass
+            self._tick_timer.stop()
+            self._end_check_timer.stop()
 
-        # VLC 渲染切回原 widget
+        # VLC render back to original widget
         if self._media_player:
             win_id = int(self._video_widget.winId())
             self._media_player.set_hwnd(win_id)
 
         self._video_widget.show()
 
-        # 恢复播放
-        if was_playing and self._media_player:
-            self._media_player.play()
-            self._media_player.set_time(int(saved_pos * 1000))
-            self._tick_timer.start()
-            self._end_check_timer.start()
+        # delayed resume
+        if was_playing_exit:
+            self._fs_saved_pos = saved_pos_exit
+            QTimer.singleShot(200, self._resume_after_fullscreen_exit)
 
         if self._fullscreen_win:
             self._fullscreen_win.close()
@@ -568,6 +605,27 @@ class VideoPlayer(QWidget):
             self._fs_close_btn = None
 
         logger.info("退出全屏播放")
+
+    def _resume_after_fullscreen_exit(self):
+        """Resume after exiting fullscreen."""
+        if not self._media_player or self._is_fullscreen:
+            return
+        try:
+            self._media_player.play()
+            if hasattr(self, "_fs_saved_pos") and self._fs_saved_pos > 0.1:
+                self._media_player.set_time(int(self._fs_saved_pos * 1000))
+            self._current_state = "playing"
+            self._tick_timer.start()
+            self._end_check_timer.start()
+        except Exception as e:
+            logger.warning(f"exit fullscreen resume failed: {e}")
+            try:
+                self._media_player.play()
+                self._current_state = "playing"
+                self._tick_timer.start()
+                self._end_check_timer.start()
+            except Exception:
+                pass
 
     def eventFilter(self, obj, event):
         """全屏窗口：鼠标移动显示退出按钮 / ESC 退出全屏"""

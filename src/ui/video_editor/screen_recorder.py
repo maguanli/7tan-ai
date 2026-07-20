@@ -232,7 +232,8 @@ class ScreenRecorder:
                 "-i", "desktop",
             ]
 
-        # 跳过音频（默认关闭）
+        # 跳过音频（默认关闭），用 MKV 格式避免 kill 导致文件损坏
+        output_file = output_file.replace(".mp4", ".mkv")
         cmd += [
             "-c:v", config.codec,
             "-crf", str(config.quality),
@@ -246,7 +247,7 @@ class ScreenRecorder:
 
         return subprocess.Popen(
             cmd,
-            stdin=subprocess.DEVNULL,
+            stdin=subprocess.PIPE,  # 保留 stdin 以便发送 'q' 优雅退出
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
@@ -430,13 +431,20 @@ class ScreenRecorder:
             return sct.monitors[1]
 
     def _finalize(self) -> Optional[str]:
-        """停止 ffmpeg 并获取输出文件"""
+        """优雅停止 ffmpeg 并获取输出文件"""
         if not self._process:
             return None
 
-        # gdigrag 模式：发送 SIGTERM 让 ffmpeg 正常结束编码
+        # 发送 'q' 让 ffmpeg 正常结束（写入 moov atom）
         try:
-            self._process.terminate()
+            if self._process.stdin:
+                self._process.stdin.write(b'q')
+                self._process.stdin.flush()
+                self._process.stdin.close()
+        except Exception:
+            pass
+
+        try:
             self._process.wait(timeout=15)
         except subprocess.TimeoutExpired:
             self._process.kill()
@@ -445,7 +453,7 @@ class ScreenRecorder:
         # 从命令中提取输出路径
         if self._process.args:
             for arg in reversed(self._process.args):
-                if not arg.startswith("-") and arg.endswith(".mp4"):
+                if arg.endswith(".mkv") or arg.endswith(".mp4"):
                     return arg
         return None
 

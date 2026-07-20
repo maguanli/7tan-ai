@@ -225,7 +225,7 @@ class RecordingConfig:
     fps: int = 30
     codec: str = "libx264"
     quality: int = 23                 # CRF
-    capture_system_audio: bool = True
+    capture_system_audio: bool = False  # 默认关闭（ffmpeg dshow设备检测可能卡死）
     capture_mic: bool = False
     mic_volume: float = 0.8           # 0.0 ~ 1.0
     mic_device_id: Optional[int] = None  # PyAudio 设备索引

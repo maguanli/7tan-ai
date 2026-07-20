@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal, QObject
 from PyQt6.QtGui import (
     QColor, QPen, QBrush, QFont, QLinearGradient, QPainter,
-    QCursor, QPixmap,
+    QCursor, QPixmap, QPixmap,
 )
 
 from src.ui.video_editor.config import (
@@ -83,6 +83,14 @@ class ClipItem(QGraphicsRectItem):
 
         # 设置光标
         self.setCursor(Qt.CursorShape.OpenHandCursor)
+
+        # 预加载缩略图（painter 中不 IO）
+        self._thumb = None
+        tp = self._data.get("thumb_path", "")
+        if tp:
+            p = QPixmap(tp)
+            if not p.isNull():
+                self._thumb = p
 
     # ---- 属性 ----
 
@@ -178,23 +186,20 @@ class ClipItem(QGraphicsRectItem):
         painter.setPen(pen)
         painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 4, 4)
 
-        # 视频帧缩略图 — 暂时禁用排查崩溃
-        if False and self.clip_type == "video" and rect.width() > 50:
-            thumb = self._get_thumb()
-            if thumb is not None and not thumb.isNull():
-                # 裁剪绘制
-                r = rect.adjusted(2, 2, -2, -2)
-                painter.save()
-                painter.setClipRect(r)
-                tw = r.width()
-                th = r.height()
-                scaled = thumb.scaled(int(tw), int(th),
-                                      Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                                      Qt.TransformationMode.SmoothTransformation)
-                sx = (scaled.width() - tw) // 2
-                sy = (scaled.height() - th) // 2
-                painter.drawPixmap(int(r.x()) - sx, int(r.y()) - sy, scaled)
-                painter.restore()
+        # 视频帧缩略图
+        if self._thumb is not None and rect.width() > 50:
+            r = rect.adjusted(2, 2, -2, -2)
+            painter.save()
+            painter.setClipRect(r)
+            tw = int(r.width())
+            th = int(r.height())
+            scaled = self._thumb.scaled(tw, th,
+                          Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                          Qt.TransformationMode.SmoothTransformation)
+            sx = (scaled.width() - tw) // 2
+            sy = (scaled.height() - th) // 2
+            painter.drawPixmap(int(r.x()) - sx, int(r.y()) - sy, scaled)
+            painter.restore()
 
         # 文本
         if rect.width() > 30:

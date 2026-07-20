@@ -1,0 +1,2 @@
+2026-07-20 13:20:54.450 | INFO     | __main__:<module>:69 - 🔍 崩溃日志: D:\7tan\7tanAI\logs\crash_stderr_20260720_132054.txt
+2026-07-20 13:20:54.450 | INFO     | __main__:<module>:70 - 🔍 faulthandler: D:\7tan\7tanAI\logs\crash_faulthandler_11660.txt

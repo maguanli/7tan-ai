@@ -178,8 +178,8 @@ class ClipItem(QGraphicsRectItem):
         painter.setPen(pen)
         painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 4, 4)
 
-        # 视频帧缩略图（从 media_bin 缓存加载）
-        if self.clip_type == "video" and rect.width() > 50:
+        # 视频帧缩略图 — 暂时禁用排查崩溃
+        if False and self.clip_type == "video" and rect.width() > 50:
             thumb = self._get_thumb()
             if thumb is not None and not thumb.isNull():
                 # 裁剪绘制

@@ -13,6 +13,11 @@ from datetime import datetime
 from loguru import logger
 
 
+def now_iso() -> str:
+    """返回当前时间的 ISO 格式字符串"""
+    return datetime.now().isoformat()
+
+
 def format_time(seconds: float) -> str:
     """把秒数格式化为 HH:MM:SS.ms 或 MM:SS.ms
 

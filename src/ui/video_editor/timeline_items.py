@@ -6,13 +6,16 @@
 Phase 3: 右键菜单支持 + 吸附增强
 """
 
+import subprocess
+import threading
+from pathlib import Path
 from typing import Optional
 
+from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal, QObject, QThread
 from PyQt6.QtWidgets import (
     QGraphicsRectItem, QGraphicsTextItem, QGraphicsLineItem,
     QGraphicsItem, QGraphicsScene, QGraphicsView, QMenu, QApplication,
 )
-from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal, QObject
 from PyQt6.QtGui import (
     QColor, QPen, QBrush, QFont, QLinearGradient, QPainter,
     QCursor, QPixmap, QPixmap,
@@ -46,6 +49,96 @@ class TimelineSignals(QObject):
 
 
 # ====================================================================
+#  缩略图信号（跨线程）
+# ====================================================================
+
+class _ThumbSignals(QObject):
+    """缩略图就绪信号 — 跨线程安全"""
+    ready = pyqtSignal(str, list)  # clip_id, [raw_jpeg_bytes, ...]
+
+_THUMB_READY = _ThumbSignals()
+
+# global callback registry (fixes multi-clip signal race)
+_thumb_callbacks = {}
+
+def _global_thumb_dispatcher(clip_id, raw_frames):
+    cb = _thumb_callbacks.pop(clip_id, None)
+    if cb:
+        cb(clip_id, raw_frames)
+
+_THUMB_READY.ready.connect(_global_thumb_dispatcher)
+
+
+# ====================================================================
+#  缩略图提取工作线程
+# ====================================================================
+
+THUMB_COUNT = 15          # 每片段最多抽帧数
+THUMB_SAMPLE_W = 360      # 抽帧宽度
+
+
+def _extract_thumbs_worker(clip_id: str, src_path: str, duration: float,
+                           source_start: float, source_end: float):
+    """在后台线程中用 ffmpeg 抽帧，完成后通过信号通知主线程。
+
+    策略：用 ffmpeg -vf fps=... 均匀采样，输出为 pipe 中的 JPEG 字节。
+    完全不使用 QPixmap/QImage（Qt GUI 对象禁止跨线程）。
+    """
+    from src.ui.video_editor.config import FFMPEG_PATH
+
+    raw_frames: list[bytes] = []
+
+    if not FFMPEG_PATH or not FFMPEG_PATH.exists():
+        _THUMB_READY.ready.emit(clip_id, raw_frames)
+        return
+    if not src_path or not Path(src_path).exists():
+        _THUMB_READY.ready.emit(clip_id, raw_frames)
+        return
+
+    used_duration = source_end - source_start if (source_end - source_start) > 0 else duration
+    if used_duration <= 0:
+        _THUMB_READY.ready.emit(clip_id, raw_frames)
+        return
+
+    count = min(THUMB_COUNT, max(3, int(used_duration * 2)))
+    fps = count / max(used_duration, 0.1)
+
+    try:
+        # ffmpeg 命令：从 source_start 开始，取 used_duration 时长，fps 帧率
+        cmd = [
+            str(FFMPEG_PATH),
+            "-ss", str(source_start),
+            "-t", str(used_duration),
+            "-i", src_path,
+            "-vf", f"fps={fps},scale={THUMB_SAMPLE_W}:-1",
+            "-f", "image2pipe",
+            "-vcodec", "mjpeg",
+            "-q:v", "5",
+            "-v", "quiet",
+            "-",
+        ]
+        proc = subprocess.run(
+            cmd, capture_output=True, timeout=30,
+        )
+        if proc.returncode == 0 and proc.stdout:
+            # 按 JPEG SOI marker (0xFF 0xD8) 分割
+            data = proc.stdout
+            jpeg_marker = b'\xff\xd8'
+            parts = data.split(jpeg_marker)
+            for part in parts[1:]:  # 第一个是空的（第一个 marker 之前）
+                frame = jpeg_marker + part
+                raw_frames.append(frame)
+            # 限制数量
+            if len(raw_frames) > THUMB_COUNT:
+                step = len(raw_frames) / THUMB_COUNT
+                raw_frames = [raw_frames[int(i * step)] for i in range(THUMB_COUNT)]
+    except Exception:
+        pass
+
+    _THUMB_READY.ready.emit(clip_id, raw_frames)
+
+
+# ====================================================================
 #  片段块 (ClipItem)
 # ====================================================================
 
@@ -57,7 +150,7 @@ class ClipItem(QGraphicsRectItem):
     """
 
     HANDLE_WIDTH = 8         # 拖拽手柄宽度（首尾）
-    MIN_VISUAL_WIDTH = 12    # 最小可见宽度（px）
+    MIN_VISUAL_WIDTH = 80    # 最小可见宽度（px）— 确保 clip 可见
     SNAP_THRESHOLD = 8       # 吸附阈值（px）
 
     def __init__(self, clip_data: dict, parent=None):
@@ -84,13 +177,25 @@ class ClipItem(QGraphicsRectItem):
         # 设置光标
         self.setCursor(Qt.CursorShape.OpenHandCursor)
 
-        # 预加载缩略图（painter 中不 IO）
-        self._thumb = None
+        # 缩略图系统
+        self._thumbnails: list[QPixmap] = []   # 已解码的帧缩略图
+        self._thumb_loaded = False             # 是否已尝试加载
+        self._loading_failed = False           # 加载失败标记
+        self._thumb_raw: list[bytes] = []      # 原始 JPEG 字节（从工作线程收到）
+        self._thumb_retry = 0
+        self._thumb_max_retries = 15
+
+        # 从 thumb_path 加载（如果有）
         tp = self._data.get("thumb_path", "")
         if tp:
             p = QPixmap(tp)
             if not p.isNull():
-                self._thumb = p
+                self._thumbnails = [p]
+                self._thumb_loaded = True
+
+        # 视频类型：自动启动后台抽帧
+        if self.clip_type == "video" and self.source_path:
+            self._start_thumb_extraction()
 
     # ---- 属性 ----
 
@@ -146,14 +251,64 @@ class ClipItem(QGraphicsRectItem):
     def source_path(self) -> str:
         return self._data.get("source_path", "")
 
-    def _get_thumb(self) -> Optional[QPixmap]:
-        """从 clip data 中的 thumb_path 加载缩略图"""
-        thumb_path = self._data.get("thumb_path", "")
-        if thumb_path:
-            pix = QPixmap(thumb_path)
-            if not pix.isNull():
-                return pix
-        return None
+    # ---- 缩略图后台提取 ----
+
+    def _start_thumb_extraction(self):
+        """启动后台 ffmpeg 缩略图提取"""
+        src = self._data.get("source_path", "")
+        if not src or self._thumb_loaded:
+            return
+        dur = self._data.get("duration", 0) or 5.0
+        ss = self._data.get("source_start", 0)
+        se = self._data.get("source_end", dur)
+
+        # register with global dispatcher
+        _thumb_callbacks[self.clip_id] = self._on_thumbs_ready
+
+        threading.Thread(
+            target=_extract_thumbs_worker,
+            args=(self.clip_id, src, dur, ss, se),
+            daemon=True,
+        ).start()
+
+    def _on_thumbs_ready(self, clip_id: str, raw_frames: list):
+        """主线程回调：收到工作线程发来的 JPEG 原始字节"""
+        # 防止旧的 clip 信号误触发（clip_id 可能复用）
+        if clip_id != self.clip_id:
+            return
+        if self._thumb_loaded:
+            return
+
+        if raw_frames:
+            self._thumb_raw = raw_frames
+            # 在主线程安全解码 QPixmap
+            self._thumbnails = []
+            for jpeg_bytes in raw_frames:
+                pix = QPixmap()
+                if pix.loadFromData(jpeg_bytes):
+                    self._thumbnails.append(pix)
+            if self._thumbnails:
+                self._thumb_loaded = True
+                self._loading_failed = False
+                self.update()
+                return
+
+        # 失败：重试
+        self._thumb_retry += 1
+        if self._thumb_retry < self._thumb_max_retries:
+            _thumb_callbacks[self.clip_id] = self._on_thumbs_ready
+            threading.Thread(
+                target=_extract_thumbs_worker,
+                args=(self.clip_id, self._data.get("source_path", ""),
+                      self._data.get("duration", 5.0),
+                      self._data.get("source_start", 0),
+                      self._data.get("source_end", self._data.get("duration", 5.0))),
+                daemon=True,
+            ).start()
+        else:
+            self._loading_failed = True
+            self._thumb_loaded = True  # 标记不再尝试
+            self.update()
 
     # ---- 绘制 ----
 
@@ -186,20 +341,48 @@ class ClipItem(QGraphicsRectItem):
         painter.setPen(pen)
         painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 4, 4)
 
-        # 视频帧缩略图
-        if self._thumb is not None and rect.width() > 50:
+        # 多帧缩略图平铺
+        thumbs = self._thumbnails
+        if thumbs and rect.width() > 40:
             r = rect.adjusted(2, 2, -2, -2)
             painter.save()
             painter.setClipRect(r)
             tw = int(r.width())
             th = int(r.height())
-            scaled = self._thumb.scaled(tw, th,
-                          Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                          Qt.TransformationMode.SmoothTransformation)
-            sx = (scaled.width() - tw) // 2
-            sy = (scaled.height() - th) // 2
-            painter.drawPixmap(int(r.x()) - sx, int(r.y()) - sy, scaled)
+            if th <= 0:
+                th = 40
+            n = len(thumbs)
+            # 每帧至少50px宽，计算实际可容纳帧数
+            target_fw = max(50, tw // n)
+            actual_n = min(n, max(1, tw // target_fw))
+            fw = tw // actual_n
+            for i in range(actual_n):
+                idx = i * n // actual_n  # uniform sampling
+                if idx >= n:
+                    idx = n - 1
+                pix = thumbs[idx]
+                if pix.isNull():
+                    continue
+                pw, ph = pix.width(), pix.height()
+                if pw > 0 and ph > 0:
+                    scale = min(fw / pw, th / ph)
+                    sw, sh = int(pw * scale), int(ph * scale)
+                    ox, oy = (fw - sw) // 2, (th - sh) // 2
+                    scaled = pix.scaled(sw, sh,
+                                  Qt.AspectRatioMode.KeepAspectRatio,
+                                  Qt.TransformationMode.SmoothTransformation)
+                    painter.drawPixmap(int(r.x()) + i * fw + ox, int(r.y()) + oy, scaled)
             painter.restore()
+        elif not thumbs and not self._thumb_loaded and rect.width() > 40:
+            # 加载中 — 显示半透明 "···"
+            painter.setPen(QColor(255, 255, 255, 80))
+            painter.setFont(QFont("Microsoft YaHei", 14))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "···")
+        elif self._loading_failed and rect.width() > 40:
+            # 加载失败 — 显示降级图标
+            painter.setPen(QColor(255, 255, 255, 120))
+            painter.setFont(QFont("Microsoft YaHei", 16))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "🎬")
 
         # 文本
         if rect.width() > 30:
@@ -428,10 +611,26 @@ class TrackBackground(QGraphicsRectItem):
 
         # 轨道标签
         icons = {"video": "🎬", "audio": "🎵", "subtitle": "💬"}
-        label = QGraphicsTextItem(f"{icons.get(track_type, '📄')} {track_type}", self)
-        label.setDefaultTextColor(QColor(THEME["text_muted"]))
-        label.setFont(QFont("Microsoft YaHei", 9))
-        label.setPos(4, y + TRACK_HEIGHT_DEFAULT / 2 - 10)
+        self._label = QGraphicsTextItem(f"{icons.get(track_type, '📄')} {track_type}", self)
+        self._label.setDefaultTextColor(QColor(THEME["text_muted"]))
+        self._label.setFont(QFont("Microsoft YaHei", 9))
+        self._label.setPos(4, y + TRACK_HEIGHT_DEFAULT / 2 - 10)
+
+    def paint(self, painter: QPainter, option, widget=None):
+        """绘制轨道背景 + 虚线网格"""
+        super().paint(painter, option, widget)
+        rect = self.rect()
+        # 虚线网格 — 每秒一条
+        painter.setPen(QPen(QColor(THEME["border"]), 1, Qt.PenStyle.DotLine))
+        total_sec = rect.width() / PPS
+        interval = 1.0 if total_sec <= 30 else (5.0 if total_sec <= 120 else 10.0)
+        t = interval
+        while t <= total_sec:
+            x = t * PPS
+            if x > rect.width():
+                break
+            painter.drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()))
+            t += interval
 
 
 # ====================================================================

@@ -9,7 +9,7 @@ Phase 2: 基础播放 + 帧步进 + 音量控制
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QApplication
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
 
@@ -229,6 +229,7 @@ class VideoPlayer(QWidget):
 
         logger.info(f"Loaded: {Path(file_path).name} ({format_time(self._duration)})")
         return True
+
     def play(self):
         """播放（VLC crash 保护）"""
         if not self._media_player or self._current_state == "playing":
@@ -356,69 +357,75 @@ class VideoPlayer(QWidget):
     # ==================================================================
     #  全屏 - Qt native approach
     #  VLC set_fullscreen/toggle_fullscreen are BROKEN when embedded
-    #  via set_hwnd. We reparent _player_container into a frameless
-    #  top-level QWidget shown fullscreen. _video_widget HWND stays
-    #  unchanged - no VLC rebind needed - playback continues.
+    #  via set_hwnd. We reparent _player_container directly as a top-
+    #  level frameless window. _video_widget HWND stays unchanged -
+    #  no VLC rebind needed - playback continues uninterrupted.
     # ==================================================================
 
     def toggle_fullscreen(self):
+        logger.info(f"[Fullscreen] toggle called, is_fullscreen={self._is_fullscreen}")
         if self._is_fullscreen:
             self._exit_fullscreen()
         else:
             self._enter_fullscreen()
 
     def _enter_fullscreen(self):
+        logger.info("[Fullscreen] enter requested")
         if not self._media_player:
+            logger.warning("[Fullscreen] no media player - aborting")
             return
 
         self._is_fullscreen = True
+
+        # 1) detach from current layout
         self._fs_orig_layout = self.layout()
         if self._fs_orig_layout:
             self._fs_orig_layout.removeWidget(self._player_container)
 
-        self._fs_window = QWidget(
-            None, Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint
+        # 2) make _player_container a top-level frameless window
+        self._player_container.setParent(None)
+        self._player_container.setWindowFlags(
+            Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint
         )
-        self._fs_window.setStyleSheet("background-color: #000;")
-        from PyQt6.QtWidgets import QVBoxLayout as _VL
-        _fl = _VL(self._fs_window)
-        _fl.setContentsMargins(0, 0, 0, 0)
-        _fl.addWidget(self._player_container)
-        self._player_container.setParent(self._fs_window)
-        self._fs_window.keyPressEvent = (
-            lambda e: self._exit_fullscreen() if e.key() == Qt.Key.Key_Escape else None
-        )
-        self._fs_window.showFullScreen()
-        logger.info("Fullscreen ON (Qt native)")
+
+        # 3) ESC key handler
+        self._fs_orig_key_handler = self._player_container.keyPressEvent
+        def _fs_key_handler(event):
+            if event.key() == Qt.Key.Key_Escape:
+                self._exit_fullscreen()
+        self._player_container.keyPressEvent = _fs_key_handler
+
+        # 4) show() → processEvents() → showFullScreen()
+        #    Order matters on Windows! showFullScreen on a never-shown
+        #    widget silently fails.
+        self._player_container.show()
+        QApplication.processEvents()
+        self._player_container.showFullScreen()
+        logger.info("[Fullscreen] ON ✓")
 
     def _exit_fullscreen(self):
+        logger.info("[Fullscreen] exit requested")
         if not self._is_fullscreen:
             return
 
-        was_playing = (self._current_state == "playing")
-        saved_pos = self.get_time()
-        self.pause()
-
-        if hasattr(self, "_fs_window") and self._fs_window is not None:
-            fl = self._fs_window.layout()
-            if fl:
-                fl.removeWidget(self._player_container)
-            self._player_container.setParent(self)
-            if self._fs_orig_layout:
-                self._fs_orig_layout.addWidget(self._player_container)
-            self._fs_window.close()
-            self._fs_window.deleteLater()
-            self._fs_window = None
-
         self._is_fullscreen = False
 
-        if was_playing and self._media_player:
-            self._media_player.play()
-            self._media_player.set_time(int(saved_pos * 1000))
-            self._tick_timer.start()
-            self._end_check_timer.start()
+        # 1) restore widget flags (MUST be done before reparenting)
+        self._player_container.setWindowFlags(Qt.WindowType.Widget)
 
-        logger.info("Fullscreen OFF")
+        # 2) restore original key handler
+        if hasattr(self, "_fs_orig_key_handler") and self._fs_orig_key_handler:
+            self._player_container.keyPressEvent = self._fs_orig_key_handler
+            self._fs_orig_key_handler = None
+
+        # 3) reparent back into VideoPlayer layout
+        self._player_container.setParent(self)
+        if self._fs_orig_layout:
+            self._fs_orig_layout.addWidget(self._player_container)
+
+        # 4) show normally inside the layout
+        self._player_container.show()
+        logger.info("[Fullscreen] OFF ✓")
 
     def is_fullscreen(self) -> bool:
         return self._is_fullscreen

@@ -13,6 +13,7 @@ import subprocess
 import threading
 import time
 import os
+import atexit
 from pathlib import Path
 from typing import Optional, Callable
 
@@ -49,6 +50,77 @@ class ScreenRecorder:
         self.on_time_updated: Optional[Callable[[float], None]] = None
         self.on_state_changed: Optional[Callable[[str], None]] = None
         self.on_error: Optional[Callable[[str], None]] = None
+
+        # 注册退出清理，防止孤儿 ffmpeg 进程
+        atexit.register(self._cleanup_on_exit)
+
+    def __del__(self):
+        """析构函数：确保 ffmpeg 子进程被终止"""
+        self._kill_ffmpeg()
+
+    @staticmethod
+    def kill_orphan_ffmpeg() -> int:
+        """检测并杀死所有孤儿 ffmpeg gdigrab 进程（供启动时调用）
+        
+        Returns:
+            杀死的进程数量
+        """
+        import signal
+        killed = 0
+        try:
+            result = subprocess.run(
+                ['tasklist', '/fi', 'imagename eq ffmpeg.exe', '/fo', 'csv', '/nh'],
+                capture_output=True, text=True, timeout=5
+            )
+            for line in result.stdout.strip().split('\n'):
+                if 'ffmpeg.exe' in line.lower():
+                    parts = line.replace('"', '').split(',')
+                    if len(parts) >= 2:
+                        pid_str = parts[1].strip()
+                        try:
+                            pid = int(pid_str)
+                            os.kill(pid, signal.SIGTERM)
+                            killed += 1
+                            logger.info(f"已清理孤儿 ffmpeg 进程 (PID={pid})")
+                        except (ValueError, OSError, PermissionError):
+                            pass
+        except Exception as e:
+            logger.warning(f"清理孤儿 ffmpeg 失败: {e}")
+        return killed
+
+    def _cleanup_on_exit(self):
+        """atexit 回调：程序退出时强制终止 ffmpeg"""
+        self._running = False
+        self._kill_ffmpeg()
+
+    def _kill_ffmpeg(self):
+        """强制终止 ffmpeg 子进程"""
+        p = self._process
+        if p is None:
+            return
+        try:
+            if p.poll() is None:
+                # 先尝试优雅退出
+                try:
+                    if p.stdin:
+                        p.stdin.write(b'q')
+                        p.stdin.flush()
+                        p.stdin.close()
+                except Exception:
+                    pass
+                # 等待 2 秒，不行就 kill
+                try:
+                    p.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    try:
+                        p.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        pass
+                logger.info("ffmpeg 录制进程已清理")
+        except Exception as e:
+            logger.warning(f"清理 ffmpeg 失败: {e}")
+        self._process = None
 
     # ==================================================================
     #  公共 API

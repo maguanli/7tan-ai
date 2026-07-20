@@ -3040,9 +3040,20 @@ class MainWindow(QMainWindow):
         self._pages["workspace"].navigate_to_url(url)
 
     def closeEvent(self, event):
-        """关闭窗口时清理线程，避免 QThread 警告"""
+        """关闭窗口时清理：停止录屏 + 等待线程结束"""
         import time
         import threading
+
+        # 停止视频剪辑器中的录屏（防止孤儿 ffmpeg 进程）
+        try:
+            if hasattr(self, 'video_editor') and self.video_editor is not None:
+                recorder = getattr(self.video_editor, '_recorder', None)
+                if recorder is not None and getattr(recorder, 'is_recording', False):
+                    logger.info("正在停止录屏...")
+                    recorder.stop()
+        except Exception as e:
+            logger.warning(f"停止录屏失败: {e}")
+
         # 等待非 daemon 线程结束
         for t in threading.enumerate():
             if t is threading.main_thread() or t.daemon:

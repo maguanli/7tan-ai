@@ -98,6 +98,11 @@ class VideoEditorPage(QWidget):
         self._ai_video_panel = None
         self._setup_ui()
 
+        # 启动时清理孤儿 ffmpeg 录屏进程（防止上次异常退出残留）
+        orphan_count = ScreenRecorder.kill_orphan_ffmpeg()
+        if orphan_count > 0:
+            logger.info(f"启动时清理了 {orphan_count} 个孤儿录屏进程")
+
     @property
     def api(self) -> EditorAPI:
         return self._api

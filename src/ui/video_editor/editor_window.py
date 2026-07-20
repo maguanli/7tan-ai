@@ -135,14 +135,14 @@ class VideoEditorPage(QWidget):
         self.player.time_changed.connect(self._on_player_time_changed)
         self.player.state_changed.connect(self._on_player_state_changed)
         self.player.media_loaded.connect(self._on_player_media_loaded)
-        rl.addWidget(self.player, 3)
+        rl.addWidget(self.player, 6)
 
         # 播放控制栏
         self._player_controls = self._build_player_controls()
         rl.addWidget(self._player_controls)
 
         splitter.addWidget(right)
-        splitter.setSizes([220, 780])
+        splitter.setSizes([180, 820])
 
         layout.addWidget(splitter)
 
@@ -160,7 +160,7 @@ class VideoEditorPage(QWidget):
         self._clip_toolbar = self._build_clip_toolbar()
         layout.addWidget(self._clip_toolbar)
 
-        layout.addWidget(self.timeline, 2)
+        layout.addWidget(self.timeline, 1)
 
         # ---- 底部工具栏 ----
         self._toolbar = self._build_toolbar()

@@ -113,18 +113,12 @@ def get_media_type(file_path: str) -> str:
 
 
 def get_media_duration_ffprobe(file_path: str) -> Optional[float]:
-    """用 FFprobe 获取视频/音频时长（秒）
-
-    Args:
-        file_path: 文件路径
-
-    Returns:
-        时长（秒），失败返回 None
-    """
+    """用 ffprobe 或 ffmpeg 获取视频/音频时长（秒）"""
     import subprocess
     import shutil as _shutil
+    import re
 
-    # 智能定位 ffprobe（与 config._find_ffmpeg 逻辑一致）
+    # 1. 优先 ffprobe
     ffprobe = None
     try:
         import imageio_ffmpeg
@@ -138,22 +132,37 @@ def get_media_duration_ffprobe(file_path: str) -> Optional[float]:
         _found = _shutil.which("ffprobe")
         if _found:
             ffprobe = Path(_found)
-    if ffprobe is None or not ffprobe.exists():
-        logger.warning("FFprobe 不可用，无法获取时长")
-        return None
 
-    try:
-        result = subprocess.run(
-            [
-                str(ffprobe), "-v", "quiet", "-show_entries",
-                "format=duration", "-of", "csv=p=0", file_path
-            ],
-            capture_output=True, text=True, timeout=15,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return float(result.stdout.strip())
-    except Exception as e:
-        logger.error(f"FFprobe 解析时长失败: {file_path} — {e}")
+    if ffprobe and ffprobe.exists():
+        try:
+            result = subprocess.run(
+                [str(ffprobe), "-v", "quiet", "-show_entries",
+                 "format=duration", "-of", "csv=p=0", file_path],
+                capture_output=True, text=True, timeout=15,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return float(result.stdout.strip())
+        except Exception:
+            pass
+
+    # 2. 用 ffmpeg 兜底（imageio_ffmpeg 没带 ffprobe）
+    from src.ui.video_editor.config import FFMPEG_PATH
+    if FFMPEG_PATH and FFMPEG_PATH.exists():
+        try:
+            result = subprocess.run(
+                [str(FFMPEG_PATH), "-i", file_path],
+                capture_output=True, text=True, encoding='utf-8',
+                errors='replace', timeout=15,
+            )
+            stderr = result.stderr or ""
+            # ffmpeg 输出: "Duration: 00:01:23.45"
+            m = re.search(r"Duration:\s*(\d+):(\d+):([\d.]+)", stderr)
+            if m:
+                return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+        except Exception as e:
+            logger.warning(f"ffmpeg 获取时长失败: {e}")
+
+    logger.warning("FFprobe/FFFmpeg 不可用，无法获取时长")
     return None
 
 

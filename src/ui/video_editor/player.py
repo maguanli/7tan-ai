@@ -187,15 +187,18 @@ class VideoPlayer(QWidget):
         return True
 
     def play(self):
-        """播放"""
+        """播放（VLC crash 保护）"""
         if not self._media_player or self._current_state == "playing":
             return
-        result = self._media_player.play()
-        if result == 0:
-            self._tick_timer.start()
-            self._end_check_timer.start()
-        else:
-            self.error.emit("播放失败")
+        try:
+            result = self._media_player.play()
+            if result == 0:
+                self._tick_timer.start()
+                self._end_check_timer.start()
+            else:
+                self.error.emit("播放失败")
+        except Exception:
+            logger.warning("VLC play() 异常，跳过")
 
     def pause(self):
         """暂停"""

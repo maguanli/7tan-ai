@@ -175,9 +175,13 @@ class VideoPlayer(QWidget):
         layout.addWidget(self._player_container)
 
         # ---- 全屏按钮（叠加在右上角，QPainter 自绘图标）----
+        # WA_NativeWindow 必须：_video_widget 是原生窗口，
+        # 普通 Qt widget 会被原生窗口遮挡，点击事件被拦截。
         self._btn_fullscreen = FullscreenButton(self._player_container)
+        self._btn_fullscreen.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
         self._btn_fullscreen.clicked.connect(self._toggle_fullscreen)
         self._btn_fullscreen.raise_()
+        self._btn_fullscreen.show()
 
         # 全屏窗口（延迟创建）
         self._fullscreen_win: Optional[QWidget] = None
@@ -465,12 +469,24 @@ class VideoPlayer(QWidget):
         self._btn_fullscreen.set_fullscreen_state(True)
 
         try:
-            self._media_player.set_fullscreen(True)
+            result = self._media_player.set_fullscreen(True)
+            logger.info(f"VLC set_fullscreen(True) returned: {result}")
         except Exception as e:
-            logger.warning(f"VLC set_fullscreen(True): {e}")
+            logger.warning(f"VLC set_fullscreen(True) exception: {e}")
             self._is_fullscreen = False
             self._btn_fullscreen.set_fullscreen_state(False)
             return
+
+        # 验证是否真的进入了全屏（某些 VLC 版本 set_fullscreen 返回成功但实际未生效）
+        import time as _time
+        _time.sleep(0.15)
+        try:
+            if not self._media_player.get_fullscreen():
+                logger.warning("VLC get_fullscreen()=False, trying toggle_fullscreen")
+                self._media_player.toggle_fullscreen()
+                _time.sleep(0.1)
+        except Exception:
+            pass
 
         if not hasattr(self, '_fs_poll_timer'):
             self._fs_poll_timer = QTimer(self)

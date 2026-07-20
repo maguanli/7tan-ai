@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal, QObject
 from PyQt6.QtGui import (
     QColor, QPen, QBrush, QFont, QLinearGradient, QPainter,
-    QCursor,
+    QCursor, QPixmap,
 )
 
 from src.ui.video_editor.config import (
@@ -134,6 +134,19 @@ class ClipItem(QGraphicsRectItem):
         """设置吸附参考点（秒）"""
         self._snap_points = list(points) if points else []
 
+    @property
+    def source_path(self) -> str:
+        return self._data.get("source_path", "")
+
+    def _get_thumb(self) -> Optional[QPixmap]:
+        """从 clip data 中的 thumb_path 加载缩略图"""
+        thumb_path = self._data.get("thumb_path", "")
+        if thumb_path:
+            pix = QPixmap(thumb_path)
+            if not pix.isNull():
+                return pix
+        return None
+
     # ---- 绘制 ----
 
     def paint(self, painter: QPainter, option, widget=None):
@@ -164,6 +177,24 @@ class ClipItem(QGraphicsRectItem):
             pen = QPen(base_color.darker(150), 1)
         painter.setPen(pen)
         painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 4, 4)
+
+        # 视频帧缩略图（从 media_bin 缓存加载）
+        if self.clip_type == "video" and rect.width() > 50:
+            thumb = self._get_thumb()
+            if thumb is not None and not thumb.isNull():
+                # 裁剪绘制
+                r = rect.adjusted(2, 2, -2, -2)
+                painter.save()
+                painter.setClipRect(r)
+                tw = r.width()
+                th = r.height()
+                scaled = thumb.scaled(int(tw), int(th),
+                                      Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                      Qt.TransformationMode.SmoothTransformation)
+                sx = (scaled.width() - tw) // 2
+                sy = (scaled.height() - th) // 2
+                painter.drawPixmap(int(r.x()) - sx, int(r.y()) - sy, scaled)
+                painter.restore()
 
         # 文本
         if rect.width() > 30:

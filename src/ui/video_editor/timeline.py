@@ -240,7 +240,7 @@ class TimelineView(QGraphicsView):
         y = ruler_height + track_index * TRACK_HEIGHT_DEFAULT
         
         logger.info(f"[add_clip] 创建 ClipItem: clip={cid[:8]} y={y}")
-        self._add_clip_item(clip, y)
+        self._add_clip_item(clip, y, media_info.get("thumb_path", ""))
         logger.info(f"[add_clip] ClipItem 创建完成")
 
         # 更新项目时长
@@ -307,9 +307,9 @@ class TimelineView(QGraphicsView):
     #  内部方法
     # ==================================================================
 
-    def _add_clip_item(self, clip: Clip, y: float):
+    def _add_clip_item(self, clip: Clip, y: float, thumb_path: str = ""):
         """在场景中添加一个 ClipItem"""
-        logger.info(f"[_add_clip_item] type={clip.type} y={y:.1f} dur={clip.duration:.1f}s")
+        logger.info(f"[_add_clip_item] type={clip.type} y={y:.1f} dur={clip.duration:.1f}s thumb={bool(thumb_path)}")
         data = {
             "id": clip.id,
             "type": clip.type,
@@ -321,6 +321,7 @@ class TimelineView(QGraphicsView):
             "speed": clip.speed,
             "source_path": clip.source_path,
             "name": clip.source_path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1],
+            "thumb_path": thumb_path,
         }
         logger.info(f"[_add_clip_item] data构建完成, 创建 ClipItem")
 

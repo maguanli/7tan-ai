@@ -374,8 +374,18 @@ class VideoEditorPage(QWidget):
         logger.info("[双击] _on_media_to_timeline 完成")
 
     def _on_media_selected(self, info: dict):
-        """素材库选中 → 仅预览信息，不自动播放（避免VLC崩溃）"""
-        self._status.setText(f"🎬 选中: {info.get('name', '?')}")
+        """素材库选中 → 预览播放"""
+        try:
+            mt = info.get("type", "")
+            if mt in ("video", "audio"):
+                if self.player.vlc_available:
+                    self.player.load_media(info["path"])
+                    from PyQt6.QtCore import QTimer
+                    QTimer.singleShot(500, self.player.play)
+            elif mt == "image":
+                self._status.setText(f"🖼️ 选中图片: {info['name']}")
+        except Exception as e:
+            logger.warning(f"预览媒体失败: {e}")
 
     def _on_player_time_changed(self, time_sec: float):
         """播放器时间更新 → 同步进度条 + 播放头"""

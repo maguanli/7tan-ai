@@ -73,11 +73,19 @@ class ScreenRecorder:
                 self.on_error("磁盘空间不足，至少需要 1GB 可用空间")
             return False
 
+        # 预检 FFmpeg
+        ok, err = self._check_ffmpeg_health()
+        if not ok:
+            if self.on_error:
+                self.on_error(err)
+            return False
+
         self._config = config
         self._running = True
         self._paused = False
         self._elapsed = 0.0
         self._frame_count = 0
+        self._audio_failed = False
 
         try:
             self._process = self._build_ffmpeg_pipe(config)
@@ -87,6 +95,12 @@ class ScreenRecorder:
             if self.on_error:
                 self.on_error(f"FFmpeg 启动失败: {e}")
             return False
+
+        # 监控 FFmpeg stderr
+        self._stderr_thread = threading.Thread(
+            target=self._monitor_stderr, daemon=True
+        )
+        self._stderr_thread.start()
 
         self._start_time = time.time()
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
@@ -132,6 +146,8 @@ class ScreenRecorder:
 
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=5.0)
+        if hasattr(self, '_stderr_thread') and self._stderr_thread and self._stderr_thread.is_alive():
+            self._stderr_thread.join(timeout=3.0)
 
         output_path = self._finalize()
         self._process = None
@@ -212,7 +228,7 @@ class ScreenRecorder:
         if config.capture_system_audio:
             cmd += [
                 "-f", "dshow",
-                "-i", "audio=立体声混音",     # Windows WASAPI
+                "-i", self._detect_loopback_device(),     # Windows WASAPI
             ]
         elif config.capture_mic:
             # 仅麦克风时仍需音频输入占位
@@ -224,7 +240,7 @@ class ScreenRecorder:
         # 麦克风输入
         if config.capture_mic and config.capture_system_audio:
             # 系统音频 + 麦克风 → FFmpeg 混音
-            mic_device = f"audio=麦克风 ({self._get_mic_device_name(config.mic_device_id)})"
+            mic_device = self._detect_mic_device(config.mic_device_id)
             cmd += [
                 "-f", "dshow",
                 "-i", mic_device,
@@ -233,7 +249,7 @@ class ScreenRecorder:
             ]
             audio_map = ["-map", "0:v", "-map", "[outa]"]
         elif config.capture_mic:
-            mic_device = f"audio=麦克风 ({self._get_mic_device_name(config.mic_device_id)})"
+            mic_device = self._detect_mic_device(config.mic_device_id)
             cmd += [
                 "-f", "dshow",
                 "-i", mic_device,
@@ -262,9 +278,71 @@ class ScreenRecorder:
         return subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
+
+    def _detect_loopback_device(self) -> str:
+        """自动检测 Windows WASAPI 环回设备名"""
+        # Windows 系统音频环回设备常见名称（按优先级）
+        candidates = [
+            "audio=立体声混音",       # 中文 Windows
+            "audio=Stereo Mix",       # 英文 Windows
+            "audio=What U Hear",      # 部分声卡
+            "audio=Wave Out Mix",     # 旧版驱动
+            "audio=Loopback",         # 通用
+        ]
+        # 先用 ffmpeg 列出设备，尝试匹配
+        try:
+            result = subprocess.run(
+                [str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg",
+                 "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
+                capture_output=True, text=True, timeout=10,
+            )
+            stderr = (result.stderr or "") + (result.stdout or "")
+            for line in stderr.split("\n"):
+                line_lower = line.strip().lower()
+                if "stereo mix" in line_lower or "loopback" in line_lower or "立体声混音" in line:
+                    # 提取 dshow 设备名
+                    if '"' in line:
+                        dev = line.split('"')[1]
+                        return f"audio={dev}"
+        except Exception:
+            pass
+        # 逐个试
+        return candidates[0]
+
+    def _detect_mic_device(self, device_id: Optional[int] = None) -> str:
+        """自动检测麦克风 dshow 设备名"""
+        # 先尝试用 PyAudio 获取设备名
+        if device_id is not None:
+            try:
+                import pyaudio
+                p = pyaudio.PyAudio()
+                info = p.get_device_info_by_index(device_id)
+                p.terminate()
+                name = info.get("name", "")
+                if name:
+                    return f"audio={name}"
+            except Exception:
+                pass
+        # 用 ffmpeg 列出音频设备
+        try:
+            result = subprocess.run(
+                [str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg",
+                 "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
+                capture_output=True, text=True, timeout=10,
+            )
+            stderr = (result.stderr or "") + (result.stdout or "")
+            for line in stderr.split("\n"):
+                line_lower = line.strip().lower()
+                if "microphone" in line_lower or "mic" in line_lower or "麦克风" in line:
+                    if '"' in line:
+                        dev = line.split('"')[1]
+                        return f"audio={dev}"
+        except Exception:
+            pass
+        return "audio=麦克风"
 
     def _get_mic_device_name(self, device_id: Optional[int]) -> str:
         """获取麦克风设备名称（简化实现）"""
@@ -278,6 +356,54 @@ class ScreenRecorder:
             except Exception:
                 pass
         return "默认设备"
+
+    def _check_ffmpeg_health(self) -> tuple[bool, str]:
+        """预检：FFmpeg 是否能正常工作
+        Returns: (ok, error_message)
+        """
+        ffmpeg = str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg"
+        try:
+            result = subprocess.run(
+                [ffmpeg, "-version"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode != 0:
+                return False, f"FFmpeg 无法运行: {result.stderr[:200]}"
+            return True, ""
+        except FileNotFoundError:
+            return False, "FFmpeg 未找到！请安装 FFmpeg 或将其加入 PATH"
+        except Exception as e:
+            return False, f"FFmpeg 检测失败: {e}"
+
+    def _monitor_stderr(self):
+        """监控 FFmpeg stderr，检测音频设备失败等错误"""
+        if not self._process or not self._process.stderr:
+            return
+        try:
+            for line in iter(self._process.stderr.readline, b""):
+                if not self._running:
+                    break
+                try:
+                    text = line.decode("utf-8", errors="replace").strip()
+                except Exception:
+                    continue
+                if not text:
+                    continue
+                logger.debug(f"[FFmpeg] {text}")
+                # 检测音频设备打开失败
+                lower = text.lower()
+                if any(kw in lower for kw in [
+                    "audio=", "dshow", "device", "microphone",
+                    "cannot open", "no such", "input/output error",
+                    "立体声混音", "immediate exit"
+                ]):
+                    logger.warning(f"[FFmpeg 音频] {text}")
+                    if not getattr(self, "_audio_failed", False):
+                        self._audio_failed = True
+                        if self.on_error:
+                            self.on_error(f"音频设备不可用: {text[:150]}")
+        except (BrokenPipeError, ValueError, OSError):
+            pass
 
     def _capture_loop(self):
         """主捕获循环（在子线程中运行）"""

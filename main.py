@@ -43,9 +43,9 @@ if sys.platform == 'win32':
     except Exception:
         pass
 
-# 🔍 崩溃日志：所有 stderr 输出同时写入文件（捕获 Qt/VLC 崩溃信息）
+# 🔍 调试日志：stderr 双写 + faulthandler（排查闪退用，不影响正常启动）
 import datetime as _dt
-_CRASH_LOG = PROJECT_ROOT / "logs" / f"crash_stderr_{_dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+_CRASH_LOG = PROJECT_ROOT / "logs" / f"debug_stderr_{_dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
 class _TeeStderr:
     def __init__(self, primary, crash_file):
         self.primary = primary
@@ -61,15 +61,8 @@ sys.stderr = _TeeStderr(sys.stderr, _CRASH_LOG)
 
 # 🔍 faulthandler 捕获 segfault
 import faulthandler
-_fh_log = PROJECT_ROOT / "logs" / f"crash_faulthandler_{os.getpid()}.txt"
+_fh_log = PROJECT_ROOT / "logs" / f"debug_faulthandler_{os.getpid()}.txt"
 faulthandler.enable(file=open(_fh_log, 'w', encoding='utf-8'))
-logger_early = None
-try:
-    from loguru import logger as logger_early
-    logger_early.info(f"🔍 崩溃日志: {_CRASH_LOG}")
-    logger_early.info(f"🔍 faulthandler: {_fh_log}")
-except Exception:
-    pass
 
 # ⚡ 尽早导入 console_panel，触发 OS 级管道重定向（必须在 loguru 之前）
 # 原理：os.pipe() + os.dup2() 在 OS 层面重定向 fd 1/2，

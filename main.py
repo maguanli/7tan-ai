@@ -44,33 +44,7 @@ if sys.platform == 'win32':
         pass
 
 # ⚡ 尽早导入 console_panel，触发 OS 级管道重定向（必须在 loguru 之前）
-# 原理：os.pipe() + os.dup2() 在 OS 层面重定向 fd 1/2，
-# 之后所有输出（print、loguru、C扩展、子进程）都会被管道捕获，
-# 在 GUI 实时控制台中显示，和黑窗完全一致。
 import src.ui.console_panel as _console_panel  # noqa: F401
-
-# 🔍 调试日志：stderr 双写 + faulthandler（必须在 console_panel 之后！）
-import datetime as _dt
-_CRASH_LOG = PROJECT_ROOT / "logs" / f"debug_stderr_{_dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-_CRASH_LOG.parent.mkdir(parents=True, exist_ok=True)
-class _TeeStderr:
-    def __init__(self, primary, crash_file):
-        self.primary = primary
-        self.crash = open(crash_file, 'w', encoding='utf-8', buffering=1)
-    def write(self, data):
-        self.primary.write(data)
-        self.crash.write(data)
-        self.crash.flush()
-    def flush(self):
-        self.primary.flush()
-        self.crash.flush()
-sys.stderr = _TeeStderr(sys.stderr, _CRASH_LOG)
-
-# 🔍 faulthandler 捕获 segfault
-import faulthandler
-_fh_log = PROJECT_ROOT / "logs" / f"debug_faulthandler_{os.getpid()}.txt"
-_fh_log.parent.mkdir(parents=True, exist_ok=True)
-faulthandler.enable(file=open(_fh_log, 'w', encoding='utf-8'))
 
 from loguru import logger
 from dotenv import load_dotenv

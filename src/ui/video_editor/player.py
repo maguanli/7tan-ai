@@ -9,9 +9,9 @@ Phase 2: 基础播放 + 帧步进 + 音量控制
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QApplication
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QRectF
-from PyQt6.QtGui import QFont, QPainter, QPen, QColor, QBrush, QPolygonF, QPainterPath
+from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QFont
 
 from loguru import logger
 
@@ -31,86 +31,6 @@ except (ImportError, OSError):
     vlc = None
     VLC_AVAILABLE = False
     logger.warning("python-vlc 未安装或 VLC 未找到，播放器将使用降级模式")
-
-
-# ============================================================
-#  全屏按钮（QPainter 自绘 YouTube 风格图标）
-# ============================================================
-
-class FullscreenButton(QPushButton):
-    """全屏/退出全屏按钮，QPainter 绘制标准全屏图标。
-
-    进入全屏：矩形边框 + 右下角向外箭头
-    退出全屏：矩形边框 + 右下角向内箭头
-    """
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._in_fullscreen = False
-        self.setToolTip("全屏播放")
-        self.setFixedSize(38, 30)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-    def set_fullscreen_state(self, in_fullscreen: bool):
-        self._in_fullscreen = in_fullscreen
-        self.setToolTip("退出全屏" if in_fullscreen else "全屏播放")
-        self.update()
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        w, h = self.width(), self.height()
-
-        # 背景
-        is_hover = self.underMouse()
-        bg = QColor(60, 60, 60, 180) if is_hover else QColor(0, 0, 0, 100)
-        p.setBrush(QBrush(bg))
-        p.setPen(QPen(QColor(150, 150, 150) if not is_hover else QColor(220, 220, 220), 1))
-        p.drawRoundedRect(QRectF(0.5, 0.5, w - 1, h - 1), 4, 4)
-
-        # 图标颜色
-        icon_color = QColor(240, 240, 240) if is_hover else QColor(200, 200, 200)
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.setPen(QPen(icon_color, 2))
-
-        # 图标区域（居中偏右）
-        margin = 8
-        icon_w = w - margin * 2
-        icon_h = h - margin * 2
-        icon_x = margin
-        icon_y = margin
-
-        # 外边框
-        p.drawRect(QRectF(icon_x, icon_y, icon_w, icon_h))
-
-        # 右下角实心三角形箭头
-        arrow = 5
-        if self._in_fullscreen:
-            # 退出全屏：三角形顶点在左上（指向内/缩小）
-            pts = [
-                (icon_x + icon_w - arrow, icon_y + icon_h - arrow),
-                (icon_x + icon_w,         icon_y + icon_h - arrow),
-                (icon_x + icon_w - arrow, icon_y + icon_h),
-            ]
-        else:
-            # 进入全屏：三角形顶点在右下（指向外/放大）
-            pts = [
-                (icon_x + icon_w,         icon_y + icon_h),
-                (icon_x + icon_w - arrow, icon_y + icon_h),
-                (icon_x + icon_w,         icon_y + icon_h - arrow),
-            ]
-
-        p.setBrush(QBrush(icon_color))
-        p.setPen(Qt.PenStyle.NoPen)
-        path = QPainterPath()
-        path.moveTo(pts[0][0], pts[0][1])
-        for px, py in pts[1:]:
-            path.lineTo(px, py)
-        path.closeSubpath()
-        p.drawPath(path)
-
-        p.end()
 
 
 class VideoPlayer(QWidget):
@@ -155,11 +75,11 @@ class VideoPlayer(QWidget):
     # ==================================================================
 
     def _setup_ui(self):
-        """构建播放器 UI 容器 + 全屏按钮叠加"""
+        """构建播放器 UI 容器"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # 容器（用于叠加全屏按钮）
+        # 容器
         self._player_container = QWidget()
         self._player_container.setStyleSheet("background-color: #000;")
         cl = QVBoxLayout(self._player_container)
@@ -174,17 +94,6 @@ class VideoPlayer(QWidget):
 
         layout.addWidget(self._player_container)
 
-        # ---- 全屏按钮（叠加在右上角，QPainter 自绘图标）----
-        # WA_NativeWindow 必须：_video_widget 是原生窗口，
-        # 普通 Qt widget 会被原生窗口遮挡，点击事件被拦截。
-        self._btn_fullscreen = FullscreenButton(self._player_container)
-        self._btn_fullscreen.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
-        self._btn_fullscreen.clicked.connect(self._toggle_fullscreen)
-        self._btn_fullscreen.raise_()
-        self._btn_fullscreen.show()
-
-        # 全屏窗口（延迟创建）
-        self._fullscreen_win: Optional[QWidget] = None
         self._is_fullscreen: bool = False
 
     # ==================================================================
@@ -448,53 +357,49 @@ class VideoPlayer(QWidget):
     #  全屏（VLC 原生 set_fullscreen - 不切换 hwnd，最可靠）
     # ==================================================================
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if hasattr(self, '_btn_fullscreen') and hasattr(self, '_player_container'):
-            pw = self._player_container.width()
-            self._btn_fullscreen.move(pw - 48, 8)
-            self._btn_fullscreen.raise_()
-
-    def _toggle_fullscreen(self):
+    def toggle_fullscreen(self):
+        """切换全屏（供外部：控制栏按钮/双击/快捷键）"""
         if self._is_fullscreen:
             self._exit_fullscreen()
         else:
             self._enter_fullscreen()
 
     def _enter_fullscreen(self):
+        """进入全屏：优先 toggle_fullscreen，失败则 set_fullscreen"""
         if not self._media_player:
             return
 
         self._is_fullscreen = True
-        self._btn_fullscreen.set_fullscreen_state(True)
 
         try:
-            result = self._media_player.set_fullscreen(True)
-            logger.info(f"VLC set_fullscreen(True) returned: {result}")
+            self._media_player.toggle_fullscreen()
         except Exception as e:
-            logger.warning(f"VLC set_fullscreen(True) exception: {e}")
+            logger.warning(f"VLC toggle_fullscreen exception: {e}")
             self._is_fullscreen = False
-            self._btn_fullscreen.set_fullscreen_state(False)
             return
 
-        # 验证是否真的进入了全屏（某些 VLC 版本 set_fullscreen 返回成功但实际未生效）
+        # 验证是否真的进入了全屏
         import time as _time
         _time.sleep(0.15)
         try:
             if not self._media_player.get_fullscreen():
-                logger.warning("VLC get_fullscreen()=False, trying toggle_fullscreen")
-                self._media_player.toggle_fullscreen()
+                logger.warning("get_fullscreen=False, trying set_fullscreen(True)")
+                self._media_player.set_fullscreen(True)
                 _time.sleep(0.1)
+                if not self._media_player.get_fullscreen():
+                    self._is_fullscreen = False
+                    logger.error("Cannot enter fullscreen!")
         except Exception:
             pass
 
+        # 轮询检测用户手动退出（ESC / VLC 双击）
         if not hasattr(self, '_fs_poll_timer'):
             self._fs_poll_timer = QTimer(self)
             self._fs_poll_timer.setInterval(400)
             self._fs_poll_timer.timeout.connect(self._poll_fullscreen_state)
         self._fs_poll_timer.start()
 
-        logger.info("VLC native fullscreen ON")
+        logger.info("Fullscreen ON")
 
     def _poll_fullscreen_state(self):
         if not self._media_player or not self._is_fullscreen:
@@ -503,9 +408,8 @@ class VideoPlayer(QWidget):
         try:
             if not self._media_player.get_fullscreen():
                 self._is_fullscreen = False
-                self._btn_fullscreen.set_fullscreen_state(False)
                 self._stop_fs_poll()
-                logger.info("VLC fullscreen exited (user)")
+                logger.info("Fullscreen exited (user)")
         except Exception:
             pass
 
@@ -518,7 +422,6 @@ class VideoPlayer(QWidget):
 
     def _exit_fullscreen(self):
         self._is_fullscreen = False
-        self._btn_fullscreen.set_fullscreen_state(False)
         self._stop_fs_poll()
 
         if self._media_player:
@@ -527,10 +430,11 @@ class VideoPlayer(QWidget):
             except Exception as e:
                 logger.warning(f"VLC set_fullscreen(False): {e}")
 
-        logger.info("Fullscreen OFF (button)")
+        logger.info("Fullscreen OFF")
 
-    def eventFilter(self, obj, event):
-        return super().eventFilter(obj, event)
+    def is_fullscreen(self) -> bool:
+        """返回当前是否全屏"""
+        return self._is_fullscreen
 
     def closeEvent(self, event):
         """清理 VLC 资源"""

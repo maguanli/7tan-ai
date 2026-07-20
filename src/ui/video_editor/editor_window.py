@@ -257,6 +257,14 @@ class VideoEditorPage(QWidget):
         )
         l.addWidget(self._speed_label)
 
+        # 全屏按钮
+        l.addSpacing(8)
+        self._btn_fullscreen = QPushButton("⛶ 全屏")
+        self._btn_fullscreen.setToolTip("全屏播放 (F)")
+        self._btn_fullscreen.setStyleSheet(btn_style)
+        self._btn_fullscreen.clicked.connect(self._on_fullscreen)
+        l.addWidget(self._btn_fullscreen)
+
         return w
 
     # ---- 底部工具栏 ----
@@ -441,11 +449,23 @@ class VideoEditorPage(QWidget):
     #  播放控制
     # ==================================================================
 
+    def keyPressEvent(self, event):
+        """键盘快捷键"""
+        from PyQt6.QtCore import Qt as Qtc
+        if event.key() == Qtc.Key.Key_F and not event.isAutoRepeat():
+            self.player.toggle_fullscreen()
+            return
+        super().keyPressEvent(event)
+
     def _on_play_pause(self):
         self.player.toggle_play_pause()
 
     def _seek_relative(self, delta: float):
         self.player.seek_relative(delta)
+
+    def _on_fullscreen(self):
+        """全屏切换"""
+        self.player.toggle_fullscreen()
 
     def _on_seek_slider(self, value: int):
         dur = self.player.get_duration()

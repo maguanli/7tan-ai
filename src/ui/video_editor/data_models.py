@@ -222,7 +222,7 @@ class ProjectData:
 class RecordingConfig:
     """录屏配置"""
     mode: str = "fullscreen"          # "fullscreen" | "region" | "window"
-    fps: int = 30
+    fps: int = 15  # 默认15fps，降低CPU
     codec: str = "libx264"
     quality: int = 23                 # CRF
     capture_system_audio: bool = False  # 默认关闭（ffmpeg dshow设备检测可能卡死）

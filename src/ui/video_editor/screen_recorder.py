@@ -408,7 +408,7 @@ class ScreenRecorder:
             pass
 
     def _capture_loop(self):
-        """主捕获循环（在子线程中运行）"""
+        """主捕获循环（在子线程中运行，低CPU占用避免GIL卡死GUI）"""
         if not self._process or not self._process.stdin:
             return
 
@@ -440,14 +440,16 @@ class ScreenRecorder:
                             self.on_error(f"截屏失败: {e}")
 
                 # 时间回调
-                if self.on_time_updated:
+                if self.on_time_updated and self._frame_count % 5 == 0:
                     self.on_time_updated(self.elapsed)
 
-                # 帧率控制
+                # 帧率控制 + 释放 GIL
                 elapsed_frame = time.time() - loop_start
                 sleep_time = frame_interval - elapsed_frame
                 if sleep_time > 0:
                     time.sleep(sleep_time)
+                else:
+                    time.sleep(0.001)  # 始终让出 GIL，防止 GUI 卡死
 
         # 安全关闭 stdin
         try:

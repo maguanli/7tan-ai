@@ -122,8 +122,23 @@ def get_media_duration_ffprobe(file_path: str) -> Optional[float]:
         时长（秒），失败返回 None
     """
     import subprocess
-    ffprobe = Path("G:/AI_Video/ffmpeg/ffprobe.exe")
-    if not ffprobe.exists():
+    import shutil as _shutil
+
+    # 智能定位 ffprobe（与 config._find_ffmpeg 逻辑一致）
+    ffprobe = None
+    try:
+        import imageio_ffmpeg
+        _ff = Path(imageio_ffmpeg.get_ffmpeg_exe())
+        _ffprobe = _ff.parent / _ff.name.replace("ffmpeg", "ffprobe")
+        if _ffprobe.exists():
+            ffprobe = _ffprobe
+    except Exception:
+        pass
+    if ffprobe is None:
+        _found = _shutil.which("ffprobe")
+        if _found:
+            ffprobe = Path(_found)
+    if ffprobe is None or not ffprobe.exists():
         logger.warning("FFprobe 不可用，无法获取时长")
         return None
 

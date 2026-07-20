@@ -147,11 +147,18 @@ class VideoEditorPage(QWidget):
 
         # ---- 时间轴 ----
         self.timeline = TimelineView()
+        self.timeline.set_project(self.project)
         self.timeline.playhead_moved.connect(self._on_timeline_playhead_moved)
         self.timeline.clip_selected.connect(self._on_timeline_clip_selected)
         self.timeline.clip_added_to_timeline.connect(self._on_timeline_clip_added)
         self.timeline.cut_requested.connect(self._on_cut)
         self.timeline.delete_requested.connect(self._on_delete_clip)
+        self.timeline.clip_trimmed.connect(self._on_clip_trim)
+
+        # ---- 剪辑工具栏（素材库/播放器下方、时间轴上方） ----
+        self._clip_toolbar = self._build_clip_toolbar()
+        layout.addWidget(self._clip_toolbar)
+
         layout.addWidget(self.timeline, 2)
 
         # ---- 底部工具栏 ----
@@ -254,23 +261,90 @@ class VideoEditorPage(QWidget):
         )
         l = QHBoxLayout(w)
         l.setContentsMargins(8, 4, 8, 4)
-        l.setSpacing(8)
+        l.setSpacing(6)
 
-        btns = [
-            ("💾 保存", self._on_save_project),
-            ("📂 打开", self._on_load_project),
-            ("🎥 录屏", self._on_start_recording),
-            ("🎙️ AI配音", self._on_ai_dub),
-            ("📝 AI字幕", self._on_ai_subtitle),
-            ("🎨 滤镜", self._on_filter_panel),
-            ("🎬 转场", self._on_add_transition),
-            ("🎯 关键帧", self._on_keyframe_panel),
-            ("🖼️ 封面", self._on_open_cover),
-            ("🤖 AI视频", self._on_ai_video),
-            ("📤 导出", self._on_export),
+        # ==== 文件 & 录制 ====
+        file_btns = [
+            ("💾 保存", self._on_save_project, "保存项目 (Ctrl+S)"),
+            ("📂 打开", self._on_load_project, "打开项目 / 导入媒体"),
+            ("🎥 录屏", self._on_start_recording, "录制屏幕"),
         ]
-        for text, handler in btns:
+        for text, handler, tip in file_btns:
             btn = QPushButton(text)
+            btn.setToolTip(tip)
+            btn.setStyleSheet(TOOLBAR_STYLESHEET)
+            btn.clicked.connect(handler)
+            l.addWidget(btn)
+
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.VLine)
+        sep2.setStyleSheet(f"color:{THEME['border']};")
+        l.addWidget(sep2)
+
+        # ==== AI & 后期 ====
+        ai_btns = [
+            ("🎙️ AI配音", self._on_ai_dub, "AI 文字转语音"),
+            ("📝 AI字幕", self._on_ai_subtitle, "AI 语音识别字幕"),
+            ("🎨 滤镜", self._on_filter_panel, "颜色滤镜调节"),
+            ("🎬 转场", self._on_add_transition, "片段间转场效果"),
+            ("🎯 关键帧", self._on_keyframe_panel, "关键帧动画"),
+            ("🖼️ 封面", self._on_open_cover, "制作视频封面"),
+            ("🤖 AI视频", self._on_ai_video, "AI 图文成片"),
+        ]
+        for text, handler, tip in ai_btns:
+            btn = QPushButton(text)
+            btn.setToolTip(tip)
+            btn.setStyleSheet(TOOLBAR_STYLESHEET)
+            btn.clicked.connect(handler)
+            l.addWidget(btn)
+
+        sep3 = QFrame()
+        sep3.setFrameShape(QFrame.Shape.VLine)
+        sep3.setStyleSheet(f"color:{THEME['border']};")
+        l.addWidget(sep3)
+
+        # ==== 导出 ====
+        export_btn = QPushButton("📤 导出")
+        export_btn.setToolTip("导出为 MP4 视频")
+        export_btn.setStyleSheet(TOOLBAR_STYLESHEET)
+        export_btn.clicked.connect(self._on_export)
+        l.addWidget(export_btn)
+
+        l.addStretch()
+        return w
+
+    # ---- 剪辑工具栏（素材库下方、时间轴上方） ----
+    def _build_clip_toolbar(self) -> QWidget:
+        w = QWidget()
+        w.setStyleSheet(
+            f"background-color:{THEME['bg_card']};"
+            f"border-top:1px solid {THEME['border']};"
+            f"border-bottom:1px solid {THEME['border']};"
+        )
+        l = QHBoxLayout(w)
+        l.setContentsMargins(8, 3, 8, 3)
+        l.setSpacing(6)
+
+        clip_label = QLabel("🔧 剪辑工具")
+        clip_label.setStyleSheet(
+            f"color:{THEME['text_secondary']}; font-size:12px; font-weight:bold;"
+        )
+        l.addWidget(clip_label)
+
+        sep0 = QFrame()
+        sep0.setFrameShape(QFrame.Shape.VLine)
+        sep0.setStyleSheet(f"color:{THEME['border']};")
+        l.addWidget(sep0)
+
+        edit_btns = [
+            ("✂️ 切割", self._on_cut, "在播放头位置切割 (S / Ctrl+K)"),
+            ("🗑️ 删除", self._on_delete_selected, "删除选中片段 (Delete)"),
+            ("↩️ 撤销", self._on_undo, "撤销 (Ctrl+Z)"),
+            ("↪️ 重做", self._on_redo, "重做 (Ctrl+Y)"),
+        ]
+        for text, handler, tip in edit_btns:
+            btn = QPushButton(text)
+            btn.setToolTip(tip)
             btn.setStyleSheet(TOOLBAR_STYLESHEET)
             btn.clicked.connect(handler)
             l.addWidget(btn)
@@ -284,19 +358,29 @@ class VideoEditorPage(QWidget):
 
     def _on_media_to_timeline(self, info: dict):
         """素材库双击 → 添加到时间轴"""
-        cid = self.timeline.add_clip(info)
-        if cid:
-            self._status.setText(f"✅ 已添加: {info['name']}")
-            self._update_project_tracks()
+        try:
+            cid = self.timeline.add_clip(info)
+            if cid:
+                self._status.setText(f"✅ 已添加: {info['name']}")
+                self._update_project_tracks()
+        except Exception as e:
+            logger.error(f"添加素材到时间轴失败: {e}")
+            self._status.setText(f"❌ 添加失败: {info.get('name', '未知')}")
 
     def _on_media_selected(self, info: dict):
         """素材库选中 → 预览"""
-        mt = info.get("type", "")
-        if mt == "video" or mt == "audio":
-            self.player.load_media(info["path"])
-            self.player.play()
-        elif mt == "image":
-            self._status.setText(f"🖼️ 选中图片: {info['name']}")
+        try:
+            mt = info.get("type", "")
+            if mt == "video" or mt == "audio":
+                if self.player.vlc_available:
+                    self.player.load_media(info["path"])
+                    self.player.play()
+                else:
+                    self._status.setText(f"🎬 选中: {info['name']} (VLC 不可用，仅显示信息)")
+            elif mt == "image":
+                self._status.setText(f"🖼️ 选中图片: {info['name']}")
+        except Exception as e:
+            logger.error(f"预览媒体失败: {e}")
 
     def _on_player_time_changed(self, time_sec: float):
         """播放器时间更新 → 同步进度条 + 播放头"""
@@ -388,17 +472,110 @@ class VideoEditorPage(QWidget):
     # ==================================================================
 
     def _on_cut(self):
-        """在播放头位置切割"""
+        """在播放头位置切割（支持撤销）"""
         t = self.timeline.get_playhead_time()
+        old_clips_data = []
+        for ti, track in enumerate(self.project.tracks):
+            if track.type in ("video", "audio"):
+                for ci, clip in enumerate(track.clips):
+                    if isinstance(clip, Clip):
+                        clip_start = clip.timeline_start
+                        clip_end = clip_start + clip.effective_duration
+                        if clip_start + 0.05 < t < clip_end - 0.05:
+                            old_clips_data.append((ti, ci, clip.timeline_start, {
+                                "id": clip.id, "source_path": clip.source_path,
+                                "type": clip.type, "track_index": clip.track_index,
+                                "timeline_start": clip.timeline_start,
+                                "source_start": clip.source_start,
+                                "source_end": clip.source_end,
+                                "duration": clip.duration, "speed": clip.speed,
+                            }, clip.source_end))
+
         count = self._cut_tool.cut_at_playhead(self.project, t)
         if count > 0:
+            for ti, ci, st, cd, old_se in old_clips_data:
+                new_se = cd["source_start"] + (t - st) * cd["speed"]
+                new_clip_data = {
+                    "id": cd["id"] + "_r", "source_path": cd["source_path"],
+                    "type": cd["type"], "track_index": cd["track_index"],
+                    "timeline_start": t,
+                    "source_start": new_se, "source_end": cd["source_end"],
+                    "duration": cd["source_end"] - new_se, "speed": cd["speed"],
+                }
+                from src.ui.video_editor.commands import SplitClipCommand
+                cmd = SplitClipCommand(ti, ci, st, new_clip_data, old_se, new_se)
+                self._undo_manager.execute(cmd, self.project)
             self.timeline.set_project(self.project)
-            self._status.setText(f"✂️ 切割 {count} 个片段 @{format_time(t)}")
+            self._status.setText(f"✂️ 切割 {count} 个片段 @{format_time(t)} (Ctrl+Z 撤销)")
         else:
             self._status.setText(f"⚠️ 当前位置无可切割片段")
 
+    def _on_delete_selected(self):
+        """删除当前选中的片段 (工具栏按钮)"""
+        cid = self.timeline.get_selected_clip_id()
+        if cid:
+            self._on_delete_clip(cid)
+        else:
+            self._status.setText("⚠️ 请先在时间轴上选中一个片段")
+
+    def _on_clip_trim(self, clip_id, old_ts, new_ts, old_ss, new_ss, old_se, new_se, old_dur, new_dur):
+        """裁剪手柄释放 → 注册撤销命令"""
+        for ti, track in enumerate(self.project.tracks):
+            for ci, clip in enumerate(track.clips):
+                if isinstance(clip, Clip) and clip.id == clip_id:
+                    from src.ui.video_editor.commands import TrimClipCommand
+                    cmd = TrimClipCommand(ti, ci, old_ts, new_ts, old_ss, new_ss, old_se, new_se, old_dur, new_dur)
+                    self._undo_manager.execute(cmd, self.project)
+                    self._status.setText(f"✂️ 裁剪: {old_dur:.1f}s→{new_dur:.1f}s (Ctrl+Z 撤销)")
+                    return
+
+    def _on_undo(self):
+        """撤销上一步操作"""
+        if self._undo_manager.can_undo:
+            desc = self._undo_manager.undo_description
+            if self._undo_manager.undo(self.project):
+                self.timeline.set_project(self.project)
+                self._status.setText(f"↩️ 已撤销: {desc}")
+            else:
+                self._status.setText("↩️ 撤销失败")
+        else:
+            self._status.setText("↩️ 没有可撤销的操作")
+
+    def _on_redo(self):
+        """重做被撤销的操作"""
+        if self._undo_manager.can_redo:
+            if self._undo_manager.redo(self.project):
+                self.timeline.set_project(self.project)
+                self._status.setText("↪️ 已重做")
+            else:
+                self._status.setText("↪️ 重做失败")
+        else:
+            self._status.setText("↪️ 没有可重做的操作")
+
     def _on_delete_clip(self, clip_id: str):
         """删除选中片段"""
+        ti, ci = self.timeline.get_clip_track_and_index(clip_id)
+        if ti >= 0 and ci >= 0 and ti < len(self.project.tracks):
+            track = self.project.tracks[ti]
+            if ci < len(track.clips):
+                clip = track.clips[ci]
+                from src.ui.video_editor.data_models import Clip as ClipModel
+                if isinstance(clip, ClipModel):
+                    cd = {
+                        "id": clip.id, "source_path": clip.source_path,
+                        "type": clip.type, "track_index": clip.track_index,
+                        "timeline_start": clip.timeline_start,
+                        "source_start": clip.source_start,
+                        "source_end": clip.source_end,
+                        "duration": clip.duration, "speed": clip.speed,
+                    }
+                else:
+                    cd = {"id": getattr(clip, "id", ""), "type": getattr(clip, "type", "video"),
+                           "track_index": ti, "timeline_start": 0.0, "source_start": 0.0,
+                           "source_end": 0.0, "duration": 0.0, "speed": 1.0}
+                from src.ui.video_editor.commands import DeleteClipCommand
+                cmd = DeleteClipCommand(ti, ci, cd)
+                self._undo_manager.execute(cmd, self.project)
         if self.timeline.remove_clip(clip_id):
             self._update_project_tracks()
             self._status.setText(f"🗑️ 已删除片段")

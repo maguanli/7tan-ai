@@ -169,10 +169,13 @@ class VideoPlayer(QWidget):
             self._media_player.set_media(media)
 
             # 等待 VLC 解析完媒体信息
-            media.parse_with_options(vlc.MediaParseFlag.local, -1)
+            media.parse_with_options(vlc.MediaParseFlag.local, 5000)
             # 如果 FFprobe 失败则用 VLC 的时长兜底
             if self._duration <= 0:
-                self._duration = media.get_duration() / 1000.0
+                try:
+                    self._duration = media.get_duration() / 1000.0
+                except Exception:
+                    pass
 
         self.media_loaded.emit({
             "path": file_path,

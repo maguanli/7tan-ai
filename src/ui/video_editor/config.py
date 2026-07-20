@@ -61,5 +61,35 @@ AUTOSAVE_INTERVAL_SEC = 60
 MAX_RECENT_PROJECTS = 10
 
 # ===== 路径 =====
-FFMPEG_PATH = Path("G:/AI_Video/ffmpeg/ffmpeg.exe")
+# ffmpeg: 优先使用 imageio_ffmpeg 自带的，否则用系统 PATH
+def _find_ffmpeg():
+    # 1. imageio_ffmpeg 自带（最优先）
+    try:
+        import imageio_ffmpeg
+        p = Path(imageio_ffmpeg.get_ffmpeg_exe())
+        if p.exists():
+            return p
+    except Exception:
+        pass
+    # 2. 内置 tools 目录
+    _tools_ffmpeg = Path(__file__).parent.parent.parent.parent / "tools" / "ffmpeg" / "ffmpeg.exe"
+    if _tools_ffmpeg.exists():
+        return _tools_ffmpeg
+    # 3. 常见安装位置
+    for candidate in [
+        Path("G:/AI_Video/ffmpeg/ffmpeg.exe"),
+        Path("C:/ffmpeg/bin/ffmpeg.exe"),
+        Path("D:/ffmpeg/bin/ffmpeg.exe"),
+    ]:
+        if candidate.exists():
+            return candidate
+    # 4. 系统 PATH 搜索
+    import shutil
+    found = shutil.which("ffmpeg")
+    if found:
+        return Path(found)
+    # 5. 回退
+    return Path("ffmpeg")
+
+FFMPEG_PATH = _find_ffmpeg()
 VLC_PATH = Path("C:/Program Files/VideoLAN/VLC")

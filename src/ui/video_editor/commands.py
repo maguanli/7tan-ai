@@ -1,7 +1,10 @@
 """
 视频剪辑器 — 命令模式（Undo/Redo）
 每个操作封装为 Command 对象，支持 Ctrl+Z / Ctrl+Y
+
+Phase 3: +裁剪(TrimClipCommand) +切割撤销修复
 """
+
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
@@ -83,6 +86,37 @@ class SplitClipCommand(ClipCommand):
                 t.clips[self.ci].duration = self.oe - t.clips[self.ci].source_start
             if self.ci+1 < len(t.clips): t.clips.pop(self.ci+1)
             return True
+        return False
+
+
+class TrimClipCommand(ClipCommand):
+    """裁剪片段 — 拖拽首尾边缘改变入点/出点"""
+    def __init__(self, ti: int, ci: int,
+                 old_start: float, new_start: float,
+                 old_source_start: float, new_source_start: float,
+                 old_source_end: float, new_source_end: float,
+                 old_duration: float, new_duration: float):
+        self.ti = ti; self.ci = ci
+        self.old_ts = old_start; self.new_ts = new_start
+        self.old_ss = old_source_start; self.new_ss = new_source_start
+        self.old_se = old_source_end; self.new_se = new_source_end
+        self.old_dur = old_duration; self.new_dur = new_duration
+        edge = "左" if abs(old_start - new_start) > 0.01 else "右"
+        self.description = f"裁剪{edge}边缘 {old_duration:.1f}s->{new_duration:.1f}s"
+    def execute(self, p) -> bool:
+        return self._apply(p, self.new_ts, self.new_ss, self.new_se, self.new_dur)
+    def undo(self, p) -> bool:
+        return self._apply(p, self.old_ts, self.old_ss, self.old_se, self.old_dur)
+    def _apply(self, p, ts, ss, se, dur):
+        if self.ti < len(p.tracks):
+            t = p.tracks[self.ti]
+            if 0 <= self.ci < len(t.clips):
+                c = t.clips[self.ci]
+                c.timeline_start = ts
+                c.source_start = ss
+                c.source_end = se
+                c.duration = dur
+                return True
         return False
 
 

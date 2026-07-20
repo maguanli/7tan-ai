@@ -46,6 +46,8 @@ class TimelineView(QGraphicsView):
     clip_added_to_timeline = pyqtSignal(dict)
     cut_requested = pyqtSignal()
     delete_requested = pyqtSignal(str)
+    clip_trimmed = pyqtSignal(str, float, float, float, float, float, float, float, float)
+    # ^ clip_id, old_ts, new_ts, old_ss, new_ss, old_se, new_se, old_dur, new_dur
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -137,6 +139,7 @@ class TimelineView(QGraphicsView):
         # Phase 3: 场景回调（右键菜单 + 吸附线）
         self._scene.context_menu_callback = self._on_clip_context_menu
         self._scene.clip_drag_finished_callback = self._on_clip_drag_finished
+        self._scene.clip_trim_finished_callback = self._on_clip_trim_finished
         self._scene.show_snap_line = self._show_snap_line
         self._scene.hide_snap_line = self._hide_snap_line
 
@@ -213,8 +216,8 @@ class TimelineView(QGraphicsView):
                 self._project.tracks.append(Track(type="audio", clips=[]))
             track = self._project.tracks[track_index]
 
-        dur = media_info.get("duration", IMAGE_DEFAULT_DURATION)
-        if mt == "image":
+        dur = media_info.get("duration", 0) or IMAGE_DEFAULT_DURATION
+        if mt == "image" or dur <= 0:
             dur = IMAGE_DEFAULT_DURATION
 
         cid = generate_clip_id()
@@ -440,6 +443,22 @@ class TimelineView(QGraphicsView):
                     clip.timeline_start = final_start
                     self._update_project_duration()
                     self._refresh_all_snap_points()
+                    return
+
+    def _on_clip_trim_finished(self, clip_id, old_ts, new_ts, old_ss, new_ss, old_se, new_se, old_dur, new_dur):
+        """裁剪手柄释放 → 同步数据模型 + 发射信号给编辑器"""
+        if not self._project:
+            return
+        for ti, track in enumerate(self._project.tracks):
+            for ci, clip in enumerate(track.clips):
+                if isinstance(clip, Clip) and clip.id == clip_id:
+                    clip.timeline_start = new_ts
+                    clip.source_start = new_ss
+                    clip.source_end = new_se
+                    clip.duration = new_dur
+                    self._update_project_duration()
+                    self._refresh_all_snap_points()
+                    self.clip_trimmed.emit(clip_id, old_ts, new_ts, old_ss, new_ss, old_se, new_se, old_dur, new_dur)
                     return
 
     def _show_snap_line(self, x: float):

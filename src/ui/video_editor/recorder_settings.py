@@ -265,20 +265,21 @@ class RecorderSettingsDialog(QDialog):
             self._output_dir_edit.setText(path)
 
     def _on_start(self):
-        """构建 RecordingConfig 并发送信号"""
-        # 读取模式
+        """点击开始 → 关闭对话框"""
+        self.accept()
+
+    def get_config(self) -> RecordingConfig:
+        """对话框关闭后获取配置"""
         mode = "fullscreen"
         for btn in self._mode_btns.buttons():
             if btn.isChecked():
                 mode = btn.property("mode_value")
                 break
 
-        # 编码器
         codec = "libx264"
         if self._codec_combo.currentIndex() == 1:
             codec = "libx265"
 
-        # 麦克风设备 ID
         mic_device_id = None
         if self._mic_check.isChecked() and self._mic_device_combo.count() > 0:
             mic_device_id = self._mic_device_combo.currentData()
@@ -294,6 +295,4 @@ class RecorderSettingsDialog(QDialog):
             mic_device_id=mic_device_id,
             output_dir=self._output_dir_edit.text() or "",
         )
-
-        self.config_changed.emit(config)
-        self.accept()
+        return config

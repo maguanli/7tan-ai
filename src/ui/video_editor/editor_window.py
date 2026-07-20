@@ -10,7 +10,7 @@ from typing import Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QLabel,
-    QPushButton, QSlider, QFrame, QFileDialog, QApplication,
+    QPushButton, QSlider, QFrame, QFileDialog, QApplication, QDialog,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -645,8 +645,11 @@ class VideoEditorPage(QWidget):
             RecordingConfig(output_dir=self.media_bin._root_dir if hasattr(self.media_bin, '_root_dir') else ''),
             self,
         )
-        dlg.config_changed.connect(self._start_recording_with_config)
-        dlg.exec()
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            # 对话框关闭后延迟启动录制，避免在 modal 内操作 GUI
+            config = dlg.get_config()
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(100, lambda: self._start_recording_with_config(config))
 
     def _start_recording_with_config(self, config: RecordingConfig):
         if self._recorder.start(config):

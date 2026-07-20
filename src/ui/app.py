@@ -2975,7 +2975,7 @@ class SettingsPage(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("7Tan — AI 自动更新系统")
+        self.setWindowTitle("7Tan — AI工具")
         self.resize(1280, 820)
         self.setMinimumSize(960, 600)
 

@@ -654,6 +654,9 @@ class VideoEditorPage(QWidget):
     def _start_recording_with_config(self, config: RecordingConfig):
         if self._recorder.start(config):
             self._overlay.show()
+            self._overlay.raise_()
+            self._overlay.activateWindow()
+            logger.info(f"🔴 录制控制条已显示: {self._overlay.isVisible()}")
             self._status.setText("🔴 正在录制…")
         else:
             self._status.setText("❌ 录制启动失败")

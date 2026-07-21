@@ -70,7 +70,8 @@ class ScreenRecorder:
         try:
             result = subprocess.run(
                 ['tasklist', '/fi', 'imagename eq ffmpeg.exe', '/fo', 'csv', '/nh'],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW
             )
             for line in result.stdout.strip().split('\n'):
                 if 'ffmpeg.exe' in line.lower():
@@ -178,6 +179,23 @@ class ScreenRecorder:
         self._start_time = time.time()
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
+
+        # 验证 FFmpeg 是否成功启动（等待 0.5 秒后检查进程是否还活着）
+        time.sleep(0.5)
+        if self._process.poll() is not None:
+            exit_code = self._process.returncode
+            stderr_output = ""
+            try:
+                remaining = self._process.stderr.read()
+                stderr_output = remaining.decode('utf-8', errors='replace')
+            except Exception:
+                pass
+            self._running = False
+            self._elapsed = 0.0
+            logger.error(f"FFmpeg 启动后立即退出 (exit={exit_code}): {stderr_output[:500]}")
+            if self.on_error:
+                self.on_error(f"录制启动失败，FFmpeg 异常退出 (exit={exit_code})。请检查音频设备是否可用。")
+            return False
 
         if self.on_state_changed:
             self.on_state_changed("recording")
@@ -396,6 +414,7 @@ class ScreenRecorder:
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW
         )
 
     def _detect_loopback_device(self) -> str:
@@ -414,6 +433,7 @@ class ScreenRecorder:
                 [str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg",
                  "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
                 capture_output=True, text=True, timeout=3,
+                creationflags=subprocess.CREATE_NO_WINDOW
             )
             stderr = (result.stderr or "") + (result.stdout or "")
             for line in stderr.split("\n"):
@@ -449,6 +469,7 @@ class ScreenRecorder:
                 [str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg",
                  "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
                 capture_output=True, text=True, timeout=3,
+                creationflags=subprocess.CREATE_NO_WINDOW
             )
             stderr = (result.stderr or "") + (result.stdout or "")
             for line in stderr.split("\n"):
@@ -484,6 +505,7 @@ class ScreenRecorder:
             result = subprocess.run(
                 [ffmpeg, "-version"],
                 capture_output=True, text=True, timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW
             )
             if result.returncode != 0:
                 return False, f"FFmpeg 无法运行: {result.stderr[:200]}"
@@ -508,6 +530,7 @@ class ScreenRecorder:
                 [ffmpeg, "-y", "-f", "dshow", "-i", device_spec,
                  "-t", "0.1", "-f", "null", "-"],
                 capture_output=True, text=True, timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW
             )
             stderr = (result.stderr or "") + (result.stdout or "")
             if "could not" in stderr.lower() or "cannot" in stderr.lower() or                "no such" in stderr.lower() or "input/output error" in stderr.lower():
@@ -574,6 +597,18 @@ class ScreenRecorder:
             time.sleep(frame_interval)
 
         # ffmpeg 已退出
+        exit_code = self._process.returncode if self._process else -1
+        stderr_output = ""
+        if exit_code != 0 and self._process and self._process.stderr:
+            try:
+                remaining = self._process.stderr.read()
+                stderr_output = remaining.decode('utf-8', errors='replace')
+            except Exception:
+                pass
+            logger.error(f"FFmpeg 异常退出 (exit={exit_code}): {stderr_output[:500]}")
+            if self.on_error and self._frame_count < 60:
+                # 仅在前60帧（约2秒）内崩溃才弹错误，避免正常停止也弹
+                self.on_error(f"录制中断 (exit={exit_code}): {stderr_output[:200]}")
         self._running = False
 
     def _get_monitor(self, sct) -> dict:
@@ -673,6 +708,7 @@ def check_wasapi_available() -> bool:
         result = subprocess.run(
             ["ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
             capture_output=True, text=True, timeout=10,
+            creationflags=subprocess.CREATE_NO_WINDOW
         )
         return "立体声混音" in result.stderr or "Stereo Mix" in result.stderr
     except Exception:

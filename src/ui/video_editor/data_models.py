@@ -225,7 +225,7 @@ class RecordingConfig:
     fps: int = 15  # 默认15fps，降低CPU
     codec: str = "libx264"
     quality: int = 23                 # CRF
-    capture_system_audio: bool = True   # 默认开启系统音频录制
+    capture_system_audio: bool = False  # 默认关闭，避免 ffmpeg dshow 设备检测卡死
     capture_mic: bool = False
     mic_volume: float = 0.8           # 0.0 ~ 1.0
     mic_device_id: Optional[int] = None  # PyAudio 设备索引

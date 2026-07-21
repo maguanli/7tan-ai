@@ -170,6 +170,19 @@ class ScreenRecorder:
                 self.on_error(f"FFmpeg 启动失败: {e}")
             return False
 
+        # 🔍 启动验证：等待 0.5s 确认 ffmpeg 没有立即崩溃
+        startup_check = 0.0
+        while startup_check < 0.5:
+            time.sleep(0.05)
+            startup_check += 0.05
+            if self._process.poll() is not None:
+                stderr_data = self._process.stderr.read().decode('utf-8', errors='replace')
+                self._running = False
+                logger.error(f"FFmpeg 启动后立即退出 (exit={self._process.returncode}): {stderr_data[:300]}")
+                if self.on_error:
+                    self.on_error(f"录制引擎启动失败，请关闭系统音频录制后重试。")
+                return False
+
         # 监控 FFmpeg stderr
         self._stderr_thread = threading.Thread(
             target=self._monitor_stderr, daemon=True
@@ -579,17 +592,25 @@ class ScreenRecorder:
 
         fps = self._config.fps
         frame_interval = 1.0 / fps
+        last_update = 0.0
 
         while self._running and self._process.poll() is None:
             if not self._paused:
                 self._frame_count += 1
-                if self._frame_count % 30 == 0 and self.on_time_updated:
-                    self._est_elapsed += 30 * frame_interval
-                    self.on_time_updated(self._est_elapsed)
+                # 每 0.5s 更新一次时间（而非 30 帧）
+                now = time.time()
+                if self._start_time and now - last_update >= 0.5:
+                    self._est_elapsed = now - self._start_time
+                    if self.on_time_updated:
+                        self.on_time_updated(self._est_elapsed)
+                    last_update = now
             time.sleep(frame_interval)
 
         # ffmpeg process exited
         exit_code = self._process.returncode if self._process else -1
+        # 如果是用户主动停止，不要报错
+        if not self._running:
+            return
         stderr_output = ""
         if exit_code != 0 and self._process and self._process.stderr:
             try:

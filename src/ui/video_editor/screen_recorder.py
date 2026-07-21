@@ -170,18 +170,34 @@ class ScreenRecorder:
                 self.on_error(f"FFmpeg 启动失败: {e}")
             return False
 
-        # 🔍 启动验证：等待 0.5s 确认 ffmpeg 没有立即崩溃
+        # 🔍 启动验证：等待 1s 确认 ffmpeg 没有立即崩溃
         startup_check = 0.0
-        while startup_check < 0.5:
-            time.sleep(0.05)
-            startup_check += 0.05
+        while startup_check < 1.0:
+            time.sleep(0.1)
+            startup_check += 0.1
             if self._process.poll() is not None:
-                stderr_data = self._process.stderr.read().decode('utf-8', errors='replace')
+                # ffmpeg 已退出 → 音频设备可能不兼容，回退到仅录画面
+                logger.warning(f"FFmpeg 启动失败 (exit={self._process.returncode})，尝试仅录画面...")
+                # 重新启动，不带音频
                 self._running = False
-                logger.error(f"FFmpeg 启动后立即退出 (exit={self._process.returncode}): {stderr_data[:300]}")
-                if self.on_error:
-                    self.on_error(f"录制引擎启动失败，请关闭系统音频录制后重试。")
-                return False
+                try:
+                    config_no_audio = RecordingConfig(
+                        mode=config.mode,
+                        fps=config.fps,
+                        codec=config.codec,
+                        quality=config.quality,
+                        capture_system_audio=False,
+                        capture_mic=False,
+                        output_dir=config.output_dir,
+                        region_rect=config.region_rect,
+                    )
+                    self._process = self._build_ffmpeg_pipe(config_no_audio)
+                except Exception as e:
+                    if self.on_error:
+                        self.on_error(f"录制引擎启动失败: {e}")
+                    return False
+                self._config = config_no_audio
+                break
 
         # 监控 FFmpeg stderr
         self._stderr_thread = threading.Thread(
@@ -526,7 +542,7 @@ class ScreenRecorder:
                 [ffmpeg, "-y", "-f", "dshow", "-i", device_spec,
                  "-t", "0.1", "-f", "null", "-"],
                 capture_output=True, encoding="utf-8", errors="replace",
-                timeout=5, creationflags=subprocess.CREATE_NO_WINDOW
+                timeout=2, creationflags=subprocess.CREATE_NO_WINDOW
             )
             stderr = (result.stderr or "") + (result.stdout or "")
             stderr_lower = stderr.lower()

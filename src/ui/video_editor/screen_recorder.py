@@ -180,23 +180,6 @@ class ScreenRecorder:
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
 
-        # 验证 FFmpeg 是否成功启动（等待 0.5 秒后检查进程是否还活着）
-        time.sleep(0.5)
-        if self._process.poll() is not None:
-            exit_code = self._process.returncode
-            stderr_output = ""
-            try:
-                remaining = self._process.stderr.read()
-                stderr_output = remaining.decode('utf-8', errors='replace')
-            except Exception:
-                pass
-            self._running = False
-            self._elapsed = 0.0
-            logger.error(f"FFmpeg 启动后立即退出 (exit={exit_code}): {stderr_output[:500]}")
-            if self.on_error:
-                self.on_error(f"录制启动失败，FFmpeg 异常退出 (exit={exit_code})。请检查音频设备是否可用。")
-            return False
-
         if self.on_state_changed:
             self.on_state_changed("recording")
 

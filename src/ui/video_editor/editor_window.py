@@ -721,7 +721,9 @@ class VideoEditorPage(QWidget):
 
     def _on_recording_error(self, msg: str):
         self._status.setText(f"❌ 录制错误: {msg}")
-        self._overlay.hide()
+        # 保持 overlay 显示 3 秒让用户看到错误，然后自动隐藏
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(3000, self._overlay.hide)
 
     def _on_overlay_pause(self):
         self._recorder.pause()

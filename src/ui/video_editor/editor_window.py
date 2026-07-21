@@ -85,6 +85,9 @@ class VideoEditorPage(QWidget):
         self._overlay.resume_clicked.connect(self._on_overlay_resume)
         self._overlay.stop_clicked.connect(self._on_overlay_stop)
         self._overlay.overlay_closed.connect(self._on_overlay_closed)
+        self._recording_timer = QTimer(self)
+        self._recording_timer.setInterval(200)
+        self._recording_timer.timeout.connect(self._update_recording_time)
         # Phase 5: AI 引擎
         self._ai_clip = AIClipEngine(self)
         self._dub_engine = AIDubEngine()
@@ -683,6 +686,7 @@ class VideoEditorPage(QWidget):
             self._overlay.activateWindow()
             logger.info(f"🔴 录制控制条已显示: {self._overlay.isVisible()}")
             self._status.setText("🔴 正在录制…")
+            self._recording_timer.start()
         else:
             self._status.setText("❌ 录制启动失败")
 
@@ -691,6 +695,7 @@ class VideoEditorPage(QWidget):
         return self._recorder.start(cfg)
 
     def _stop_recording(self):
+        self._recording_timer.stop()
         self._overlay.hide()
         result = self._recorder.stop()
         if result:
@@ -700,6 +705,11 @@ class VideoEditorPage(QWidget):
 
     def _on_recording_time(self, seconds: float):
         self._overlay.set_time(seconds)
+
+    def _update_recording_time(self):
+        """主线程安全：轮询录制时间并更新 overlay"""
+        if self._recorder.is_recording:
+            self._overlay.set_time(self._recorder.elapsed)
 
     def _on_recording_state(self, state: str):
         if state == "paused":

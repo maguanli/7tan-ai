@@ -193,6 +193,7 @@ class ScreenRecorder:
         """暂停录制"""
         if self._running and not self._paused:
             self._paused = True
+            self._elapsed += time.time() - self._start_time
             if self.on_state_changed:
                 self.on_state_changed("paused")
             logger.info("⏸ 录制已暂停")
@@ -201,6 +202,7 @@ class ScreenRecorder:
         """继续录制"""
         if self._running and self._paused:
             self._paused = False
+            self._start_time = time.time()
             if self.on_state_changed:
                 self.on_state_changed("recording")
             logger.info("▶ 录制已继续")
@@ -348,10 +350,11 @@ class ScreenRecorder:
                 audio_devices_failed.append(f"麦克风({e})")
                 logger.warning(f"麦克风初始化失败: {e}")
 
-        if audio_devices_failed and self.on_error:
-            self.on_error(
+        if audio_devices_failed:
+            logger.warning(
                 f"以下音频设备不可用，将仅录制画面: {', '.join(audio_devices_failed)}"
             )
+            # 音频失败非致命错误，不触发 on_error 避免隐藏录屏 overlay
 
         audio_enabled = len(audio_inputs) > 0
 
@@ -530,20 +533,27 @@ class ScreenRecorder:
                     continue
                 if not text:
                     continue
-                logger.debug(f"[FFmpeg] {text}")
-                # 检测音频设备打开失败
+                # 只对真正的错误关键词报警，排除正常状态行
                 lower = text.lower()
-                if any(kw in lower for kw in [
-                    "audio=", "dshow", "cannot open audio",
-                    "cannot find audio", "microphone",
-                    "cannot open", "no such", "input/output error",
-                    "立体声混音", "immediate exit"
-                ]):
-                    logger.warning(f"[FFmpeg 音频] {text}")
+                is_fatal = any(kw in lower for kw in [
+                    "cannot open audio", "cannot find audio",
+                    "input/output error", "immediate exit",
+                    "permission denied", "device is already in use",
+                ])
+                is_status_line = any(kw in lower for kw in [
+                    "frame=", "fps=", "speed=", "size=", "time=",
+                    "bitrate=", "q=", "l size=",
+                ])
+                if is_fatal:
+                    logger.warning(f"[FFmpeg error] {text}")
                     if not getattr(self, "_audio_failed", False):
                         self._audio_failed = True
                         if self.on_error:
-                            self.on_error(f"音频设备不可用: {text[:150]}")
+                            self.on_error(f"Recording error: {text[:150]}")
+                elif is_status_line:
+                    logger.debug(f"[FFmpeg] {text}")
+                else:
+                    logger.debug(f"[FFmpeg] {text}")
         except (BrokenPipeError, ValueError, OSError):
             pass
 

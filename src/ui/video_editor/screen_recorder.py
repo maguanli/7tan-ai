@@ -390,7 +390,7 @@ class ScreenRecorder:
             logger.info("音频: 已关闭")
 
         cmd.append(output_file)
-        logger.debug(f"FFmpeg 命令({len(cmd)}个参数): ... -> {output_file}")
+        logger.info(f"FFmpeg 录制命令: {' '.join(cmd)}")
 
         return subprocess.Popen(
             cmd,
@@ -415,8 +415,8 @@ class ScreenRecorder:
             result = subprocess.run(
                 [str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg",
                  "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
-                capture_output=True, text=True, timeout=3,
-                creationflags=subprocess.CREATE_NO_WINDOW
+                capture_output=True, encoding="utf-8", errors="replace",
+                timeout=3, creationflags=subprocess.CREATE_NO_WINDOW
             )
             stderr = (result.stderr or "") + (result.stdout or "")
             for line in stderr.split("\n"):
@@ -451,8 +451,8 @@ class ScreenRecorder:
             result = subprocess.run(
                 [str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg",
                  "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
-                capture_output=True, text=True, timeout=3,
-                creationflags=subprocess.CREATE_NO_WINDOW
+                capture_output=True, encoding="utf-8", errors="replace",
+                timeout=3, creationflags=subprocess.CREATE_NO_WINDOW
             )
             stderr = (result.stderr or "") + (result.stdout or "")
             for line in stderr.split("\n"):
@@ -487,8 +487,8 @@ class ScreenRecorder:
         try:
             result = subprocess.run(
                 [ffmpeg, "-version"],
-                capture_output=True, text=True, timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW
+                capture_output=True, encoding="utf-8", errors="replace",
+                timeout=10, creationflags=subprocess.CREATE_NO_WINDOW
             )
             if result.returncode != 0:
                 return False, f"FFmpeg 无法运行: {result.stderr[:200]}"
@@ -512,11 +512,17 @@ class ScreenRecorder:
             result = subprocess.run(
                 [ffmpeg, "-y", "-f", "dshow", "-i", device_spec,
                  "-t", "0.1", "-f", "null", "-"],
-                capture_output=True, text=True, timeout=5,
-                creationflags=subprocess.CREATE_NO_WINDOW
+                capture_output=True, encoding="utf-8", errors="replace",
+                timeout=5, creationflags=subprocess.CREATE_NO_WINDOW
             )
             stderr = (result.stderr or "") + (result.stdout or "")
-            if "could not" in stderr.lower() or "cannot" in stderr.lower() or                "no such" in stderr.lower() or "input/output error" in stderr.lower():
+            stderr_lower = stderr.lower()
+            # non-zero exit = device not available
+            if result.returncode != 0:
+                logger.debug(f"audio device check failed [{device_spec}]: exit={result.returncode}")
+                return False, stderr[:200] if stderr else f"device not available (exit={result.returncode})"
+            if ("could not" in stderr_lower or "cannot" in stderr_lower or
+                    "no such" in stderr_lower or "input/output error" in stderr_lower):
                 return False, stderr[:200]
             return True, ""
         except subprocess.TimeoutExpired:
@@ -526,9 +532,10 @@ class ScreenRecorder:
             return False, str(e)
 
     def _monitor_stderr(self):
-        """监控 FFmpeg stderr，检测音频设备失败等错误"""
+        """Monitor FFmpeg stderr, detect audio device failures etc."""
         if not self._process or not self._process.stderr:
             return
+        self._last_stderr_lines = ""
         try:
             for line in iter(self._process.stderr.readline, b""):
                 if not self._running:
@@ -539,7 +546,9 @@ class ScreenRecorder:
                     continue
                 if not text:
                     continue
-                # 只对真正的错误关键词报警，排除正常状态行
+                # Save last lines for crash diagnosis
+                self._last_stderr_lines = (self._last_stderr_lines + "\n" + text)[-2000:]
+                # Only alert on real error keywords, skip status lines
                 lower = text.lower()
                 is_fatal = any(kw in lower for kw in [
                     "cannot open audio", "cannot find audio",
@@ -579,7 +588,7 @@ class ScreenRecorder:
                     self.on_time_updated(self._est_elapsed)
             time.sleep(frame_interval)
 
-        # ffmpeg 已退出
+        # ffmpeg process exited
         exit_code = self._process.returncode if self._process else -1
         stderr_output = ""
         if exit_code != 0 and self._process and self._process.stderr:
@@ -588,10 +597,16 @@ class ScreenRecorder:
                 stderr_output = remaining.decode('utf-8', errors='replace')
             except Exception:
                 pass
-            logger.error(f"FFmpeg 异常退出 (exit={exit_code}): {stderr_output[:500]}")
+            # Also try to read any stderr from _monitor_stderr (which may have consumed it)
+            if not stderr_output.strip():
+                stderr_output = getattr(self, '_last_stderr_lines', "")
+            logger.error(f"FFmpeg crashed (exit={exit_code}): {stderr_output[:500]}")
             if self.on_error and self._frame_count < 60:
-                # 仅在前60帧（约2秒）内崩溃才弹错误，避免正常停止也弹
-                self.on_error(f"录制中断 (exit={exit_code}): {stderr_output[:200]}")
+                # Only show error if crash happened early (first ~2s at 30fps)
+                if stderr_output.strip():
+                    self.on_error(f"Recording crashed (exit={exit_code}): {stderr_output[:200]}")
+                else:
+                    self.on_error(f"Recording crashed (exit={exit_code}). Check logs for details.")
         self._running = False
 
     def _get_monitor(self, sct) -> dict:
@@ -690,8 +705,8 @@ def check_wasapi_available() -> bool:
     try:
         result = subprocess.run(
             ["ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
-            capture_output=True, text=True, timeout=10,
-            creationflags=subprocess.CREATE_NO_WINDOW
+            capture_output=True, encoding="utf-8", errors="replace",
+            timeout=10, creationflags=subprocess.CREATE_NO_WINDOW
         )
         return "立体声混音" in result.stderr or "Stereo Mix" in result.stderr
     except Exception:

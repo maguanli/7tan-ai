@@ -410,10 +410,12 @@ class ScreenRecorder:
                 cmd += ["-filter_complex", fc, "-map", "0:v", "-map", "[aout]",
                         "-c:a", "aac", "-b:a", "128k"]
             else:
-                # 单路音频：仅麦克风 → 用 -af volume 调音量
+                # 单路音频：直接映射输入流（不用 filter label 方括号语法）
+                audio_idx = len(cmd) - sum(1 for a in cmd if a.startswith("-i"))
+                # 更简单：视频是第一个 -i，音频是第二个 -i
                 if mic_input_label and config.capture_mic:
                     cmd += ["-af", f"volume={config.mic_volume}"]
-                cmd += ["-map", "0:v", "-map", audio_inputs[0],
+                cmd += ["-map", "0:v", "-map", "1:a",
                         "-c:a", "aac", "-b:a", "128k"]
             logger.info(f"音频: 已启用 ({len(audio_inputs)}路)")
         else:

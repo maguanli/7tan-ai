@@ -178,7 +178,7 @@ class RecorderSettingsDialog(QDialog):
         self._mic_vol_slider = QSlider(Qt.Orientation.Horizontal)
         self._mic_vol_slider.setRange(0, 100)
         self._mic_vol_slider.setValue(80)
-        self._mic_vol_slider.setEnabled(False)
+        self._mic_vol_slider.setEnabled(True)
         self._mic_vol_label = QLabel("80%")
         self._mic_vol_label.setStyleSheet("color:#ccc; font-size:12px; min-width:36px;")
         self._mic_vol_slider.valueChanged.connect(
@@ -257,7 +257,7 @@ class RecorderSettingsDialog(QDialog):
 
     def _on_mic_toggled(self, checked: bool):
         self._mic_device_combo.setEnabled(checked)
-        self._mic_vol_slider.setEnabled(checked)
+        # 滑块始终可调，不依赖勾选状态
 
     def _browse_output_dir(self):
         path = QFileDialog.getExistingDirectory(self, "选择保存目录")

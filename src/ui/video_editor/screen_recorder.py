@@ -312,6 +312,7 @@ class ScreenRecorder:
         # ==================== 音频输入 ====================
         audio_inputs = []   # 标签如 "[1:a]", "[2:a]"
         audio_devices_failed = []
+        mic_input_label = None  # 麦克风音频流标签
 
         if config.capture_system_audio:
             try:
@@ -338,7 +339,8 @@ class ScreenRecorder:
                     cmd += ["-f", "dshow", "-i", mic_dev,
                             "-thread_queue_size", "4096"]
                     audio_inputs.append(f"[{len(audio_inputs) + 1}:a]")
-                    logger.info(f"麦克风: {mic_dev}")
+                    mic_input_label = audio_inputs[-1]  # 记录用于音量调节
+                    logger.info(f"麦克风: {mic_dev} (音量={config.mic_volume:.0%})")
                 else:
                     audio_devices_failed.append(f"麦克风({mic_dev})")
                     logger.warning(f"麦克风设备不可用: {mic_dev}")
@@ -360,12 +362,22 @@ class ScreenRecorder:
         # ==================== 音频处理 ====================
         if audio_enabled:
             if len(audio_inputs) > 1:
-                # 多路音频 → amix 混合
-                amix_src = "".join(audio_inputs)
-                fc = f"{amix_src}amix=inputs={len(audio_inputs)}:duration=first:dropout_transition=2[aout]"
+                # 多路音频 → amix 混合（有麦克风时先调音量再混合）
+                if mic_input_label and config.capture_mic:
+                    # [1:a]volume=0.8[mic];[mic][2:a]amix=...[aout]
+                    other = [a for a in audio_inputs if a != mic_input_label]
+                    fc = (f"{mic_input_label}volume={config.mic_volume}[mic];"
+                          f"[mic]{''.join(other)}amix=inputs={len(audio_inputs)}"
+                          f":duration=first:dropout_transition=2[aout]")
+                else:
+                    amix_src = "".join(audio_inputs)
+                    fc = f"{amix_src}amix=inputs={len(audio_inputs)}:duration=first:dropout_transition=2[aout]"
                 cmd += ["-filter_complex", fc, "-map", "0:v", "-map", "[aout]",
                         "-c:a", "aac", "-b:a", "128k"]
             else:
+                # 单路音频：仅麦克风 → 用 -af volume 调音量
+                if mic_input_label and config.capture_mic:
+                    cmd += ["-af", f"volume={config.mic_volume}"]
                 cmd += ["-map", "0:v", "-map", audio_inputs[0],
                         "-c:a", "aac", "-b:a", "128k"]
             logger.info(f"音频: 已启用 ({len(audio_inputs)}路)")

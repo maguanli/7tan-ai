@@ -275,7 +275,11 @@ class ScreenRecorder:
             return True  # 无法检查时放行
 
     def _build_ffmpeg_pipe(self, config: RecordingConfig) -> subprocess.Popen:
-        """构建 FFmpeg 子进程（gdigrab 直接抓屏，不占 Python GIL）"""
+        """构建 FFmpeg 子进程（gdigrab 抓屏 + dshow 音频输入）
+        
+        修复：根据 RecordingConfig 的 capture_system_audio / capture_mic
+        动态添加音频输入，不再硬编码 -an。
+        """
         ffmpeg = str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg"
 
         # 输出路径
@@ -283,43 +287,98 @@ class ScreenRecorder:
         output_dir = config.output_dir or os.path.join(os.getcwd(), "recordings")
         os.makedirs(output_dir, exist_ok=True)
         output_file = os.path.join(output_dir, f"recording_{timestamp}.mp4")
+        # 用 MKV 避免异常退出导致文件损坏
+        output_file = output_file.replace(".mp4", ".mkv")
 
         x, y, w, h = config.region_rect
 
+        # ==================== 视频输入 ====================
+        cmd = [ffmpeg, "-y"]
+
         if config.mode == "region":
-            # gdigrab 区域录制
-            cmd = [
-                ffmpeg, "-y",
+            cmd += [
                 "-f", "gdigrab", "-framerate", str(config.fps),
                 "-offset_x", str(x), "-offset_y", str(y),
                 "-video_size", f"{w}x{h}",
                 "-i", "desktop",
             ]
         else:
-            # 全屏
-            cmd = [
-                ffmpeg, "-y",
+            cmd += [
                 "-f", "gdigrab", "-framerate", str(config.fps),
                 "-video_size", f"{w}x{h}",
                 "-i", "desktop",
             ]
 
-        # 跳过音频（默认关闭），用 MKV 格式避免 kill 导致文件损坏
-        output_file = output_file.replace(".mp4", ".mkv")
-        cmd += [
-            "-c:v", config.codec,
-            "-crf", str(config.quality),
-            "-preset", "ultrafast",
-            "-pix_fmt", "yuv420p",
-            "-an",
-            output_file,
-        ]
+        # ==================== 音频输入 ====================
+        audio_inputs = []   # 标签如 "[1:a]", "[2:a]"
+        audio_devices_failed = []
 
-        logger.debug(f"FFmpeg 命令: {' '.join(cmd)}")
+        if config.capture_system_audio:
+            try:
+                loopback_dev = self._detect_loopback_device()
+                # 预检：设备是否存在
+                ok, _ = self._check_audio_device(loopback_dev)
+                if ok:
+                    cmd += ["-f", "dshow", "-i", loopback_dev,
+                            "-thread_queue_size", "4096"]
+                    audio_inputs.append(f"[{len(audio_inputs) + 1}:a]")
+                    logger.info(f"系统音频: {loopback_dev}")
+                else:
+                    audio_devices_failed.append(f"系统音频({loopback_dev})")
+                    logger.warning(f"系统音频设备不可用: {loopback_dev}")
+            except Exception as e:
+                audio_devices_failed.append(f"系统音频({e})")
+                logger.warning(f"系统音频初始化失败: {e}")
+
+        if config.capture_mic:
+            try:
+                mic_dev = self._detect_mic_device(config.mic_device_id)
+                ok, _ = self._check_audio_device(mic_dev)
+                if ok:
+                    cmd += ["-f", "dshow", "-i", mic_dev,
+                            "-thread_queue_size", "4096"]
+                    audio_inputs.append(f"[{len(audio_inputs) + 1}:a]")
+                    logger.info(f"麦克风: {mic_dev}")
+                else:
+                    audio_devices_failed.append(f"麦克风({mic_dev})")
+                    logger.warning(f"麦克风设备不可用: {mic_dev}")
+            except Exception as e:
+                audio_devices_failed.append(f"麦克风({e})")
+                logger.warning(f"麦克风初始化失败: {e}")
+
+        if audio_devices_failed and self.on_error:
+            self.on_error(
+                f"以下音频设备不可用，将仅录制画面: {', '.join(audio_devices_failed)}"
+            )
+
+        audio_enabled = len(audio_inputs) > 0
+
+        # ==================== 编码参数 ====================
+        cmd += ["-c:v", config.codec, "-crf", str(config.quality),
+                "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
+
+        # ==================== 音频处理 ====================
+        if audio_enabled:
+            if len(audio_inputs) > 1:
+                # 多路音频 → amix 混合
+                amix_src = "".join(audio_inputs)
+                fc = f"{amix_src}amix=inputs={len(audio_inputs)}:duration=first:dropout_transition=2[aout]"
+                cmd += ["-filter_complex", fc, "-map", "0:v", "-map", "[aout]",
+                        "-c:a", "aac", "-b:a", "128k"]
+            else:
+                cmd += ["-map", "0:v", "-map", audio_inputs[0],
+                        "-c:a", "aac", "-b:a", "128k"]
+            logger.info(f"音频: 已启用 ({len(audio_inputs)}路)")
+        else:
+            cmd += ["-an"]
+            logger.info("音频: 已关闭")
+
+        cmd.append(output_file)
+        logger.debug(f"FFmpeg 命令({len(cmd)}个参数): ... -> {output_file}")
 
         return subprocess.Popen(
             cmd,
-            stdin=subprocess.PIPE,  # 保留 stdin 以便发送 'q' 优雅退出
+            stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
@@ -418,6 +477,32 @@ class ScreenRecorder:
             return False, "FFmpeg 未找到！请安装 FFmpeg 或将其加入 PATH"
         except Exception as e:
             return False, f"FFmpeg 检测失败: {e}"
+
+    def _check_audio_device(self, device_spec: str) -> tuple[bool, str]:
+        """预检：dshow 音频设备是否可用
+        
+        Args:
+            device_spec: 如 "audio=立体声混音"
+        Returns:
+            (ok, error_message)
+        """
+        ffmpeg = str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg"
+        try:
+            # 用 -t 0.1 快速测试能否打开设备
+            result = subprocess.run(
+                [ffmpeg, "-y", "-f", "dshow", "-i", device_spec,
+                 "-t", "0.1", "-f", "null", "-"],
+                capture_output=True, text=True, timeout=5,
+            )
+            stderr = (result.stderr or "") + (result.stdout or "")
+            if "could not" in stderr.lower() or "cannot" in stderr.lower() or                "no such" in stderr.lower() or "input/output error" in stderr.lower():
+                return False, stderr[:200]
+            return True, ""
+        except subprocess.TimeoutExpired:
+            # 超时意味着设备打开了但卡住了，也算不可用
+            return False, "设备检测超时"
+        except Exception as e:
+            return False, str(e)
 
     def _monitor_stderr(self):
         """监控 FFmpeg stderr，检测音频设备失败等错误"""

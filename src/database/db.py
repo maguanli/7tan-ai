@@ -412,6 +412,15 @@ def init_db(db_path: str = None):
         ensure_default_ai_config()
     except Exception as e:
         logger.warning(f"AI 配置迁移跳过: {e}")
+    # 从 JSON/TXT 迁移记忆和提示词到数据库（仅首次）
+    try:
+        migrate_memory_json_to_db()
+    except Exception as e:
+        logger.warning(f"记忆迁移跳过: {e}")
+    try:
+        migrate_prompts_txt_to_db()
+    except Exception as e:
+        logger.warning(f"提示词迁移跳过: {e}")
     logger.info("✅ 数据库初始化完成")
 
 
@@ -631,3 +640,587 @@ def ensure_default_ai_config():
     finally:
         session2.close()
 
+
+
+# ===== Capability =====
+
+class Capability(Base):
+    """AI capability inventory"""
+    __tablename__ = "capabilities"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    category = Column(String, nullable=False)
+    icon = Column(String, default="📦")
+    sort_order = Column(Integer, default=0)
+    name = Column(String, nullable=False)
+    description = Column(String)
+    tool_name = Column(String)
+    is_active = Column(Integer, default=1)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id, "category": self.category,
+            "icon": self.icon, "sort_order": self.sort_order,
+            "name": self.name, "description": self.description,
+            "tool_name": self.tool_name, "is_active": self.is_active,
+        }
+
+
+def get_all_capabilities(active_only: bool = True) -> list:
+    session = get_session()
+    try:
+        q = session.query(Capability).order_by(Capability.sort_order, Capability.id)
+        if active_only:
+            q = q.filter(Capability.is_active == 1)
+        return [c.to_dict() for c in q.all()]
+    finally:
+        session.close()
+
+
+def get_capabilities_grouped(active_only: bool = True) -> list:
+    caps = get_all_capabilities(active_only=active_only)
+    groups = {}
+    group_order = {}
+    for c in caps:
+        cat = c["category"]
+        if cat not in groups:
+            groups[cat] = {"category": cat, "icon": c["icon"], "items": []}
+            group_order[cat] = c["sort_order"]
+        groups[cat]["items"].append({
+            "name": c["name"], "desc": c["description"], "tool": c["tool_name"],
+        })
+    return sorted(groups.values(), key=lambda g: group_order.get(g["category"], 999))
+
+
+def get_capability_summary() -> dict:
+    caps = get_all_capabilities(active_only=True)
+    cats = set(c["category"] for c in caps)
+    return {
+        "total_categories": len(cats),
+        "total_tools": f"{len(caps)}+",
+        "local_tools": [],
+        "cloud_services": [],
+    }
+
+
+def migrate_capabilities_from_yaml():
+    import yaml as _yaml
+    session = get_session()
+    try:
+        if session.query(Capability).count() > 0:
+            return
+    finally:
+        session.close()
+    cap_path = Path(__file__).parent.parent.parent / "config" / "capabilities.yaml"
+    if not cap_path.exists():
+        return
+    try:
+        with open(cap_path, 'r', encoding='utf-8') as f:
+            cap_data = _yaml.safe_load(f)
+    except Exception:
+        return
+    caps = cap_data.get("capabilities", [])
+    if not caps:
+        return
+    session = get_session()
+    try:
+        for idx, group in enumerate(caps):
+            cat = group.get("category", "")
+            icon = group.get("icon", "📦")
+            for item in group.get("items", []):
+                session.add(Capability(
+                    category=cat, icon=icon, sort_order=idx,
+                    name=item.get("name", ""),
+                    description=item.get("desc", ""),
+                    tool_name=item.get("tool", ""), is_active=1,
+                ))
+        session.commit()
+    except Exception:
+        session.rollback()
+    finally:
+        session.close()
+
+
+# ===== InstalledSoftware =====
+
+class InstalledSoftware(Base):
+    """Installed software / environment inventory"""
+    __tablename__ = "installed_software"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    category = Column(String, nullable=False)
+    icon = Column(String, default="📦")
+    name = Column(String, nullable=False, unique=True)
+    version = Column(String)
+    install_path = Column(String)
+    executable = Column(String)
+    is_in_path = Column(Integer, default=0)
+    is_working = Column(Integer, default=1)
+    notes = Column(String)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id, "category": self.category, "icon": self.icon,
+            "name": self.name, "version": self.version,
+            "install_path": self.install_path, "executable": self.executable,
+            "is_in_path": bool(self.is_in_path),
+            "is_working": bool(self.is_working), "notes": self.notes,
+        }
+
+
+def get_installed_software_by_name(name: str):
+    session = get_session()
+    try:
+        sw = session.query(InstalledSoftware).filter(InstalledSoftware.name == name).first()
+        return sw.to_dict() if sw else None
+    finally:
+        session.close()
+
+
+def get_all_installed_software(grouped: bool = False):
+    session = get_session()
+    try:
+        sw_list = session.query(InstalledSoftware).order_by(
+            InstalledSoftware.category, InstalledSoftware.name
+        ).all()
+        items = [s.to_dict() for s in sw_list]
+        if not grouped:
+            return items
+        groups = {}
+        for item in items:
+            cat = item["category"]
+            if cat not in groups:
+                groups[cat] = {"category": cat, "icon": item["icon"], "items": []}
+            groups[cat]["items"].append(item)
+        return list(groups.values())
+    finally:
+        session.close()
+
+
+def upsert_installed_software(name, category="", icon="📦", version="",
+                              install_path="", executable="",
+                              is_in_path=False, is_working=True, notes=""):
+    session = get_session()
+    try:
+        existing = session.query(InstalledSoftware).filter(
+            InstalledSoftware.name == name
+        ).first()
+        if existing:
+            existing.category = category or existing.category
+            existing.icon = icon
+            existing.version = version or existing.version
+            existing.install_path = install_path or existing.install_path
+            existing.executable = executable or existing.executable
+            existing.is_in_path = 1 if is_in_path else existing.is_in_path
+            existing.is_working = 1 if is_working else existing.is_working
+            existing.notes = notes or existing.notes
+            existing.updated_at = datetime.now()
+        else:
+            session.add(InstalledSoftware(
+                category=category, icon=icon, name=name,
+                version=version, install_path=install_path,
+                executable=executable,
+                is_in_path=1 if is_in_path else 0,
+                is_working=1 if is_working else 0,
+                notes=notes,
+            ))
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        logger.warning(f"upsert_installed_software failed: {e}")
+    finally:
+        session.close()
+
+
+def scan_and_sync_installed_software():
+    """Scan system for installed dev tools and sync to DB.
+    Strategy: 1) PATH check (where cmd)  2) known install paths  3) library check"""
+    import subprocess
+    import re
+
+    # ---- Helper ----
+    def _try_where(exe, vre=""):
+        """Returns (ipath, version) or (None, None)"""
+        try:
+            r = subprocess.run(["where", exe], capture_output=True, text=True, timeout=5, shell=True)
+            if r.returncode == 0 and r.stdout.strip():
+                ipath = r.stdout.strip().split("\n")[0].strip()
+                ver = ""
+                if vre:
+                    try:
+                        r2 = subprocess.run([exe, vre], capture_output=True, text=True, timeout=5, shell=True)
+                        m = re.search(vre, r2.stdout + r2.stderr)
+                        if m:
+                            ver = m.group(1)
+                    except Exception:
+                        pass
+                return (ipath, ver)
+        except Exception:
+            pass
+        return (None, None)
+
+    # ===== PATH checks via 'where' =====
+    path_checks = [
+        ("FFmpeg",  "🎬 Video/Audio", "🎬", "ffmpeg",      "-version", r"ffmpeg version (\S+)"),
+        ("Python",  "💻 Languages",   "🐍", "python",      "--version", r"Python (\S+)"),
+        ("Git",     "🛠 DevOps",      "🔀", "git",         "--version", r"git version (\S+)"),
+        ("Node.js", "💻 Languages",   "🟢", "node",        "--version", r"v(\S+)"),
+        ("Java JDK","💻 Languages",   "☕", "java",        "-version",  r'version "(\S+)"'),
+        ("Gradle",  "📱 Mobile Dev",  "🐘", "gradle",      "--version", r"Gradle (\S+)"),
+        ("Docker",  "🛠 DevOps",      "🐳", "docker",      "--version", r"Docker version (\S+)"),
+        ("7-Zip",   "📦 Compression", "🗜",  "7z",          "",          r"7-Zip (\S+)"),
+        ("Edge TTS","🎬 Video/Audio", "🔊", "edge-tts",    "--version", ""),
+        ("VS Code", "💻 Dev Tools",   "📝", "code",        "--version", r"^(\S+)"),
+    ]
+
+    for name, cat, icon, exe, varg, vre in path_checks:
+        ipath, ver = _try_where(exe, vre)
+        if ipath:
+            upsert_installed_software(name=name, category=cat, icon=icon, version=ver,
+                                      install_path=ipath, executable=exe, is_in_path=True, is_working=True)
+        else:
+            upsert_installed_software(name=name, category=cat, icon=icon,
+                                      executable=exe, is_in_path=False, is_working=False)
+
+    # ===== Known install paths (not in PATH, but we know where they are) =====
+    known_paths = [
+        ("FFmpeg",      "🎬 Video/Audio", "🎬", [
+            r"G:\ffmpeg\bin\ffmpeg.exe",
+            r"G:\AI_Video\bin\ffmpeg\bin\ffmpeg.exe",
+            r"G:\AI_Video\ffmpeg\ffmpeg-8.1.2-essentials_build\bin\ffmpeg.exe",
+            r"G:\ai_video_tools\ffmpeg\ffmpeg.exe",
+            r"G:\tools\ffmpeg.exe",
+        ]),
+        ("VS Code",     "💻 Dev Tools",   "📝", [
+            r"C:\Program Files\Microsoft VS Code\Code.exe",
+            r"C:\Users\Administrator\AppData\Local\Programs\Microsoft VS Code\Code.exe",
+        ]),
+        ("Node.js",     "💻 Languages",   "🟢", [
+            r"C:\Program Files\nodejs\node.exe",
+            r"C:\Program Files (x86)\nodejs\node.exe",
+        ]),
+        ("Docker",      "🛠 DevOps",      "🐳", [
+            r"C:\Program Files\Docker\Docker\Docker Desktop.exe",
+            r"C:\Program Files\Docker\Docker\resources\bin\docker.exe",
+        ]),
+        ("Gradle",      "📱 Mobile Dev",  "🐘", [
+            r"C:\gradle\bin\gradle.bat",
+            r"C:\Program Files\gradle\bin\gradle.bat",
+        ]),
+        ("Java JDK",    "💻 Languages",   "☕", [
+            r"C:\Program Files\Java\jdk*\bin\java.exe",
+            r"C:\Program Files\Eclipse Adoptium\jdk*\bin\java.exe",
+            r"C:\Program Files\Android\Android Studio\jbr\bin\java.exe",
+        ]),
+        ("Android Studio","📱 Mobile Dev","🤖", [
+            r"C:\Program Files\Android\Android Studio\bin\studio64.exe",
+        ]),
+        ("Android SDK", "📱 Mobile Dev",  "📱", [
+            r"C:\Users\Administrator\AppData\Local\Android\Sdk",
+        ]),
+        ("7-Zip",       "📦 Compression", "🗜",  [
+            r"C:\Program Files\7-Zip\7z.exe",
+            r"G:\ai_video_tools\7-Zip\7z.exe",
+        ]),
+    ]
+
+    for name, cat, icon, candidates in known_paths:
+        # Only update if currently marked NOT working
+        existing = get_installed_software_by_name(name)
+        if existing and existing["is_working"]:
+            continue
+        for pat in candidates:
+            if "*" in pat:
+                import glob as _glob
+                matches = _glob.glob(pat)
+                if matches:
+                    upsert_installed_software(name=name, category=cat, icon=icon,
+                                              install_path=matches[0], is_working=True)
+                    break
+            elif os.path.exists(pat):
+                upsert_installed_software(name=name, category=cat, icon=icon,
+                                          install_path=pat, is_working=True)
+                break
+
+    # ===== PATH-only checks (directories, no exe) =====
+    dir_checks = [
+        ("ComfyUI",     "🎬 Video/Audio", "🎨", r"G:\AI_Video\comfyui"),
+        ("SD WebUI",    "🎬 Video/Audio", "🖼",  r"G:\AI_Video\stable-diffusion-webui"),
+        ("7tan Editor", "💻 Dev Tools",   "🅰", r"D:\7tan\7tanAI"),
+    ]
+
+    for name, cat, icon, chk in dir_checks:
+        exists = os.path.isdir(chk)
+        upsert_installed_software(
+            name=name, category=cat, icon=icon,
+            install_path=chk if exists else "", is_working=exists,
+        )
+
+    # ===== Library checks =====
+    for name, cat, icon, notes in [
+        ("MoviePy", "🎬 Video/Audio", "🎞", "Python lib, via pip"),
+    ]:
+        upsert_installed_software(
+            name=name, category=cat, icon=icon, is_working=True, notes=notes,
+        )
+
+    logger.info("Installed software scan completed")
+
+
+# ===== Memory =====
+
+class Memory(Base):
+    """AI 持久化记忆存储"""
+    __tablename__ = "memory"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    section = Column(String, nullable=False, index=True)
+    key = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    importance = Column(String, default="medium")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        Index("idx_memory_section_key", "section", "key", unique=True),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id, "section": self.section, "key": self.key,
+            "content": self.content, "importance": self.importance,
+            "created_at": str(self.created_at)[:19] if self.created_at else "",
+            "updated_at": str(self.updated_at)[:19] if self.updated_at else "",
+        }
+
+
+def upsert_memory(section: str, key: str, content: str, importance: str = "medium") -> dict:
+    """插入或更新一条记忆"""
+    session = get_session()
+    try:
+        existing = session.query(Memory).filter(
+            Memory.section == section, Memory.key == key
+        ).first()
+        if existing:
+            existing.content = content
+            existing.importance = importance
+            existing.updated_at = datetime.now()
+            result = {"action": "updated", "id": existing.id}
+        else:
+            m = Memory(section=section, key=key, content=content, importance=importance)
+            session.add(m)
+            session.flush()
+            result = {"action": "created", "id": m.id}
+        session.commit()
+        return result
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def get_all_memories(section: str = None, keyword: str = None, limit: int = 500) -> list:
+    """查询记忆列表"""
+    session = get_session()
+    try:
+        q = session.query(Memory).order_by(
+            Memory.updated_at.desc()
+        )
+        if section:
+            q = q.filter(Memory.section == section)
+        if keyword:
+            kw = f"%{keyword}%"
+            q = q.filter(
+                (Memory.key.ilike(kw)) | (Memory.content.ilike(kw))
+            )
+        return [m.to_dict() for m in q.limit(limit).all()]
+    finally:
+        session.close()
+
+
+def get_memory_summary() -> dict:
+    """记忆存储概览"""
+    session = get_session()
+    try:
+        from sqlalchemy import func, case
+        sections = session.query(
+            Memory.section,
+            func.count(Memory.id).label("total"),
+            func.sum(
+                case((Memory.importance == "high", 1), else_=0)
+            ).label("high_count"),
+            func.max(Memory.updated_at).label("last_updated"),
+        ).group_by(Memory.section).all()
+        return [
+            {
+                "section": s[0], "total": s[1], "high_count": s[2] or 0,
+                "last_updated": str(s[3])[:19] if s[3] else "",
+            }
+            for s in sections
+        ]
+    finally:
+        session.close()
+
+
+def delete_memory(section: str, key: str) -> bool:
+    """删除一条记忆"""
+    session = get_session()
+    try:
+        m = session.query(Memory).filter(
+            Memory.section == section, Memory.key == key
+        ).first()
+        if m:
+            session.delete(m)
+            session.commit()
+            return True
+        return False
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+# ===== Prompt =====
+
+class Prompt(Base):
+    """AI 系统提示词存储"""
+    __tablename__ = "prompts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    prompt_type = Column(String, nullable=False, unique=True, index=True)
+    content = Column(Text, nullable=False)
+    reason = Column(String, default="")
+    char_count = Column(Integer, default=0)
+    line_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id, "prompt_type": self.prompt_type,
+            "content": self.content, "reason": self.reason,
+            "char_count": self.char_count, "line_count": self.line_count,
+            "created_at": str(self.created_at)[:19] if self.created_at else "",
+            "updated_at": str(self.updated_at)[:19] if self.updated_at else "",
+        }
+
+
+def upsert_prompt(prompt_type: str, content: str, reason: str = "") -> dict:
+    """插入或更新提示词"""
+    session = get_session()
+    try:
+        existing = session.query(Prompt).filter(
+            Prompt.prompt_type == prompt_type
+        ).first()
+        char_count = len(content)
+        line_count = content.count('\n') + 1
+        if existing:
+            existing.content = content
+            existing.reason = reason
+            existing.char_count = char_count
+            existing.line_count = line_count
+            existing.updated_at = datetime.now()
+            result = {"action": "updated", "id": existing.id}
+        else:
+            p = Prompt(
+                prompt_type=prompt_type, content=content, reason=reason,
+                char_count=char_count, line_count=line_count,
+            )
+            session.add(p)
+            session.flush()
+            result = {"action": "created", "id": p.id}
+        session.commit()
+        return result
+    except Exception as e:
+        session.rollback()
+        raise e
+    finally:
+        session.close()
+
+
+def get_prompt_from_db(prompt_type: str) -> dict | None:
+    """从数据库获取提示词"""
+    session = get_session()
+    try:
+        p = session.query(Prompt).filter(
+            Prompt.prompt_type == prompt_type
+        ).first()
+        return p.to_dict() if p else None
+    finally:
+        session.close()
+
+
+def get_all_prompts() -> list:
+    """获取所有提示词"""
+    session = get_session()
+    try:
+        return [p.to_dict() for p in session.query(Prompt).order_by(Prompt.updated_at.desc()).all()]
+    finally:
+        session.close()
+
+
+def migrate_memory_json_to_db():
+    """将 data/memory/*.json 迁移到数据库（仅首次）"""
+    import json as _json
+    session = get_session()
+    try:
+        if session.query(Memory).count() > 0:
+            return  # 已有数据，跳过
+    finally:
+        session.close()
+    
+    mem_dir = Path(__file__).parent.parent.parent / "data" / "memory"
+    if not mem_dir.exists():
+        return
+    
+    count = 0
+    for fpath in mem_dir.glob("*.json"):
+        section = fpath.stem
+        try:
+            data = _json.loads(fpath.read_text(encoding="utf-8"))
+            entries = data.get("entries", [])
+            for entry in entries:
+                key = entry.get("key", "")
+                content = entry.get("content", "")
+                importance = entry.get("importance", "medium")
+                if key and content:
+                    try:
+                        upsert_memory(section, key, content, importance)
+                        count += 1
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+    logger.info(f"记忆迁移完成: {count} 条 → 数据库")
+
+
+def migrate_prompts_txt_to_db():
+    """将 data/prompts/*.txt 迁移到数据库"""
+    prompts_dir = Path(__file__).parent.parent.parent / "data" / "prompts"
+    if not prompts_dir.exists():
+        return
+    
+    session = get_session()
+    try:
+        if session.query(Prompt).count() > 0:
+            return
+    finally:
+        session.close()
+    
+    count = 0
+    for fpath in prompts_dir.glob("*.txt"):
+        prompt_type = fpath.stem
+        try:
+            content = fpath.read_text(encoding="utf-8")
+            if content.strip():
+                upsert_prompt(prompt_type, content, "从文件迁移")
+                count += 1
+        except Exception:
+            pass
+    logger.info(f"提示词迁移完成: {count} 条 → 数据库")

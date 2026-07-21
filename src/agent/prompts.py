@@ -85,7 +85,8 @@ def list_prompts() -> dict:
 
 
 def update_prompt(prompt_type: str, new_template: str, reason: str = ""):
-    """更新提示词模板（保存自定义版本并记录原因）"""
+    """更新提示词模板（保存到文件 + 数据库）"""
+    # 1. 保存到文件（AI 启动时从文件读取）
     prompts_dir = Path("data/prompts")
     prompts_dir.mkdir(parents=True, exist_ok=True)
     prompt_file = prompts_dir / f"{prompt_type}.txt"
@@ -95,3 +96,9 @@ def update_prompt(prompt_type: str, new_template: str, reason: str = ""):
         with open(log_path, "a", encoding="utf-8") as f:
             from datetime import datetime
             f.write(f"[{datetime.now().isoformat()}] {reason}\n")
+    # 2. 同步到数据库（设置页从数据库读取）
+    try:
+        from src.database.db import upsert_prompt
+        upsert_prompt(prompt_type, new_template, reason)
+    except Exception:
+        pass  # 文件已保存，DB 同步失败不影响主流程

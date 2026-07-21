@@ -1,40 +1,22 @@
 """
-记忆增强插件 — 持久化知识存储与检索
+记忆增强插件 — 持久化知识存储与检索（数据库版）
 让 AI 能够记住重要信息、积累经验、跨会话保持知识
+所有数据存储到 SQLite 数据库 games.db，不再使用 JSON 文件
 """
-import sys, json, os, time
+import sys
 from pathlib import Path
-from datetime import datetime
 
 ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(ROOT))
 from src.tools.registry import register_tool
 
-# 往上查找 build.bat，定位真正的源码根目录（避免 dist 被清空）
-_real_root = ROOT
-for _ in range(6):
-    if (_real_root / "build.bat").exists():
-        break
-    _real_root = _real_root.parent
 
-MEMORY_DIR = _real_root / "data" / "memory"
-MEMORY_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def _read_memory(section: str) -> dict:
-    path = MEMORY_DIR / f"{section}.json"
-    if path.exists():
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except:
-            return {"entries": [], "updated": str(datetime.now())}
-    return {"entries": [], "updated": str(datetime.now()), "created": str(datetime.now())}
-
-
-def _write_memory(section: str, data: dict):
-    path = MEMORY_DIR / f"{section}.json"
-    data["updated"] = str(datetime.now())
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+def _get_db_funcs():
+    """延迟导入数据库函数，避免循环依赖"""
+    from src.database.db import (
+        upsert_memory, get_all_memories, get_memory_summary, delete_memory
+    )
+    return upsert_memory, get_all_memories, get_memory_summary, delete_memory
 
 
 @register_tool(
@@ -53,25 +35,13 @@ def _write_memory(section: str, data: dict):
     category="memory",
 )
 def memory_store(section: str, key: str, content: str, importance: str = "medium") -> str:
-    mem = _read_memory(section)
-    existing = [e for e in mem["entries"] if e.get("key") == key]
-    if existing:
-        existing[0]["content"] = content
-        existing[0]["importance"] = importance
-        existing[0]["updated"] = str(datetime.now())
-        _write_memory(section, mem)
-        return f"🔄 已更新记忆 [{section}/{key}]"
-    
-    mem["entries"].append({
-        "key": key, "content": content, "importance": importance,
-        "created": str(datetime.now()), "updated": str(datetime.now()),
-    })
-    if len(mem["entries"]) > 500:
-        mem["entries"] = sorted(mem["entries"], key=lambda x: x.get("importance","low")!="high")
-        mem["entries"] = mem["entries"][:500]
-    
-    _write_memory(section, mem)
-    return f"✅ 已存储记忆 [{section}/{key}] (重要性: {importance})"
+    upsert_memory, _, _, _ = _get_db_funcs()
+    try:
+        result = upsert_memory(section, key, content, importance)
+        action = "更新" if result["action"] == "updated" else "存储"
+        return f"✅ 已{action}记忆 [{section}/{key}] (重要性: {importance})"
+    except Exception as e:
+        return f"❌ 存储失败: {e}"
 
 
 @register_tool(
@@ -89,31 +59,27 @@ def memory_store(section: str, key: str, content: str, importance: str = "medium
     category="memory",
 )
 def memory_recall(section: str = "", keyword: str = "", limit: int = 10) -> str:
-    results = []
-    sections = [section] if section else [p.stem for p in MEMORY_DIR.glob("*.json")]
-    
-    for sec in sections:
-        mem = _read_memory(sec)
-        for entry in mem.get("entries", []):
-            if keyword:
-                kw = keyword.lower()
-                if kw not in entry.get("key","").lower() and kw not in entry.get("content","").lower():
-                    continue
-            results.append({"section": sec, **entry})
-    
-    if not results:
-        return f"🔍 未找到匹配的记忆（分类={section or '全部'}, 关键词={keyword or '无'}）"
-    
-    importance_order = {"high": 0, "medium": 1, "low": 2}
-    results.sort(key=lambda x: importance_order.get(x.get("importance","low"), 3))
-    results = results[:limit]
-    
-    output = [f"🧠 记忆检索结果 ({len(results)} 条):\n"]
-    for r in results:
-        output.append(f"  [{r['section']}/{r['key']}] ⭐{r.get('importance','?')}")
-        output.append(f"    {r['content'][:200]}")
-        output.append("")
-    return "\n".join(output)
+    _, get_all_memories, _, _ = _get_db_funcs()
+    try:
+        results = get_all_memories(
+            section=section if section else None,
+            keyword=keyword if keyword else None,
+            limit=limit,
+        )
+        if not results:
+            return f"🔍 未找到匹配的记忆（分类={section or '全部'}, 关键词={keyword or '无'}）"
+
+        importance_order = {"high": 0, "medium": 1, "low": 2}
+        results.sort(key=lambda x: importance_order.get(x.get("importance", "low"), 3))
+
+        output = [f"🧠 记忆检索结果 ({len(results)} 条):\n"]
+        for r in results:
+            output.append(f"  [{r['section']}/{r['key']}] ⭐{r.get('importance', '?')}")
+            output.append(f"    {r['content'][:200]}")
+            output.append("")
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ 检索失败: {e}"
 
 
 @register_tool(
@@ -125,17 +91,24 @@ def memory_recall(section: str = "", keyword: str = "", limit: int = 10) -> str:
     category="memory",
 )
 def memory_summary() -> str:
-    output = ["🧠 记忆存储概览\n"]
-    total = 0
-    for path in sorted(MEMORY_DIR.glob("*.json")):
-        mem = _read_memory(path.stem)
-        count = len(mem.get("entries", []))
-        total += count
-        high = sum(1 for e in mem.get("entries", []) if e.get("importance") == "high")
-        updated = mem.get("updated", "?")
-        output.append(f"  📁 {path.stem}: {count} 条 (重要:{high}) | 更新:{updated[:19]}")
-    output.append(f"\n  📊 总计: {total} 条记忆")
-    return "\n".join(output)
+    _, _, get_memory_summary, _ = _get_db_funcs()
+    try:
+        sections = get_memory_summary()
+        if not sections:
+            return "🧠 记忆存储为空"
+
+        output = ["🧠 记忆存储概览\n"]
+        total = 0
+        for s in sections:
+            total += s["total"]
+            output.append(
+                f"  📁 {s['section']}: {s['total']} 条 "
+                f"(重要:{s['high_count']}) | 更新:{s['last_updated']}"
+            )
+        output.append(f"\n  📊 总计: {total} 条记忆")
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ 获取概览失败: {e}"
 
 
 @register_tool(
@@ -152,11 +125,10 @@ def memory_summary() -> str:
     category="memory",
 )
 def memory_forget(section: str, key: str) -> str:
-    mem = _read_memory(section)
-    before = len(mem["entries"])
-    mem["entries"] = [e for e in mem["entries"] if e.get("key") != key]
-    after = len(mem["entries"])
-    if before == after:
+    _, _, _, delete_memory = _get_db_funcs()
+    try:
+        if delete_memory(section, key):
+            return f"🗑️ 已删除记忆 [{section}/{key}]"
         return f"⚠️ 未找到记忆 [{section}/{key}]"
-    _write_memory(section, mem)
-    return f"🗑️ 已删除记忆 [{section}/{key}] ({before}→{after})"
+    except Exception as e:
+        return f"❌ 删除失败: {e}"

@@ -2047,20 +2047,32 @@ class SettingsPage(QWidget):
             }}
         """)
 
-        # 四个 Tab
+        # 五个 Tab
         self._ai_tab = QWidget()
         self._site_tab = QWidget()
         self._oss_tab = QWidget()
         self._plugin_tab = QWidget()
+        self._cap_tab = QWidget()
+        self._sw_tab = QWidget()
+        self._memory_tab = QWidget()
+        self._prompt_tab = QWidget()
         self._build_ai_tab()
         self._build_site_tab()
         self._build_oss_tab()
         self._build_plugin_tab()
+        self._build_capabilities_tab()
+        self._build_installed_software_tab()
+        self._build_memory_tab()
+        self._build_prompt_tab()
 
         self._tabs.addTab(self._ai_tab, "🤖 AI 模型")
         self._tabs.addTab(self._site_tab, "🌐 站点设置")
         self._tabs.addTab(self._oss_tab, "☁️ OSS 存储")
         self._tabs.addTab(self._plugin_tab, "🧩 插件市场")
+        self._tabs.addTab(self._cap_tab, "🧠 能力清单")
+        self._tabs.addTab(self._sw_tab, "🖥 环境引擎")
+        self._tabs.addTab(self._memory_tab, "🧠 记忆系统")
+        self._tabs.addTab(self._prompt_tab, "📝 系统提示词")
         layout.addWidget(self._tabs)
 
         # 内部状态
@@ -2795,6 +2807,672 @@ class SettingsPage(QWidget):
 
         # 初始加载
         self._refresh_plugins()
+
+    # =================== 能力清单 Tab ===================
+    def _build_capabilities_tab(self):
+        """构建能力清单 Tab — 展示盘古 AI 所有功能与能力"""
+        import yaml
+        from pathlib import Path
+
+        layout = QVBoxLayout(self._cap_tab)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+
+        # 标题说明
+        header = QHBoxLayout()
+        title = QLabel("🧠 盘古 AI — 功能与能力清单")
+        title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {THEME['text_primary']};")
+        header.addWidget(title)
+        header.addStretch()
+
+        self._cap_count_label = QLabel("")
+        self._cap_count_label.setStyleSheet(f"color: {THEME['accent']}; font-size: 13px; font-weight: bold;")
+        header.addWidget(self._cap_count_label)
+        layout.addLayout(header)
+
+        subtitle = QLabel("以下列出盘古 AI 当前拥有的全部功能与能力，按类别分组。每次接到任务时，AI 会参考此清单选择最合适的工具。")
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
+        layout.addWidget(subtitle)
+
+        # 滚动区域
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"""
+            QScrollArea {{
+                border: none;
+                background: transparent;
+            }}
+            QScrollBar:vertical {{
+                background: {THEME['bg_dark']};
+                width: 8px;
+                border-radius: 4px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {THEME['border']};
+                border-radius: 4px;
+                min-height: 30px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {THEME['accent']};
+            }}
+        """)
+
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setSpacing(16)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 加载能力数据 — 优先从数据库读取，YAML 兜底
+        caps = []
+        summary = {}
+        try:
+            from src.database.db import get_capabilities_grouped, get_capability_summary
+            caps = get_capabilities_grouped(active_only=True)
+            summary = get_capability_summary()
+        except Exception:
+            # 数据库读取失败，回退到 YAML
+            cap_path = Path(__file__).parent.parent.parent / "config" / "capabilities.yaml"
+            try:
+                with open(cap_path, 'r', encoding='utf-8') as f:
+                    cap_data = yaml.safe_load(f)
+                caps = cap_data.get('capabilities', [])
+                summary = cap_data.get('summary', {})
+            except Exception:
+                pass
+
+        total_items = 0
+        for group in caps:
+            cat = group.get('category', '')
+            icon = group.get('icon', '📦')
+            items = group.get('items', [])
+            total_items += len(items)
+
+            # 分类卡片
+            card = QGroupBox(f"{icon}  {cat}")
+            card.setStyleSheet(f"""
+                QGroupBox {{
+                    color: {THEME['accent']};
+                    font-weight: bold;
+                    font-size: 14px;
+                    border: 1px solid {THEME['border']};
+                    border-radius: 10px;
+                    margin-top: 16px;
+                    padding: 20px 16px 12px 16px;
+                    background: {THEME['bg_card']};
+                }}
+                QGroupBox::title {{
+                    subcontrol-origin: margin;
+                    left: 16px;
+                    padding: 0 10px;
+                    background: {THEME['bg_card']};
+                    border-radius: 4px;
+                }}
+            """)
+
+            card_layout = QVBoxLayout(card)
+            card_layout.setSpacing(8)
+
+            # 表头
+            header_row = QHBoxLayout()
+            h_name = QLabel("  能力名称")
+            h_name.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px; font-weight: bold;")
+            h_name.setFixedWidth(180)
+            h_desc = QLabel("功能描述")
+            h_desc.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px; font-weight: bold;")
+            h_tool = QLabel("工具/来源")
+            h_tool.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px; font-weight: bold;")
+            h_tool.setFixedWidth(260)
+            header_row.addWidget(h_name)
+            header_row.addWidget(h_desc, 1)
+            header_row.addWidget(h_tool)
+            card_layout.addLayout(header_row)
+
+            # 分隔线
+            sep = QFrame()
+            sep.setFrameShape(QFrame.Shape.HLine)
+            sep.setStyleSheet(f"color: {THEME['border']};")
+            card_layout.addWidget(sep)
+
+            for item in items:
+                row = QHBoxLayout()
+                row.setSpacing(8)
+
+                name = QLabel(f"  ◆ {item.get('name', '')}")
+                name.setStyleSheet(f"color: {THEME['text_primary']}; font-size: 13px;")
+                name.setFixedWidth(180)
+
+                desc = QLabel(item.get('desc', ''))
+                desc.setWordWrap(True)
+                desc.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
+
+                tool = QLabel(item.get('tool', ''))
+                tool.setStyleSheet(f"color: {THEME['accent2']}; font-size: 11px; font-family: 'Consolas', 'Courier New', monospace;")
+                tool.setFixedWidth(260)
+                tool.setWordWrap(True)
+
+                row.addWidget(name)
+                row.addWidget(desc, 1)
+                row.addWidget(tool)
+                card_layout.addLayout(row)
+
+            container_layout.addWidget(card)
+
+        # 统计摘要
+        if summary:
+            summary_box = QGroupBox("📊 统计摘要")
+            summary_box.setStyleSheet(f"""
+                QGroupBox {{
+                    color: {THEME['warning']};
+                    font-weight: bold;
+                    font-size: 14px;
+                    border: 1px solid {THEME['border']};
+                    border-radius: 10px;
+                    margin-top: 16px;
+                    padding: 20px 16px 12px 16px;
+                    background: {THEME['bg_card']};
+                }}
+                QGroupBox::title {{
+                    subcontrol-origin: margin;
+                    left: 16px;
+                    padding: 0 10px;
+                    background: {THEME['bg_card']};
+                    border-radius: 4px;
+                }}
+            """)
+            s_layout = QFormLayout(summary_box)
+            s_layout.setSpacing(8)
+
+            s_layout.addRow(QLabel("能力分类:"), QLabel(f"{summary.get('total_categories', '?')} 个"))
+            s_layout.addRow(QLabel("工具总数:"), QLabel(f"{summary.get('total_tools', '?')} 个"))
+            s_layout.addRow(QLabel("本地工具:"), QLabel(", ".join(summary.get('local_tools', []))))
+            s_layout.addRow(QLabel("云服务:"), QLabel(", ".join(summary.get('cloud_services', []))))
+
+            for i in range(s_layout.rowCount()):
+                label_item = s_layout.itemAt(i, QFormLayout.ItemRole.LabelRole)
+                field_item = s_layout.itemAt(i, QFormLayout.ItemRole.FieldRole)
+                if label_item and label_item.widget():
+                    label_item.widget().setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 13px; font-weight: bold;")
+                if field_item and field_item.widget():
+                    field_item.widget().setStyleSheet(f"color: {THEME['text_primary']}; font-size: 13px;")
+
+            container_layout.addWidget(summary_box)
+
+        container_layout.addStretch()
+        scroll.setWidget(container)
+        layout.addWidget(scroll)
+
+        # 更新计数
+        self._cap_count_label.setText(f"共 {total_items} 项能力 · {len(caps)} 个分类")
+
+    # =================== 环境与软件清单 Tab ===================
+    def _build_installed_software_tab(self):
+        """构建环境与软件清单 Tab — 展示电脑上已安装的开发环境/引擎/软件"""
+        layout = QVBoxLayout(self._sw_tab)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+
+        # 标题行
+        header = QHBoxLayout()
+        title = QLabel("💻 环境、引擎与软件安装清单")
+        title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {THEME['text_primary']};")
+        header.addWidget(title)
+        header.addStretch()
+
+        self._sw_count_label = QLabel("")
+        self._sw_count_label.setStyleSheet(f"color: {THEME['accent']}; font-size: 13px; font-weight: bold;")
+        header.addWidget(self._sw_count_label)
+
+        # 刷新按钮
+        refresh_btn = QPushButton("🔄 重新扫描")
+        refresh_btn.setFixedHeight(32)
+        refresh_btn.clicked.connect(self._refresh_software_list)
+        refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['bg_input']}; color: {THEME['accent']};
+                border: 1px solid {THEME['border']}; border-radius: 6px;
+                padding: 4px 16px; font-size: 12px;
+            }}
+            QPushButton:hover {{ border-color: {THEME['accent']}; background: {THEME['hover']}; }}
+        """)
+        header.addWidget(refresh_btn)
+        layout.addLayout(header)
+
+        subtitle = QLabel("以下列出电脑上已安装的关键开发环境、引擎和软件。AI 在执行任务前会参考此清单，避免重复安装已有工具。")
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
+        layout.addWidget(subtitle)
+
+        # 滚动区域
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"""
+            QScrollArea {{ border: none; background: transparent; }}
+            QScrollBar:vertical {{ background: {THEME['bg_dark']}; width: 8px; border-radius: 4px; }}
+            QScrollBar::handle:vertical {{ background: {THEME['border']}; border-radius: 4px; min-height: 30px; }}
+            QScrollBar::handle:vertical:hover {{ background: {THEME['accent']}; }}
+        """)
+
+        container = QWidget()
+        self._sw_container_layout = QVBoxLayout(container)
+        self._sw_container_layout.setSpacing(16)
+        self._sw_container_layout.setContentsMargins(0, 0, 0, 0)
+
+        scroll.setWidget(container)
+        layout.addWidget(scroll)
+
+        # 加载数据
+        self._load_software_list()
+
+    def _load_software_list(self):
+        """从数据库加载软件清单并渲染"""
+        # 清空
+        while self._sw_container_layout.count() > 0:
+            item = self._sw_container_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        try:
+            from src.database.db import get_all_installed_software
+            groups = get_all_installed_software(grouped=True)
+        except Exception:
+            groups = []
+
+        total_items = 0
+        for group in groups:
+            cat = group.get('category', '')
+            icon = group.get('icon', '📦')
+            items = group.get('items', [])
+            total_items += len(items)
+
+            card = QGroupBox(f"{icon}  {cat}")
+            card.setStyleSheet(f"""
+                QGroupBox {{
+                    color: {THEME['accent']}; font-weight: bold; font-size: 14px;
+                    border: 1px solid {THEME['border']}; border-radius: 10px;
+                    margin-top: 16px; padding: 20px 16px 12px 16px;
+                    background: {THEME['bg_card']};
+                }}
+                QGroupBox::title {{
+                    subcontrol-origin: margin; left: 16px; padding: 0 10px;
+                    background: {THEME['bg_card']}; border-radius: 4px;
+                }}
+            """)
+
+            card_layout = QVBoxLayout(card)
+            card_layout.setSpacing(6)
+
+            # 表头
+            hdr = QHBoxLayout()
+            for w, t in [(180, "软件名称"), (100, "版本"), (280, "安装路径"), (70, "PATH"), (200, "备注")]:
+                lbl = QLabel(f"  {t}")
+                lbl.setFixedWidth(w)
+                lbl.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px; font-weight: bold;")
+                hdr.addWidget(lbl)
+            hdr.addStretch()
+            card_layout.addLayout(hdr)
+
+            sep = QFrame()
+            sep.setFrameShape(QFrame.Shape.HLine)
+            sep.setStyleSheet(f"color: {THEME['border']};")
+            card_layout.addWidget(sep)
+
+            for item in items:
+                row = QHBoxLayout()
+                row.setSpacing(6)
+
+                name_lbl = QLabel(f"  {'✅' if item.get('is_working') else '❌'} {item.get('name', '')}")
+                name_lbl.setFixedWidth(180)
+                name_lbl.setStyleSheet(f"color: {THEME['text_primary']}; font-size: 13px;")
+
+                ver_lbl = QLabel(item.get('version', '') or '—')
+                ver_lbl.setFixedWidth(100)
+                ver_lbl.setStyleSheet(f"color: {THEME['accent2']}; font-size: 12px; font-family: 'Consolas', monospace;")
+
+                path_lbl = QLabel(item.get('install_path', '') or '—')
+                path_lbl.setFixedWidth(280)
+                path_lbl.setToolTip(item.get('install_path', ''))
+                path_lbl.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 11px;")
+                path_lbl.setWordWrap(False)
+
+                path_status = "✅" if item.get('is_in_path') else "⚠️"
+                path_lbl2 = QLabel(path_status)
+                path_lbl2.setFixedWidth(70)
+                path_lbl2.setToolTip("在PATH中" if item.get('is_in_path') else "不在PATH中，需用完整路径")
+                path_lbl2.setStyleSheet(f"color: {'#22c55e' if item.get('is_in_path') else '#f59e0b'}; font-size: 14px;")
+
+                note_lbl = QLabel(item.get('notes', '') or '')
+                note_lbl.setFixedWidth(200)
+                note_lbl.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 11px;")
+                note_lbl.setWordWrap(True)
+
+                row.addWidget(name_lbl)
+                row.addWidget(ver_lbl)
+                row.addWidget(path_lbl)
+                row.addWidget(path_lbl2)
+                row.addWidget(note_lbl)
+                row.addStretch()
+                card_layout.addLayout(row)
+
+            self._sw_container_layout.addWidget(card)
+
+        self._sw_container_layout.addStretch()
+        self._sw_count_label.setText(f"共 {total_items} 款软件 · {len(groups)} 个分类")
+
+    def _refresh_software_list(self):
+        """重新扫描并刷新"""
+        try:
+            from src.database.db import scan_and_sync_installed_software
+            scan_and_sync_installed_software()
+            QMessageBox.information(self, "扫描完成", "已重新扫描系统软件并更新清单。")
+        except Exception as e:
+            QMessageBox.warning(self, "扫描失败", f"扫描过程出错: {e}")
+        self._load_software_list()
+
+
+    # =================== 记忆系统 Tab ===================
+    def _build_memory_tab(self):
+        """构建记忆系统 Tab — 展示 AI 持久化记忆数据"""
+        layout = QVBoxLayout(self._memory_tab)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+
+        header = QHBoxLayout()
+        title = QLabel("🧠 记忆系统")
+        title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {THEME['text_primary']};")
+        header.addWidget(title)
+        header.addStretch()
+
+        self._mem_count_label = QLabel("")
+        self._mem_count_label.setStyleSheet(f"color: {THEME['accent']}; font-size: 13px; font-weight: bold;")
+        header.addWidget(self._mem_count_label)
+
+        refresh_btn = QPushButton("🔄 刷新")
+        refresh_btn.setFixedHeight(32)
+        refresh_btn.clicked.connect(self._load_memory_data)
+        refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['bg_input']}; color: {THEME['accent']};
+                border: 1px solid {THEME['border']}; border-radius: 6px;
+                padding: 4px 16px; font-size: 12px;
+            }}
+            QPushButton:hover {{ border-color: {THEME['accent']}; background: {THEME['hover']}; }}
+        """)
+        header.addWidget(refresh_btn)
+        layout.addLayout(header)
+
+        subtitle = QLabel("AI 会将重要信息持久化存储，重启后依然保留。分为游戏知识、技能经验、配置、通用四类。")
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
+        layout.addWidget(subtitle)
+
+        # 搜索栏
+        search_row = QHBoxLayout()
+        self._mem_search = QLineEdit()
+        self._mem_search.setPlaceholderText("搜索记忆内容...")
+        self._mem_search.setStyleSheet(f"""
+            QLineEdit {{
+                background: {THEME['bg_input']}; color: {THEME['text_primary']};
+                border: 1px solid {THEME['border']}; border-radius: 6px;
+                padding: 6px 12px; font-size: 13px;
+            }}
+            QLineEdit:focus {{ border-color: {THEME['accent']}; }}
+        """)
+        self._mem_search.textChanged.connect(self._filter_memory_data)
+        search_row.addWidget(self._mem_search)
+
+        self._mem_section_filter = QComboBox()
+        self._mem_section_filter.addItems(["全部", "config", "games", "skills", "general"])
+        self._mem_section_filter.currentTextChanged.connect(self._filter_memory_data)
+        self._mem_section_filter.setStyleSheet(f"""
+            QComboBox {{
+                background: {THEME['bg_input']}; color: {THEME['text_primary']};
+                border: 1px solid {THEME['border']}; border-radius: 6px;
+                padding: 6px 12px; font-size: 13px; min-width: 100px;
+            }}
+            QComboBox:focus {{ border-color: {THEME['accent']}; }}
+            QComboBox::drop-down {{ border: none; }}
+            QComboBox QAbstractItemView {{
+                background: {THEME['bg_card']}; color: {THEME['text_primary']};
+                selection-background-color: {THEME['accent']};
+            }}
+        """)
+        search_row.addWidget(self._mem_section_filter)
+        layout.addLayout(search_row)
+
+        # 滚动区域
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"""
+            QScrollArea {{ border: none; background: transparent; }}
+            QScrollBar:vertical {{ background: {THEME['bg_dark']}; width: 8px; border-radius: 4px; }}
+            QScrollBar::handle:vertical {{ background: {THEME['border']}; border-radius: 4px; min-height: 30px; }}
+            QScrollBar::handle:vertical:hover {{ background: {THEME['accent']}; }}
+        """)
+
+        container = QWidget()
+        self._mem_container_layout = QVBoxLayout(container)
+        self._mem_container_layout.setSpacing(10)
+        self._mem_container_layout.setContentsMargins(0, 0, 0, 0)
+
+        scroll.setWidget(container)
+        layout.addWidget(scroll)
+
+        self._all_memories = []
+        self._load_memory_data()
+
+    def _load_memory_data(self):
+        """从数据库加载记忆数据"""
+        self._all_memories = []
+        try:
+            from src.database.db import get_all_memories
+            db_memories = get_all_memories()
+            self._all_memories = [
+                {
+                    "section": m["section"],
+                    "key": m["key"],
+                    "content": m["content"],
+                    "importance": m.get("importance", "medium"),
+                }
+                for m in db_memories
+            ]
+        except Exception:
+            pass
+        self._render_memory_list(self._all_memories)
+
+    def _filter_memory_data(self):
+        """按搜索词和分类过滤记忆"""
+        keyword = self._mem_search.text().lower()
+        section = self._mem_section_filter.currentText()
+        filtered = []
+        for m in self._all_memories:
+            if section != "全部" and m["section"] != section:
+                continue
+            if keyword and keyword not in m["key"].lower() and keyword not in m["content"].lower():
+                continue
+            filtered.append(m)
+        self._render_memory_list(filtered)
+
+    def _render_memory_list(self, memories):
+        """渲染记忆列表"""
+        while self._mem_container_layout.count() > 0:
+            item = self._mem_container_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        self._mem_count_label.setText(f"共 {len(memories)} 条记忆")
+
+        section_icons = {"config": "⚙️", "games": "🎮", "skills": "🔧", "general": "📋"}
+        importance_colors = {"high": "#ef4444", "medium": "#f59e0b", "low": "#22c55e", "unknown": THEME['text_muted']}
+
+        for m in memories:
+            card = QFrame()
+            card.setStyleSheet(f"""
+                QFrame {{
+                    background: {THEME['bg_card']}; border: 1px solid {THEME['border']};
+                    border-radius: 8px; padding: 12px;
+                }}
+            """)
+            card_layout = QVBoxLayout(card)
+            card_layout.setSpacing(6)
+
+            top_row = QHBoxLayout()
+            icon = section_icons.get(m["section"], "📄")
+            sec_label = QLabel(f"{icon} {m['section']}/{m['key']}")
+            sec_label.setStyleSheet(f"color: {THEME['accent']}; font-weight: bold; font-size: 13px;")
+            top_row.addWidget(sec_label)
+
+            imp_label = QLabel(f"● {m['importance']}")
+            imp_label.setStyleSheet(f"color: {importance_colors.get(m['importance'], THEME['text_muted'])}; font-size: 11px;")
+            top_row.addWidget(imp_label)
+            top_row.addStretch()
+
+            del_btn = QPushButton("🗑 删除")
+            del_btn.setFixedSize(60, 24)
+            del_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: #ef4444; border: 1px solid #ef4444;
+                    border-radius: 4px; font-size: 11px;
+                }}
+                QPushButton:hover {{ background: #ef4444; color: #fff; }}
+            """)
+            sec = m["section"]
+            key = m["key"]
+            del_btn.clicked.connect(lambda checked, s=sec, k=key: self._delete_memory(s, k))
+            top_row.addWidget(del_btn)
+            card_layout.addLayout(top_row)
+
+            content_label = QLabel(m["content"][:500])
+            content_label.setWordWrap(True)
+            content_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
+            card_layout.addWidget(content_label)
+
+            self._mem_container_layout.addWidget(card)
+
+        self._mem_container_layout.addStretch()
+
+    def _delete_memory(self, section, key):
+        """删除一条记忆（从数据库）"""
+        reply = QMessageBox.question(self, "确认删除", f"确定要删除 {section}/{key} 吗？",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            from src.database.db import delete_memory
+            if delete_memory(section, key):
+                QMessageBox.information(self, "已删除", f"已删除记忆 {section}/{key}")
+                self._load_memory_data()
+            else:
+                QMessageBox.warning(self, "未找到", f"未找到记忆 {section}/{key}")
+        except Exception as e:
+            QMessageBox.warning(self, "删除失败", str(e))
+
+    # =================== 系统提示词 Tab ===================
+    def _build_prompt_tab(self):
+        """构建系统提示词 Tab — 查看当前 AI 系统提示词"""
+        layout = QVBoxLayout(self._prompt_tab)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+
+        header = QHBoxLayout()
+        title = QLabel("📝 系统提示词")
+        title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {THEME['text_primary']};")
+        header.addWidget(title)
+        header.addStretch()
+
+        self._prompt_info_label = QLabel("")
+        self._prompt_info_label.setStyleSheet(f"color: {THEME['accent']}; font-size: 13px; font-weight: bold;")
+        header.addWidget(self._prompt_info_label)
+
+        refresh_btn = QPushButton("🔄 刷新")
+        refresh_btn.setFixedHeight(32)
+        refresh_btn.clicked.connect(self._load_prompt_data)
+        refresh_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['bg_input']}; color: {THEME['accent']};
+                border: 1px solid {THEME['border']}; border-radius: 6px;
+                padding: 4px 16px; font-size: 12px;
+            }}
+            QPushButton:hover {{ border-color: {THEME['accent']}; background: {THEME['hover']}; }}
+        """)
+        header.addWidget(refresh_btn)
+        layout.addLayout(header)
+
+        subtitle = QLabel("以下为当前 AI 的系统提示词（只读）。提示词定义了 AI 的行为规则、能力边界和回答风格。")
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
+        layout.addWidget(subtitle)
+
+        # 提示词来源标签
+        self._prompt_source_label = QLabel("")
+        self._prompt_source_label.setStyleSheet(f"color: {THEME['accent2']}; font-size: 12px; font-weight: bold;")
+        layout.addWidget(self._prompt_source_label)
+
+        # 文本显示区
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"""
+            QScrollArea {{ border: 1px solid {THEME['border']}; border-radius: 8px; background: {THEME['bg_dark']}; }}
+            QScrollBar:vertical {{ background: {THEME['bg_dark']}; width: 8px; border-radius: 4px; }}
+            QScrollBar::handle:vertical {{ background: {THEME['border']}; border-radius: 4px; min-height: 30px; }}
+            QScrollBar::handle:vertical:hover {{ background: {THEME['accent']}; }}
+        """)
+
+        self._prompt_text = QTextEdit()
+        self._prompt_text.setReadOnly(True)
+        self._prompt_text.setStyleSheet(f"""
+            QTextEdit {{
+                background: {THEME['bg_dark']}; color: {THEME['text_primary']};
+                border: none; padding: 16px; font-size: 13px;
+                font-family: 'Consolas', 'Microsoft YaHei', monospace;
+            }}
+        """)
+        scroll.setWidget(self._prompt_text)
+        layout.addWidget(scroll)
+
+        self._load_prompt_data()
+
+    def _load_prompt_data(self):
+        """加载系统提示词（优先数据库，回退文件）"""
+        prompt_text = ""
+        source = ""
+
+        # 优先从数据库读取
+        try:
+            from src.database.db import get_prompt_from_db
+            db_prompt = get_prompt_from_db("system")
+            if db_prompt:
+                prompt_text = db_prompt["content"]
+                updated = db_prompt.get("updated_at", "")
+                reason = db_prompt.get("reason", "")
+                source = f"💾 来源: 数据库 (更新: {updated}"
+                if reason:
+                    source += f", 原因: {reason}"
+                source += ")"
+        except Exception:
+            pass
+
+        # 回退：从文件读取
+        if not prompt_text:
+            custom_path = Path("data/prompts/system.txt")
+            if custom_path.exists():
+                prompt_text = custom_path.read_text(encoding="utf-8")
+                source = "📂 来源: data/prompts/system.txt（自定义覆盖）"
+            else:
+                try:
+                    from src.agent.prompts import DEFAULT_PROMPTS
+                    prompt_text = DEFAULT_PROMPTS.get("system", "")
+                    source = "📦 来源: 内置默认提示词"
+                except Exception:
+                    prompt_text = "无法加载提示词"
+                    source = "⚠️ 加载失败"
+
+        chars = len(prompt_text)
+        lines = prompt_text.count('\n') + 1
+        self._prompt_info_label.setText(f"{chars} 字符 · {lines} 行")
+        self._prompt_source_label.setText(source)
+        self._prompt_text.setPlainText(prompt_text)
+
 
     def _on_plugin_selected(self, row):
         """选中插件时显示详情"""

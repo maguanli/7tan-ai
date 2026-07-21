@@ -102,6 +102,9 @@ def create_default_config(config_path: Path = None):
                 },
             },
         },
+        "agent": {
+            "loop_timeout": 600,
+        },
     }
     with open(config_path, "w", encoding="utf-8") as f:
         yaml.dump(default, f, allow_unicode=True, default_flow_style=False, indent=2)

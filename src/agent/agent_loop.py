@@ -17,6 +17,18 @@ from ..database.db import get_session, ConversationHistory
 # 最大迭代次数（防止无限循环）
 MAX_ITERATIONS = 300  # 浏览列表多页任务需要更多步数
 
+def _get_timeout_from_config() -> int:
+    """从配置读取超时时间（秒），默认 600"""
+    try:
+        from ..config.loader import load_config
+        config = load_config()
+        return config.get("agent", {}).get("loop_timeout", 600)
+    except Exception:
+        return 600
+
+# Agent 循环超时（从配置读取）
+AGENT_LOOP_TIMEOUT = _get_timeout_from_config()
+
 
 def _get_active_ai_config(config: dict) -> dict:
     """从数据库获取当前活跃 AI 配置"""
@@ -68,7 +80,8 @@ def run_agent_loop(
     system_prompt = _build_system_prompt(config)
 
     # 初始化消息
-    messages = [{"role": "system", "content": system_prompt}]
+    timeout_note = f"\n\n【时间限制】本轮任务超时时间为 {AGENT_LOOP_TIMEOUT} 秒（约 {AGENT_LOOP_TIMEOUT//60} 分钟）。请合理规划步骤，避免不必要的大文件重复下载。如果时间紧迫，优先完成任务的核心部分。"
+    messages = [{"role": "system", "content": system_prompt + timeout_note}]
 
     # 加载历史对话（带截断保护）
     if session_id:
@@ -107,8 +120,29 @@ def run_agent_loop(
     final_result = ""
     all_logs = []
     last_calls = []  # 防重复循环检测
+    start_time = time.time()  # 超时感知：记录开始时间
+    timeout_warned = False    # 是否已发出超时警告
 
     for iteration in range(1, max_iterations + 1):
+        # 超时感知：检查剩余时间
+        elapsed = time.time() - start_time
+        remaining = AGENT_LOOP_TIMEOUT - elapsed
+        if remaining < 120 and not timeout_warned:
+            timeout_warned = True
+            logger.warning(f"⏰ 距超时还有 {remaining:.0f} 秒，请尽快完成任务！")
+            messages.append({
+                "role": "user",
+                "content": f"⚠️ 距超时还有约 {remaining:.0f} 秒！请跳过非必需步骤，直接给出当前已完成的结果。"
+            })
+        elif remaining < 30:
+            logger.error(f"⏰ 仅剩 {remaining:.0f} 秒，强制退出循环")
+            return {
+                "success": False,
+                "result": f"⏰ 任务超时（已用 {elapsed:.0f} 秒）。请分步执行或简化任务后重试。",
+                "iterations": iteration,
+                "cost": total_cost,
+                "logs": all_logs,
+            }
         logger.info(f"🔄 Agent 迭代 {iteration}/{max_iterations}")
 
         try:

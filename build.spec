@@ -17,6 +17,11 @@ a = Analysis(
         'tkinter', 'unittest', 'test', 'pdb',
         'IPython', 'jupyter', 'notebook',
         'matplotlib', 'pandas',
+        # --- 排除 ML/AI 包（项目不使用，torch c10.dll 损坏导致构建失败）---
+        'torch', 'torchvision', 'torchaudio', 'torchtext',
+        'onnxruntime', 'onnx', 'onnxconverter_common',
+        'huggingface_hub', 'transformers', 'sentencepiece', 'tokenizers',
+        'safetensors',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

@@ -20,9 +20,16 @@ from loguru import logger
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
-# 🔒 后端超时保护：Agent 循环最长等待时间（秒）
-# 略小于前端 HTTP 超时（310s），确保后端先返回错误而非前端 timeout
-AGENT_LOOP_TIMEOUT = 600
+def _get_agent_loop_timeout() -> int:
+    """从配置读取超时时间，默认 600 秒"""
+    try:
+        from ...config.loader import load_config
+        config = load_config()
+        return config.get("agent", {}).get("loop_timeout", 600)
+    except Exception:
+        return 600
+
+AGENT_LOOP_TIMEOUT = _get_agent_loop_timeout()
 
 
 class ChatRequest(BaseModel):

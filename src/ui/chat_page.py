@@ -1395,6 +1395,7 @@ class ChatPage(QWidget):
         self._messages = []
         self._message_data = []
         self._current_parsed_data = []  # ALL parsed messages (including unrendered)
+        self._full_history_messages = []  # 完整历史消息（用于向上滚动懒加载）
         self._rendered_start = 0
         self._rendered_end = 0
         self._all_rendered = True
@@ -2023,6 +2024,7 @@ class ChatPage(QWidget):
         self._messages.clear()
         self._message_data.clear()
         self._current_parsed_data.clear()
+        self._full_history_messages.clear()
         self._rendered_start = 0
         self._rendered_end = 0
         self._all_rendered = True
@@ -2193,6 +2195,7 @@ class ChatPage(QWidget):
         messages = data.get("messages", [])
         self._current_session_id = session_id
         self._clear_messages()
+        self._full_history_messages = messages  # 保存完整历史，供向上滚动懒加载使用
         self._title_label.setText(f"💬 {data.get('title', '对话')}")
 
         if not messages:
@@ -2340,7 +2343,7 @@ class ChatPage(QWidget):
         self._load_more_history()
 
     def _load_more_history(self):
-        """加载更早的历史消息（每次 20 条）"""
+        """加载更早的历史消息（每次 LAZY_CHUNK 条）"""
         if self._rendered_start <= 0:
             self._all_rendered = True
             self._lazy_loading = False
@@ -2348,16 +2351,31 @@ class ChatPage(QWidget):
 
         chunk = self._LAZY_CHUNK
         new_start = max(0, self._rendered_start - chunk)
-        # 从预解析缓存读取旧消息（含 HTML）
+
+        # 1) 优先从预解析缓存读取
         parsed_slice = self._current_parsed_data[new_start:self._rendered_start] if self._current_parsed_data else []
         old_messages = []
         for msg in reversed(parsed_slice):
             md = {"role": msg["role"], "content": msg["content"], "timestamp": msg.get("timestamp", ""), "cost": msg.get("cost", 0), "tool_calls": msg.get("tool_calls"), "html": msg.get("html")}
             old_messages.append(md)
             self._message_data.insert(new_start, md)
-        # Fallback: if no parsed cache, read from _message_data
+
+        # 2) 缓存不够？从完整历史列表实时解析
+        if not old_messages and self._full_history_messages:
+            raw_slice = self._full_history_messages[new_start:self._rendered_start]
+            for msg in reversed(raw_slice):
+                role = msg.get("role", "system")
+                content = msg.get("content", "")
+                html = self._pre_parse_single(content, role) if content else None
+                md = {"role": role, "content": content, "timestamp": msg.get("timestamp", ""), "cost": msg.get("cost", 0), "tool_calls": msg.get("tool_calls"), "html": html}
+                old_messages.append(md)
+                self._message_data.insert(new_start, md)
+
+        # 3) 仍为空则放弃
         if not old_messages:
-            old_messages = list(reversed(self._message_data[new_start:self._rendered_start]))
+            self._all_rendered = True
+            self._lazy_loading = False
+            return
 
         # 记录当前滚动位置，用于加载后恢复
         sb = self._scroll.verticalScrollBar()

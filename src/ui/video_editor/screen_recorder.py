@@ -197,6 +197,8 @@ class ScreenRecorder:
                         self.on_error(f"录制引擎启动失败: {e}")
                     return False
                 self._config = config_no_audio
+                self._running = True  # 回退成功，恢复运行状态
+                config = config_no_audio  # 后续日志用新配置
                 break
 
         # 监控 FFmpeg stderr

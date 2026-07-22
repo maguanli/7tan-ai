@@ -2430,13 +2430,18 @@ class SettingsPage(QWidget):
     def _toggle_api_key_visibility(self, checked):
         """切换 API Key 显示/隐藏 — 显示时从本地配置加载真实密钥"""
         if checked:
-            # 从本地配置文件获取真实密钥（绕过脱敏）
+            # 从本地配置文件获取真实密钥（绕过脱敏），并解析环境变量
             from src.config.loader import load_config
+            import re
             config = load_config()
             key_name = self._config_list.currentItem().data(Qt.ItemDataRole.UserRole)
-            real_key = config.get("ai", {}).get("configs", {}).get(key_name, {}).get("api_key", "")
-            if real_key:
+            raw_key = config.get("ai", {}).get("configs", {}).get(key_name, {}).get("api_key", "")
+            # 解析 ${VAR} 环境变量引用
+            real_key = re.sub(r'\$\{(\w+)\}', lambda m: _os.environ.get(m.group(1), m.group(0)), raw_key)
+            if real_key and real_key != raw_key:
                 self._ai_key.setText(real_key)
+            elif raw_key and not raw_key.startswith("$"):
+                self._ai_key.setText(raw_key)
             self._ai_key.setEchoMode(QLineEdit.EchoMode.Normal)
             self._ai_key_toggle.setText("隐藏")
         else:

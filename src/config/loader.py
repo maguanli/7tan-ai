@@ -98,7 +98,7 @@ def create_default_config(config_path: Path = None):
                     "api_key": "",
                     "context_window": 128000,
                     "max_tokens": 16384,
-                    "temperature": 0.7,
+                    "temperature": 1.0,
                 },
                 "ollama": {
                     "provider": "ollama",

@@ -8,7 +8,7 @@ a = Analysis(
     ['main.py'],
     pathex=[str(Path('D:\7tan\7tanAI')), str(Path('D:\7tan\7tanAI/src'))],
     binaries=[],
-    datas=[('config', 'config'), ('data/prompts', 'data/prompts'), ('data/plugins', 'data/plugins')],
+    datas=[('config', 'config'), ('data/prompts', 'data/prompts'), ('data/plugins', 'data/plugins'), ('data/logo', 'data/logo')],
     hiddenimports=['sqlalchemy', 'sqlalchemy.pool', 'sqlalchemy.ext.declarative', 'fastapi', 'uvicorn', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.websockets', 'websockets', 'websockets.legacy', 'playwright', 'playwright.async_api', 'openai', 'httpx', 'yaml', 'apscheduler', 'loguru', 'watchfiles', 'pydantic', 'cryptography', 'aiofiles', 'PyQt6', 'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebEngineCore', 'PyQt6.QtWebChannel', 'PyQt6.QtCharts', 'unidecode', 'slugify', 'mss', 'numpy'],
     hookspath=[],
     hooksconfig={},

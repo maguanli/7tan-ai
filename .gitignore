@@ -39,6 +39,11 @@ venv/
 *.log
 downloads/temp/
 
+# 测试覆盖率
+.coverage
+.coverage.*
+htmlcov/
+
 # IDE
 .vscode/
 .idea/

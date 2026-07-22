@@ -1,8 +1,8 @@
 """
 视频剪辑器 — 主窗口 (VideoEditorPage)
+"""
+from __future__ import annotations
 
-Phase 1~7 全部完成。底部工具栏：
-  💾保存 | 📂打开 | 🎥录屏 | 🎙️AI配音 | 📝AI字幕 |
   🎨滤镜 | 🎬转场 | 🎯关键帧 | 🖼️封面 | 🤖AI视频 | 📤导出
 """
 from pathlib import Path

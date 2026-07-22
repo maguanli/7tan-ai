@@ -36,7 +36,7 @@ RETRY_POLICIES = {
     "api_timeout":    RetryConfig(max_retries=5, base_delay=2, max_delay=120, backoff=2.0,
                                   name="API超时"),
     # API 限流 — 等久一点
-    "api_rate_limit": RetryConfig(max_retries=3, base_delay=60, max_delay=600, backoff=1.0,
+    "api_rate_limit": RetryConfig(max_retries=30, base_delay=60, max_delay=600, backoff=1.0,
                                   name="API限流"),
     # 文件下载 — 快速重试
     "download":       RetryConfig(max_retries=3, base_delay=1, max_delay=30, backoff=1.0,

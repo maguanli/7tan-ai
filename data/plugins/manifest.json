@@ -414,5 +414,60 @@
     "description": "智能代码分析：跳转定义、查找引用、诊断检查（pyflakes）、代码补全、悬停文档。基于 jedi + pyflakes，纯 Python 实现。",
     "tools": ["go_to_definition", "find_all_references", "get_diagnostics", "get_completions", "get_hover_info"],
     "icon": "🔬"
+  },
+  {
+    "id": "debug_helper",
+    "name": "调试辅助",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "错误诊断与调试：堆栈分析、错误解释与修复建议、日志搜索分析、崩溃诊断。支持12种常见Python错误类型。",
+    "tools": ["analyze_error", "analyze_log", "diagnose_crash"],
+    "icon": "🐛"
+  },
+  {
+    "id": "db_explorer",
+    "name": "数据库探索器",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "项目数据库管理：探索表结构(SQLite/MySQL/PostgreSQL)、执行SELECT查询、自动生成SQLAlchemy ORM模型。",
+    "tools": ["explore_db", "query_db", "generate_model"],
+    "icon": "🗄️"
+  },
+  {
+    "id": "http_client",
+    "name": "HTTP 客户端",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "API 测试与调试：发送HTTP请求(GET/POST/PUT/DELETE)、测试API端点、解析OpenAPI/Swagger文档。",
+    "tools": ["http_request", "test_api_endpoint", "openapi_explore"],
+    "icon": "🌐"
+  },
+  {
+    "id": "ci_helper",
+    "name": "CI/CD 助手",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "持续集成辅助：生成GitHub Actions CI配置(Python/Node/Docker)、基于Git历史生成CHANGELOG、语义化版本升级。",
+    "tools": ["generate_ci_config", "generate_changelog", "bump_version"],
+    "icon": "🚀"
+  },
+  {
+    "id": "config_manager",
+    "name": "配置管理",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "项目配置安全：管理.env变量(增删改查)、扫描硬编码密钥/Token/密码泄露、生成.env.example模板。",
+    "tools": ["manage_env", "scan_secrets", "generate_env_template"],
+    "icon": "🔐"
   }
 ]

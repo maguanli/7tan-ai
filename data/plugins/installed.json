@@ -27,6 +27,11 @@
     "dependency_analyzer",
     "template_generator",
     "test_runner",
-    "lsp_bridge"
+    "lsp_bridge",
+    "debug_helper",
+    "db_explorer",
+    "http_client",
+    "ci_helper",
+    "config_manager"
   ]
 }

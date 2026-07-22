@@ -17,6 +17,15 @@
     "ide_integration",
     "file_replacer",
     "code_reviewer",
-    "remote_deployer"
+    "remote_deployer",
+    "code_search",
+    "code_structure",
+    "terminal_runner",
+    "doc_generator",
+    "refactor_tools",
+    "diff_tools",
+    "dependency_analyzer",
+    "template_generator",
+    "test_runner"
   ]
 }

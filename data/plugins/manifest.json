@@ -304,5 +304,104 @@
       "deploy_pipeline"
     ],
     "icon": "🚀"
+  },
+  {
+    "id": "code_search",
+    "name": "代码搜索",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "项目级代码搜索：ripgrep全文搜索、文件名查找、多文件内容搜索。支持正则、文件类型过滤。",
+    "tools": ["grep_code", "find_files", "search_in_files"],
+    "icon": "🔍"
+  },
+  {
+    "id": "code_structure",
+    "name": "代码结构分析",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "代码结构解析：列出函数/类、分析导入依赖、项目扫描统计、查找符号引用。支持 Python AST。",
+    "tools": ["list_functions", "analyze_imports", "scan_project", "find_references"],
+    "icon": "🏗️"
+  },
+  {
+    "id": "terminal_runner",
+    "name": "终端增强",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "增强的命令执行：自动检测构建系统并构建、安装依赖、环境检查。支持 Python/Node/Go/Rust。",
+    "tools": ["run_command", "run_build", "install_deps", "check_env"],
+    "icon": "⚡"
+  },
+  {
+    "id": "doc_generator",
+    "name": "文档生成",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "AI 辅助文档生成：docstring 模板、README 模板、API 路由分析。Google 风格文档字符串。",
+    "tools": ["generate_docstring", "generate_readme", "analyze_api_routes"],
+    "icon": "📖"
+  },
+  {
+    "id": "refactor_tools",
+    "name": "代码重构",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "代码重构工具：符号重命名预览、导入整理、函数提取建议、代码格式化（black/autopep8/prettier）。",
+    "tools": ["rename_symbol", "organize_imports", "extract_function", "format_code"],
+    "icon": "🔧"
+  },
+  {
+    "id": "diff_tools",
+    "name": "差异工具",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "差异分析：文件/目录diff、Git工作区变更检查、分支对比、合并冲突检测与辅助解决。",
+    "tools": ["generate_diff", "check_changes", "compare_branches", "resolve_conflict"],
+    "icon": "📊"
+  },
+  {
+    "id": "dependency_analyzer",
+    "name": "依赖分析",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "依赖管理：列出依赖、检测循环导入、生成Mermaid依赖图、检查过期包。",
+    "tools": ["check_dependencies", "detect_circular_imports", "generate_dependency_graph", "check_outdated"],
+    "icon": "🔗"
+  },
+  {
+    "id": "template_generator",
+    "name": "项目脚手架",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "快速项目创建：Python CLI/Web、Node CLI、Vue 3 等模板。一键创建完整项目结构。",
+    "tools": ["list_templates", "create_project", "generate_gitignore"],
+    "icon": "🏗️"
+  },
+  {
+    "id": "test_runner",
+    "name": "测试运行器",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "测试自动化：运行测试（pytest/jest/go test/cargo test）、覆盖率报告、测试发现、模板生成。",
+    "tools": ["run_tests", "run_coverage", "discover_tests", "generate_test_template"],
+    "icon": "🧪"
   }
 ]

@@ -102,7 +102,7 @@
 - 有没有遗漏的细节？
 - 下次如何做得更好？
 
-## 🧠 能力清单速览（共 10 大类 60+ 工具）
+## 🧠 能力清单速览（共 17 大类 120+ 工具）
 
 | 类别 | 核心能力 | 关键工具 |
 |------|----------|----------|
@@ -116,6 +116,13 @@
 | 💻 开发运维 | Git(20+)、Docker(8)、Kubernetes(15+)、VS Code(7)、ADB(6)、SSH/SCP/rsync、Gradle、代码审查 | git_*, docker_*, kubectl_*, vscode_*, adb_*, ssh_execute, code_review_* |
 | 🎬 视频制作 | Edge TTS配音、MoviePy合成、FFmpeg处理、Pillow生图、SD WebUI(AI生图)、ComfyUI | G盘本地工具链: G:\AI_Video\ |
 | 📊 费用管理 | 记录每次AI调用费用、按日期/任务汇总报告 | track_cost, get_cost_report |
+| 🔍 代码搜索 | 全局搜索、文件名查找、内容检索、项目扫描、符号引用追踪 | grep_code, find_files, search_in_files, find_references, scan_project |
+| 🧭 LSP 语言服务 | 跳转定义、查找引用、诊断错误、代码补全、悬停文档 | go_to_definition, find_all_references, get_diagnostics, get_completions, get_hover_info |
+| 🏗️ 终端与构建 | 执行命令、自动构建、安装依赖、环境检查、Shell脚本 | run_command, run_build, install_deps, check_env, run_shell_script, system_shell |
+| 📝 文档与重构 | 生成文档/README、重命名符号、格式化代码、提取函数、整理导入、API路由分析 | generate_docstring, generate_readme, rename_symbol, format_code, extract_function, organize_imports, analyze_api_routes |
+| 🔬 依赖与差异 | 依赖检查、循环导入检测、依赖图、过期包、差异对比、分支对比、冲突解决 | check_dependencies, detect_circular_imports, generate_dependency_graph, check_outdated, generate_diff, check_changes, compare_branches, resolve_conflict |
+| 🧪 测试 | 运行测试、覆盖率报告、发现测试、生成测试模板 | run_tests, run_coverage, discover_tests, generate_test_template |
+| 🔧 批量与修复 | 批量文件替换、沙盒自修复、代码补全服务、完整性检查、函数/导入分析 | file_replace, self_fix_sandbox, completion_*, check_file_integrity, list_functions, analyze_imports |
 
 > 💡 完整能力清单详见软件设置 → 「🧠 能力清单」Tab，或 config/capabilities.yaml
 > 💡 已安装软件清单详见软件设置 → 「💻 环境与软件」Tab，或查询数据库 installed_software 表

@@ -2428,28 +2428,41 @@ class SettingsPage(QWidget):
             self._ai_base.setText(default_url)
 
     def _toggle_api_key_visibility(self, checked):
-        """切换 API Key 显示/隐藏 — 显示时从本地配置加载真实密钥"""
+        """切换 API Key 显示/隐藏"""
+        item = self._config_list.currentItem()
+        if not item:
+            return
+        key_name = item.data(Qt.ItemDataRole.UserRole)
+
         if checked:
-            # 从本地配置文件获取真实密钥（绕过脱敏），并解析环境变量
-            from src.config.loader import load_config
-            import re
-            config = load_config()
-            key_name = self._config_list.currentItem().data(Qt.ItemDataRole.UserRole)
-            raw_key = config.get("ai", {}).get("configs", {}).get(key_name, {}).get("api_key", "")
-            # 解析 ${VAR} 环境变量引用
-            real_key = re.sub(r'\$\{(\w+)\}', lambda m: _os.environ.get(m.group(1), m.group(0)), raw_key)
-            if real_key and real_key != raw_key:
+            # 显示：优先从数据库获取真实密钥（AI 配置存在数据库，不在 YAML）
+            real_key = ""
+            try:
+                from src.database.db import get_ai_config_by_key
+                cfg = get_ai_config_by_key(key_name, mask_secrets=False)
+                if cfg:
+                    real_key = cfg.get("api_key", "")
+            except Exception:
+                pass
+
+            # fallback：如果数据库没拿到，尝试从 load_config 解析环境变量引用
+            if not real_key:
+                import re
+                from src.config.loader import load_config
+                config = load_config()
+                raw_key = config.get("ai", {}).get("configs", {}).get(key_name, {}).get("api_key", "")
+                real_key = re.sub(r'\$\{(\w+)\}', lambda m: _os.environ.get(m.group(1), m.group(0)), raw_key)
+
+            if real_key:
                 self._ai_key.setText(real_key)
-            elif raw_key and not raw_key.startswith("$"):
-                self._ai_key.setText(raw_key)
+                # 同步到内存缓存，防止后续操作覆盖用户输入
+                if key_name in self._ai_configs:
+                    self._ai_configs[key_name]["api_key"] = real_key
+
             self._ai_key.setEchoMode(QLineEdit.EchoMode.Normal)
             self._ai_key_toggle.setText("隐藏")
         else:
-            # 恢复脱敏显示
-            item = self._config_list.currentItem()
-            if item:
-                cfg = self._ai_configs.get(item.data(Qt.ItemDataRole.UserRole), {})
-                self._ai_key.setText(cfg.get("api_key", ""))
+            # 隐藏：仅切换密码模式，不覆盖输入框内容（修复：之前从脱敏缓存覆盖导致用户输入丢失）
             self._ai_key.setEchoMode(QLineEdit.EchoMode.Password)
             self._ai_key_toggle.setText("显示")
 

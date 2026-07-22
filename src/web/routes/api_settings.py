@@ -4,6 +4,8 @@ GET  /api/settings         — 获取配置（脱敏）
 PUT  /api/settings         — 更新配置
 POST /api/settings/restart — 重启程序
 """
+import os
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Any
@@ -20,6 +22,37 @@ def _mask_secret(value: Any) -> Any:
     if isinstance(value, str) and len(value) > 8:
         return value[:3] + "••••" + value[-3:]
     return value
+
+
+def _update_env_model(ai_key: str, model: str):
+    """同步 .env 中的模型环境变量（目前仅 deepseek 使用 ${DEEPSEEK_MODEL} 变量）"""
+    if ai_key != "deepseek":
+        return
+    if not model or "••••" in str(model):
+        return
+
+    # 从 api_settings.py → routes/ → web/ → src/ → 项目根目录
+    env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
+    if not os.path.exists(env_path):
+        logger.warning(f".env 文件不存在: {env_path}")
+        return
+
+    with open(env_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    updated = False
+    with open(env_path, "w", encoding="utf-8") as f:
+        for line in lines:
+            if line.startswith("DEEPSEEK_MODEL="):
+                f.write(f"DEEPSEEK_MODEL={model}\n")
+                updated = True
+            else:
+                f.write(line)
+
+    if updated:
+        logger.info(f"✅ .env DEEPSEEK_MODEL 已更新为 {model}")
+    else:
+        logger.warning(f"⚠️ .env 中未找到 DEEPSEEK_MODEL= 行，未更新")
 
 
 @router.get("")
@@ -86,6 +119,25 @@ async def update_settings(updates: dict):
             if active_key:
                 set_active_ai_config(active_key)
             logger.info(f"⚙️ AI 配置已写入数据库")
+
+            # 🔄 同步 .env 中的模型变量
+            if active_key:
+                active_model = ai_updates["configs"].get(active_key, {}).get("model", "")
+                _update_env_model(active_key, active_model)
+
+        elif ai_updates and "active" in ai_updates:
+            # 仅切换 active（无 configs 变更）→ 同步到 YAML
+            config.setdefault("ai", {})["active"] = ai_updates["active"]
+            logger.info(f"⚙️ AI active 已同步到 YAML: {ai_updates['active']}")
+
+            # 🔄 同步 .env 中的模型变量（从数据库读取模型名）
+            try:
+                from ...database.db import get_active_ai_config
+                active_cfg = get_active_ai_config(mask_secrets=False)
+                if active_cfg:
+                    _update_env_model(ai_updates["active"], active_cfg.get("model", ""))
+            except Exception as e:
+                logger.warning(f"同步 .env 模型变量失败: {e}")
 
         # 其余配置写入 YAML
         def deep_merge(base: dict, overlay: dict):

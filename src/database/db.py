@@ -320,13 +320,15 @@ class AiConfig(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     def to_dict(self, mask_secrets: bool = False) -> dict:
-        api_key = self.api_key or ""
-        if mask_secrets and len(api_key) > 6:
-            api_key = api_key[:3] + "••••" + api_key[-3:]
+        plain_key = self.get_api_key()
+        if mask_secrets and len(plain_key) > 6:
+            display_key = plain_key[:3] + "••••" + plain_key[-3:]
+        else:
+            display_key = plain_key
         return {
             "id": self.id, "config_key": self.config_key,
             "provider": self.provider, "model": self.model,
-            "base_url": self.base_url, "api_key": api_key,
+            "base_url": self.base_url, "api_key": display_key,
             "context_window": self.context_window,
             "max_tokens": self.max_tokens, "temperature": self.temperature,
             "is_active": self.is_active,

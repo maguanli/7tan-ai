@@ -404,9 +404,13 @@ def _call_llm(model, messages: list, tools: list, config: dict) -> dict:
     kwargs = {
         "model": model.get_api_name(),
         "messages": messages,
-        "temperature": temperature,
         "max_tokens": max_tokens,
     }
+
+    # Kimi K3 (moonshot) 只接受 temperature=1，DeepSeek 不需要显式传入
+    # 对这两个 provider 不设 temperature，让 API 用默认值
+    if provider not in ("moonshot", "deepseek"):
+        kwargs["temperature"] = temperature
 
     if tools:
         kwargs["tools"] = tools

@@ -597,6 +597,29 @@ def get_active_ai_config_raw() -> dict | None:
             "context_window": cfg.context_window,
             "max_tokens": cfg.max_tokens,
             "temperature": cfg.temperature,
+            "extra_config": cfg.extra_config,
+        }
+    finally:
+        session.close()
+
+
+def get_ai_config_by_key(config_key: str) -> dict | None:
+    """按 config_key 获取 AI 配置（含解密后的 api_key）"""
+    session = get_session()
+    try:
+        cfg = session.query(AiConfig).filter(AiConfig.config_key == config_key).first()
+        if not cfg:
+            return None
+        return {
+            "config_key": cfg.config_key,
+            "provider": cfg.provider,
+            "model": cfg.model,
+            "base_url": cfg.base_url,
+            "api_key": cfg.get_api_key() or "",
+            "context_window": cfg.context_window,
+            "max_tokens": cfg.max_tokens,
+            "temperature": cfg.temperature,
+            "extra_config": cfg.extra_config,
         }
     finally:
         session.close()

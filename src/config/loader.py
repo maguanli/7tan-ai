@@ -96,9 +96,10 @@ def create_default_config(config_path: Path = None):
                     "model": "kimi-k3",
                     "base_url": "https://api.moonshot.cn/v1",
                     "api_key": "",
-                    "context_window": 128000,
-                    "max_tokens": 16384,
+                    "context_window": 1048576,
+                    "max_tokens": 131072,
                     "temperature": 1.0,
+                    "extra_config": {"reasoning_effort": "high"},
                 },
                 "ollama": {
                     "provider": "ollama",

@@ -56,18 +56,29 @@ class ModelManager:
         self._load_config_defaults()
 
     def _load_config_defaults(self):
-        """从数据库加载 context_window / max_tokens / temperature"""
+        """从数据库加载 context_window / max_tokens / temperature / extra_config
+
+        优先按 model_name 匹配 config_key，找不到则回退到活跃配置。
+        """
         try:
-            from ..database.db import get_active_ai_config_raw
-            cfg = get_active_ai_config_raw()
+            from ..database.db import get_ai_config_by_key, get_active_ai_config_raw
+            cfg = get_ai_config_by_key(self.model_name)
+            if not cfg:
+                cfg = get_active_ai_config_raw()
             if cfg:
                 self.context_window = cfg.get("context_window", 128000)
                 self.max_tokens = cfg.get("max_tokens", 4096)
                 self.temperature = cfg.get("temperature", 0.7)
+                self.extra_config = cfg.get("extra_config") or {}
+                self.provider = cfg.get("provider", "")
             else:
-                logger.warning("未找到活跃 AI 配置，使用默认值")
+                logger.warning("未找到 AI 配置，使用默认值")
+                self.extra_config = {}
+                self.provider = ""
         except Exception as e:
             logger.warning(f"加载 AI 配置失败，使用默认值: {e}")
+            self.extra_config = {}
+            self.provider = ""
 
     def get_api_name(self) -> str:
         return self._api_name
@@ -87,7 +98,12 @@ class ModelManager:
         # 注入默认参数（允许调用方覆盖）
         kwargs.setdefault("model", self.model_name)
         kwargs.setdefault("max_tokens", self.max_tokens)
-        kwargs.setdefault("temperature", self.temperature)
+        # Kimi/Moonshot: temperature 和 top_p 是固定值，不应显式传入
+        if self.provider != "moonshot":
+            kwargs.setdefault("temperature", self.temperature)
+        # 注入 extra_config（如 reasoning_effort 等扩展参数）
+        for key, value in self.extra_config.items():
+            kwargs.setdefault(key, value)
 
         # 🔒 安全校验：确保所有 tools 的 schema 合法（防止 type: null 等 400 错误）
         if "tools" in kwargs:

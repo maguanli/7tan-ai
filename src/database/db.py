@@ -1112,7 +1112,12 @@ class Prompt(Base):
 
 
 def upsert_prompt(prompt_type: str, content: str, reason: str = "") -> dict:
-    """插入或更新提示词"""
+    """插入或更新提示词（自动建表）"""
+    # 确保 prompts 表存在
+    try:
+        Base.metadata.create_all(bind=get_engine())
+    except Exception:
+        pass
     session = get_session()
     try:
         existing = session.query(Prompt).filter(

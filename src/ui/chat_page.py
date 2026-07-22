@@ -746,10 +746,11 @@ class MessageBubble(QFrame):
             html = _md.markdown(md_text, extensions=['fenced_code', 'tables'], output_format='html')
             html = self._pygments_highlight(html)
             html = html.replace('<a ', '<a style="color:#00d4ff;" ')
-            html = html.replace('<table>', '<table style="border-collapse:collapse;margin:8px 0;width:100%;">')
+            html = html.replace('<table>', '<table style="border-collapse:collapse;margin:8px 0;width:100%;table-layout:fixed;word-break:break-all;">')
             html = html.replace('<th>', f'<th style="border:1px solid {THEME["border"]};padding:6px 10px;background:{THEME["bg_dark"]};">')
             html = html.replace('<td>', f'<td style="border:1px solid {THEME["border"]};padding:4px 10px;">')
             html = html.replace('<blockquote>', '<blockquote style="border-left:3px solid #00d4ff;padding-left:12px;margin:4px 0;color:#94a3b8;">')
+            html = html.replace('<img ', '<img style="max-width:100%;height:auto;" ')
             html = html.replace('<hr>', '<hr style="border-color:#1e293b;margin:8px 0;">')
             html = html.replace('<hr/>', '<hr style="border-color:#1e293b;margin:8px 0;">')
             return f'<div style="color:{text_color or THEME["text_primary"]};font-size:13px;line-height:1.6;word-break:break-word;overflow-wrap:break-word;max-width:100%;">{html}</div>'
@@ -1856,6 +1857,7 @@ class ChatPage(QWidget):
             html = html.replace('<th>', f'<th style="border:1px solid {THEME["border"]};padding:6px 10px;background:{THEME["bg_dark"]};">')
             html = html.replace('<td>', f'<td style="border:1px solid {THEME["border"]};padding:4px 10px;">')
             html = html.replace('<blockquote>', '<blockquote style="border-left:3px solid #00d4ff;padding-left:12px;margin:4px 0;color:#94a3b8;">')
+            html = html.replace('<img ', '<img style="max-width:100%;height:auto;" ')
             html = html.replace('<hr>', '<hr style="border-color:#1e293b;margin:8px 0;">')
             html = html.replace('<hr/>', '<hr style="border-color:#1e293b;margin:8px 0;">')
             return f'<div style="color:{text_color};font-size:13px;line-height:1.6;word-break:break-word;overflow-wrap:break-word;max-width:100%;">{html}</div>'

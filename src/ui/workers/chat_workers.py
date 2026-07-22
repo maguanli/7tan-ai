@@ -9,6 +9,16 @@ from PyQt6.QtCore import QThread, pyqtSignal
 API_BASE = "http://127.0.0.1:9800"
 
 
+def _get_chat_timeout() -> int:
+    """从配置读取客户端超时 = loop_timeout + 10"""
+    try:
+        from src.config.loader import load_config
+        config = load_config()
+        return config.get("agent", {}).get("loop_timeout", 600) + 10
+    except Exception:
+        return 610
+
+
 class ChatWorker(QThread):
     """发送消息并接收回复，支持流式轮询"""
 
@@ -31,7 +41,7 @@ class ChatWorker(QThread):
             if self._model:
                 data["model"] = self._model
 
-            resp = requests.post(f"{API_BASE}/api/chat/send", json=data, timeout=610)
+            resp = requests.post(f"{API_BASE}/api/chat/send", json=data, timeout=_get_chat_timeout())
             resp.raise_for_status()
             result = resp.json()
             self.finished.emit(result)
@@ -65,7 +75,7 @@ class StreamChatWorker(QThread):
                 f"{API_BASE}/api/chat/send/stream",
                 json=data,
                 stream=True,
-                timeout=600,
+                timeout=_get_chat_timeout(),
                 headers={"Accept": "text/event-stream"}
             ) as resp:
                 resp.raise_for_status()

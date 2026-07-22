@@ -119,6 +119,16 @@ THEME = {
 API_BASE = "http://127.0.0.1:9800"
 
 
+def _get_chat_timeout() -> int:
+    """从配置读取客户端超时 = loop_timeout + 10"""
+    try:
+        from src.config.loader import load_config
+        config = load_config()
+        return config.get("agent", {}).get("loop_timeout", 600) + 10
+    except Exception:
+        return 610
+
+
 
 
 
@@ -1385,7 +1395,7 @@ class ChatPage(QWidget):
 
             try:
 
-                resp = requests.post(f"{API_BASE}/api/chat/send", json=data, timeout=610)
+                resp = requests.post(f"{API_BASE}/api/chat/send", json=data, timeout=_get_chat_timeout())
 
                 resp.raise_for_status()
 

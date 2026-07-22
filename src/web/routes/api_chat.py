@@ -29,7 +29,8 @@ def _get_agent_loop_timeout() -> int:
     except Exception:
         return 600
 
-AGENT_LOOP_TIMEOUT = _get_agent_loop_timeout()
+# 每次请求动态读取，不使用模块级缓存
+# AGENT_LOOP_TIMEOUT 已改为惰性函数调用
 
 
 class ChatRequest(BaseModel):
@@ -75,13 +76,13 @@ async def send_message(req: ChatRequest):
         # 🔒 超时保护：最长等待 AGENT_LOOP_TIMEOUT 秒
         # 防止 AI API 调用挂起时后端无限等待
         try:
-            result = await asyncio.wait_for(future, timeout=AGENT_LOOP_TIMEOUT)
+            result = await asyncio.wait_for(future, timeout=_get_agent_loop_timeout())
         except asyncio.TimeoutError:
-            logger.error(f"⏰ Agent 循环超时 ({AGENT_LOOP_TIMEOUT}s)，会话: {session_id}")
-            save_message(session_id, "assistant", f"⏰ 请求超时（{AGENT_LOOP_TIMEOUT}秒），请重试或简化问题。")
+            logger.error(f"⏰ Agent 循环超时 ({_get_agent_loop_timeout()}s)，会话: {session_id}")
+            save_message(session_id, "assistant", f"⏰ 请求超时（{_get_agent_loop_timeout()}秒），请重试或简化问题。")
             raise HTTPException(
                 status_code=504,
-                detail=f"AI 请求超时（{AGENT_LOOP_TIMEOUT}秒），请稍后重试。如果是复杂任务，尝试分步执行。"
+                detail=f"AI 请求超时（{_get_agent_loop_timeout()}秒），请稍后重试。如果是复杂任务，尝试分步执行。"
             )
 
         # 保存 AI 回复

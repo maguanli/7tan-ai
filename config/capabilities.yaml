@@ -82,6 +82,7 @@ capabilities:
       - { name: "远程部署", desc: "SSH执行命令、SCP上传、rsync同步", tool: "ssh_execute / scp_upload / rsync_deploy" }
       - { name: "Gradle 构建", desc: "执行 Gradle 构建任务，支持 Android 打包", tool: "gradle_build" }
       - { name: "代码审查", desc: "静态分析代码质量、安全漏洞扫描", tool: "code_review_* / security_scan_*" }
+      - { name: "LSP 语言服务", desc: "跳转定义/查找引用/诊断检查/代码补全/悬停文档，基于 jedi+pyflakes", tool: "go_to_definition / find_all_references / get_diagnostics / get_completions / get_hover_info" }
 
   - category: "🎬 视频制作"
     icon: "🎬"
@@ -103,7 +104,7 @@ capabilities:
 # 统计信息（自动生成）
 # ============================================================
 summary:
-  total_categories: 10
-  total_tools: 60+
+  total_categories: 11
+  total_tools: 120+
   local_tools: ["Edge TTS", "MoviePy", "FFmpeg", "Pillow", "SD WebUI", "ComfyUI"]
   cloud_services: ["OSS存储", "AI大模型(DeepSeek/GLM等)", "7坛管理后台"]

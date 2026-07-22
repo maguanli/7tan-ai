@@ -84,7 +84,7 @@ def create_default_config(config_path: Path = None):
             "configs": {
                 "deepseek": {
                     "provider": "deepseek",
-                    "model": "deepseek-v4-pro",
+                    "model": "deepseek-chat",
                     "base_url": "https://api.deepseek.com/v1",
                     "api_key": "",
                     "context_window": 128000,

@@ -13,9 +13,10 @@ from ..utils.retry import retry, is_retryable_error, classify_policy, RETRY_POLI
 # ===== 各模型价格（每百万 token，人民币，参考各厂商公开定价）=====
 
 MODEL_PRICES = {
-    "deepseek-v4-pro":   {"prompt": 2.0,  "completion": 8.0},
-    "deepseek-v4-flash": {"prompt": 0.5,  "completion": 2.0},
+    "deepseek-chat":     {"prompt": 1.0,  "completion": 4.0},
+    "deepseek-reasoner": {"prompt": 4.0,  "completion": 16.0},
     "GLM-5.2":           {"prompt": 1.5,  "completion": 6.0},
+    "kimi-k3":           {"prompt": 2.0,  "completion": 8.0},
 }
 
 
@@ -98,7 +99,7 @@ class ModelManager:
         # 注入默认参数（允许调用方覆盖）
         kwargs.setdefault("model", self.model_name)
         kwargs.setdefault("max_tokens", self.max_tokens)
-        # Kimi/Moonshot & DeepSeek v4: temperature 是固定值（只能=1），不应显式传入
+        # Kimi/Moonshot & DeepSeek: temperature 是固定值，不应显式传入
         if self.provider not in ("moonshot", "deepseek"):
             kwargs.setdefault("temperature", self.temperature)
         # 注入 extra_config（如 reasoning_effort 等扩展参数）
@@ -198,121 +199,79 @@ class ModelManager:
                 # 其他未知错误（如网络波动导致的底层异常）
                 last_error = e
                 err_str = str(e).lower()
-                if any(kw in err_str for kw in ("ssl", "connection", "timeout", "reset", "refused", "broken pipe")):
-                    if attempt >= 3:
-                        break
-                    delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
-                    logger.warning(
-                        f"🔧 网络层错误 (尝试 {attempt+1}/3): {type(e).__name__} — {delay:.1f}s 后重试"
-                    )
-                    time.sleep(delay)
-                else:
-                    # 不认识的异常不重试
-                    logger.error(f"❌ 未知错误，不重试: {type(e).__name__}: {e}")
-                    raise
+                if attempt >= 3:
+                    break
+                delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
+                logger.warning(
+                    f"⚠️ 未知错误 (尝试 {attempt+1}/3): {e} — {delay:.1f}s 后重试"
+                )
+                time.sleep(delay)
 
-        # 重试耗尽
-        logger.error(f"💀 API 调用失败，已重试 3 次: {last_error}")
-        raise RuntimeError(
-            f"AI API 调用失败（已重试 3 次）: {last_error}"
-        ) from last_error
+        # 所有重试都失败
+        raise RuntimeError(f"LLM 调用失败（已重试 5 次），最后错误: {last_error}")
 
-    @staticmethod
-    def _sanitize_tools(tools: list) -> list:
-        """修复 tools 列表中不完整的 function schema"""
+    def _get_client(self):
+        """懒加载创建 OpenAI 客户端"""
+        if self._client is not None:
+            return self._client
+
+        from openai import OpenAI
+        from ..config.loader import load_config
+
+        cfg = load_config()
+        ai_config = cfg.get("ai", {})
+        active = ai_config.get("active", "deepseek")
+        configs = ai_config.get("configs", {})
+        model_cfg = configs.get(active, {})
+
+        api_key = model_cfg.get("api_key", "")
+        base_url = model_cfg.get("base_url", "https://api.deepseek.com/v1")
+
+        if not api_key:
+            raise RuntimeError(
+                f"未配置 AI API Key！请设置 {active.upper()}_API_KEY 环境变量"
+            )
+
+        self._client = OpenAI(api_key=api_key, base_url=base_url)
+        return self._client
+
+    def _sanitize_tools(self, tools: list) -> list:
+        """清理 tools 列表，移除不合法的字段
+
+        OpenAI API 要求 function.parameters 必须是有效的 JSON Schema:
+        - type 不能为 None/null
+        - $defs 引用必须存在
+        """
         sanitized = []
         for tool in tools:
             try:
                 fn = tool.get("function", {})
-                params = fn.get("parameters")
-                if not isinstance(params, dict) or not params.get("type"):
-                    fn = dict(fn)
-                    fn["parameters"] = {"type": "object", "properties": {}, "required": []}
-                    tool = dict(tool)
-                    tool["function"] = fn
-                    logger.warning(f"🔧 修复工具 schema: {fn.get('name', 'unknown')} (type was: {type(params).__name__})")
+                params = fn.get("parameters", {})
+                if params:
+                    # 递归清理 schema
+                    params = self._clean_schema(params)
+                    fn["parameters"] = params
                 sanitized.append(tool)
             except Exception:
                 sanitized.append(tool)
         return sanitized
 
-    def _get_client(self):
-        """获取 OpenAI 兼容客户端 — 从数据库读取活跃 AI 配置（带缓存）"""
-        if self._client is not None:
-            return self._client
+    def _clean_schema(self, schema: dict) -> dict:
+        """递归清理 JSON Schema，修复常见问题"""
+        if not isinstance(schema, dict):
+            return schema
 
-        from ..database.db import get_active_ai_config_raw, get_all_ai_configs
-
-        cfg = get_active_ai_config_raw()
-        if not cfg:
-            # 回退：尝试从数据库加载任何配置
-            configs = get_all_ai_configs(mask_secrets=False)
-            if configs:
-                cfg = configs[0]
-                logger.warning(f"没有活跃配置，回退到: {cfg.get('config_key')}")
-
-        if cfg:
-            provider = cfg.get("provider", "deepseek")
-            api_key = cfg.get("api_key", "")
-            base_url = (cfg.get("base_url", "") or "").strip()
-            config_key = cfg.get("config_key", "unknown")
-        else:
-            provider = "deepseek"
-            api_key = ""
-            base_url = ""
-            config_key = "none"
-
-        if not api_key and provider != "ollama":
-            raise ValueError(
-                "AI API Key 未配置！\n"
-                "请在「AI 设置」对话框中配置 API Key，\n"
-                "或切换到 Ollama 本地模型（无需 API Key）。"
-            )
-
-        import openai
-        import httpx
-
-        # 各 provider 的默认 base_url
-        DEFAULT_URLS = {
-            "deepseek": "https://api.deepseek.com/v1",
-            "zhipu":    "https://open.bigmodel.cn/api/paas/v4",
-            "ollama":   "http://localhost:11434/v1",
-        }
-
-        final_url = base_url or DEFAULT_URLS.get(provider, "https://api.openai.com/v1")
-
-        logger.info(f"🤖 连接 AI [{config_key}]: provider={provider}, model={cfg.get('model','?') if cfg else '?'}, base_url={final_url}")
-
-        # 🔒 配置 HTTP 超时，防止 AI API 调用无限挂起
-        # connect=10s（建连接）, read=120s（等响应）, write=30s（发请求）
-        # 单次调用最长 120s，配合重试 5 次，理论最大 ~10 分钟
-        self._client = openai.OpenAI(
-            api_key=api_key,
-            base_url=final_url,
-            timeout=httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0),
-        )
-        return self._client
-
-
-# 缓存已创建的模型实例
-_model_cache = {}
-
-
-def clear_model_cache():
-    """清除所有缓存的模型客户端（配置更新后调用）"""
-    for mgr in _model_cache.values():
-        mgr._client = None
-    _model_cache.clear()
-    logger.info("🔄 模型缓存已清除，下次请求将使用新配置")
-
-
-def get_model(model_name: str) -> ModelManager:
-    """获取模型实例（带缓存）"""
-    if model_name not in _model_cache:
-        import sys
-        logger.debug(f"🤖 加载模型: {model_name}")
-        sys.stderr.flush()
-        _model_cache[model_name] = ModelManager(model_name)
-        logger.debug(f"🤖 模型已缓存: {model_name}")
-        sys.stderr.flush()
-    return _model_cache[model_name]
+        cleaned = {}
+        for key, value in schema.items():
+            if key == "type" and value is None:
+                cleaned[key] = "object"  # 修复 type: null
+            elif isinstance(value, dict):
+                cleaned[key] = self._clean_schema(value)
+            elif isinstance(value, list):
+                cleaned[key] = [
+                    self._clean_schema(item) if isinstance(item, dict) else item
+                    for item in value
+                ]
+            else:
+                cleaned[key] = value
+        return cleaned

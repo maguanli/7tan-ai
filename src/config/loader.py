@@ -69,8 +69,39 @@ def load_config(config_path: Path = None) -> dict:
     return _resolve_env_vars(raw) if raw else {}
 
 
+def get_active_ai_config() -> dict:
+    """获取当前活跃的 AI 模型配置（数据库为单一数据源）。
+
+    优先级：
+    1. 数据库 ai_configs 表中 is_active=1 的记录
+    2. config.yaml 中 ai.configs[ai.active] 的回退配置
+    3. 空 dict
+
+    所有需要获取模型名/API Key/上下文窗口等参数的代码，
+    必须通过此函数获取，禁止硬编码模型名。
+    """
+    # 优先从数据库读取（单一数据源）
+    try:
+        from ..database.db import get_active_ai_config_raw
+        cfg = get_active_ai_config_raw()
+        if cfg:
+            return dict(cfg)
+    except Exception:
+        pass
+
+    # 回退到 config.yaml
+    config = load_config()
+    ai = config.get("ai", {})
+    active_key = ai.get("active", "")
+    configs = ai.get("configs", {})
+    return dict(configs.get(active_key, {}))
+
+
 def create_default_config(config_path: Path = None):
-    """首次运行时创建默认配置（仅当文件不存在时）"""
+    """首次运行时创建默认配置（仅当文件不存在时）
+    
+    注意：模型配置以数据库为准，此处仅创建最小化 config.yaml 模板。
+    """
     if config_path is None:
         config_path = CONFIG_PATH
 
@@ -80,32 +111,13 @@ def create_default_config(config_path: Path = None):
     config_path.parent.mkdir(parents=True, exist_ok=True)
     default = {
         "ai": {
-            "active": "deepseek",
+            "active": "ollama",
             "configs": {
-                "deepseek": {
+                "ollama": {
                     "provider": "deepseek",
-                    "model": "deepseek-chat",
+                    "model": "",
                     "base_url": "https://api.deepseek.com/v1",
                     "api_key": "",
-                    "context_window": 128000,
-                    "max_tokens": 16384,
-                    "temperature": 0.7,
-                },
-                "kimi-k3": {
-                    "provider": "moonshot",
-                    "model": "kimi-k3",
-                    "base_url": "https://api.moonshot.cn/v1",
-                    "api_key": "",
-                    "context_window": 1048576,
-                    "max_tokens": 131072,
-                    "temperature": 1.0,
-                    "extra_config": {"reasoning_effort": "high"},
-                },
-                "ollama": {
-                    "provider": "ollama",
-                    "model": "qwen2.5:7b",
-                    "base_url": "http://localhost:11434/v1",
-                    "api_key": "ollama",
                     "context_window": 128000,
                     "max_tokens": 16384,
                     "temperature": 0.7,
@@ -167,9 +179,9 @@ def _env_var_ref(key: str) -> str:
 
 
 def _generate_default_config(answers: dict) -> dict:
-    """根据引导问答生成默认配置"""
+    """根据引导问答生成默认配置（模型具体值从数据库获取）"""
     provider = answers.get("provider", "deepseek")
-    model = answers.get("model", "deepseek-chat")
+    model = answers.get("model", "")
     base_url = answers.get("base_url", "https://api.deepseek.com/v1")
     return {
         "ai": {

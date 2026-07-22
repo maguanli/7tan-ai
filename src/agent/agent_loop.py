@@ -70,7 +70,7 @@ def run_agent_loop(
     active_ai = _get_active_ai_config(config)
 
     # 选择模型
-    actual_model = model_name or active_ai.get("model", "deepseek-chat")
+    actual_model = model_name or active_ai.get("model", "")
     model = get_model(actual_model)
 
     # 上下文管理器
@@ -248,6 +248,7 @@ def run_agent_loop(
             messages.append({"role": "user", "content": "请继续完成任务，或调用工具。"})
             continue
 
+        assistant_msg = msg_dict  # 保存引用，供重型工具锁分支使用
         for tc in tool_calls_raw:
             try:
                 # 兼容 openai 库新版返回 dict 而不是对象
@@ -536,7 +537,7 @@ def run_agent_loop_streaming(
     config = load_config()
     active_ai = _get_active_ai_config(config)
 
-    actual_model = model_name or active_ai.get("model", "deepseek-chat")
+    actual_model = model_name or active_ai.get("model", "")
     model = get_model(actual_model)
     ctx = ContextManager(task=task, session_id=session_id)
     system_prompt = _build_system_prompt(config)
@@ -653,6 +654,7 @@ def run_agent_loop_streaming(
             messages.append({"role": "user", "content": "\u8bf7\u7ee7\u7eed\u5b8c\u6210\u4efb\u52a1\uff0c\u6216\u8c03\u7528\u5de5\u5177\u3002"})
             continue
 
+        assistant_msg = msg_dict  # 保存引用，供重型工具锁分支使用
         for tc in tool_calls_raw:
             try:
                 func = tc.function if hasattr(tc, 'function') else tc.get("function", {})

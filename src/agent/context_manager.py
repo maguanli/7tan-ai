@@ -100,13 +100,11 @@ class ContextManager:
                 if content:
                     conversation_text += f"[{role}]: {content[:200]}\n"
 
-            # 使用 ModelManager 统一的 API 调用
-            from ..config.loader import load_config
-            config = load_config()
-            model_name = model_name or config.get("ai", {}).get("configs", {}).get(
-                config.get("ai", {}).get("active", "deepseek"),
-                {}
-            ).get("model", "deepseek-chat")
+            # 使用 ModelManager 统一的 API 调用（从数据库获取模型名）
+            from ..config.loader import get_active_ai_config
+            if not model_name:
+                ai_cfg = get_active_ai_config()
+                model_name = ai_cfg.get("model", "")
 
             mm = ModelManager(model_name)
             response = mm.chat(

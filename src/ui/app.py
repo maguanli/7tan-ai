@@ -2198,7 +2198,7 @@ class SettingsPage(QWidget):
 
         self._ai_model = QComboBox()
         self._ai_model.setEditable(True)
-        self._ai_model.addItems(["deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner", "gpt-4o", "gpt-4o-mini", "qwen-max", "glm-4-plus", "kimi-k3"])
+        self._ai_model.addItems(["deepseek-chat", "deepseek-reasoner", "gpt-4o", "gpt-4o-mini", "qwen-max", "glm-4-plus", "kimi-k3"])
         self._ai_model.setMinimumHeight(32)
 
         self._ai_key = QLineEdit()
@@ -2480,7 +2480,7 @@ class SettingsPage(QWidget):
         # 如果列表为空，不创建兜底默认配置（避免覆盖真实数据）
         if self._config_list.count() == 0:
             self._ai_configs = {"deepseek": {
-                "provider": "deepseek", "model": "deepseek-chat",
+                "provider": "deepseek", "model": "",
                 "base_url": "https://api.deepseek.com/v1", "api_key": ""
             }}
             self._active_config = "deepseek"
@@ -2560,7 +2560,7 @@ class SettingsPage(QWidget):
 
         if not self._ai_configs:
             self._ai_configs = {"deepseek": {
-                "provider": "deepseek", "model": "deepseek-chat",
+                "provider": "deepseek", "model": "",
                 "base_url": "https://api.deepseek.com/v1", "api_key": ""
             }}
             self._active_config = "deepseek"

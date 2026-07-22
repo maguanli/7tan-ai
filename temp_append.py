@@ -35,7 +35,7 @@ def run_agent_loop_streaming(
     config = load_config()
     active_ai = _get_active_ai_config(config)
 
-    actual_model = model_name or active_ai.get("model", "deepseek-chat")
+    actual_model = model_name or active_ai.get("model", "deepseek-v4-pro")
     model = get_model(actual_model)
     ctx = ContextManager(task=task, session_id=session_id)
     system_prompt = _build_system_prompt(config)

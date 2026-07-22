@@ -194,9 +194,9 @@
         },
         "7tan.chat.model": {
           "type": "string",
-          "default": "deepseek-chat",
+          "default": "deepseek-v4-pro",
           "description": "对话使用的模型",
-          "enum": ["deepseek-chat", "deepseek-coder"]
+          "enum": ["deepseek-v4-pro", "deepseek-coder"]
         }
       }
     }

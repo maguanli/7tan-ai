@@ -10,16 +10,13 @@ from src.tools.registry import register_tool
 
 
 def _get_client():
-    """直接使用软件当前活跃的 AI 配置"""
+    """直接使用软件当前活跃的 AI 配置（从数据库读取）"""
     from openai import OpenAI
-    from src.config.loader import load_config
-    config = load_config()
-    ai = config.get("ai", {})
-    active = ai.get("active", "deepseek")
-    cfg = ai.get("configs", {}).get(active, {})
+    from src.config.loader import get_active_ai_config
+    cfg = get_active_ai_config()
     key = cfg.get("api_key", "")
     url = cfg.get("base_url", "https://api.deepseek.com/v1")
-    model = cfg.get("model", "deepseek-chat")
+    model = cfg.get("model", "")
     return OpenAI(api_key=key, base_url=url), model if key else (None, None)
 
 

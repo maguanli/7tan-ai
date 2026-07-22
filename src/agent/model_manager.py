@@ -13,7 +13,7 @@ from ..utils.retry import retry, is_retryable_error, classify_policy, RETRY_POLI
 # ===== 各模型价格（每百万 token，人民币，参考各厂商公开定价）=====
 
 MODEL_PRICES = {
-    "deepseek-chat":     {"prompt": 1.0,  "completion": 4.0},
+    "deepseek-v4-pro":     {"prompt": 1.0,  "completion": 4.0},
     "deepseek-reasoner": {"prompt": 4.0,  "completion": 16.0},
     "GLM-5.2":           {"prompt": 1.5,  "completion": 6.0},
     "kimi-k3":           {"prompt": 2.0,  "completion": 8.0},

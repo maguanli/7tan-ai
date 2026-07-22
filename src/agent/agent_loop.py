@@ -421,16 +421,27 @@ def _call_llm(model, messages: list, tools: list, config: dict) -> dict:
 
 
 def _build_system_prompt(config: dict) -> str:
-    """构建系统提示词"""
-    ai_cfg = config.get("ai", {})
-    default_prompt = ai_cfg.get("system_prompt", "")
+    """构建系统提示词 — 数据库优先，文件回退"""
+    # 1. 优先从数据库读取（通过 prompts 模块）
+    try:
+        from .prompts import get_prompt
+        db_prompt = get_prompt("system")
+        if db_prompt and db_prompt.strip() and len(db_prompt) > 200:
+            return db_prompt
+    except Exception:
+        pass
 
-    # 如果有自定义 prompt 文件，优先使用
+    # 2. 回退到文件
     from pathlib import Path
     custom_prompt = Path("data/prompts/system.txt")
     if custom_prompt.exists():
-        return custom_prompt.read_text(encoding="utf-8")
+        content = custom_prompt.read_text(encoding="utf-8")
+        if content.strip():
+            return content
 
+    # 3. 回退到配置文件
+    ai_cfg = config.get("ai", {})
+    default_prompt = ai_cfg.get("system_prompt", "")
     if default_prompt:
         return default_prompt
 

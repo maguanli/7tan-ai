@@ -1,10 +1,12 @@
 """
-AI Prompt 模板管理
+AI Prompt 模板管理 — 数据库为唯一真相源，文件为缓存/回退
 """
 from pathlib import Path
+from datetime import datetime
+from loguru import logger
 
 
-# 默认 Prompt 模板
+# 默认 Prompt 模板（仅首次初始化时使用，之后以数据库为准）
 DEFAULT_PROMPTS = {
     "scraper": """你是一个资源情报专家，负责从网页内容中发现游戏和软件资源。
 
@@ -58,17 +60,39 @@ DEFAULT_PROMPTS = {
 }
 
 
+def _get_prompts_dir() -> Path:
+    """获取 prompts 目录（兼容不同运行模式）"""
+    return Path("data/prompts")
+
+
 def get_prompt(prompt_type: str) -> str:
-    """获取指定类型的 prompt 模板（优先读取自定义文件）"""
-    custom_file = Path(f"data/prompts/{prompt_type}.txt")
+    """
+    获取指定类型的 prompt 模板。
+    优先级：数据库 > 文件 > 默认模板
+    """
+    # 1. 优先从数据库读取
+    try:
+        from ..database.db import get_prompt_from_db
+        row = get_prompt_from_db(prompt_type)
+        if row and row.get("content", "").strip():
+            return row["content"]
+    except Exception as e:
+        logger.debug(f"从数据库读取 prompt '{prompt_type}' 失败: {e}")
+
+    # 2. 回退到文件
+    custom_file = _get_prompts_dir() / f"{prompt_type}.txt"
     if custom_file.exists():
-        return custom_file.read_text(encoding="utf-8")
+        content = custom_file.read_text(encoding="utf-8")
+        if content.strip():
+            return content
+
+    # 3. 最后回退到默认模板
     return DEFAULT_PROMPTS.get(prompt_type, "")
 
 
 def save_prompt(prompt_type: str, template: str):
-    """保存自定义 prompt 模板"""
-    prompts_dir = Path("data/prompts")
+    """保存自定义 prompt 模板（仅文件，供外部直接调用）"""
+    prompts_dir = _get_prompts_dir()
     prompts_dir.mkdir(parents=True, exist_ok=True)
     (prompts_dir / f"{prompt_type}.txt").write_text(template, encoding="utf-8")
 
@@ -76,29 +100,60 @@ def save_prompt(prompt_type: str, template: str):
 def list_prompts() -> dict:
     """列出所有可用的 prompt 模板"""
     prompts = {}
+    # 从数据库获取
+    try:
+        from ..database.db import get_all_prompts
+        db_prompts = get_all_prompts()
+        for p in db_prompts:
+            prompts[p["prompt_type"]] = {
+                "source": "database",
+                "updated_at": p.get("updated_at", ""),
+                "char_count": p.get("char_count", 0),
+            }
+    except Exception:
+        pass
+
+    # 补充默认模板
     for ptype in DEFAULT_PROMPTS:
-        prompts[ptype] = {
-            "default": DEFAULT_PROMPTS[ptype][:100] + "...",
-            "custom": Path(f"data/prompts/{ptype}.txt").exists(),
-        }
+        if ptype not in prompts:
+            prompts[ptype] = {
+                "source": "default",
+                "custom": (_get_prompts_dir() / f"{ptype}.txt").exists(),
+            }
     return prompts
 
 
 def update_prompt(prompt_type: str, new_template: str, reason: str = ""):
-    """更新提示词模板（保存到文件 + 数据库）"""
-    # 1. 保存到文件（AI 启动时从文件读取）
-    prompts_dir = Path("data/prompts")
-    prompts_dir.mkdir(parents=True, exist_ok=True)
-    prompt_file = prompts_dir / f"{prompt_type}.txt"
-    prompt_file.write_text(new_template, encoding="utf-8")
-    if reason:
-        log_path = prompts_dir / f"{prompt_type}.log"
-        with open(log_path, "a", encoding="utf-8") as f:
-            from datetime import datetime
-            f.write(f"[{datetime.now().isoformat()}] {reason}\n")
-    # 2. 同步到数据库（设置页从数据库读取）
+    """
+    更新提示词模板。
+    数据库为唯一真相源，文件为缓存/回退。
+    """
+    # 1. 写入数据库（主存储）
     try:
-        from src.database.db import upsert_prompt
-        upsert_prompt(prompt_type, new_template, reason)
-    except Exception:
-        pass  # 文件已保存，DB 同步失败不影响主流程
+        from ..database.db import upsert_prompt
+        result = upsert_prompt(prompt_type, new_template, reason)
+        logger.info(f"💾 提示词已写入数据库: {prompt_type} ({result.get('action')}) — {reason}")
+    except Exception as e:
+        logger.error(f"❌ 写入数据库失败: {e}")
+        # 如果数据库写入失败，仍尝试写文件作为紧急备份
+        _sync_to_file(prompt_type, new_template, reason)
+        raise RuntimeError(f"提示词更新失败：数据库写入错误 — {e}")
+
+    # 2. 同步到文件（缓存/回退）
+    _sync_to_file(prompt_type, new_template, reason)
+
+
+def _sync_to_file(prompt_type: str, content: str, reason: str = ""):
+    """将提示词同步到文件（缓存）"""
+    try:
+        prompts_dir = _get_prompts_dir()
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        prompt_file = prompts_dir / f"{prompt_type}.txt"
+        prompt_file.write_text(content, encoding="utf-8")
+        if reason:
+            log_path = prompts_dir / f"{prompt_type}.log"
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now().isoformat()}] {reason}\n")
+        logger.debug(f"📄 提示词已同步到文件: {prompt_type}.txt")
+    except Exception as e:
+        logger.warning(f"⚠️ 同步到文件失败: {e}")

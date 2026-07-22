@@ -275,3 +275,23 @@ class ModelManager:
             else:
                 cleaned[key] = value
         return cleaned
+
+
+# ===== 全局模型缓存 =====
+_model_cache: dict[str, ModelManager] = {}
+
+
+def get_model(model_name: str) -> ModelManager:
+    """获取或创建模型管理器实例（全局单例缓存）"""
+    if model_name not in _model_cache:
+        logger.debug(f"🤖 加载模型: {model_name}")
+        _model_cache[model_name] = ModelManager(model_name)
+    else:
+        logger.debug(f"🤖 模型已缓存: {model_name}")
+    return _model_cache[model_name]
+
+
+def clear_model_cache():
+    """清除模型缓存（配置变更后调用）"""
+    _model_cache.clear()
+    logger.info("🔄 模型缓存已清除，下次请求将使用新配置")

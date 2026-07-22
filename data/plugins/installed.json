@@ -32,6 +32,8 @@
     "db_explorer",
     "http_client",
     "ci_helper",
-    "config_manager"
+    "config_manager",
+    "snippet_manager",
+    "perf_tools"
   ]
 }

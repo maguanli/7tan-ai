@@ -91,8 +91,75 @@ def go_to_definition(file_path: str, line: int, column: int = 1) -> str:
         except Exception as e:
             return f"jedi 分析失败: {e}"
 
+    # JavaScript/TypeScript: 使用正则分析
+    if ext in (".js", ".ts", ".jsx", ".tsx", ".mjs"):
+        return _js_ts_definition(file_path, line)
+
     # 非 Python: 回退到文本搜索
     return _text_based_definition(file_path, line, ext)
+
+
+def _js_ts_definition(file_path: str, line: int) -> str:
+    """JS/TS 定义查找"""
+    import re
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        if line > len(lines):
+            return f"行号超出范围 (文件共 {len(lines)} 行)"
+
+        target = lines[line - 1]
+        # 提取符号名
+        symbol = None
+        for p in [
+            r'(?:export\s+)?(?:async\s+)?function\s+(\w+)',
+            r'(?:export\s+)?(?:const|let|var)\s+(\w+)\s*[:=]\s*(?:async\s*)?\(',
+            r'(?:export\s+)?class\s+(\w+)',
+            r'(\w+)\(',
+            r'(?:import\s+.*\b)(\w+)',
+        ]:
+            m = re.search(p, target)
+            if m:
+                symbol = m.group(1)
+                break
+        if not symbol:
+            return f"无法识别符号: {target.strip()[:80]}"
+
+        # 在项目中搜索定义
+        found = []
+        def_patterns = [
+            f"function {symbol}", f"const {symbol}", f"let {symbol}",
+            f"class {symbol}", f"export function {symbol}",
+            f"export const {symbol}", f"export class {symbol}",
+        ]
+        for root, dirs, files in os.walk(os.path.dirname(file_path)):
+            dirs[:] = [d for d in dirs if d not in
+                       ("node_modules", ".git", "dist", "build")]
+            for fname in files:
+                if not fname.endswith((".js", ".ts", ".jsx", ".tsx", ".mjs")):
+                    continue
+                fpath = os.path.join(root, fname)
+                try:
+                    with open(fpath, "r", encoding="utf-8") as fp:
+                        for i, l in enumerate(fp, 1):
+                            for dp in def_patterns:
+                                if dp in l:
+                                    found.append(f"📍 {fpath}:{i}: {l.strip()[:120]}")
+                                    if len(found) >= 10:
+                                        break
+                            if len(found) >= 10:
+                                break
+                    if len(found) >= 10:
+                        break
+                except Exception:
+                    pass
+            if len(found) >= 10:
+                break
+        if not found:
+            return f"未找到 '{symbol}' 的定义"
+        return f"🔍 JS/TS 定义搜索 '{symbol}':\n" + "\n".join(found)
+    except Exception as e:
+        return f"搜索失败: {e}"
 
 
 def _text_based_definition(file_path: str, line: int, ext: str) -> str:

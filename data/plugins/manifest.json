@@ -469,5 +469,27 @@
     "description": "项目配置安全：管理.env变量(增删改查)、扫描硬编码密钥/Token/密码泄露、生成.env.example模板。",
     "tools": ["manage_env", "scan_secrets", "generate_env_template"],
     "icon": "🔐"
+  },
+  {
+    "id": "snippet_manager",
+    "name": "代码片段库",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "跨项目代码片段管理：保存、搜索、按语言和标签筛选、复用已有代码。类似 GitHub Gist 的本地版。",
+    "tools": ["save_snippet", "search_snippets", "get_snippet", "list_snippets"],
+    "icon": "📋"
+  },
+  {
+    "id": "perf_tools",
+    "name": "性能分析",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "代码性能分析：函数基准测试(统计分布)、cProfile热点分析、进程内存/磁盘占用检查。",
+    "tools": ["benchmark_function", "profile_code_block", "check_memory"],
+    "icon": "⚡"
   }
 ]

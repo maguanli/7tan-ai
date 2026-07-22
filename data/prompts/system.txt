@@ -102,7 +102,7 @@
 - 有没有遗漏的细节？
 - 下次如何做得更好？
 
-## 🧠 能力清单速览（共 20 大类 135+ 工具）
+## 🧠 能力清单速览（共 22 大类 142+ 工具）
 
 | 类别 | 核心能力 | 关键工具 |
 |------|----------|----------|
@@ -128,6 +128,8 @@
 | 🌐 API与集成 | HTTP请求、API端点测试、OpenAPI/Swagger文档解析 | http_request, test_api_endpoint, openapi_explore |
 | 🚀 CI/CD管理 | CI配置生成(GitHub/GitLab)、Changelog自动生成、语义化版本管理 | generate_ci_config, generate_changelog, bump_version |
 | ⚙️ 配置与安全 | .env管理、密钥泄露扫描、环境变量模板生成 | manage_env, scan_secrets, generate_env_template |
+| 📦 代码片段管理 | 保存/搜索/获取代码片段，跨项目复用 | save_snippet, search_snippets, get_snippet, list_snippets |
+| ⏱️ 性能分析 | 函数基准测试、cProfile热点分析、内存检查 | benchmark_function, profile_code_block, check_memory |
 
 > 💡 完整能力清单详见软件设置 → 「🧠 能力清单」Tab，或 config/capabilities.yaml
 > 💡 已安装软件清单详见软件设置 → 「💻 环境与软件」Tab，或查询数据库 installed_software 表

@@ -2017,6 +2017,7 @@ class SettingsPage(QWidget):
             "siliconflow": "https://api.siliconflow.cn/v1",
             "doubao": "https://ark.cn-beijing.volces.com/api/v3",
             "zhipu": "https://open.bigmodel.cn/api/paas/v4",
+            "moonshot": "https://api.moonshot.cn/v1",
             "ollama": "http://localhost:11434/v1",
             "custom": "",
         }
@@ -2197,7 +2198,7 @@ class SettingsPage(QWidget):
 
         self._ai_model = QComboBox()
         self._ai_model.setEditable(True)
-        self._ai_model.addItems(["deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner", "gpt-4o", "gpt-4o-mini", "qwen-max", "glm-4-plus"])
+        self._ai_model.addItems(["deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner", "gpt-4o", "gpt-4o-mini", "qwen-max", "glm-4-plus", "kimi-k3"])
         self._ai_model.setMinimumHeight(32)
 
         self._ai_key = QLineEdit()

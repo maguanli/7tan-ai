@@ -91,6 +91,15 @@ def create_default_config(config_path: Path = None):
                     "max_tokens": 16384,
                     "temperature": 0.7,
                 },
+                "kimi-k3": {
+                    "provider": "moonshot",
+                    "model": "kimi-k3",
+                    "base_url": "https://api.moonshot.cn/v1",
+                    "api_key": "",
+                    "context_window": 128000,
+                    "max_tokens": 16384,
+                    "temperature": 0.7,
+                },
                 "ollama": {
                     "provider": "ollama",
                     "model": "qwen2.5:7b",

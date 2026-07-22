@@ -178,11 +178,26 @@ capabilities:
       - { name: "费用记录", desc: "每次调用 AI 模型后自动记录 token 和费用", tool: "track_cost" }
       - { name: "费用报告", desc: "按日期/任务类型汇总费用统计", tool: "get_cost_report" }
 
+  - category: "📦 代码片段管理"
+    icon: "📦"
+    items:
+      - { name: "保存片段", desc: "保存代码片段到跨项目代码库，支持标签分类和语言标记", tool: "save_snippet" }
+      - { name: "搜索片段", desc: "按名称/标签/语言搜索已保存的代码片段", tool: "search_snippets" }
+      - { name: "获取片段", desc: "获取已保存代码片段的完整内容", tool: "get_snippet" }
+      - { name: "列出片段", desc: "列出所有已保存的代码片段，按语言分组", tool: "list_snippets" }
+
+  - category: "⏱️ 性能分析"
+    icon: "⏱️"
+    items:
+      - { name: "基准测试", desc: "对 Python 函数进行基准测试：运行N次，统计最小/最大/平均/中位数", tool: "benchmark_function" }
+      - { name: "性能热点", desc: "使用 cProfile 分析 Python 代码的性能热点，找出耗时最多的函数", tool: "profile_code_block" }
+      - { name: "内存检查", desc: "检查 Python 进程的内存使用情况和项目磁盘占用", tool: "check_memory" }
+
 # ============================================================
 # 统计信息（自动生成）
 # ============================================================
 summary:
-  total_categories: 20
-  total_tools: 135+
+  total_categories: 22
+  total_tools: 142+
   local_tools: ["Edge TTS", "MoviePy", "FFmpeg", "Pillow", "SD WebUI", "ComfyUI"]
   cloud_services: ["OSS存储", "AI大模型(DeepSeek/GLM等)", "7坛管理后台"]

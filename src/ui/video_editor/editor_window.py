@@ -3,8 +3,6 @@
 """
 from __future__ import annotations
 
-  🎨滤镜 | 🎬转场 | 🎯关键帧 | 🖼️封面 | 🤖AI视频 | 📤导出
-"""
 from pathlib import Path
 from typing import Optional
 

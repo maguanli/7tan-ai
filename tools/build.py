@@ -93,7 +93,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon=str(Path('{ROOT}') / 'data' / 'logo' / 'app_single.ico'),
 )
 
 coll = COLLECT(

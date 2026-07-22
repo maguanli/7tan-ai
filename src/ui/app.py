@@ -363,7 +363,7 @@ class Sidebar(QFrame):
         # 导航项
         nav_items = [
             ("dashboard", "📊", "仪表盘"),
-            ("workspace", "🌐💬", "AI 工作台"),
+            ("workspace", "💬", "AI 工作台"),
             ("resources", "📦", "资源管理"),
             ("tasks", "⚙️", "任务监控"),
             ("sources", "🔗", "数据源"),

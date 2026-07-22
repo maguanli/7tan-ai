@@ -183,7 +183,7 @@ class AIVideoMaker:
                 )
                 scene.audio_path = audio_path
             except Exception as e:
-                print(f"[AIVideoMaker] 配音失败 (场景 {scene.index}): {e}")
+                logger.warning(f"[AIVideoMaker] 配音失败 (场景 {scene.index}): {e}")
                 scene.audio_path = None
 
         return script
@@ -294,7 +294,7 @@ class AIVideoMaker:
             img.save(path, "PNG")
             return path
         except Exception as e:
-            print(f"[AIVideoMaker] 创建背景失败: {e}")
+            logger.warning(f"[AIVideoMaker] 创建背景失败: {e}")
             return None
 
     def run_full_pipeline(self, topic: str, project: Project,

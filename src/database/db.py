@@ -1068,7 +1068,7 @@ def get_all_memories(section: str = None, keyword: str = None, limit: int = 500)
         session.close()
 
 
-def get_memory_summary() -> dict:
+def get_memory_summary() -> list:
     """记忆存储概览"""
     session = get_session()
     try:

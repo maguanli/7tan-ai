@@ -65,7 +65,8 @@ def parse_size_to_bytes(size_str: str) -> Optional[int]:
         return None
     units = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
     size_str = size_str.strip().upper()
-    for unit, multiplier in units.items():
+    # 按单位长度降序匹配，避免 "1GB" 先被 "B" 匹配导致解析失败
+    for unit, multiplier in sorted(units.items(), key=lambda kv: -len(kv[0])):
         if size_str.endswith(unit):
             try:
                 return int(float(size_str.replace(unit, "").strip()) * multiplier)

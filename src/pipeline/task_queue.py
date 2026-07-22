@@ -5,7 +5,6 @@
 """
 import threading
 import queue
-import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -107,6 +106,7 @@ class TaskQueue:
             self._progress_callbacks: list[Callable] = []
             self._status_callback: Optional[Callable] = None
             self._task_lock = threading.Lock()
+            self._submit_counter = 0  # 单调递增计数，保证堆元组前两项唯一
 
     # ===== 任务管理 =====
 
@@ -114,8 +114,10 @@ class TaskQueue:
         """提交任务到队列，返回任务 ID"""
         with self._task_lock:
             self._history[task.id] = task
-            # PriorityQueue 使用 (priority, counter, task) 避免比较 task
-            self._queue.put((-task.priority.value, time.time(), task))
+            # PriorityQueue 使用 (priority, counter, task) 避免比较 task；
+            # counter 必须唯一且递增（time.time() 可能相同导致 heappush 比较 Task）
+            self._submit_counter += 1
+            self._queue.put((-task.priority.value, self._submit_counter, task))
         logger.info(f"📋 任务入队: {task.name} ({task.id})")
         self._notify_status()
         return task.id

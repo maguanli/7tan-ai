@@ -3675,6 +3675,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("7Tan — AI工具")
         self.resize(1280, 820)
         self.setMinimumSize(960, 600)
+        self._apply_window_icon()
 
         # 中心 widget
         central = QWidget()
@@ -3723,6 +3724,18 @@ class MainWindow(QMainWindow):
         # 默认显示仪表盘
         self._sidebar.set_active("dashboard")
         self._stack.setCurrentWidget(self._pages["dashboard"])
+
+    def _apply_window_icon(self):
+        """设置窗口图标 — 使用 data/logo/logo_v4_256.png（7Tan LOGO）"""
+        try:
+            base = Path(__file__).resolve().parents[2]
+            for name in ("logo_v4_256.png", "logo_v4_512.png", "logo_v4_1024.png"):
+                p = base / "data" / "logo" / name
+                if p.exists():
+                    self.setWindowIcon(QIcon(str(p)))
+                    return
+        except Exception:
+            pass
 
     def _switch_page(self, key):
         if key in self._pages:

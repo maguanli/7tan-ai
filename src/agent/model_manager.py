@@ -98,8 +98,8 @@ class ModelManager:
         # 注入默认参数（允许调用方覆盖）
         kwargs.setdefault("model", self.model_name)
         kwargs.setdefault("max_tokens", self.max_tokens)
-        # Kimi/Moonshot: temperature 和 top_p 是固定值，不应显式传入
-        if self.provider != "moonshot":
+        # Kimi/Moonshot & DeepSeek v4: temperature 是固定值（只能=1），不应显式传入
+        if self.provider not in ("moonshot", "deepseek"):
             kwargs.setdefault("temperature", self.temperature)
         # 注入 extra_config（如 reasoning_effort 等扩展参数）
         for key, value in self.extra_config.items():

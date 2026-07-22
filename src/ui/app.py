@@ -2076,7 +2076,7 @@ class SettingsPage(QWidget):
         self._tabs.addTab(self._sw_tab, "🖥 环境引擎")
         self._tabs.addTab(self._memory_tab, "🧠 记忆系统")
         self._tabs.addTab(self._prompt_tab, "📝 系统提示词")
-        self._tabs.addTab(self._about_tab, "ℹ️ 关于")
+        self._tabs.addTab(self._about_tab, "ℹ️ 关于7Tan")
         layout.addWidget(self._tabs)
 
         # 内部状态

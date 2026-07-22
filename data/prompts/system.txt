@@ -102,7 +102,7 @@
 - 有没有遗漏的细节？
 - 下次如何做得更好？
 
-## 🧠 能力清单速览（共 17 大类 120+ 工具）
+## 🧠 能力清单速览（共 20 大类 135+ 工具）
 
 | 类别 | 核心能力 | 关键工具 |
 |------|----------|----------|
@@ -123,6 +123,11 @@
 | 🔬 依赖与差异 | 依赖检查、循环导入检测、依赖图、过期包、差异对比、分支对比、冲突解决 | check_dependencies, detect_circular_imports, generate_dependency_graph, check_outdated, generate_diff, check_changes, compare_branches, resolve_conflict |
 | 🧪 测试 | 运行测试、覆盖率报告、发现测试、生成测试模板 | run_tests, run_coverage, discover_tests, generate_test_template |
 | 🔧 批量与修复 | 批量文件替换、沙盒自修复、代码补全服务、完整性检查、函数/导入分析 | file_replace, self_fix_sandbox, completion_*, check_file_integrity, list_functions, analyze_imports |
+| 🐛 调试与诊断 | 错误堆栈分析、日志搜索分析、崩溃诊断修复 | analyze_error, analyze_log, diagnose_crash |
+| 🗄️ 数据库探索 | 数据库结构浏览、SQL安全查询、ORM模型生成 | explore_db, query_db, generate_model |
+| 🌐 API与集成 | HTTP请求、API端点测试、OpenAPI/Swagger文档解析 | http_request, test_api_endpoint, openapi_explore |
+| 🚀 CI/CD管理 | CI配置生成(GitHub/GitLab)、Changelog自动生成、语义化版本管理 | generate_ci_config, generate_changelog, bump_version |
+| ⚙️ 配置与安全 | .env管理、密钥泄露扫描、环境变量模板生成 | manage_env, scan_secrets, generate_env_template |
 
 > 💡 完整能力清单详见软件设置 → 「🧠 能力清单」Tab，或 config/capabilities.yaml
 > 💡 已安装软件清单详见软件设置 → 「💻 环境与软件」Tab，或查询数据库 installed_software 表

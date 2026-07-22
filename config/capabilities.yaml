@@ -50,6 +50,7 @@ capabilities:
       - { name: "资源存取", desc: "保存/查询/更新资源信息到数据库", tool: "db_save_resource / db_query_resources" }
       - { name: "版本比对", desc: "检查是否已有更早版本，实现增量更新", tool: "db_check_version" }
       - { name: "任务日志", desc: "记录浏览/下载/改写/上传/发布各环节日志", tool: "db_add_task_log" }
+      - { name: "软件清单", desc: "查询/写入已安装软件的路径和版本，避免重复安装", tool: "get_installed_software_by_name / upsert_installed_software" }
 
   - category: "🧠 AI 推理能力"
     icon: "🧠"
@@ -84,6 +85,83 @@ capabilities:
       - { name: "代码审查", desc: "静态分析代码质量、安全漏洞扫描", tool: "code_review_* / security_scan_*" }
       - { name: "LSP 语言服务", desc: "跳转定义/查找引用/诊断检查/代码补全/悬停文档，基于 jedi+pyflakes", tool: "go_to_definition / find_all_references / get_diagnostics / get_completions / get_hover_info" }
 
+  - category: "🔍 代码搜索与重构"
+    icon: "🔍"
+    items:
+      - { name: "代码搜索", desc: "全局正则搜索、文件名查找、内容检索、符号引用追踪", tool: "grep_code / find_files / search_in_files / find_references" }
+      - { name: "项目扫描", desc: "快速扫描项目结构、语言分布、文件统计", tool: "scan_project" }
+      - { name: "批量替换", desc: "对文本文件执行多对批量字符串替换", tool: "file_replace" }
+
+  - category: "🏗️ 终端与构建"
+    icon: "🏗️"
+    items:
+      - { name: "执行命令", desc: "在项目目录中执行任意 shell 命令", tool: "run_command" }
+      - { name: "自动构建", desc: "自动检测项目类型并执行构建", tool: "run_build" }
+      - { name: "安装依赖", desc: "自动检测并安装 Python/Node/Go/Rust 依赖", tool: "install_deps" }
+      - { name: "环境检查", desc: "检查 Python/Node/Go/Rust 版本、Git 状态、磁盘空间", tool: "check_env" }
+      - { name: "Shell 脚本", desc: "执行 Shell 脚本内容", tool: "run_shell_script" }
+
+  - category: "📝 文档与重构"
+    icon: "📝"
+    items:
+      - { name: "文档生成", desc: "为函数/类生 docstring，为项目生成 README", tool: "generate_docstring / generate_readme" }
+      - { name: "符号重命名", desc: "安全地重命名函数/类/变量，预览所有修改位置", tool: "rename_symbol" }
+      - { name: "代码格式化", desc: "autopep8/black/prettier 格式化代码", tool: "format_code" }
+      - { name: "函数提取", desc: "分析代码块是否适合提取为独立函数", tool: "extract_function" }
+      - { name: "导入整理", desc: "排序导入语句，移除未使用的导入", tool: "organize_imports" }
+      - { name: "API 路由分析", desc: "分析 FastAPI/Flask/Express 项目的 API 端点", tool: "analyze_api_routes" }
+
+  - category: "🔬 差异与依赖"
+    icon: "🔬"
+    items:
+      - { name: "差异对比", desc: "生成文件/目录差异；对比 Git 分支；检查工作区变更", tool: "generate_diff / compare_branches / check_changes" }
+      - { name: "冲突解决", desc: "检测 Git 合并冲突并辅助决策", tool: "resolve_conflict" }
+      - { name: "依赖检查", desc: "检查 pip/npm 依赖、循环导入、过期包", tool: "check_dependencies / detect_circular_imports / check_outdated" }
+      - { name: "依赖图", desc: "生成 Mermaid 模块依赖关系图", tool: "generate_dependency_graph" }
+
+  - category: "🧪 测试"
+    icon: "🧪"
+    items:
+      - { name: "运行测试", desc: "自动检测测试框架并运行（pytest/unittest/jest/mocha）", tool: "run_tests" }
+      - { name: "覆盖率", desc: "生成 pytest-cov 覆盖率报告", tool: "run_coverage" }
+      - { name: "发现测试", desc: "列出项目中所有测试文件和测试函数", tool: "discover_tests" }
+      - { name: "测试模板", desc: "为 Python 函数生成 pytest 测试模板", tool: "generate_test_template" }
+
+  - category: "🐛 调试与诊断"
+    icon: "🐛"
+    items:
+      - { name: "错误分析", desc: "分析 Python 错误堆栈，解释原因并提供修复建议", tool: "analyze_error" }
+      - { name: "日志分析", desc: "搜索项目日志中的错误和警告，按严重程度排序", tool: "analyze_log" }
+      - { name: "崩溃诊断", desc: "诊断程序崩溃原因，检查崩溃日志和事件日志", tool: "diagnose_crash" }
+
+  - category: "🗄️ 数据库探索"
+    icon: "🗄️"
+    items:
+      - { name: "数据库浏览", desc: "列出所有表、查看结构、行数，支持 SQLite/MySQL/PostgreSQL", tool: "explore_db" }
+      - { name: "SQL 查询", desc: "对 SQLite 执行 SELECT 查询（安全只读）", tool: "query_db" }
+      - { name: "ORM 生成", desc: "根据表结构生成 Python SQLAlchemy ORM 模型代码", tool: "generate_model" }
+
+  - category: "🌐 API 与集成"
+    icon: "🌐"
+    items:
+      - { name: "HTTP 请求", desc: "发送 GET/POST/PUT/DELETE/PATCH 请求，支持 JSON/Header/认证", tool: "http_request" }
+      - { name: "API 测试", desc: "快速测试 API 端点，报告状态码和响应时间", tool: "test_api_endpoint" }
+      - { name: "OpenAPI 探索", desc: "解析 OpenAPI/Swagger 文档，列出所有端点", tool: "openapi_explore" }
+
+  - category: "🚀 CI/CD 管理"
+    icon: "🚀"
+    items:
+      - { name: "CI 配置生成", desc: "生成 GitHub Actions / GitLab CI 配置", tool: "generate_ci_config" }
+      - { name: "Changelog", desc: "根据 Git 提交历史自动生成 CHANGELOG.md", tool: "generate_changelog" }
+      - { name: "版本管理", desc: "自动升级语义化版本号（patch/minor/major）", tool: "bump_version" }
+
+  - category: "⚙️ 配置与安全"
+    icon: "⚙️"
+    items:
+      - { name: "环境变量管理", desc: "管理 .env 文件：列出/添加/更新/检查变量", tool: "manage_env" }
+      - { name: "密钥扫描", desc: "扫描代码中泄露的密码、Token、敏感信息", tool: "scan_secrets" }
+      - { name: "环境模板生成", desc: "扫描代码中的环境变量调用，生成 .env.example", tool: "generate_env_template" }
+
   - category: "🎬 视频制作"
     icon: "🎬"
     items:
@@ -104,7 +182,7 @@ capabilities:
 # 统计信息（自动生成）
 # ============================================================
 summary:
-  total_categories: 11
-  total_tools: 120+
+  total_categories: 20
+  total_tools: 135+
   local_tools: ["Edge TTS", "MoviePy", "FFmpeg", "Pillow", "SD WebUI", "ComfyUI"]
   cloud_services: ["OSS存储", "AI大模型(DeepSeek/GLM等)", "7坛管理后台"]

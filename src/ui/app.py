@@ -403,7 +403,7 @@ class Sidebar(QFrame):
 
         # 底部信息
         version = QLabel("7tan.com v5.1.0")
-        version.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 10px; padding: 8px;")
+        version.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 14px; font-weight: bold; padding: 10px;")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         version.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         version.setToolTip("在浏览器中打开 https://www.7tan.com/")

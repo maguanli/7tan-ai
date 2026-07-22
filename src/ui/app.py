@@ -2057,6 +2057,7 @@ class SettingsPage(QWidget):
         self._sw_tab = QWidget()
         self._memory_tab = QWidget()
         self._prompt_tab = QWidget()
+        self._about_tab = QWidget()
         self._build_ai_tab()
         self._build_site_tab()
         self._build_oss_tab()
@@ -2065,6 +2066,7 @@ class SettingsPage(QWidget):
         self._build_installed_software_tab()
         self._build_memory_tab()
         self._build_prompt_tab()
+        self._build_about_tab()
 
         self._tabs.addTab(self._ai_tab, "🤖 AI 模型")
         self._tabs.addTab(self._site_tab, "🌐 站点设置")
@@ -2074,6 +2076,7 @@ class SettingsPage(QWidget):
         self._tabs.addTab(self._sw_tab, "🖥 环境引擎")
         self._tabs.addTab(self._memory_tab, "🧠 记忆系统")
         self._tabs.addTab(self._prompt_tab, "📝 系统提示词")
+        self._tabs.addTab(self._about_tab, "ℹ️ 关于")
         layout.addWidget(self._tabs)
 
         # 内部状态
@@ -3492,6 +3495,73 @@ class SettingsPage(QWidget):
         self._prompt_source_label.setText(source)
         self._prompt_text.setPlainText(prompt_text)
 
+    def _build_about_tab(self):
+        """构建关于页 Tab — 显示 7Tan AI工具 简介与 LOGO"""
+        layout = QVBoxLayout(self._about_tab)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+
+        header = QHBoxLayout()
+        title = QLabel("ℹ️ 关于 7Tan AI工具")
+        title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {THEME['text_primary']};")
+        header.addWidget(title)
+        header.addStretch()
+        layout.addLayout(header)
+
+        # LOGO 显示
+        logo_label = QLabel()
+        logo_label.setFixedSize(128, 128)
+        logo_label.setStyleSheet("border-radius: 16px; background: transparent;")
+        base = Path(__file__).resolve().parents[2]
+        for name in ("logo_v4_256.png", "logo_v4_512.png", "logo_v4_1024.png"):
+            logo_path = base / "data" / "logo" / name
+            if logo_path.exists():
+                pix = QPixmap(str(logo_path)).scaled(128, 128, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                logo_label.setPixmap(pix)
+                break
+        layout.addWidget(logo_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # 标题与版本
+        name_label = QLabel("7Tan AI工具")
+        name_label.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {THEME['text_primary']};")
+        name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(name_label)
+
+        version_label = QLabel("v5.1.0 · 内部构建")
+        version_label.setStyleSheet(f"font-size: 13px; color: {THEME['text_secondary']};")
+        version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(version_label)
+
+        layout.addSpacing(10)
+
+        # 简介文本
+        intro_text = QTextEdit()
+        intro_text.setReadOnly(True)
+        intro_text.setStyleSheet(f"""
+            QTextEdit {{
+                background: {THEME['bg_dark']}; color: {THEME['text_primary']};
+                border: 1px solid {THEME['border']}; border-radius: 8px;
+                padding: 20px; font-size: 13px;
+                font-family: 'Microsoft YaHei', sans-serif;
+            }}
+        """)
+        intro_text.setPlainText(
+            "7Tan AI工具 是一款由 AI 驱动的个人创作与开发助手，代号「盘古」。\n"
+            "它将软件研发、游戏内容生产、系统运维三大能力融为一体，\n"
+            "让 AI 不只是聊天，而是真正替你干活。\n\n"
+            "【核心能力】\n"
+            "🤖 AI 智能中枢 — 接入 DeepSeek 等大模型，支持深度推理、\n"
+            "   代码生成、文案创作与多轮对话\n\n"
+            "🌐 游戏内容工厂 — 自动采集游戏资讯、撰写评测简介、\n"
+            "   配图处理、敏感词审核，一键发布到 7坛社区\n\n"
+            "💻 全栈开发助手 — 代码检索/审查/测试/重构、Git 版本管理、\n"
+            "   Docker/K8s 运维、ADB 设备调试，200+ 工具随叫随到\n\n"
+            "🧠 自我进化系统 — 可自主创建插件、优化提示词、管理记忆，\n"
+            "   越用越聪明\n\n"
+            "🎬 视频创作链 — TTS 配音、AI 生图、视频合成一站式完成\n\n"
+            "【出品】7Tan 团队"
+        )
+        layout.addWidget(intro_text)
 
     def _on_plugin_selected(self, row):
         """选中插件时显示详情"""

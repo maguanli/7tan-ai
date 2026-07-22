@@ -47,7 +47,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='data/logo/app.ico',
+    icon=r'D:\7tan\7tanAI\data\logo\app.ico',
 )
 
 coll = COLLECT(

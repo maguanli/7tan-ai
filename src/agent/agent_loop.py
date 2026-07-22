@@ -275,8 +275,27 @@ def run_agent_loop(
                         "logs": all_logs,
                     }
 
-                # 执行工具（带异常保护，确保永远不会遗漏 tool 响应）
-                result_str = execute_tool(tool_name, tool_args)
+                # 🔒 并发保护：重型工具不允许同时运行
+                _HEAVY_TOOLS = {"run_build", "run_tests", "run_coverage", "install_deps",
+                                "run_command", "self_rebuild", "sandbox_execute"}
+                if tool_name in _HEAVY_TOOLS:
+                    import threading
+                    _heavy_lock = getattr(threading, '_7tan_heavy_lock', None)
+                    if _heavy_lock is None:
+                        _heavy_lock = threading.Lock()
+                        threading._7tan_heavy_lock = _heavy_lock
+                    if not _heavy_lock.acquire(blocking=False):
+                        result_str = "⚠️ 另一个重型操作（构建/测试/安装）正在运行中，请等待其完成后再试。"
+                        messages.append(assistant_msg)
+                        messages.append({"role": "tool", "tool_call_id": tool_id, "content": result_str})
+                        continue
+
+                try:
+                    # 执行工具（带异常保护，确保永远不会遗漏 tool 响应）
+                    result_str = execute_tool(tool_name, tool_args)
+                finally:
+                    if tool_name in _HEAVY_TOOLS:
+                        _heavy_lock.release()
 
                 # 截断过长结果（硬保护，极高上限）
                 if len(result_str) > 100000:

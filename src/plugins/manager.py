@@ -210,11 +210,12 @@ class PluginManager:
     # === 生命周期 ===
 
     def load_all_installed(self):
-        """启动时加载所有已安装的插件"""
+        """启动时加载所有已安装的插件（单个失败不影响整体）"""
         installed = self.get_installed()
         manifest = self.get_manifest()
         manifest_map = {p.get("id"): p for p in manifest}
 
+        self._load_errors = {}  # 记录加载失败的插件及原因
         for pid in installed:
             info = manifest_map.get(pid, {"type": "builtin"})
             pkg_dir = PLUGIN_DIR / pid
@@ -222,9 +223,20 @@ class PluginManager:
                 try:
                     self._load_plugin(pid, str(pkg_dir))
                 except Exception as e:
+                    self._load_errors[pid] = str(e)
                     logger.warning(f"加载插件 {pid} 失败: {e}")
+            else:
+                self._load_errors[pid] = "插件目录不存在"
+                logger.warning(f"插件 {pid} 目录不存在: {pkg_dir}")
 
-    def get_plugin_status(self, plugin_id: str) -> str:
+        if self._load_errors:
+            logger.warning(
+                f"{len(self._load_errors)}/{len(installed)} 个插件加载失败: "
+                f"{', '.join(f'{k}({v[:30]})' for k, v in self._load_errors.items())}")
+
+    def get_load_errors(self) -> dict:
+        """获取插件加载错误信息"""
+        return getattr(self, '_load_errors', {})
         """获取插件状态: installed / available"""
         if plugin_id in self.get_installed():
             return "installed"

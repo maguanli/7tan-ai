@@ -170,9 +170,9 @@ class ScreenRecorder:
                 self.on_error(f"FFmpeg 启动失败: {e}")
             return False
 
-        # 🔍 启动验证：等待 1s 确认 ffmpeg 没有立即崩溃
+        # 🔍 启动验证：等待 0.5s 确认 ffmpeg 没有立即崩溃
         startup_check = 0.0
-        while startup_check < 1.0:
+        while startup_check < 0.5:
             time.sleep(0.1)
             startup_check += 0.1
             if self._process.poll() is not None:

@@ -680,21 +680,38 @@ class VideoEditorPage(QWidget):
             QTimer.singleShot(100, lambda: self._start_recording_with_config(config))
 
     def _start_recording_with_config(self, config: RecordingConfig):
-        if self._recorder.start(config):
-            self._overlay.show()
-            self._overlay.raise_()
-            self._overlay.activateWindow()
-            logger.info(f"🔴 录制控制条已显示: {self._overlay.isVisible()}")
-            self._status.setText("🔴 正在录制…")
-            self._recording_timer.start()
-        else:
-            self._status.setText("❌ 录制启动失败")
+        # 先显示控制条（秒出），再异步启动录制引擎
+        self._overlay.show()
+        self._overlay.raise_()
+        self._overlay.activateWindow()
+        self._status.setText("🔴 正在启动录制…")
+        self._recording_starting = True
+
+        def _do_start():
+            ok = self._recorder.start(config)
+            from PyQt6.QtCore import QTimer
+            if ok and self._recording_starting:
+                QTimer.singleShot(0, lambda: (
+                    self._status.setText("🔴 正在录制…"),
+                    self._recording_timer.start(),
+                    setattr(self, '_recording_starting', False),
+                ))
+            else:
+                QTimer.singleShot(0, lambda: (
+                    self._overlay.hide(),
+                    self._status.setText("❌ 录制启动失败"),
+                    setattr(self, '_recording_starting', False),
+                ))
+
+        import threading
+        threading.Thread(target=_do_start, daemon=True).start()
 
     def _start_recording(self, config=None) -> bool:
         cfg = config or RecordingConfig()
         return self._recorder.start(cfg)
 
     def _stop_recording(self):
+        self._recording_starting = False
         self._recording_timer.stop()
         self._overlay.hide()
         result = self._recorder.stop()

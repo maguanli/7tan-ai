@@ -603,7 +603,7 @@ def get_active_ai_config_raw() -> dict | None:
         session.close()
 
 
-def get_ai_config_by_key(config_key: str) -> dict | None:
+def _get_ai_config_legacy(config_key: str) -> dict | None:
     """按 config_key 获取 AI 配置（含解密后的 api_key）"""
     session = get_session()
     try:

@@ -46,6 +46,23 @@ if sys.platform == 'win32':
 # ⚡ 尽早导入 console_panel，触发 OS 级管道重定向（必须在 loguru 之前）
 import src.ui.console_panel as _console_panel  # noqa: F401
 
+# 🔍 崩溃诊断 — 捕获未处理异常和 segfault
+import traceback as _tb
+_CRASH_DIR = PROJECT_ROOT / "logs"
+_CRASH_DIR.mkdir(parents=True, exist_ok=True)
+
+def _crash_handler(exc_type, exc_value, exc_tb):
+    """捕获所有未处理的 Python 异常"""
+    crash_path = _CRASH_DIR / f"crash_{os.getpid()}.txt"
+    with open(crash_path, "w", encoding="utf-8") as f:
+        f.write(f"CRASH PID={os.getpid()}\n{exc_type.__name__}: {exc_value}\n\n")
+        _tb.print_exception(exc_type, exc_value, exc_tb, file=f)
+    sys.__excepthook__(exc_type, exc_value, exc_tb)
+sys.excepthook = _crash_handler
+
+import faulthandler
+faulthandler.enable(file=open(_CRASH_DIR / f"segfault_{os.getpid()}.txt", "w"))
+
 from loguru import logger
 from dotenv import load_dotenv
 

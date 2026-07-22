@@ -23,7 +23,9 @@ from src.ui.video_editor.data_models import (
 )
 from src.ui.video_editor.project_manager import ProjectManager
 from src.ui.video_editor.commands import UndoManager
-from src.ui.video_editor.editor_api import EditorAPI
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:  # 仅供类型注解，避免与 editor_api 形成模块级循环导入
+    from src.ui.video_editor.editor_api import EditorAPI
 from src.ui.video_editor.player import VideoPlayer
 from src.ui.video_editor.media_bin import MediaBin
 from src.ui.video_editor.timeline import TimelineView
@@ -70,6 +72,7 @@ class VideoEditorPage(QWidget):
         super().__init__()
         self._pm = ProjectManager()
         self._undo_manager = UndoManager()
+        from src.ui.video_editor.editor_api import EditorAPI  # 延迟导入，打破循环
         self._api = EditorAPI(self)
         self.project = self._pm.new_project()
         self._playing = False

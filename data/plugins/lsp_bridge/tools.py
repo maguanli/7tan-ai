@@ -11,7 +11,6 @@ ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(ROOT))
 from src.tools.registry import register_tool
 import os
-import subprocess
 
 
 def _find_neo4():

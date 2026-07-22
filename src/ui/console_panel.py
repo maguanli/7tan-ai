@@ -86,11 +86,19 @@ _DEDUP_WINDOW = 5.0  # 精确匹配窗口（秒）
 _DEDUP_FUZZY_WINDOW = 4.0  # 模糊匹配窗口（秒），比精确窗口小，避免误杀
 
 
+_FILE_SINK_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\s*\|\s*"
+    r"[A-Z]+\s*\|\s*[\w\.]+:[\w<>]+:\d+\s*\|\s*")
+
+
 def _enqueue(line: str):
     line = line.strip('\r\n')
     if not line:
         return
     clean = _strip_ansi(line)
+    if not clean.strip():
+        return
+    clean = _FILE_SINK_RE.sub('', clean)
     if not clean.strip():
         return
     h = hash(clean)

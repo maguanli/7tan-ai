@@ -41,6 +41,8 @@ def _find_rg():
 def grep_code(pattern: str, path: str = ".", file_types: str = "",
               context: int = 2, max_results: int = 50) -> str:
     """在项目中 grep 搜索代码"""
+    if not os.path.exists(path):
+        return f"❌ 路径不存在: {path}"
     rg = _find_rg()
     if rg:
         cmd = [rg, "--line-number", "--color", "never",
@@ -111,6 +113,9 @@ def find_files(pattern: str = "*", path: str = ".", recursive: bool = True,
                max_results: int = 50) -> str:
     """按文件名查找"""
     import fnmatch
+    # 路径存在检查，避免 WinError 3
+    if not os.path.exists(path):
+        return f"❌ 路径不存在: {path}\n💡 提示: 当前工作目录是 {os.getcwd()}，请确认路径是否正确。"
     results = []
     walker = os.walk(path) if recursive else [(path, [], os.listdir(path))]
     for root, dirs, files in walker:

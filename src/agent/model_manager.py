@@ -57,10 +57,7 @@ class ModelManager:
         self._load_config_defaults()
 
     def _load_config_defaults(self):
-        """从数据库加载 context_window / max_tokens / temperature / extra_config
-
-        优先按 model_name 匹配 config_key，找不到则回退到活跃配置。
-        """
+        """从数据库加载 context_window / max_tokens / temperature / extra_config"""
         try:
             from ..database.db import get_ai_config_by_key, get_active_ai_config_raw
             cfg = get_ai_config_by_key(self.model_name)
@@ -72,14 +69,20 @@ class ModelManager:
                 self.temperature = cfg.get("temperature", 0.7)
                 self.extra_config = cfg.get("extra_config") or {}
                 self.provider = cfg.get("provider", "")
+                self._db_api_key = cfg.get("api_key", "")  # 缓存 DB 中的 api_key
+                self._db_base_url = cfg.get("base_url", "")
             else:
                 logger.warning("未找到 AI 配置，使用默认值")
                 self.extra_config = {}
                 self.provider = ""
+                self._db_api_key = ""
+                self._db_base_url = ""
         except Exception as e:
             logger.warning(f"加载 AI 配置失败，使用默认值: {e}")
             self.extra_config = {}
             self.provider = ""
+            self._db_api_key = ""
+            self._db_base_url = ""
 
     def get_api_name(self) -> str:
         return self._api_name
@@ -211,28 +214,38 @@ class ModelManager:
         raise RuntimeError(f"LLM 调用失败（已重试 5 次），最后错误: {last_error}")
 
     def _get_client(self):
-        """懒加载创建 OpenAI 客户端"""
+        """懒加载创建 OpenAI 客户端（优先用数据库配置，回退 YAML）"""
         if self._client is not None:
             return self._client
 
         from openai import OpenAI
-        from ..config.loader import load_config
 
-        cfg = load_config()
-        ai_config = cfg.get("ai", {})
-        active = ai_config.get("active", "deepseek")
-        configs = ai_config.get("configs", {})
-        model_cfg = configs.get(active, {})
+        # 优先用数据库中的 api_key 和 base_url
+        api_key = getattr(self, '_db_api_key', '').strip()
+        base_url = getattr(self, '_db_base_url', '').strip()
 
-        api_key = model_cfg.get("api_key", "")
-        base_url = model_cfg.get("base_url", "https://api.deepseek.com/v1")
+        # 回退：从 YAML 按 provider 查找
+        if not api_key or not base_url:
+            from ..config.loader import load_config
+            import re
+            import os as _os
+            cfg = load_config()
+            ai_config = cfg.get("ai", {})
+            configs = ai_config.get("configs", {})
+            provider_key = self.provider or ai_config.get("active", "deepseek")
+            model_cfg = configs.get(provider_key, configs.get(self.model_name, {}))
+            api_key = model_cfg.get("api_key", "").strip()
+            base_url = model_cfg.get("base_url", "https://api.deepseek.com/v1")
+            # 展开环境变量引用
+            api_key = re.sub(r'\$\{(\w+)\}', lambda m: _os.environ.get(m.group(1), ''), api_key)
 
         if not api_key:
             raise RuntimeError(
-                f"未配置 AI API Key！请设置 {active.upper()}_API_KEY 环境变量"
+                f"未配置 AI API Key！请在 设置→AI模型 中添加 {self.model_name} 的密钥"
             )
 
-        self._client = OpenAI(api_key=api_key, base_url=base_url)
+        self._client = OpenAI(api_key=api_key, base_url=base_url or "https://api.deepseek.com/v1")
+        logger.info(f"🤖 连接 AI [{self.model_name}]: provider={self.provider}, base_url={base_url}")
         return self._client
 
     def _sanitize_tools(self, tools: list) -> list:

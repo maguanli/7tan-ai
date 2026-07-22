@@ -101,6 +101,9 @@ def _enqueue(line: str):
     clean = _FILE_SINK_RE.sub('', clean)
     if not clean.strip():
         return
+    # 隐藏无时间戳前缀的 Agent/User 直发消息，保留文件 sink 带时间戳版本
+    if clean.startswith("\U0001f4ac Agent:") or clean.startswith("\U0001f464 User:"):
+        return
     h = hash(clean)
     # 模糊指纹：取前60字符，防止loguru默认sink格式化(带时间戳)绕过精确去重
     h_fuzzy = hash(clean[:60])

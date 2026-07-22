@@ -403,5 +403,16 @@
     "description": "测试自动化：运行测试（pytest/jest/go test/cargo test）、覆盖率报告、测试发现、模板生成。",
     "tools": ["run_tests", "run_coverage", "discover_tests", "generate_test_template"],
     "icon": "🧪"
+  },
+  {
+    "id": "lsp_bridge",
+    "name": "LSP 语言服务",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "开发",
+    "description": "智能代码分析：跳转定义、查找引用、诊断检查（pyflakes）、代码补全、悬停文档。基于 jedi + pyflakes，纯 Python 实现。",
+    "tools": ["go_to_definition", "find_all_references", "get_diagnostics", "get_completions", "get_hover_info"],
+    "icon": "🔬"
   }
 ]

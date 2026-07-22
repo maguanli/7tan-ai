@@ -26,6 +26,7 @@
     "diff_tools",
     "dependency_analyzer",
     "template_generator",
-    "test_runner"
+    "test_runner",
+    "lsp_bridge"
   ]
 }

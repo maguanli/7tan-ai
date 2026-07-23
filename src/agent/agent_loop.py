@@ -684,20 +684,28 @@ def _trim_prompt_for_mode(prompt: str, task_mode: str) -> str:
     if task_mode not in ("code",):
         return prompt  # game_publish / general 不裁剪
 
-    # code 模式下要移除的模块标题（精确匹配 ## 行）
-    drop_sections = [
-        "🎮 游戏领域专业知识",
-        "📝 游戏简介撰写规范",
-        "🌐 浏览网页规则",
-        "📋 发布流程",
-        "🧠 能力清单速览",
+    # code 模式下要移除的模块关键词（兼容 ## / ### / 无标题情况）
+    drop_keywords = [
+        "游戏领域专业知识",
+        "游戏简介撰写规范",
+        "浏览网页规则",
+        "发布流程",
+        "能力清单速览",
+        "能力清单索引",
     ]
     lines = prompt.splitlines()
     out = []
     skipping = False
     for line in lines:
-        if line.startswith("## "):
-            skipping = any(ds in line for ds in drop_sections)
+        stripped = line.strip()
+        # 任何级别的 Markdown 标题都视为新 section 开始
+        if stripped.startswith("#"):
+            skipping = any(k in stripped for k in drop_keywords)
+            continue
+        # 无标题但命中关键词的段落也跳过（防御数据库 prompt 无标题）
+        if not skipping and any(k in stripped for k in drop_keywords):
+            skipping = True
+            continue
         if not skipping:
             out.append(line)
     trimmed = "\n".join(out)

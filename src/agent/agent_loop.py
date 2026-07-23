@@ -13,6 +13,17 @@ from .context_manager import ContextManager
 from ..tools.registry import execute_tool, get_all_tools, get_tool
 from ..tools.monitor_tools import track_cost
 from ..database.db import get_session, ConversationHistory
+from .agent_optimizer import (
+    execute_tools_parallel,
+    get_file_replace_hint,
+    find_affected_tests,
+    build_incremental_test_cmd,
+    get_workspace_status,
+    filter_history_by_mode,
+    should_compress_context,
+    compress_context,
+    get_optimized_system_prompt_addition,
+)
 
 # 最大迭代次数（防止无限循环）
 MAX_ITERATIONS = 300  # 浏览列表多页任务需要更多步数
@@ -319,18 +330,26 @@ def run_agent_loop(
     # 上下文管理器
     ctx = ContextManager(task=task, session_id=session_id)
 
-    # 系统 prompt（按模式分层裁剪）
+    # 🚀 系统 prompt（按模式分层裁剪 + 模式专属补充）
     system_prompt = _build_system_prompt(config, task_mode)
+    system_prompt += get_optimized_system_prompt_addition(task_mode)
+
+    # 🚀 自动注入工作区状态（git status --short）
+    workspace_status = get_workspace_status()
+    if workspace_status:
+        system_prompt += f"\n\n{workspace_status}"
 
     # 初始化消息
     timeout_note = f"\n\n【时间限制】本轮任务超时时间为 {AGENT_LOOP_TIMEOUT} 秒（约 {AGENT_LOOP_TIMEOUT//60} 分钟）。请合理规划步骤，避免不必要的大文件重复下载。如果时间紧迫，优先完成任务的核心部分。"
     messages = [{"role": "system", "content": system_prompt + timeout_note}]
 
-    # 加载历史对话（带截断保护）
+    # 加载历史对话（带截断保护 + 模式过滤）
     if session_id:
         try:
             from ..agent.conversation import get_session_messages
             history = get_session_messages(session_id, limit=30)
+            # 🚀 按任务模式过滤历史对话
+            history = filter_history_by_mode(history, task_mode)
             # 估算 token：跳过太长的历史，从后往前保留最多 ~16K tokens 的上下文
             hist_tokens = 0
             kept = []
@@ -485,14 +504,58 @@ def run_agent_loop(
                 "logs": all_logs,
             }
 
+        # 🚀 上下文压缩检查（在工具调用前）
+        if should_compress_context(ctx._total_tokens):
+            logger.info("🗜️ 上下文过大，执行压缩...")
+            summary = compress_context(ctx, model=model)
+            if summary:
+                messages = [{"role": "system", "content": system_prompt + timeout_note}]
+                messages.extend(ctx.get_messages())
+                logger.info(f"🗜️ 上下文压缩完成，摘要长度: {len(summary)}")
+
         # 处理工具调用
         if not tool_calls_raw:
             # 没有工具调用也没有文本 — 让模型继续
             messages.append({"role": "user", "content": "请继续完成任务，或调用工具。"})
             continue
 
-        assistant_msg = msg_dict  # 保存引用，供重型工具锁分支使用
+        # 🚀 并行执行独立工具（⭐5）
+        tc_dicts = []
         for tc in tool_calls_raw:
+            func = tc.function if hasattr(tc, 'function') else tc.get("function", {})
+            tc_dicts.append({
+                "id": tc.id if hasattr(tc, 'id') else tc.get("id", ""),
+                "type": "function",
+                "function": {
+                    "name": func.name if hasattr(func, 'name') else func.get("name", "unknown"),
+                    "arguments": func.arguments if hasattr(func, 'arguments') else func.get("arguments", "{}"),
+                }
+            })
+
+        def _execute_single_tool(name: str, args: dict) -> str:
+            acquired = False
+            if name in _HEAVY_TOOLS:
+                acquired = _heavy_lock.acquire(blocking=False)
+                if not acquired:
+                    return "⚠️ 另一个重型操作（构建/测试/安装）正在运行中，请等待其完成后再试。"
+            try:
+                result = _execute_tool_cached(name, args)
+                result = _smart_truncate_tool_result(name, result)
+                if len(result) > 100000:
+                    result = result[:100000] + "\n...(结果已截断)"
+                return result
+            except Exception as e:
+                import traceback
+                logger.error(f"❌ 工具执行失败 [{name}]: {e}\n{traceback.format_exc()}")
+                return f"❌ 工具执行失败: {e}"
+            finally:
+                if name in _HEAVY_TOOLS and acquired:
+                    _heavy_lock.release()
+
+        tool_results = execute_tools_parallel(tc_dicts, _execute_single_tool)
+
+        assistant_msg = msg_dict
+        for tc, result in zip(tool_calls_raw, tool_results):
             try:
                 # 兼容 openai 库新版返回 dict 而不是对象
                 func = tc.function if hasattr(tc, 'function') else tc.get("function", {})
@@ -501,7 +564,6 @@ def run_agent_loop(
                 tool_id = tc.id if hasattr(tc, 'id') else tc.get("id", "")
                 tool_args = json.loads(tool_args_raw) if isinstance(tool_args_raw, str) else tool_args_raw
 
-                tool_def = get_tool(tool_name)
                 logger.info(f"🔧 调用工具: {tool_name}({_truncate_args(tool_args)})")
 
                 # 检测重复调用死循环
@@ -519,36 +581,8 @@ def run_agent_loop(
                         "logs": all_logs,
                     }
 
-                # 🔒 并发保护：重型工具不允许同时运行
-                _HEAVY_TOOLS = {"run_build", "run_tests", "run_coverage", "install_deps",
-                                "run_command", "self_rebuild", "sandbox_execute"}
-                if tool_name in _HEAVY_TOOLS:
-                    import threading
-                    _heavy_lock = getattr(threading, '_7tan_heavy_lock', None)
-                    if _heavy_lock is None:
-                        _heavy_lock = threading.Lock()
-                        threading._7tan_heavy_lock = _heavy_lock
-                    if not _heavy_lock.acquire(blocking=False):
-                        result_str = "⚠️ 另一个重型操作（构建/测试/安装）正在运行中，请等待其完成后再试。"
-                        messages.append(assistant_msg)
-                        messages.append({"role": "tool", "tool_call_id": tool_id, "content": result_str})
-                        continue
+                result_str = result["content"]
 
-                try:
-                    # 执行工具（带异常保护 + 请求级文件缓存）
-                    result_str = _execute_tool_cached(tool_name, tool_args)
-                finally:
-                    if tool_name in _HEAVY_TOOLS:
-                        _heavy_lock.release()
-
-                # 🚀 智能截断（软保护，保留关键信息，防止消息膨胀）
-                result_str = _smart_truncate_tool_result(tool_name, result_str)
-
-                # 截断过长结果（硬保护，极高上限）
-                if len(result_str) > 100000:
-                    result_str = result_str[:100000] + "\n...(结果已截断)"
-
-                pass  # 结果摘要已静音
             except Exception as tool_err:
                 import traceback
                 logger.error(f"❌ 工具执行失败 [{tool_name}]: {tool_err}\n{traceback.format_exc()}")
@@ -560,7 +594,6 @@ def run_agent_loop(
                 "tool_call_id": tool_id,
                 "content": result_str,
             })
-
     # 达到最大迭代次数
     logger.warning(f"⚠️ 达到最大迭代次数 {max_iterations}")
     return {

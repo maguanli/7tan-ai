@@ -222,6 +222,65 @@ _FILE_REPLACE_HINT = """
 - write_file: 全量重写，适合大改动，但会发送整个文件内容
 """
 
+_CODE_MODE_GUIDE = """
+【高效率编码工作流 — 请严格遵守】
+
+## 1. 定位代码
+- 先用 grep_code 搜索关键词 → 找到目标文件
+- 再用 read_file_content 读取具体文件（可同时读多个文件节省时间）
+
+## 2. 理解上下文
+- 用 list_functions 查看文件结构（函数/类列表）
+- 用 analyze_imports 了解依赖关系
+- 用 go_to_definition 跟踪定义
+
+## 3. 执行修改
+- ≤5 行小改：用 file_replace（高精度、低成本）
+- 整个函数/类重写：用 write_file
+- 跨文件批量：先规划所有改动，再逐一执行
+
+## 4. 验证修改（必须执行！）
+- 改完用 py_compile 或 run_command 验证是否可编译
+- 如果有测试，用 run_tests 验证不破坏已有功能
+- 用 git_diff 查看改动内容，确保没有误改
+
+## 5. 质量检查
+- 用 analyze_error 分析任何编译/运行时错误
+- 用 get_diagnostics 检查代码质量问题
+- 用 organize_imports 整理导入
+- 用 format_code 格式化代码
+
+## 核心原则
+✅ 读文件可以并行（多个 read_file_content 同时调用）
+✅ 改文件必须顺序（写完一个验证后再写下一个）
+✅ 每次改动后都要验证——积少成多的 bug 最难找
+✅ 优先用精准工具（file_replace > write_file, grep_code > find_files）
+"""
+
+_CODE_TOOLS_REFERENCE = """
+【可用编程工具速查】
+
+▸ 搜索: grep_code(全文) | find_files(文件名) | find_references(符号引用)
+▸ 阅读: read_file_content | list_functions(结构) | analyze_imports(依赖)
+▸ LSP:  go_to_definition | get_diagnostics | get_completions | find_all_references
+▸ 编辑: file_replace(小改) | write_file(重写) | rename_symbol(重命名)
+▸ 验证: run_command(编译) | run_tests(测试) | git_diff(变更) | git_status(状态)
+▸ 调试: analyze_error(解释) | analyze_log(日志) | diagnose_crash(崩溃)
+▸ 质量: format_code | organize_imports | code_review_file | security_scan_file
+▸ Git:  git_status/diff/log/commit/add/push/pull/branch/checkout
+▸ 性能: benchmark_function | profile_code_block | check_memory
+▸ 终端: run_command(Shell) | run_build | install_deps | check_env
+▸ 文档: generate_docstring | generate_readme | analyze_api_routes
+▸ 测试: run_tests | run_coverage | discover_tests | generate_test_template
+▸ DB:   explore_db | query_db | generate_model
+▸ API:  http_request | test_api_endpoint | openapi_explore
+▸ 重构: extract_function | analyze_imports
+▸ 依赖: check_dependencies | detect_circular_imports | check_outdated
+▸ CI:   generate_ci_config | generate_changelog | bump_version
+▸ 配置: manage_env | scan_secrets | generate_env_template
+▸ 片段: save_snippet | search_snippets | get_snippet
+"""
+
 
 def get_file_replace_hint() -> str:
     """获取 file_replace 使用提示"""
@@ -453,12 +512,7 @@ def get_optimized_system_prompt_addition(task_mode: str) -> str:
         针对特定模式的提示词补充
     """
     if task_mode == "code":
-        return _FILE_REPLACE_HINT + """
-【代码开发模式】
-- 优先使用 file_replace 进行小范围精准修改
-- 修改后建议运行 run_tests 验证
-- 使用 git_status / git_diff 确认变更范围
-"""
+        return _FILE_REPLACE_HINT + _CODE_MODE_GUIDE + _CODE_TOOLS_REFERENCE
     elif task_mode == "game_publish":
         return """
 【游戏发布模式】

@@ -126,7 +126,7 @@ def rsync_deploy(local_path: str, remote_dest: str, remote_host: str = "",
         target = remote_dest
     cmd.append(target)
     
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     return {"success": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr}
 
 @register_tool(name="scp_upload",description="通过SCP上传文件到远程服务器",parameters={"local_file":{"type":"string","description":"本地文件"},"remote_path":{"type":"string","description":"远程路径"},"host":{"type":"string","description":"主机地址"}},category="devops")
@@ -177,7 +177,7 @@ def gradle_build(project_path: str, task: str = "assembleRelease",
                       cwd=project_path, capture_output=True, timeout=120)
     
     result = subprocess.run(["cmd", "/c", "gradlew.bat", task],
-                           cwd=project_path, capture_output=True, text=True, timeout=600)
+                           cwd=project_path, capture_output=True, text=True, timeout=timeout)
     
     elapsed = time.time() - start
     
@@ -199,12 +199,12 @@ def gradle_build(project_path: str, task: str = "assembleRelease",
         "stdout": result.stdout[-3000:] if len(result.stdout) > 3000 else result.stdout
     }
 
-@register_tool(name="run_shell_script",description="执行Shell脚本",parameters={"script":{"type":"string","description":"脚本内容"},"cwd":{"type":"string","description":"工作目录","default":""}},category="devops")
-def run_shell_script(script: str, cwd: str = "") -> dict:
+@register_tool(name="run_shell_script",description="执行Shell脚本",parameters={"script":{"type":"string","description":"脚本内容"},"cwd":{"type":"string","description":"工作目录","default":""},"timeout":{"type":"integer","description":"超时秒数，默认120","default":120}},category="devops")
+def run_shell_script(script: str, cwd: str = "", timeout: int = 120) -> dict:
     """执行 shell 脚本（支持多行）"""
     result = subprocess.run(
         script, shell=True, cwd=cwd or os.getcwd(),
-        capture_output=True, text=True, timeout=600
+        capture_output=True, text=True, timeout=timeout
     )
     return {
         "success": result.returncode == 0,

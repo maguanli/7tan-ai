@@ -30,6 +30,243 @@ def _get_timeout_from_config() -> int:
 AGENT_LOOP_TIMEOUT = _get_timeout_from_config()
 
 
+# ============================================================
+# 🚀 Token 效率优化模块（任务模式识别 / 工具筛选 / 结果截断 / 文件缓存）
+# ============================================================
+
+def _detect_task_mode(task: str) -> str:
+    """根据任务描述识别场景，用于裁剪 system prompt 和筛选工具
+
+    Returns:
+        'code'         — 代码编写/调试/重构/测试/Git 等开发任务
+        'game_publish' — 游戏资源浏览/下载/发布任务
+        'general'      — 其他/无法判断（保守全量）
+    """
+    t = task.lower()
+    # 游戏发布场景特征词（优先匹配，因为特征强）
+    game_kw = [
+        "发布到", "一键发布", "publish_to_7tan", "游戏详情页", "下载链接",
+        "find_download_links", "browse_page", "游戏简介", "截图", "logo",
+        "oss_upload", "db_save_resource", "采集", "游戏资源", "新游戏",
+        "游戏站", "详情页", "get_page_images",
+    ]
+    if any(k in t for k in game_kw):
+        return "game_publish"
+    # 代码开发场景特征词
+    code_kw = [
+        "代码", "bug", "修复", "重构", "函数", "类", "报错", "错误",
+        "refactor", "debug", "fix", "implement", "写一个", "优化",
+        "python", "def ", "class ", "git", "commit", "分支", "测试",
+        "test", "运行测试", "单元测试", "覆盖率", "依赖", "import",
+        "语法", "编译", "构建", "build", "打包", "插件", "脚本",
+        "审查", "review", "格式化", "重命名", "查找引用", "跳转定义",
+        ".py", ".js", ".ts", "接口", "api", "性能", "profile",
+    ]
+    if any(k in t for k in code_kw):
+        return "code"
+    return "general"
+
+
+# 场景工具白名单 — None 表示不筛选（全量）
+_CODE_TOOLS = {
+    # 代码搜索与结构
+    "grep_code", "find_files", "search_in_files", "find_references",
+    "list_functions", "analyze_imports", "scan_project", "code_stats",
+    "list_templates", "create_project",
+    # LSP
+    "go_to_definition", "find_all_references", "get_diagnostics",
+    "get_completions", "get_hover_info",
+    # 文件读写
+    "read_file_content", "write_file", "list_files", "file_replace",
+    "delete_file", "compress_image",
+    # Git
+    "git_status", "git_diff", "git_log", "git_add", "git_commit",
+    "git_push", "git_pull", "git_branch", "git_checkout", "git_clone",
+    "git_init", "git_stash", "git_tag", "git_remote_info",
+    "git_check_commit_message", "git_init_hooks", "git_contributors",
+    "check_changes", "compare_branches", "resolve_conflict", "generate_diff",
+    # 测试
+    "run_tests", "run_coverage", "discover_tests", "generate_test_template",
+    # 终端与构建
+    "run_command", "run_build", "install_deps", "check_env",
+    "run_shell_script", "system_shell", "gradle_build", "deploy_pipeline",
+    # 重构与文档
+    "rename_symbol", "organize_imports", "format_code", "extract_function",
+    "generate_docstring", "generate_readme", "analyze_api_routes",
+    "generate_gitignore", "generate_ci_config", "generate_changelog", "bump_version",
+    # 代码审查与依赖
+    "code_review_file", "code_review_directory", "security_scan_file",
+    "check_dependencies", "detect_circular_imports", "generate_dependency_graph",
+    "check_outdated", "scan_secrets", "generate_env_template", "manage_env",
+    # 调试诊断
+    "analyze_error", "analyze_log", "diagnose_crash",
+    # 性能
+    "benchmark_function", "profile_code_block", "check_memory",
+    # 数据库探索 / API
+    "explore_db", "query_db", "generate_model",
+    "http_request", "test_api_endpoint", "openapi_explore",
+    # 片段 / 补全
+    "save_snippet", "search_snippets", "get_snippet", "list_snippets",
+    "completion_start", "completion_stop", "completion_status",
+    # VS Code
+    "vscode_open_file", "vscode_open_project", "vscode_open_multi",
+    "vscode_diff", "vscode_list_extensions", "vscode_install_extension",
+    # 自我管理 / 沙盒
+    "sandbox_execute", "self_modify_config", "self_update_prompt",
+    "self_fix_sandbox", "check_file_integrity", "verify_integrity",
+    "self_diagnose", "create_plugin", "memory_store", "memory_recall",
+    "memory_summary", "memory_forget",
+    # 监控 / 通用自我管理
+    "track_cost", "get_cost_report", "health_check", "get_system_status",
+    "check_disk", "web_search", "fetch_news",
+    "self_rebuild", "self_restart", "verify_integrity",
+    # 内容质量（通用）
+    "check_sensitive_words", "check_content_quality",
+}
+
+_GAME_PUBLISH_TOOLS = {
+    # 浏览器
+    "use_source_browser", "use_admin_browser", "browse_page", "scroll_down",
+    "click_element", "screenshot", "get_page_images", "find_download_links",
+    "extract_logo", "auto_screenshot", "ocr_screenshot", "login_7tan",
+    # 文件 / 下载 / 图片
+    "download_file", "check_disk", "read_file_content", "write_file",
+    "list_files", "delete_file", "compress_image",
+    # OSS / 发布
+    "oss_upload", "oss_delete", "publish_to_7tan",
+    "detect_form_fields", "fill_all_fields",
+    # 数据库
+    "db_check_duplicate", "db_save_resource", "db_query_resources",
+    "db_check_version", "db_add_task_log",
+    # 内容处理 / AI
+    "analyze_game", "compare_games", "summarize_reviews", "cloud_write_intro",
+    "cloud_analyze", "translate_text", "check_sensitive_words",
+    "check_content_quality", "web_search", "fetch_news",
+    # 监控 / 通用自我管理
+    "track_cost", "get_cost_report", "health_check", "get_system_status",
+    "sandbox_execute", "self_modify_config", "self_rebuild", "self_restart",
+    "self_update_prompt", "verify_integrity",
+    "memory_store", "memory_recall",
+}
+
+
+def get_tools_for_mode(mode: str) -> list:
+    """按任务模式返回筛选后的工具定义列表（OpenAI tools 格式）
+
+    general / 未知模式 → 全量（保守，保证功能不缺失）
+    """
+    all_tools = get_all_tools()
+    if mode == "code":
+        allowed = _CODE_TOOLS
+    elif mode == "game_publish":
+        allowed = _GAME_PUBLISH_TOOLS
+    else:
+        return all_tools
+    filtered = [t for t in all_tools if t["function"]["name"] in allowed]
+    logger.info(
+        f"🎯 工具筛选[{mode}]: {len(all_tools)} → {len(filtered)} "
+        f"(省 ~{(len(all_tools)-len(filtered))*80} tokens)"
+    )
+    return filtered
+
+
+# 工具结果软截断阈值（字符）。超过则按类型智能摘要，避免消息历史膨胀。
+_SOFT_TRUNCATE_LIMIT = 2500
+
+# 按工具定制的截断策略：保留关键信息，丢弃冗余项
+_KEEP_HEAD_TOOLS = {           # 只保留前 N 字符 + 统计
+    "scan_project", "code_review_directory", "analyze_imports",
+    "generate_dependency_graph", "discover_tests", "browse_page",
+}
+
+
+def _smart_truncate_tool_result(tool_name: str, result: str) -> str:
+    """对工具结果做智能截断，防止消息历史膨胀（在 100K 硬截断之前生效）
+
+    策略：
+      - 短结果原样返回
+      - 特定工具保留头部 + 附加统计
+      - 其余超长结果保留头尾，省略中段
+    """
+    if not isinstance(result, str):
+        result = str(result)
+    n = len(result)
+    if n <= _SOFT_TRUNCATE_LIMIT:
+        return result
+    # 保留头部型
+    if tool_name in _KEEP_HEAD_TOOLS:
+        head = result[:_SOFT_TRUNCATE_LIMIT]
+        return f"{head}\n\n…[已截断：共 {n} 字符，仅显示前 {_SOFT_TRUNCATE_LIMIT}。需要完整内容请缩小范围后重查]"
+    # 头尾保留型（默认）
+    head = result[:1800]
+    tail = result[-500:]
+    omitted = n - 2300
+    return (
+        f"{head}\n\n…[中间省略 {omitted} 字符]…\n\n{tail}"
+        f"\n\n(完整结果 {n} 字符，已智能截断)"
+    )
+
+
+# ---- 请求级文件缓存（生命周期 = 单次 run_agent_loop） ----
+_request_file_cache: dict = {}
+
+
+def _cache_get(path: str):
+    """读取缓存；mtime 变化则失效"""
+    import os
+    entry = _request_file_cache.get(path)
+    if not entry:
+        return None
+    try:
+        if os.path.getmtime(path) == entry[1]:
+            return entry[0]
+    except OSError:
+        pass
+    _request_file_cache.pop(path, None)
+    return None
+
+
+def _cache_put(path: str, content) -> None:
+    import os
+    try:
+        _request_file_cache[path] = (content, os.path.getmtime(path))
+    except OSError:
+        _request_file_cache[path] = (content, 0)
+
+
+def _clear_request_cache() -> None:
+    """请求结束清空缓存，避免内存泄漏"""
+    _request_file_cache.clear()
+
+
+def _execute_tool_cached(name: str, args: dict) -> str:
+    """🚀 带请求级缓存的工具执行包装
+
+    对只读文件类工具做缓存：同一请求内重复读取同一文件直接命中缓存，
+    避免重复磁盘 I/O 与重复结果进入消息历史。
+    缓存以文件 mtime 失效，写操作后自动失效，保证一致性。
+    """
+    _CACHEABLE = {"read_file_content"}
+    if name in _CACHEABLE:
+        path = args.get("path") or args.get("file_path") or ""
+        # 仅当无 offset/max_lines 这类部分读取参数时才整文件缓存
+        if path and not args.get("offset") and not args.get("max_lines"):
+            hit = _cache_get(path)
+            if hit is not None:
+                logger.debug(f"📦 文件缓存命中: {path}")
+                return hit
+            result = execute_tool(name, args)
+            _cache_put(path, result)
+            return result
+    result = execute_tool(name, args)
+    # 写操作后使对应文件缓存失效
+    if name in ("write_file", "file_replace", "delete_file"):
+        path = args.get("path") or args.get("file_path") or args.get("filepath") or ""
+        if path:
+            _request_file_cache.pop(path, None)
+    return result
+
+
 def _get_active_ai_config(config: dict) -> dict:
     """从数据库获取当前活跃 AI 配置"""
     try:
@@ -69,6 +306,12 @@ def run_agent_loop(
     config = load_config()
     active_ai = _get_active_ai_config(config)
 
+    # 🚀 识别任务模式（用于工具筛选 + 分层 prompt）
+    task_mode = _detect_task_mode(task)
+    if task_mode != "general":
+        logger.info(f"🧭 任务模式识别: {task_mode}")
+    _clear_request_cache()  # 🚀 初始化请求级文件缓存
+
     # 选择模型
     actual_model = model_name or active_ai.get("model", "")
     model = get_model(actual_model)
@@ -76,8 +319,8 @@ def run_agent_loop(
     # 上下文管理器
     ctx = ContextManager(task=task, session_id=session_id)
 
-    # 系统 prompt
-    system_prompt = _build_system_prompt(config)
+    # 系统 prompt（按模式分层裁剪）
+    system_prompt = _build_system_prompt(config, task_mode)
 
     # 初始化消息
     timeout_note = f"\n\n【时间限制】本轮任务超时时间为 {AGENT_LOOP_TIMEOUT} 秒（约 {AGENT_LOOP_TIMEOUT//60} 分钟）。请合理规划步骤，避免不必要的大文件重复下载。如果时间紧迫，优先完成任务的核心部分。"
@@ -157,7 +400,7 @@ def run_agent_loop(
             response = _call_llm(
                 model=model,
                 messages=messages,
-                tools=get_all_tools(),
+                tools=get_tools_for_mode(task_mode),
                 config=config,
             )
         except Exception as e:
@@ -292,11 +535,14 @@ def run_agent_loop(
                         continue
 
                 try:
-                    # 执行工具（带异常保护，确保永远不会遗漏 tool 响应）
-                    result_str = execute_tool(tool_name, tool_args)
+                    # 执行工具（带异常保护 + 请求级文件缓存）
+                    result_str = _execute_tool_cached(tool_name, tool_args)
                 finally:
                     if tool_name in _HEAVY_TOOLS:
                         _heavy_lock.release()
+
+                # 🚀 智能截断（软保护，保留关键信息，防止消息膨胀）
+                result_str = _smart_truncate_tool_result(tool_name, result_str)
 
                 # 截断过长结果（硬保护，极高上限）
                 if len(result_str) > 100000:
@@ -425,30 +671,72 @@ def _call_llm(model, messages: list, tools: list, config: dict) -> dict:
     return response
 
 
-def _build_system_prompt(config: dict) -> str:
-    """构建系统提示词 — 数据库优先，文件回退"""
+def _trim_prompt_for_mode(prompt: str, task_mode: str) -> str:
+    """🚀 按任务模式裁剪 system prompt 中与场景无关的模块（分层 prompt）
+
+    设计原则：
+      - 始终保留：核心身份 / 安全边界 / 重启构建硬性规则 / 铁律 / 自由原则
+      - code 模式：裁掉游戏专业知识、简介撰写规范、浏览网页规则、发布流程、能力清单大表
+      - game_publish 模式：保留全部（本来就是为它写的）
+      - general 模式：保留全部
+    通过 Markdown 二级标题(## )切分模块，仅移除命中的整块，保证结构完整。
+    """
+    if task_mode not in ("code",):
+        return prompt  # game_publish / general 不裁剪
+
+    # code 模式下要移除的模块标题（精确匹配 ## 行）
+    drop_sections = [
+        "🎮 游戏领域专业知识",
+        "📝 游戏简介撰写规范",
+        "🌐 浏览网页规则",
+        "📋 发布流程",
+        "🧠 能力清单速览",
+    ]
+    lines = prompt.splitlines()
+    out = []
+    skipping = False
+    for line in lines:
+        if line.startswith("## "):
+            skipping = any(ds in line for ds in drop_sections)
+        if not skipping:
+            out.append(line)
+    trimmed = "\n".join(out)
+    saved = len(prompt) - len(trimmed)
+    if saved > 0:
+        logger.info(f"✂️ 分层 Prompt[{task_mode}]: {len(prompt)} → {len(trimmed)} 字符 (省 ~{saved//2} tokens)")
+    return trimmed
+
+
+def _build_system_prompt(config: dict, task_mode: str = "general") -> str:
+    """构建系统提示词 — 数据库优先，文件回退；按 task_mode 分层裁剪"""
+    full = None
     # 1. 优先从数据库读取（通过 prompts 模块）
     try:
         from .prompts import get_prompt
         db_prompt = get_prompt("system")
         if db_prompt and db_prompt.strip() and len(db_prompt) > 200:
-            return db_prompt
+            full = db_prompt
     except Exception:
         pass
 
     # 2. 回退到文件
-    from pathlib import Path
-    custom_prompt = Path("data/prompts/system.txt")
-    if custom_prompt.exists():
-        content = custom_prompt.read_text(encoding="utf-8")
-        if content.strip():
-            return content
+    if full is None:
+        from pathlib import Path
+        custom_prompt = Path("data/prompts/system.txt")
+        if custom_prompt.exists():
+            content = custom_prompt.read_text(encoding="utf-8")
+            if content.strip():
+                full = content
 
     # 3. 回退到配置文件
-    ai_cfg = config.get("ai", {})
-    default_prompt = ai_cfg.get("system_prompt", "")
-    if default_prompt:
-        return default_prompt
+    if full is None:
+        ai_cfg = config.get("ai", {})
+        default_prompt = ai_cfg.get("system_prompt", "")
+        if default_prompt:
+            full = default_prompt
+
+    if full is not None:
+        return _trim_prompt_for_mode(full, task_mode)
 
     # 默认 prompt
     return """你是一个专业的游戏资源编辑 AI，负责从游戏网站发现、整理并发布游戏资源到7坛平台。
@@ -541,10 +829,16 @@ def run_agent_loop_streaming(
     config = load_config()
     active_ai = _get_active_ai_config(config)
 
+    # 🚀 识别任务模式 + 初始化请求级文件缓存
+    task_mode = _detect_task_mode(task)
+    if task_mode != "general":
+        logger.info(f"🧭 任务模式识别: {task_mode}")
+    _clear_request_cache()
+
     actual_model = model_name or active_ai.get("model", "")
     model = get_model(actual_model)
     ctx = ContextManager(task=task, session_id=session_id)
-    system_prompt = _build_system_prompt(config)
+    system_prompt = _build_system_prompt(config, task_mode)
 
     messages = [{"role": "system", "content": system_prompt}]
 
@@ -588,7 +882,7 @@ def run_agent_loop_streaming(
             response = _call_llm(
                 model=model,
                 messages=messages,
-                tools=get_all_tools(),
+                tools=get_tools_for_mode(task_mode),
                 config=config,
             )
         except Exception as e:
@@ -684,7 +978,9 @@ def run_agent_loop_streaming(
                            "cost": total_cost, "iterations": iteration}
                     return
 
-                result_str = execute_tool(tool_name, tool_args)
+                result_str = _execute_tool_cached(tool_name, tool_args)
+                # 🚀 智能截断（软保护）
+                result_str = _smart_truncate_tool_result(tool_name, result_str)
                 if len(result_str) > 100000:
                     result_str = result_str[:100000] + "\n...(\u7ed3\u679c\u5df2\u622a\u65ad)"
 

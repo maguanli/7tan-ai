@@ -1818,9 +1818,10 @@ class ChatPage(QWidget):
 
             QTimer.singleShot(500, self._refresh_sessions)
 
-        # 🎤 语音模式：延迟 300ms 后朗读（避免与 UI 渲染竞态）
+        # 🎤 语音模式：后台线程朗读（合成+播放全在后台，不阻塞UI）
         if self._voice_mode and not self._voice_recording and success and result:
-            QTimer.singleShot(300, lambda r=result: self._speak_response(r))
+            import threading
+            threading.Thread(target=self._speak_response, args=(result,), daemon=True).start()
 
 
 
@@ -1872,9 +1873,10 @@ class ChatPage(QWidget):
 
             QTimer.singleShot(500, self._refresh_sessions)
 
-        # 🎤 语音模式：延迟 300ms 后朗读（避免与 UI 渲染竞态）
+        # 🎤 语音模式：后台线程朗读（合成+播放全在后台，不阻塞UI）
         if self._voice_mode and not self._voice_recording and success and result:
-            QTimer.singleShot(300, lambda r=result: self._speak_response(r))
+            import threading
+            threading.Thread(target=self._speak_response, args=(result,), daemon=True).start()
 
 
 
@@ -1887,7 +1889,7 @@ class ChatPage(QWidget):
             result = tts_speak(text, play=True, strip_code=True)
             logger.info(f"[TTS] _speak_response OK: {result}")
         except Exception as e:
-            logger.warning(f"[TTS] 朗读失败: {e}")
+            logger.error(f"[TTS] 朗读失败: {e}", exc_info=True)
 
     def _on_error(self, error_msg: str, thinking_msg=None):
 

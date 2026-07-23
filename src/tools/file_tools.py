@@ -76,11 +76,13 @@ def list_files(directory: str, pattern: str = "*") -> str:
     },
     category="file",
 )
-def read_file_content(path: str = None, encoding: str = "utf-8", max_lines: int = 200, offset: int = 0, limit: int = None, filepath: str = None) -> str:
+def read_file_content(path: str = None, encoding: str = "utf-8", max_lines: int = 200, offset: int = 0, limit: int = None, filepath: str = None, file_path: str = None) -> str:
     """读取文件内容"""
     # 兼容 AI 可能使用不同的参数名
     if filepath is not None:
         path = filepath
+    if file_path is not None:
+        path = file_path
     if limit is not None:
         max_lines = limit
     if path is None:

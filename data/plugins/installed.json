@@ -34,6 +34,8 @@
     "ci_helper",
     "config_manager",
     "snippet_manager",
-    "perf_tools"
+    "perf_tools",
+    "tts_piper",
+    "whisper_stt"
   ]
 }

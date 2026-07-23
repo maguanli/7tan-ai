@@ -222,6 +222,8 @@ class ChatPage(QWidget):
         self._batch_rendering = False  # suppress _scroll_to_bottom during batch
         self._HISTORY_CHUNK = 15
         self._LAZY_CHUNK = 10
+        self._voice_mode = False  # 语音模式开关
+        self._voice_recording = False  # 是否正在录音
         self._render_queue: list = []
         self._render_timer = None
         self._render_insert_pos: int = 0
@@ -571,53 +573,57 @@ class ChatPage(QWidget):
 
         bottom_row.addStretch()
 
-
-
-        send_btn = QPushButton("发送 ▲")
-
-        send_btn.setFixedHeight(30)
-
-        send_btn.setFixedWidth(90)
-
-        send_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-
-        send_btn.clicked.connect(lambda: self._send_message(self._input.toPlainText().strip()))
-
-        send_btn.setStyleSheet(f"""
-
+        # ---- 语音模式切换按钮 ----
+        self._voice_btn = QPushButton("🎤 语音")
+        self._voice_btn.setFixedHeight(30)
+        self._voice_btn.setMinimumWidth(105)
+        self._voice_btn.setMaximumWidth(160)
+        self._voice_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self._voice_btn.setCheckable(True)
+        self._voice_btn.clicked.connect(self._toggle_voice_mode)
+        self._voice_btn.setStyleSheet(f"""
             QPushButton {{
-
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-
-                    stop:0 {THEME['accent2']}, stop:1 {THEME['accent']});
-
-                color: #fff; border: none; border-radius: 6px;
-
-                font-size: 13px; font-weight: bold;
-
+                background: {THEME['bg_input']};
+                color: {THEME['text_primary']};
+                border: 1px solid {THEME['border']};
+                border-radius: 6px;
+                font-size: 12px;
             }}
-
             QPushButton:hover {{
-
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-
-                    stop:0 {THEME['accent2']}dd, stop:1 {THEME['accent']}dd);
-
+                border-color: {THEME['accent']}66;
+                color: {THEME['accent']};
             }}
-
-            QPushButton:pressed {{
-
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-
-                    stop:0 {THEME['accent']}, stop:1 {THEME['accent2']});
-
+            QPushButton:checked {{
+                background: {THEME['accent']};
+                color: #000;
+                border-color: {THEME['accent']};
+                font-weight: bold;
             }}
-
         """)
+        bottom_row.addWidget(self._voice_btn)
 
-        bottom_row.addWidget(send_btn)
-
-
+        self._send_btn = QPushButton("发送 ▲")
+        self._send_btn.setFixedHeight(30)
+        self._send_btn.setMinimumWidth(90)
+        self._send_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self._send_btn.clicked.connect(self._on_send_clicked)
+        self._send_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {THEME['accent2']}, stop:1 {THEME['accent']});
+                color: #fff; border: none; border-radius: 6px;
+                font-size: 13px; font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {THEME['accent2']}dd, stop:1 {THEME['accent']}dd);
+            }}
+            QPushButton:pressed {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {THEME['accent']}, stop:1 {THEME['accent2']});
+            }}
+        """)
+        bottom_row.addWidget(self._send_btn)
 
         input_layout.addLayout(bottom_row)
 
@@ -1315,7 +1321,110 @@ class ChatPage(QWidget):
 
     # ==================== 消息收发 ====================
 
+    def _toggle_voice_mode(self):
+        """切换语音/文字模式"""
+        self._voice_mode = self._voice_btn.isChecked()
+        if self._voice_mode:
+            self._voice_btn.setText("🎤 语音中")
+            self._send_btn.setText("🎤 录音发送")
+            self._input.setPlaceholderText("语音模式：点击录音按钮开始说话...")
+        else:
+            self._voice_btn.setText("🎤 语音")
+            self._send_btn.setText("发送 ▲")
+            self._input.setPlaceholderText("输入消息... (Enter 发送, Shift+Enter 换行, 可拖拽文件)")
 
+    def _on_send_clicked(self):
+        """发送按钮点击：语音模式走录音，文字模式走发送"""
+        if self._voice_mode:
+            self._voice_record_and_send()
+        else:
+            text = self._input.toPlainText().strip()
+            if text:
+                self._send_message(text)
+
+    def _voice_record_and_send(self):
+        """录音 → STT → 发送"""
+        if self._voice_recording:
+            return  # 防止重复点击
+        
+        self._voice_recording = True
+        self._send_btn.setEnabled(False)
+        self._send_btn.setText("🔴 录音中...")
+        self._add_message("system", "🎤 正在录音，请说话...（5 秒后自动停止）")
+        
+        import threading
+        def _record_and_send():
+            try:
+                import sounddevice as sd
+                import numpy as np
+                import tempfile
+                import wave
+                import subprocess
+                import os
+                
+                # 录音参数
+                duration = 5  # 秒
+                sample_rate = 16000
+                channels = 1
+                
+                # 录音
+                audio = sd.rec(
+                    int(duration * sample_rate),
+                    samplerate=sample_rate,
+                    channels=channels,
+                    dtype='int16'
+                )
+                sd.wait()
+                
+                # 保存为 WAV
+                tmp_wav = os.path.join(tempfile.gettempdir(), '7tan_voice.wav')
+                with wave.open(tmp_wav, 'wb') as wf:
+                    wf.setnchannels(channels)
+                    wf.setsampwidth(2)
+                    wf.setframerate(sample_rate)
+                    wf.writeframes(audio.tobytes())
+                
+                # Whisper STT
+                whisper_exe = r'G:\whisper_cpp\Release\whisper-cli.exe'
+                whisper_model = r'G:\whisper_cpp\models\ggml-small.bin'
+                result = subprocess.run(
+                    [whisper_exe, '-m', whisper_model, '-f', tmp_wav, '-l', 'zh', '--no-timestamps'],
+                    capture_output=True, text=True, timeout=30
+                )
+                
+                # 提取识别文本
+                recognized = result.stdout.strip()
+                if not recognized:
+                    recognized = result.stderr.strip()
+                
+                # 清理临时文件
+                try:
+                    os.remove(tmp_wav)
+                except:
+                    pass
+                
+                if recognized:
+                    # 用 signal 在主线程设置文本并发送
+                    def _send_recognized():
+                        self._input.setPlainText(recognized)
+                        self._send_message(recognized)
+                    QTimer.singleShot(50, _send_recognized)
+                else:
+                    QTimer.singleShot(0, lambda: self._add_message("error", "❌ 未识别到语音内容，请重试"))
+                    
+            except Exception as e:
+                QTimer.singleShot(0, lambda: self._add_message("error", f"❌ 录音失败: {e}"))
+            finally:
+                def _reset():
+                    self._voice_recording = False
+                    self._send_btn.setEnabled(True)
+                    if self._voice_mode:
+                        self._send_btn.setText("🎤 录音发送")
+                    else:
+                        self._send_btn.setText("发送 ▲")
+                QTimer.singleShot(0, _reset)
+        
+        threading.Thread(target=_record_and_send, daemon=True).start()
 
     def _send_message(self, text: str = None):
 
@@ -1709,6 +1818,10 @@ class ChatPage(QWidget):
 
             QTimer.singleShot(500, self._refresh_sessions)
 
+        # 🎤 语音模式：延迟 300ms 后朗读（避免与 UI 渲染竞态）
+        if self._voice_mode and not self._voice_recording and success and result:
+            QTimer.singleShot(300, lambda r=result: self._speak_response(r))
+
 
 
     def _on_response(self, data, thinking_msg=None):
@@ -1759,7 +1872,22 @@ class ChatPage(QWidget):
 
             QTimer.singleShot(500, self._refresh_sessions)
 
+        # 🎤 语音模式：延迟 300ms 后朗读（避免与 UI 渲染竞态）
+        if self._voice_mode and not self._voice_recording and success and result:
+            QTimer.singleShot(300, lambda r=result: self._speak_response(r))
 
+
+
+
+    def _speak_response(self, text: str):
+        """后台线程：语音模式下朗读 AI 回复"""
+        logger.info(f"[TTS] _speak_response START: text_len={len(text) if text else 0}")
+        try:
+            from data.plugins.tts_piper.tools import tts_speak
+            result = tts_speak(text, play=True, strip_code=True)
+            logger.info(f"[TTS] _speak_response OK: {result}")
+        except Exception as e:
+            logger.warning(f"[TTS] 朗读失败: {e}")
 
     def _on_error(self, error_msg: str, thinking_msg=None):
 

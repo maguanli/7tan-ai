@@ -223,6 +223,7 @@ class ChatPage(QWidget):
         self._HISTORY_CHUNK = 15
         self._LAZY_CHUNK = 10
         self._voice_mode = False  # 语音模式开关
+        self._voice_gender = "female"  # 语音性别: female(花颜) / male(云希)
         self._voice_recording = False  # 是否正在录音
         self._render_queue: list = []
         self._render_timer = None
@@ -572,6 +573,40 @@ class ChatPage(QWidget):
 
 
         bottom_row.addStretch()
+
+        # ---- 声音性别切换按钮 ----
+        self._gender_btn = QPushButton("♀ 女声")
+        self._gender_btn.setFixedHeight(30)
+        self._gender_btn.setMinimumWidth(85)
+        self._gender_btn.setMaximumWidth(140)
+        self._gender_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self._gender_btn.setCheckable(True)
+        self._gender_btn.setChecked(True)  # 默认女声
+        self._gender_btn.clicked.connect(self._toggle_voice_gender)
+        self._gender_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {THEME['bg_input']};
+                color: {THEME['text_primary']};
+                border: 1px solid {THEME['border']};
+                border-radius: 6px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                border-color: {THEME['accent']}66;
+                color: {THEME['accent']};
+            }}
+            QPushButton:checked {{
+                background: #e91e8c;
+                color: #fff;
+                border-color: #e91e8c;
+            }}
+            QPushButton:!checked {{
+                background: #1976d2;
+                color: #fff;
+                border-color: #1976d2;
+            }}
+        """)
+        bottom_row.addWidget(self._gender_btn)
 
         # ---- 语音模式切换按钮 ----
         self._voice_btn = QPushButton("🎤 语音")
@@ -1320,6 +1355,23 @@ class ChatPage(QWidget):
 
 
     # ==================== 消息收发 ====================
+
+    def _toggle_voice_gender(self):
+        """切换男女声"""
+        is_female = self._gender_btn.isChecked()
+        if is_female:
+            self._voice_gender = "female"
+            self._gender_btn.setText("♀ 女声")
+        else:
+            self._voice_gender = "male"
+            self._gender_btn.setText("♂ 男声")
+
+        try:
+            from data.plugins.tts_piper.tools import tts_set_gender
+            result = tts_set_gender(self._voice_gender)
+            logger.info(f"[TTS] 声音切换: {result}")
+        except Exception as e:
+            logger.error(f"[TTS] 声音切换失败: {e}")
 
     def _toggle_voice_mode(self):
         """切换语音/文字模式"""

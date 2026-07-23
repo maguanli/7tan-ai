@@ -18,6 +18,15 @@ _HEAVY_TOOLS = {
 }
 import threading
 _heavy_lock = threading.Lock()
+
+# 🎤 Agent 语音回调：由 UI 层设置，当语音模式开启时朗读 Agent 中间消息
+_agent_speak_callback = None
+
+
+def set_agent_speak_callback(callback):
+    """设置 Agent 消息语音回调。callback(str) 在后台线程调用。传 None 清除。"""
+    global _agent_speak_callback
+    _agent_speak_callback = callback
 # ⭐ 建议B：重库预热——后台线程预 import jedi 等大库，
 # 避免编码任务首次 LSP 调用时冷启动等待 ~1s（实测 jedi import 耗时大头）
 def _prewarm_heavy_libs() -> None:
@@ -476,6 +485,12 @@ def run_agent_loop(
         # 如果有文本回复，记录
         if content:
             logger.info(f"💬 Agent: {content[:100]}...")
+            # 🎤 语音模式：通过回调朗读 Agent 消息（完整内容，非截断）
+            if _agent_speak_callback:
+                try:
+                    threading.Thread(target=_agent_speak_callback, args=(content,), daemon=True).start()
+                except Exception:
+                    pass
         # 判断是否需要工具调用
         # "length" = 输出被截断，不能当完成！
         if finish_reason == "length":

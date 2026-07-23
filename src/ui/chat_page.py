@@ -1328,10 +1328,16 @@ class ChatPage(QWidget):
             self._voice_btn.setText("🎤 语音中")
             self._send_btn.setText("🎤 录音发送")
             self._input.setPlaceholderText("语音模式：点击录音按钮开始说话...")
+            # 🎤 设置 Agent 语音回调：让 Agent 中间消息也能朗读
+            from ..agent.agent_loop import set_agent_speak_callback
+            set_agent_speak_callback(self._speak_response)
         else:
             self._voice_btn.setText("🎤 语音")
             self._send_btn.setText("发送 ▲")
             self._input.setPlaceholderText("输入消息... (Enter 发送, Shift+Enter 换行, 可拖拽文件)")
+            # 🎤 清除 Agent 语音回调
+            from ..agent.agent_loop import set_agent_speak_callback
+            set_agent_speak_callback(None)
 
     def _on_send_clicked(self):
         """发送按钮点击：语音模式走录音，文字模式走发送"""

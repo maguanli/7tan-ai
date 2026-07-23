@@ -13,6 +13,14 @@ from .context_manager import ContextManager
 from ..tools.registry import execute_tool, get_all_tools, get_tool
 from ..tools.monitor_tools import track_cost
 from ..database.db import get_session, ConversationHistory
+
+# 🔒 重型工具互斥集合——防止并发执行构建/测试等重型操作
+_HEAVY_TOOLS = {
+    "run_build", "run_tests", "run_coverage", "install_deps",
+    "run_command", "run_shell_script", "self_rebuild", "sandbox_execute",
+}
+import threading
+_heavy_lock = threading.Lock()
 from .agent_optimizer import (
     execute_tools_parallel,
     get_file_replace_hint,

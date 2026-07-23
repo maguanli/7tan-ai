@@ -20,6 +20,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # === 男声配置 (Edge TTS) ===
 MALE_VOICE = "zh-CN-YunxiNeural"  # 云希 — 年轻自然男声
+MALE_VOLUME = "+80%"  # 男声默认偏小，加 80% 对齐女声音量
 
 _voice = None
 _voice_lock = threading.Lock()
@@ -93,6 +94,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
         # 使用 edge-tts CLI（最可靠方式）
         cmd = [
             "edge-tts", "--voice", MALE_VOICE,
+            "--volume", MALE_VOLUME,
             "--text", text,
             "--write-media", mp3_path,
         ]
@@ -105,7 +107,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
         try:
             subprocess.run([
                 r"G:\ffmpeg\bin\ffmpeg.exe", "-y", "-i", mp3_path,
-                "-acodec", "pcm_s16le", "-ar", "22050",
+                "-af", "volume=2.0", "-acodec", "pcm_s16le", "-ar", "22050",
                 wav_path
             ], capture_output=True, timeout=15, check=True)
             os.remove(mp3_path)

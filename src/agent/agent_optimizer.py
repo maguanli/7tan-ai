@@ -62,6 +62,35 @@ _READONLY_TOOLS = {
 }
 
 
+# ⭐ 建议A：冷启动敏感工具（首次 import 大库，GIL 竞争下并行反而更慢）
+_COLD_START_SENSITIVE_TOOLS = {
+    "list_functions", "analyze_imports", "go_to_definition",
+    "find_all_references", "get_completions", "get_hover_info",
+    "get_diagnostics",  # jedi / AST 系
+}
+
+
+def _should_parallel(independent: list) -> bool:
+    """
+    判断独立工具集是否值得并行。
+    实测结论：
+    - 单工具 <0.1s 的快工具并行纯亏线程池开销
+    - 冷启动重库（jedi）并行因 GIL 竞争严重变慢
+    - 只有含慢工具(I/O/子进程/>0.5s)时并行才有真收益
+    """
+    if len(independent) <= 1:
+        return False
+    names = {_extract_tool_name(tc) for tc in independent}
+    # 含冷启动敏感工具 → 串行（避免 GIL 下并发 import 竞争）
+    if names & _COLD_START_SENSITIVE_TOOLS:
+        return False
+    # 全是快工具（只读小操作）→ 串行（省线程池开销）
+    if names and names.issubset(_READONLY_TOOLS):
+        return False
+    # 其余（含慢工具/写工具/子进程）→ 并行有收益
+    return True
+
+
 def _extract_tool_name(tool_call: dict) -> str:
     """从 tool_call 字典提取工具名"""
     fn = tool_call.get("function", {})
@@ -120,8 +149,8 @@ def execute_tools_parallel(tool_calls: list[dict], execute_fn) -> list[dict]:
 
     results_map: dict[str, str] = {}
 
-    # 并行执行独立工具
-    if independent:
+    # ⭐ 建议A：耗时门槛——只在真正有收益时才并行
+    if independent and _should_parallel(independent):
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(independent))) as pool:
             future_to_tc = {}
             for tc in independent:
@@ -135,6 +164,15 @@ def execute_tools_parallel(tool_calls: list[dict], execute_fn) -> list[dict]:
                     results_map[tc.get("id", "")] = future.result()
                 except Exception as e:
                     results_map[tc.get("id", "")] = f"❌ 工具执行失败: {e}"
+    elif independent:
+        # 不值得并行（快工具/冷启动敏感）→ 串行，省线程池开销
+        for tc in independent:
+            name = _extract_tool_name(tc)
+            args = _parse_tool_args(tc)
+            try:
+                results_map[tc.get("id", "")] = execute_fn(name, args)
+            except Exception as e:
+                results_map[tc.get("id", "")] = f"❌ 工具执行失败: {e}"
 
     # 串行执行依赖工具
     for tc in dependent:

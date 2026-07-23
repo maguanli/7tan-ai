@@ -21,6 +21,27 @@ _HEAVY_TOOLS = {
 }
 import threading
 _heavy_lock = threading.Lock()
+
+
+# ⭐ 建议B：重库预热——后台线程预 import jedi 等大库，
+# 避免编码任务首次 LSP 调用时冷启动等待 ~1s（实测 jedi import 耗时大头）
+def _prewarm_heavy_libs() -> None:
+    """后台预 import 编码场景的重型库，消除首次调用冷启动。"""
+    import importlib
+    for lib in ("jedi",):
+        try:
+            importlib.import_module(lib)
+            logger.debug(f"预热库 {lib} 完成")
+        except Exception as e:
+            logger.debug(f"预热库 {lib} 跳过(未安装或失败): {e}")
+
+
+def start_prewarm() -> None:
+    """以守护线程启动预热，不阻塞主流程。"""
+    t = threading.Thread(target=_prewarm_heavy_libs, daemon=True, name="lib-prewarm")
+    t.start()
+
+
 from .agent_optimizer import (
     execute_tools_parallel,
     get_file_replace_hint,
@@ -330,6 +351,7 @@ def run_agent_loop(
     if task_mode != "general":
         logger.info(f"🧭 任务模式识别: {task_mode}")
     _clear_request_cache()  # 🚀 初始化请求级文件缓存
+    start_prewarm()  # 🚀 建议B: 后台预热 jedi 等重库，消除 LSP 冷启动
 
     # 选择模型
     actual_model = model_name or active_ai.get("model", "")

@@ -5,15 +5,12 @@ Agent 核心循环 — LLM 推理 + 工具调用 + 多步执行
 import json
 import time
 from datetime import datetime
-
 from loguru import logger
-
 from .model_manager import get_model
 from .context_manager import ContextManager
 from ..tools.registry import execute_tool, get_all_tools, get_tool
 from ..tools.monitor_tools import track_cost
 from ..database.db import get_session, ConversationHistory
-
 # 🔒 重型工具互斥集合——防止并发执行构建/测试等重型操作
 _HEAVY_TOOLS = {
     "run_build", "run_tests", "run_coverage", "install_deps",
@@ -21,8 +18,6 @@ _HEAVY_TOOLS = {
 }
 import threading
 _heavy_lock = threading.Lock()
-
-
 # ⭐ 建议B：重库预热——后台线程预 import jedi 等大库，
 # 避免编码任务首次 LSP 调用时冷启动等待 ~1s（实测 jedi import 耗时大头）
 def _prewarm_heavy_libs() -> None:
@@ -34,14 +29,10 @@ def _prewarm_heavy_libs() -> None:
             logger.debug(f"预热库 {lib} 完成")
         except Exception as e:
             logger.debug(f"预热库 {lib} 跳过(未安装或失败): {e}")
-
-
 def start_prewarm() -> None:
     """以守护线程启动预热，不阻塞主流程。"""
     t = threading.Thread(target=_prewarm_heavy_libs, daemon=True, name="lib-prewarm")
     t.start()
-
-
 from .agent_optimizer import (
     execute_tools_parallel,
     get_file_replace_hint,
@@ -53,10 +44,8 @@ from .agent_optimizer import (
     compress_context,
     get_optimized_system_prompt_addition,
 )
-
 # 最大迭代次数（防止无限循环）
 MAX_ITERATIONS = 300  # 浏览列表多页任务需要更多步数
-
 def _get_timeout_from_config() -> int:
     """从配置读取超时时间（秒），默认 600"""
     try:
@@ -65,18 +54,13 @@ def _get_timeout_from_config() -> int:
         return config.get("agent", {}).get("loop_timeout", 600)
     except Exception:
         return 600
-
 # Agent 循环超时（从配置读取）
 AGENT_LOOP_TIMEOUT = _get_timeout_from_config()
-
-
 # ============================================================
 # 🚀 Token 效率优化模块（任务模式识别 / 工具筛选 / 结果截断 / 文件缓存）
 # ============================================================
-
 def _detect_task_mode(task: str) -> str:
     """根据任务描述识别场景，用于裁剪 system prompt 和筛选工具
-
     Returns:
         'code'         — 代码编写/调试/重构/测试/Git 等开发任务
         'game_publish' — 游戏资源浏览/下载/发布任务
@@ -105,8 +89,6 @@ def _detect_task_mode(task: str) -> str:
     if any(k in t for k in code_kw):
         return "code"
     return "general"
-
-
 # 场景工具白名单 — None 表示不筛选（全量）
 _CODE_TOOLS = {
     # 代码搜索与结构
@@ -163,7 +145,6 @@ _CODE_TOOLS = {
     # 内容质量（通用）
     "check_sensitive_words", "check_content_quality",
 }
-
 _GAME_PUBLISH_TOOLS = {
     # 浏览器
     "use_source_browser", "use_admin_browser", "browse_page", "scroll_down",
@@ -188,11 +169,8 @@ _GAME_PUBLISH_TOOLS = {
     "self_update_prompt", "verify_integrity",
     "memory_store", "memory_recall",
 }
-
-
 def get_tools_for_mode(mode: str) -> list:
     """按任务模式返回筛选后的工具定义列表（OpenAI tools 格式）
-
     general / 未知模式 → 全量（保守，保证功能不缺失）
     """
     all_tools = get_all_tools()
@@ -208,21 +186,15 @@ def get_tools_for_mode(mode: str) -> list:
         f"(省 ~{(len(all_tools)-len(filtered))*80} tokens)"
     )
     return filtered
-
-
 # 工具结果软截断阈值（字符）。超过则按类型智能摘要，避免消息历史膨胀。
 _SOFT_TRUNCATE_LIMIT = 2500
-
 # 按工具定制的截断策略：保留关键信息，丢弃冗余项
 _KEEP_HEAD_TOOLS = {           # 只保留前 N 字符 + 统计
     "scan_project", "code_review_directory", "analyze_imports",
     "generate_dependency_graph", "discover_tests", "browse_page",
 }
-
-
 def _smart_truncate_tool_result(tool_name: str, result: str) -> str:
     """对工具结果做智能截断，防止消息历史膨胀（在 100K 硬截断之前生效）
-
     策略：
       - 短结果原样返回
       - 特定工具保留头部 + 附加统计
@@ -245,12 +217,8 @@ def _smart_truncate_tool_result(tool_name: str, result: str) -> str:
         f"{head}\n\n…[中间省略 {omitted} 字符]…\n\n{tail}"
         f"\n\n(完整结果 {n} 字符，已智能截断)"
     )
-
-
 # ---- 请求级文件缓存（生命周期 = 单次 run_agent_loop） ----
 _request_file_cache: dict = {}
-
-
 def _cache_get(path: str):
     """读取缓存；mtime 变化则失效"""
     import os
@@ -264,24 +232,17 @@ def _cache_get(path: str):
         pass
     _request_file_cache.pop(path, None)
     return None
-
-
 def _cache_put(path: str, content) -> None:
     import os
     try:
         _request_file_cache[path] = (content, os.path.getmtime(path))
     except OSError:
         _request_file_cache[path] = (content, 0)
-
-
 def _clear_request_cache() -> None:
     """请求结束清空缓存，避免内存泄漏"""
     _request_file_cache.clear()
-
-
 def _execute_tool_cached(name: str, args: dict) -> str:
     """🚀 带请求级缓存的工具执行包装
-
     对只读文件类工具做缓存：同一请求内重复读取同一文件直接命中缓存，
     避免重复磁盘 I/O 与重复结果进入消息历史。
     缓存以文件 mtime 失效，写操作后自动失效，保证一致性。
@@ -305,8 +266,28 @@ def _execute_tool_cached(name: str, args: dict) -> str:
         if path:
             _request_file_cache.pop(path, None)
     return result
-
-
+def _execute_tool_optimized(name: str, args: dict) -> str:
+    """统一的工具执行入口——重型锁 + 缓存 + 截断 + 硬上限
+    两条 Agent 循环（非流式 / 流式）共用此入口，确保优化一致。
+    """
+    acquired = False
+    if name in _HEAVY_TOOLS:
+        acquired = _heavy_lock.acquire(blocking=False)
+        if not acquired:
+            return "⚠️ 另一个重型操作（构建/测试/安装）正在运行中，请等待其完成后再试。"
+    try:
+        result = _execute_tool_cached(name, args)
+        result = _smart_truncate_tool_result(name, result)
+        if len(result) > 100000:
+            result = result[:100000] + "\n...(结果已截断)"
+        return result
+    except Exception as e:
+        import traceback
+        logger.error(f"❌ 工具执行失败 [{name}]: {e}\n{traceback.format_exc()}")
+        return f"❌ 工具执行失败: {e}"
+    finally:
+        if acquired:
+            _heavy_lock.release()
 def _get_active_ai_config(config: dict) -> dict:
     """从数据库获取当前活跃 AI 配置"""
     try:
@@ -322,8 +303,6 @@ def _get_active_ai_config(config: dict) -> dict:
         active_key = ai.get("active", "deepseek")
         return ai["configs"].get(active_key, {})
     return ai
-
-
 def run_agent_loop(
     task: str,
     session_id: str = None,
@@ -332,47 +311,38 @@ def run_agent_loop(
 ) -> dict:
     """
     执行 Agent 循环 — ReAct 模式
-
     Args:
         task: 用户任务描述
         session_id: 会话 ID（用于对话历史）
         model_name: 指定模型（默认使用配置中的默认模型）
         max_iterations: 最大推理-行动循环次数
-
     Returns:
         dict: {"success": bool, "result": str, "iterations": int, "cost": float}
     """
     from ..config.loader import load_config
     config = load_config()
     active_ai = _get_active_ai_config(config)
-
     # 🚀 识别任务模式（用于工具筛选 + 分层 prompt）
     task_mode = _detect_task_mode(task)
     if task_mode != "general":
         logger.info(f"🧭 任务模式识别: {task_mode}")
     _clear_request_cache()  # 🚀 初始化请求级文件缓存
     start_prewarm()  # 🚀 建议B: 后台预热 jedi 等重库，消除 LSP 冷启动
-
     # 选择模型
     actual_model = model_name or active_ai.get("model", "")
     model = get_model(actual_model)
-
     # 上下文管理器
     ctx = ContextManager(task=task, session_id=session_id)
-
     # 🚀 系统 prompt（按模式分层裁剪 + 模式专属补充）
     system_prompt = _build_system_prompt(config, task_mode)
     system_prompt += get_optimized_system_prompt_addition(task_mode)
-
     # 🚀 自动注入工作区状态（git status --short）
     workspace_status = get_workspace_status()
     if workspace_status:
         system_prompt += f"\n\n{workspace_status}"
-
     # 初始化消息
     timeout_note = f"\n\n【时间限制】本轮任务超时时间为 {AGENT_LOOP_TIMEOUT} 秒（约 {AGENT_LOOP_TIMEOUT//60} 分钟）。请合理规划步骤，避免不必要的大文件重复下载。如果时间紧迫，优先完成任务的核心部分。"
     messages = [{"role": "system", "content": system_prompt + timeout_note}]
-
     # 加载历史对话（带截断保护 + 模式过滤）
     if session_id:
         try:
@@ -405,16 +375,13 @@ def run_agent_loop(
                 logger.info(f"📜 加载 {len(kept)} 条历史对话上下文")
         except Exception as e:
             logger.warning(f"加载历史失败: {e}")
-
     messages.append({"role": "user", "content": task})
-
     total_cost = 0.0
     final_result = ""
     all_logs = []
     last_calls = []  # 防重复循环检测
     start_time = time.time()  # 超时感知：记录开始时间
     timeout_warned = False    # 是否已发出超时警告
-
     for iteration in range(1, max_iterations + 1):
         # 超时感知：检查剩余时间
         elapsed = time.time() - start_time
@@ -436,13 +403,11 @@ def run_agent_loop(
                 "logs": all_logs,
             }
         logger.info(f"🔄 Agent 迭代 {iteration}/{max_iterations}")
-
         try:
             # 诊断: 打印每条消息的角色和类型
             for i, m in enumerate(messages):
                 role = m.get("role", "?")
                 pass  # 消息摘要已静音
-
             # 🔒 安全检查：修复孤立的 assistant tool_calls（防止 API 400 错误）
             messages = _repair_messages(messages)
             
@@ -463,7 +428,6 @@ def run_agent_loop(
                 "cost": total_cost,
                 "logs": all_logs,
             }
-
         # 记录费用
         usage = response.usage
         if usage:
@@ -473,11 +437,9 @@ def run_agent_loop(
                 completion_tokens=usage.completion_tokens or 0,
             )
             total_cost += cost
-
         choice = response.choices[0]
         msg = choice.message
         finish_reason = choice.finish_reason or ""
-
         # 添加 assistant 消息到历史
         msg_dict = {"role": "assistant"}
         if msg.content:
@@ -497,7 +459,6 @@ def run_agent_loop(
                 })
             msg_dict["tool_calls"] = safe_calls
         messages.append(msg_dict)
-
         # 记录到对话历史
         content = msg.content or ""
         tool_calls_raw = msg.tool_calls
@@ -509,15 +470,12 @@ def run_agent_loop(
             "finish_reason": finish_reason,
         }
         all_logs.append(log_entry)
-
         # 保存对话到数据库
         if content:
             ctx.add_assistant_message(content)
-
         # 如果有文本回复，记录
         if content:
             logger.info(f"💬 Agent: {content[:100]}...")
-
         # 判断是否需要工具调用
         # "length" = 输出被截断，不能当完成！
         if finish_reason == "length":
@@ -533,7 +491,6 @@ def run_agent_loop(
                 "cost": total_cost,
                 "logs": all_logs,
             }
-
         # 🚀 上下文压缩检查（在工具调用前）
         if should_compress_context(ctx._total_tokens):
             logger.info("🗜️ 上下文过大，执行压缩...")
@@ -542,13 +499,11 @@ def run_agent_loop(
                 messages = [{"role": "system", "content": system_prompt + timeout_note}]
                 messages.extend(ctx.get_messages())
                 logger.info(f"🗜️ 上下文压缩完成，摘要长度: {len(summary)}")
-
         # 处理工具调用
         if not tool_calls_raw:
             # 没有工具调用也没有文本 — 让模型继续
             messages.append({"role": "user", "content": "请继续完成任务，或调用工具。"})
             continue
-
         # 🚀 并行执行独立工具（⭐5）
         tc_dicts = []
         for tc in tool_calls_raw:
@@ -561,29 +516,7 @@ def run_agent_loop(
                     "arguments": func.arguments if hasattr(func, 'arguments') else func.get("arguments", "{}"),
                 }
             })
-
-        def _execute_single_tool(name: str, args: dict) -> str:
-            acquired = False
-            if name in _HEAVY_TOOLS:
-                acquired = _heavy_lock.acquire(blocking=False)
-                if not acquired:
-                    return "⚠️ 另一个重型操作（构建/测试/安装）正在运行中，请等待其完成后再试。"
-            try:
-                result = _execute_tool_cached(name, args)
-                result = _smart_truncate_tool_result(name, result)
-                if len(result) > 100000:
-                    result = result[:100000] + "\n...(结果已截断)"
-                return result
-            except Exception as e:
-                import traceback
-                logger.error(f"❌ 工具执行失败 [{name}]: {e}\n{traceback.format_exc()}")
-                return f"❌ 工具执行失败: {e}"
-            finally:
-                if name in _HEAVY_TOOLS and acquired:
-                    _heavy_lock.release()
-
-        tool_results = execute_tools_parallel(tc_dicts, _execute_single_tool)
-
+        tool_results = execute_tools_parallel(tc_dicts, _execute_tool_optimized)
         assistant_msg = msg_dict
         for tc, result in zip(tool_calls_raw, tool_results):
             try:
@@ -593,9 +526,7 @@ def run_agent_loop(
                 tool_args_raw = func.arguments if hasattr(func, 'arguments') else func.get("arguments", "{}")
                 tool_id = tc.id if hasattr(tc, 'id') else tc.get("id", "")
                 tool_args = json.loads(tool_args_raw) if isinstance(tool_args_raw, str) else tool_args_raw
-
                 logger.info(f"🔧 调用工具: {tool_name}({_truncate_args(tool_args)})")
-
                 # 检测重复调用死循环
                 call_sig = f"{tool_name}:{json.dumps(tool_args, sort_keys=True)}"
                 last_calls.append(call_sig)
@@ -610,14 +541,11 @@ def run_agent_loop(
                         "cost": total_cost,
                         "logs": all_logs,
                     }
-
                 result_str = result["content"]
-
             except Exception as tool_err:
                 import traceback
                 logger.error(f"❌ 工具执行失败 [{tool_name}]: {tool_err}\n{traceback.format_exc()}")
                 result_str = f"❌ 工具执行失败: {tool_err}"
-
             # 无论如何都要添加到消息历史（防止孤立的 assistant tool_calls）
             messages.append({
                 "role": "tool",
@@ -633,8 +561,6 @@ def run_agent_loop(
         "cost": total_cost,
         "logs": all_logs,
     }
-
-
 def _repair_messages(messages: list) -> list:
     """修复消息历史中的孤儿 tool_calls，防止 API 400 错误
     
@@ -701,42 +627,32 @@ def _repair_messages(messages: list) -> list:
         pending_calls.clear()
     
     return repaired
-
-
 def _call_llm(model, messages: list, tools: list, config: dict) -> dict:
     """调用 LLM API"""
     active_cfg = _get_active_ai_config(config)
     provider = active_cfg.get("provider", "deepseek")
     temperature = active_cfg.get("temperature", 0.7)
     max_tokens = active_cfg.get("max_tokens", 4096)
-
     kwargs = {
         "model": model.get_api_name(),
         "messages": messages,
         "max_tokens": max_tokens,
     }
-
     # Kimi K3 (moonshot) 只接受 temperature=1，DeepSeek 不需要显式传入
     # 对这两个 provider 不设 temperature，让 API 用默认值
     if provider not in ("moonshot", "deepseek"):
         kwargs["temperature"] = temperature
-
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
-
     # 记录请求日志
     req_start = time.time()
     response = model.chat(**kwargs)
     elapsed = time.time() - req_start
     logger.debug(f"⏱️ API 响应: {elapsed:.2f}s")
-
     return response
-
-
 def _trim_prompt_for_mode(prompt: str, task_mode: str) -> str:
     """🚀 按任务模式裁剪 system prompt 中与场景无关的模块（分层 prompt）
-
     设计原则：
       - 始终保留：核心身份 / 安全边界 / 重启构建硬性规则 / 铁律 / 自由原则
       - code 模式：裁掉游戏专业知识、简介撰写规范、浏览网页规则、发布流程、能力清单大表
@@ -746,7 +662,6 @@ def _trim_prompt_for_mode(prompt: str, task_mode: str) -> str:
     """
     if task_mode not in ("code",):
         return prompt  # game_publish / general 不裁剪
-
     # code 模式下要移除的模块关键词（兼容 ## / ### / 无标题情况）
     drop_keywords = [
         "游戏领域专业知识",
@@ -776,8 +691,6 @@ def _trim_prompt_for_mode(prompt: str, task_mode: str) -> str:
     if saved > 0:
         logger.info(f"✂️ 分层 Prompt[{task_mode}]: {len(prompt)} → {len(trimmed)} 字符 (省 ~{saved//2} tokens)")
     return trimmed
-
-
 def _build_system_prompt(config: dict, task_mode: str = "general") -> str:
     """构建系统提示词 — 数据库优先，文件回退；按 task_mode 分层裁剪"""
     full = None
@@ -789,7 +702,6 @@ def _build_system_prompt(config: dict, task_mode: str = "general") -> str:
             full = db_prompt
     except Exception:
         pass
-
     # 2. 回退到文件
     if full is None:
         from pathlib import Path
@@ -798,26 +710,21 @@ def _build_system_prompt(config: dict, task_mode: str = "general") -> str:
             content = custom_prompt.read_text(encoding="utf-8")
             if content.strip():
                 full = content
-
     # 3. 回退到配置文件
     if full is None:
         ai_cfg = config.get("ai", {})
         default_prompt = ai_cfg.get("system_prompt", "")
         if default_prompt:
             full = default_prompt
-
     if full is not None:
         return _trim_prompt_for_mode(full, task_mode)
-
     # 默认 prompt
     return """你是一个专业的游戏资源编辑 AI，负责从游戏网站发现、整理并发布游戏资源到7坛平台。
-
 【核心任务流程】
 1. 浏览游戏网站，发现新游戏
 2. 提取游戏的完整信息（名称、简介、LOGO、截图、下载地址）
 3. 将文件下载到本地，必要时上传到OSS云存储
 4. 整理好所有信息后，调用 publish_to_7tan 一键发布
-
 【发布前必须收集的内容】
 - title: 游戏名称（必须）
 - intro: 游戏简介（必须，至少100字，包含玩法、特色、截图描述等）
@@ -826,24 +733,20 @@ def _build_system_prompt(config: dict, task_mode: str = "general") -> str:
 - screenshot_paths: 游戏截图本地路径（强烈建议，下载2-4张截图，JSON数组格式如 '["path1","path2"]'）
 - category: 分类名称
 - tags: 标签（逗号分隔）
-
 【如何找到下载链接】
 1. 先用 browse_page 浏览游戏详情页
 2. 用 find_download_links 查找页面中的下载地址
 3. 如果 find_download_links 没找到，用 click_element 点击页面上的"下载"按钮触发真实下载链接
 4. 下载链接通常包含 .apk/.ipa/.zip/.rar 等扩展名，或者含 download/down/apk 关键词
-
 【如何写简介】
 - 不要只写游戏名称！必须包含：游戏类型、核心玩法、画面风格、特色功能
 - 参考页面上的官方描述，但需要用 AI 改写润色
 - 字数至少 100 字，越详细越好
 - 格式使用 HTML（<p>、<br>、<b>等标签）
-
 【下载和上传】
 - 用 download_file 下载文件到 downloads/packages/
 - 如果需要在简介中插入图片，用 oss_upload 上传到 OSS 获得外链
 - LOGO 和截图先用 download_file 下载到本地，再传给 publish_to_7tan
-
 【重要规则】
 - 每步只调用一个工具，逐步完成任务
 - 发布前必须用 check_content_quality 检查内容质量
@@ -851,9 +754,6 @@ def _build_system_prompt(config: dict, task_mode: str = "general") -> str:
 - 下载前先检查磁盘空间
 - 遇到错误时尝试修复并重试
 - 完成后汇报发布结果"""
-
-
-
 def track_cost_internal(model: str, prompt_tokens: int, completion_tokens: int) -> float:
     """内部费用追踪（返回费用值）"""
     from ..tools.monitor_tools import _estimate_cost
@@ -865,17 +765,12 @@ def track_cost_internal(model: str, prompt_tokens: int, completion_tokens: int) 
         cost=cost,
     )
     return cost
-
-
 def _truncate_args(args: dict) -> str:
     """截断工具参数显示"""
     s = json.dumps(args, ensure_ascii=False)
     if len(s) > 80:
         return s[:77] + "..."
     return s
-
-
-
 def run_agent_loop_streaming(
     task: str,
     session_id: str = None,
@@ -884,7 +779,6 @@ def run_agent_loop_streaming(
 ):
     """
     流式 Agent 循环 — 逐步 yield 事件给前端展示思考过程
-
     Yields:
         dict: 事件类型
             {"type": "thinking", "message": "..."}
@@ -899,20 +793,21 @@ def run_agent_loop_streaming(
     from ..config.loader import load_config
     config = load_config()
     active_ai = _get_active_ai_config(config)
-
     # 🚀 识别任务模式 + 初始化请求级文件缓存
     task_mode = _detect_task_mode(task)
     if task_mode != "general":
         logger.info(f"🧭 任务模式识别: {task_mode}")
     _clear_request_cache()
-
+    start_prewarm()  # warm jedi
     actual_model = model_name or active_ai.get("model", "")
     model = get_model(actual_model)
     ctx = ContextManager(task=task, session_id=session_id)
     system_prompt = _build_system_prompt(config, task_mode)
-
+    system_prompt += get_optimized_system_prompt_addition(task_mode)
+    workspace_status = get_workspace_status()
+    if workspace_status:
+        system_prompt += "\n\n" + workspace_status
     messages = [{"role": "system", "content": system_prompt}]
-
     # 加载历史对话
     if session_id:
         try:
@@ -931,23 +826,20 @@ def run_agent_loop_streaming(
                     entry["tool_call_id"] = m["tool_call_id"]
                 kept.insert(0, entry)
                 hist_tokens += t
+            history = filter_history_by_mode(history, task_mode)
             messages.extend(kept)
             if kept:
                 messages = _repair_messages(messages)
         except Exception as e:
             logger.warning(f"\u52a0\u8f7d\u5386\u53f2\u5931\u8d25: {e}")
-
     messages.append({"role": "user", "content": task})
     yield {"type": "thinking", "message": "\uf0e7\u5df2\u52a0\u8f7d\u4efb\u52a1\uff0c\u5f00\u59cb\u5904\u7406..."}
-
     total_cost = 0.0
     all_logs = []
     last_calls = []
-
     for iteration in range(1, max_iterations + 1):
         yield {"type": "iteration", "iteration": iteration, "max_iterations": max_iterations}
         yield {"type": "thinking", "message": f"\uf0e7\u7b2c {iteration}/{max_iterations} \u8f6e\u63a8\u7406..."}
-
         try:
             messages = _repair_messages(messages)
             response = _call_llm(
@@ -963,7 +855,6 @@ def run_agent_loop_streaming(
             yield {"type": "error", "message": f"LLM \u8c03\u7528\u5931\u8d25: {e}"}
             yield {"type": "done", "success": False, "result": f"LLM \u8c03\u7528\u5931\u8d25: {e}", "cost": total_cost, "iterations": iteration}
             return
-
         usage = response.usage
         if usage:
             cost = track_cost_internal(
@@ -973,11 +864,9 @@ def run_agent_loop_streaming(
             )
             total_cost += cost
             yield {"type": "cost", "cost": cost}
-
         choice = response.choices[0]
         msg = choice.message
         finish_reason = choice.finish_reason or ""
-
         msg_dict = {"role": "assistant"}
         if msg.content:
             msg_dict["content"] = msg.content
@@ -995,7 +884,6 @@ def run_agent_loop_streaming(
                 })
             msg_dict["tool_calls"] = safe_calls
         messages.append(msg_dict)
-
         content = msg.content or ""
         tool_calls_raw = msg.tool_calls
         log_entry = {
@@ -1006,11 +894,9 @@ def run_agent_loop_streaming(
             "finish_reason": finish_reason,
         }
         all_logs.append(log_entry)
-
         if content:
             ctx.add_assistant_message(content)
             yield {"type": "text_chunk", "content": content}
-
         if finish_reason == "length":
             messages.append({"role": "user", "content": "\u4f60\u7684\u8f93\u51fa\u88ab\u622a\u65ad\u4e86\uff0c\u8bf7\u4ece\u4e2d\u65ad\u5904\u7ee7\u7eed\u751f\u6210\u5269\u4f59\u5185\u5bb9\uff0c\u4e0d\u8981\u91cd\u590d\u5df2\u8f93\u51fa\u7684\u90e8\u5206\u3002"})
             continue
@@ -1018,12 +904,18 @@ def run_agent_loop_streaming(
             yield {"type": "thinking", "message": "\u2705 \u4efb\u52a1\u5b8c\u6210"}
             yield {"type": "done", "success": True, "result": content or "\u4efb\u52a1\u5b8c\u6210", "cost": total_cost, "iterations": iteration}
             return
-
         if not tool_calls_raw:
             messages.append({"role": "user", "content": "\u8bf7\u7ee7\u7eed\u5b8c\u6210\u4efb\u52a1\uff0c\u6216\u8c03\u7528\u5de5\u5177\u3002"})
             continue
-
         assistant_msg = msg_dict  # 保存引用，供重型工具锁分支使用
+        # context compression
+        if should_compress_context(ctx._total_tokens):
+            logger.info("compressing context...")
+            summary = compress_context(ctx, model=model)
+            if summary:
+                sp = system_prompt
+                messages = [{"role": "system", "content": sp}]
+                messages.extend(ctx.get_messages())
         for tc in tool_calls_raw:
             try:
                 func = tc.function if hasattr(tc, 'function') else tc.get("function", {})
@@ -1031,12 +923,9 @@ def run_agent_loop_streaming(
                 tool_args_raw = func.arguments if hasattr(func, 'arguments') else func.get("arguments", "{}")
                 tool_id = tc.id if hasattr(tc, 'id') else tc.get("id", "")
                 tool_args = json.loads(tool_args_raw) if isinstance(tool_args_raw, str) else tool_args_raw
-
                 tool_def = get_tool(tool_name)
                 logger.info(f"\uf0e7 \u8c03\u7528\u5de5\u5177: {tool_name}({_truncate_args(tool_args)})")
-
                 yield {"type": "tool_call", "tool_name": tool_name, "args": tool_args}
-
                 call_sig = f"{tool_name}:{json.dumps(tool_args, sort_keys=True)}"
                 last_calls.append(call_sig)
                 if len(last_calls) > 5:
@@ -1048,28 +937,19 @@ def run_agent_loop_streaming(
                            "result": f"\u26a0\ufe0f \u68c0\u6d4b\u5230\u6b7b\u5faa\u73af \u2014 \u5de5\u5177 {tool_name} \u8fde\u7eed\u8c03\u7528 3 \u6b21\u76f8\u540c\u53c2\u6570\uff0c\u5df2\u81ea\u52a8\u505c\u6b62\u3002",
                            "cost": total_cost, "iterations": iteration}
                     return
-
-                result_str = _execute_tool_cached(tool_name, tool_args)
-                # 🚀 智能截断（软保护）
-                result_str = _smart_truncate_tool_result(tool_name, result_str)
-                if len(result_str) > 100000:
-                    result_str = result_str[:100000] + "\n...(\u7ed3\u679c\u5df2\u622a\u65ad)"
-
+                result_str = _execute_tool_optimized(tool_name, tool_args)
                 summary = result_str[:200] + "..." if len(result_str) > 200 else result_str
                 yield {"type": "tool_result", "tool_name": tool_name, "summary": summary, "error": False}
-
             except Exception as tool_err:
                 import traceback
                 logger.error(f"\u274c \u5de5\u5177\u6267\u884c\u5931\u8d25 [{tool_name}]: {tool_err}\n{traceback.format_exc()}")
                 result_str = f"\u274c \u5de5\u5177\u6267\u884c\u5931\u8d25: {tool_err}"
                 yield {"type": "tool_result", "tool_name": tool_name, "summary": f"\u274c {tool_err}", "error": True}
-
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_id,
                 "content": result_str,
             })
-
     yield {"type": "thinking", "message": f"\u26a0\ufe0f \u8fbe\u5230\u6700\u5927\u8fed\u4ee3\u6b21\u6570 {max_iterations}"}
     yield {"type": "done", "success": False,
            "result": f"\u8fbe\u5230\u6700\u5927\u8fed\u4ee3\u6b21\u6570 {max_iterations}\uff0c\u4efb\u52a1\u672a\u5b8c\u6210",

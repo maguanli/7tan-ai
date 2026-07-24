@@ -202,6 +202,7 @@ def _extract_thumbs_worker(clip_id: str, src_path: str, duration: float,
     count = min(THUMB_COUNT, max(3, int(used_duration * 2)))
     fps = count / max(used_duration, 0.1)
 
+    proc = None
     try:
         # ffmpeg 命令：从 source_start 开始，取 used_duration 时长，fps 帧率
         cmd = [
@@ -213,12 +214,12 @@ def _extract_thumbs_worker(clip_id: str, src_path: str, duration: float,
             "-f", "image2pipe",
             "-vcodec", "mjpeg",
             "-q:v", "5",
-            "-v", "quiet",
+            "-v", "error",
             "-",
         ]
         logger.debug(f"[thumb] ffmpeg start: {clip_id[:8]} src={Path(src_path).name} dur={used_duration:.1f}s")
         proc = subprocess.run(
-            cmd, capture_output=True, timeout=30,
+            cmd, capture_output=True, timeout=15,
         )
         if proc.returncode == 0 and proc.stdout:
             # 按 JPEG SOI marker (0xFF 0xD8) 分割
@@ -232,13 +233,16 @@ def _extract_thumbs_worker(clip_id: str, src_path: str, duration: float,
             if len(raw_frames) > THUMB_COUNT:
                 step = len(raw_frames) / THUMB_COUNT
                 raw_frames = [raw_frames[int(i * step)] for i in range(THUMB_COUNT)]
+    except subprocess.TimeoutExpired:
+        logger.warning(f"[thumb] ffmpeg TIMEOUT: {clip_id[:8]} src={Path(src_path).name}")
     except Exception as e:
         logger.warning(f"[thumb] ffmpeg failed: {clip_id[:8]} src={Path(src_path).name} err={e}")
 
     if raw_frames:
         logger.debug(f"[thumb] ffmpeg done: {clip_id[:8]} frames={len(raw_frames)}")
     else:
-        logger.warning(f"[thumb] ffmpeg produced no frames: {clip_id[:8]} src={Path(src_path).name}")
+        stderr_tail = (proc.stderr or b"").decode(errors="replace")[-200:] if proc and proc.stderr else "(no stderr)"
+        logger.warning(f"[thumb] ffmpeg produced no frames: {clip_id[:8]} src={Path(src_path).name} rc={proc.returncode if proc else '?'} stderr={stderr_tail}")
 
     # save to disk cache
     if raw_frames:
@@ -293,7 +297,7 @@ class ClipItem(QGraphicsRectItem):
         self._loading_failed = False           # 加载失败标记
         self._thumb_raw: list[bytes] = []      # 原始 JPEG 字节（从工作线程收到）
         self._thumb_retry = 0
-        self._thumb_max_retries = 15
+        self._thumb_max_retries = 3
 
         # 从 thumb_path 加载（如果有）
         tp = self._data.get("thumb_path", "")
@@ -368,6 +372,13 @@ class ClipItem(QGraphicsRectItem):
         src = self._data.get("source_path", "")
         if not src or self._thumb_loaded:
             return
+        # 文件存在性预检 — 避免无意义入队
+        if not Path(src).exists():
+            logger.warning(f"[thumb] source file missing: {self.clip_id[:8]} path={src}")
+            self._loading_failed = True
+            self._thumb_loaded = True
+            self.update()
+            return
         dur = self._data.get("duration", 0) or 5.0
         ss = self._data.get("source_start", 0)
         se = self._data.get("source_end", dur)
@@ -392,18 +403,24 @@ class ClipItem(QGraphicsRectItem):
             return
 
         if not raw_frames:
-            # retry via queue
+            # retry via queue (with delay to avoid hammering ffmpeg)
             self._thumb_retry += 1
             if self._thumb_retry < self._thumb_max_retries:
-                _thumb_callbacks[self.clip_id] = self._on_thumbs_ready
-                _enqueue_extraction(
-                    self.clip_id,
-                    self._data.get("source_path", ""),
-                    self._data.get("duration", 5.0),
-                    self._data.get("source_start", 0),
-                    self._data.get("source_end", self._data.get("duration", 5.0)),
-                )
+                delay = 2000 * self._thumb_retry
+                logger.debug(f"[thumb] retry {self._thumb_retry}/{self._thumb_max_retries} in {delay}ms: {self.clip_id[:8]}")
+                from PyQt6.QtCore import QTimer
+                def retry_later():
+                    _thumb_callbacks[self.clip_id] = self._on_thumbs_ready
+                    _enqueue_extraction(
+                        self.clip_id,
+                        self._data.get("source_path", ""),
+                        self._data.get("duration", 5.0),
+                        self._data.get("source_start", 0),
+                        self._data.get("source_end", self._data.get("duration", 5.0)),
+                    )
+                QTimer.singleShot(delay, retry_later)
             else:
+                logger.warning(f"[thumb] all retries exhausted: {self.clip_id[:8]}")
                 self._loading_failed = True
                 self._thumb_loaded = True
                 self.update()

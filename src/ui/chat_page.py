@@ -225,7 +225,6 @@ class ChatPage(QWidget):
         self._voice_mode = False  # 语音模式开关
         self._voice_gender = "female"  # 语音性别: female(花颜) / male(云希)
         self._load_voice_gender()  # 从配置恢复上次的语音性别
-        self._voice_diag(f"[init] after _load_voice_gender: _voice_gender={self._voice_gender!r}, _voice_mode={self._voice_mode!r}")
         self._voice_recording = False  # 是否正在录音
         self._render_queue: list = []
         self._render_timer = None
@@ -586,7 +585,6 @@ class ChatPage(QWidget):
         self._gender_btn.setChecked(self._voice_gender == "female")
         self._gender_btn.setText("♀ 女声" if self._voice_gender == "female" else "♂ 男声")
         self._gender_btn.clicked.connect(self._toggle_voice_gender)
-        self._voice_diag(f"[btn] _gender_btn created: text={self._gender_btn.text()!r}, checked={self._gender_btn.isChecked()}")
         self._gender_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {THEME['bg_input']};
@@ -1442,10 +1440,7 @@ class ChatPage(QWidget):
         print(msg)
         logger.info(msg)
         self._add_message("system", f"[Voice] {msg}")
-        self._voice_diag(f"[toggle] switched to {self._voice_gender!r}")
-
         # 持久化保存
-        self._voice_diag(f"[toggle] saving: gender={self._voice_gender!r} mode={self._voice_mode!r}")
         self._save_voice_gender()
 
         try:
@@ -1466,19 +1461,6 @@ class ChatPage(QWidget):
         """games.db 路径 — 基于 __file__，不受工作目录影响"""
         from pathlib import Path
         return str(Path(__file__).resolve().parent.parent.parent / "data" / "games.db")
-
-    @staticmethod
-    def _voice_diag(msg: str):
-        """文件诊断：绕过所有输出重定向，直接写入 data/voice_diag.txt"""
-        from pathlib import Path
-        from datetime import datetime
-        diag_path = Path(__file__).resolve().parent.parent.parent / "data" / "voice_diag.txt"
-        try:
-            ts = datetime.now().strftime("%H:%M:%S")
-            with open(diag_path, "a", encoding="utf-8") as f:
-                f.write(f"{ts} {msg}\n")
-        except Exception:
-            pass  # 静默失败，不影响主流程
 
     def _db_set(self, key, value):
         """写入一条设置到 app_settings 表（独立短连接，立即提交）"""
@@ -1534,7 +1516,7 @@ class ChatPage(QWidget):
         else:
             self._voice_gender = "female"
         self._voice_mode = (str(mode).lower() == "true")
-        self._voice_diag(f"[load] db_read: gender={gender!r} mode={mode!r} -> set _voice_gender={self._voice_gender!r} _voice_mode={self._voice_mode!r}")
+
         print(f"[Voice] 已从数据库恢复: gender={self._voice_gender}, mode={self._voice_mode}")
         logger.info(f"[Voice] 已从数据库恢复: gender={self._voice_gender}, mode={self._voice_mode}")
         try:
@@ -1551,7 +1533,7 @@ class ChatPage(QWidget):
 
     def _save_voice_gender(self):
         """把当前语音设置写入数据库（立即生效，供下次启动读取）"""
-        self._voice_diag(f"[save] START: gender={self._voice_gender!r} mode={self._voice_mode!r}")
+
         print(f"[Voice] 保存到数据库路径 = {self._db_path()}")
         logger.info(f"[Voice] 保存到数据库路径 = {self._db_path()}")
         try:
@@ -1560,18 +1542,17 @@ class ChatPage(QWidget):
             # 独立连接读回验证
             verify = self._db_get("voice_gender", "")
             if verify == self._voice_gender:
-                self._voice_diag(f"[save] VERIFY OK: db has gender={verify!r}")
+
                 print(f"[Voice] 数据库保存成功并验证通过: gender={verify}, mode={self._voice_mode}")
                 logger.info(f"[Voice] 数据库保存成功并验证通过: gender={verify}, mode={self._voice_mode}")
             else:
-                self._voice_diag(f"[save] VERIFY FAIL: wrote={self._voice_gender!r}, read back={verify!r}")
+
                 print(f"[Voice] 数据库验证失败! 写入={self._voice_gender}, 读回={verify}")
                 logger.error(f"[Voice] 数据库验证失败! 写入={self._voice_gender}, 读回={verify}")
         except Exception as e:
             print(f"[Voice] 数据库保存异常: {type(e).__name__}: {e}")
             logger.error(f"[Voice] 数据库保存异常: {type(e).__name__}: {e}")
-            self._voice_diag(f"[save] FAILED: {type(e).__name__}: {e}")
-        self._voice_diag("[save] DONE")
+
 
 
 

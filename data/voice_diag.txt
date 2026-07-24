@@ -1,7 +1,0 @@
-14:04:24 [load] db_read: gender='male' mode='true' -> set _voice_gender='male' _voice_mode=True
-14:04:24 [init] after _load_voice_gender: _voice_gender='male', _voice_mode=True
-14:04:24 [btn] _gender_btn created: text='♂ 男声', checked=False
-14:05:29 [load] db_read: gender='male' mode='true' -> set _voice_gender='male' _voice_mode=True
-14:05:29 [init] after _load_voice_gender: _voice_gender='male', _voice_mode=True
-14:05:29 [btn] _gender_btn created: text='♂ 男声', checked=False
-14:07:04 [toggle] switched to 'female'

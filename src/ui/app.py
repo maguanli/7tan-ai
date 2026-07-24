@@ -3848,12 +3848,7 @@ class MainWindow(QMainWindow):
             workspace = self._pages.get("workspace") if hasattr(self, "_pages") else None
             chat = getattr(workspace, "chat", None) if workspace is not None else None
             if chat is not None and hasattr(chat, "_save_voice_gender"):
-                try:
-                    chat._voice_diag(f"[closeEvent] saving: gender={chat._voice_gender!r} mode={chat._voice_mode!r}")
-                except Exception:
-                    pass
                 chat._save_voice_gender()
-                logger.info("[Voice] 主窗口closeEvent: 语音设置已写入数据库")
         except Exception as e:
             logger.warning(f"[Voice] 主窗口closeEvent保存语音失败: {e}")
 

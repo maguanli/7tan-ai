@@ -6,6 +6,7 @@
 Phase 3: 右键菜单支持 + 吸附增强
 """
 
+import hashlib
 import subprocess
 import threading
 from pathlib import Path
@@ -73,8 +74,88 @@ _THUMB_READY.ready.connect(_global_thumb_dispatcher)
 #  缩略图提取工作线程
 # ====================================================================
 
-THUMB_COUNT = 15          # 每片段最多抽帧数
-THUMB_SAMPLE_W = 360      # 抽帧宽度
+THUMB_COUNT = 15
+THUMB_SAMPLE_W = 360
+THUMB_CACHE_DIR = Path("data/video_editor/thumbs")
+THUMB_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+THUMB_MAX_CONCURRENT = 2
+_extract_sem = threading.Semaphore(THUMB_MAX_CONCURRENT)
+_extract_queue = []
+_extract_queue_lock = threading.Lock()
+
+
+def _thumb_cache_key(src_path, source_start, source_end):
+    raw = f"{src_path}|{source_start:.3f}|{source_end:.3f}"
+    return hashlib.md5(raw.encode()).hexdigest()
+
+
+def _thumb_load_cache(cache_key):
+    cache_file = THUMB_CACHE_DIR / f"{cache_key}.thumb"
+    if not cache_file.exists():
+        return []
+    try:
+        data = cache_file.read_bytes()
+        if len(data) < 4:
+            return []
+        nframes = int.from_bytes(data[:4], 'big')
+        if nframes <= 0 or nframes > 100:
+            return []
+        frames = []
+        offset = 4
+        for _ in range(nframes):
+            if offset + 4 > len(data):
+                break
+            fsize = int.from_bytes(data[offset:offset + 4], 'big')
+            offset += 4
+            if fsize <= 0 or offset + fsize > len(data):
+                break
+            frames.append(data[offset:offset + fsize])
+            offset += fsize
+        return frames if len(frames) == nframes else []
+    except Exception:
+        return []
+
+
+def _thumb_save_cache(cache_key, frames):
+    if not frames:
+        return
+    cache_file = THUMB_CACHE_DIR / f"{cache_key}.thumb"
+    try:
+        parts = [len(frames).to_bytes(4, 'big')]
+        for f in frames:
+            parts.append(len(f).to_bytes(4, 'big'))
+            parts.append(f)
+        cache_file.write_bytes(b''.join(parts))
+    except Exception:
+        pass
+
+
+def _process_queue():
+    while True:
+        with _extract_queue_lock:
+            if not _extract_queue:
+                return
+            task = _extract_queue.pop(0)
+        if _extract_sem.acquire(blocking=False):
+            cid, sp, dur, ss, se = task
+            threading.Thread(
+                target=_extract_thumbs_worker,
+                args=(cid, sp, dur, ss, se),
+                daemon=True,
+            ).start()
+        else:
+            with _extract_queue_lock:
+                _extract_queue.insert(0, task)
+            return
+
+
+def _enqueue_extraction(clip_id, src_path, duration, source_start, source_end):
+    with _extract_queue_lock:
+        for item in _extract_queue:
+            if item[0] == clip_id:
+                return
+        _extract_queue.append((clip_id, src_path, duration, source_start, source_end))
+    _process_queue()
 
 
 def _extract_thumbs_worker(clip_id: str, src_path: str, duration: float,
@@ -88,16 +169,32 @@ def _extract_thumbs_worker(clip_id: str, src_path: str, duration: float,
 
     raw_frames: list[bytes] = []
 
-    if not FFMPEG_PATH or not FFMPEG_PATH.exists():
-        _THUMB_READY.ready.emit(clip_id, raw_frames)
-        return
-    if not src_path or not Path(src_path).exists():
-        _THUMB_READY.ready.emit(clip_id, raw_frames)
-        return
-
+    # cache check + early validation
     used_duration = source_end - source_start if (source_end - source_start) > 0 else duration
     if used_duration <= 0:
         _THUMB_READY.ready.emit(clip_id, raw_frames)
+        _extract_sem.release()
+        _process_queue()
+        return
+
+    # disk cache hit
+    ck = _thumb_cache_key(src_path, source_start, source_end)
+    cached = _thumb_load_cache(ck)
+    if cached:
+        _THUMB_READY.ready.emit(clip_id, cached)
+        _extract_sem.release()
+        _process_queue()
+        return
+
+    if not FFMPEG_PATH or not FFMPEG_PATH.exists():
+        _THUMB_READY.ready.emit(clip_id, raw_frames)
+        _extract_sem.release()
+        _process_queue()
+        return
+    if not src_path or not Path(src_path).exists():
+        _THUMB_READY.ready.emit(clip_id, raw_frames)
+        _extract_sem.release()
+        _process_queue()
         return
 
     count = min(THUMB_COUNT, max(3, int(used_duration * 2)))
@@ -135,7 +232,12 @@ def _extract_thumbs_worker(clip_id: str, src_path: str, duration: float,
     except Exception:
         pass
 
+    # save to disk cache
+    if raw_frames:
+        _thumb_save_cache(ck, raw_frames)
     _THUMB_READY.ready.emit(clip_id, raw_frames)
+    _extract_sem.release()
+    _process_queue()
 
 
 # ====================================================================
@@ -254,7 +356,7 @@ class ClipItem(QGraphicsRectItem):
     # ---- 缩略图后台提取 ----
 
     def _start_thumb_extraction(self):
-        """启动后台 ffmpeg 缩略图提取"""
+        """启动后台缩略图提取（加入队列，限制并发）"""
         src = self._data.get("source_path", "")
         if not src or self._thumb_loaded:
             return
@@ -265,50 +367,58 @@ class ClipItem(QGraphicsRectItem):
         # register with global dispatcher
         _thumb_callbacks[self.clip_id] = self._on_thumbs_ready
 
-        threading.Thread(
-            target=_extract_thumbs_worker,
-            args=(self.clip_id, src, dur, ss, se),
-            daemon=True,
-        ).start()
+        # use queue to limit concurrent ffmpeg processes
+        _enqueue_extraction(self.clip_id, src, dur, ss, se)
 
     def _on_thumbs_ready(self, clip_id: str, raw_frames: list):
-        """主线程回调：收到工作线程发来的 JPEG 原始字节"""
-        # 防止旧的 clip 信号误触发（clip_id 可能复用）
-        if clip_id != self.clip_id:
-            return
-        if self._thumb_loaded:
+        """主线程回调：分帧解码 QPixmap，避免 UI 冻结"""
+        if clip_id != self.clip_id or self._thumb_loaded:
             return
 
-        if raw_frames:
-            self._thumb_raw = raw_frames
-            # 在主线程安全解码 QPixmap
-            self._thumbnails = []
-            for jpeg_bytes in raw_frames:
-                pix = QPixmap()
-                if pix.loadFromData(jpeg_bytes):
-                    self._thumbnails.append(pix)
-            if self._thumbnails:
+        if not raw_frames:
+            # retry via queue
+            self._thumb_retry += 1
+            if self._thumb_retry < self._thumb_max_retries:
+                _thumb_callbacks[self.clip_id] = self._on_thumbs_ready
+                _enqueue_extraction(
+                    self.clip_id,
+                    self._data.get("source_path", ""),
+                    self._data.get("duration", 5.0),
+                    self._data.get("source_start", 0),
+                    self._data.get("source_end", self._data.get("duration", 5.0)),
+                )
+            else:
+                self._loading_failed = True
                 self._thumb_loaded = True
-                self._loading_failed = False
+                self.update()
+            return
+
+        self._thumb_raw = raw_frames
+        self._thumbnails = []
+        self._thumb_load_idx = 0
+        self._thumb_loaded = True
+        self._loading_failed = False
+
+        # staggered QPixmap decoding via QTimer to avoid UI freeze
+        from PyQt6.QtCore import QTimer
+
+        def decode_next():
+            if self._thumb_load_idx >= len(self._thumb_raw):
+                self._thumb_raw = []
                 self.update()
                 return
+            jpeg_bytes = self._thumb_raw[self._thumb_load_idx]
+            pix = QPixmap()
+            if pix.loadFromData(jpeg_bytes):
+                self._thumbnails.append(pix)
+            self._thumb_load_idx += 1
+            if self._thumb_load_idx < len(self._thumb_raw):
+                QTimer.singleShot(5, decode_next)
+            else:
+                self._thumb_raw = []
+                self.update()
 
-        # 失败：重试
-        self._thumb_retry += 1
-        if self._thumb_retry < self._thumb_max_retries:
-            _thumb_callbacks[self.clip_id] = self._on_thumbs_ready
-            threading.Thread(
-                target=_extract_thumbs_worker,
-                args=(self.clip_id, self._data.get("source_path", ""),
-                      self._data.get("duration", 5.0),
-                      self._data.get("source_start", 0),
-                      self._data.get("source_end", self._data.get("duration", 5.0))),
-                daemon=True,
-            ).start()
-        else:
-            self._loading_failed = True
-            self._thumb_loaded = True  # 标记不再尝试
-            self.update()
+        QTimer.singleShot(0, decode_next)
 
     # ---- 绘制 ----
 

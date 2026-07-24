@@ -1444,14 +1444,9 @@ class ChatPage(QWidget):
 
     @staticmethod
     def _voice_settings_path():
-        """获取 voice_settings.json 路径"""
+        """获取 voice_settings.json 路径 — 基于 __file__，不受工作目录影响"""
         from pathlib import Path
-        import os
-        cwd = Path(os.getcwd())
-        for p in [cwd] + list(cwd.parents):
-            if (p / "config" / "config.yaml").exists():
-                return str(p / "data" / "voice_settings.json")
-        return str(Path(__file__).parent.parent.parent / "data" / "voice_settings.json")
+        return str(Path(__file__).resolve().parent.parent.parent / "data" / "voice_settings.json")
 
     def _load_voice_gender(self):
         """从 JSON 文件恢复语音设置"""

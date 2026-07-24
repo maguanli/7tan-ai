@@ -1,0 +1,23 @@
+L226:         self._voice_gender = "female"  # 语音性别: female(花颜) / male(云希)
+L227:         self._load_voice_gender()  # 从配置恢复上次的语音性别
+L585:         self._gender_btn.setChecked(self._voice_gender == "female")
+L586:         self._gender_btn.setText("♀ 女声" if self._voice_gender == "female" else "♂ 男声")
+L587:         self._gender_btn.clicked.connect(self._toggle_voice_gender)
+L1419:     def _toggle_voice_gender(self):
+L1422:         if self._voice_gender == "female":
+L1423:             self._voice_gender = "male"
+L1427:             self._voice_gender = "female"
+L1431:         print(f"[Voice] 切换为: {self._voice_gender}")
+L1434:         self._save_voice_gender()
+L1438:             result = tts_set_gender(self._voice_gender)
+L1456:     def _load_voice_gender(self):
+L1471:                     self._voice_gender = gender
+L1473:                 print(f"[Voice] 已恢复: gender={self._voice_gender}, mode={self._voice_mode}")
+L1476:                 self._voice_gender = "female"
+L1480:             self._voice_gender = "female"
+L1482:             self._save_voice_gender()
+L1486:             tts_set_gender(self._voice_gender)
+L1490:     def _save_voice_gender(self):
+L1495:             "voice_gender": self._voice_gender,
+L1508:             if verify.get("voice_gender") == self._voice_gender:
+L1534:         self._save_voice_gender()

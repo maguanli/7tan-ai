@@ -162,15 +162,12 @@ capabilities:
       - { name: "密钥扫描", desc: "扫描代码中泄露的密码、Token、敏感信息", tool: "scan_secrets" }
       - { name: "环境模板生成", desc: "扫描代码中的环境变量调用，生成 .env.example", tool: "generate_env_template" }
 
-  - category: "🎬 视频制作"
+  - category: "🎬 录屏与制图"
     icon: "🎬"
     items:
-      - { name: "Edge TTS 配音", desc: "微软免费语音合成，十几种中文音色", tool: "Edge TTS (G盘本地)" }
-      - { name: "MoviePy 合成", desc: "图片+配音+字幕+转场 合成视频", tool: "MoviePy (G盘本地)" }
-      - { name: "FFmpeg 处理", desc: "视频编解码、格式转换、音视频合并", tool: "FFmpeg (G盘本地)" }
-      - { name: "Pillow 图像", desc: "程序化生成画面（几何图形/文字/特效）", tool: "Pillow (G盘本地)" }
-      - { name: "SD WebUI", desc: "AI 文生图，生成真人/动漫风格画面（需手动操作）", tool: "G:/AI_Video/stable-diffusion-webui" }
-      - { name: "ComfyUI", desc: "AI 工作流生图/生视频（已克隆，待初始化）", tool: "G:/AI_Tools/ComfyUI" }
+      - { name: "屏幕录制", desc: "录制屏幕视频，输出 MP4 格式", tool: "录屏 (本地)" }
+      - { name: "图像生成", desc: "Pillow 程序化生成画面（几何图形/文字/特效）", tool: "Pillow (G盘本地)" }
+      - { name: "语音合成", desc: "Edge TTS 微软免费语音合成，十几种中文音色", tool: "Edge TTS (G盘本地)" }
 
   - category: "📊 费用管理"
     icon: "📊"
@@ -197,7 +194,7 @@ capabilities:
 # 统计信息（自动生成）
 # ============================================================
 summary:
-  total_categories: 22
+  total_categories: 21
   total_tools: 142+
-  local_tools: ["Edge TTS", "MoviePy", "FFmpeg", "Pillow", "SD WebUI", "ComfyUI"]
+  local_tools: ["Edge TTS", "Pillow"]
   cloud_services: ["OSS存储", "AI大模型(DeepSeek/GLM等)", "7坛管理后台"]

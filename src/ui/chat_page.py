@@ -851,6 +851,7 @@ class ChatPage(QWidget):
 
         if not self._batch_rendering:
             self._scroll_to_bottom()
+            self._update_context_indicator()
 
         return bubble
 
@@ -864,6 +865,63 @@ class ChatPage(QWidget):
 
         QTimer.singleShot(50, lambda: sb.setValue(sb.maximum()))
 
+
+
+    def _update_context_indicator(self):
+        """更新上下文用量指示器"""
+        try:
+            total_chars = sum(len(m.get("content", "")) for m in self._message_data)
+            try:
+                import tiktoken
+                enc = tiktoken.get_encoding("cl100k_base")
+                total_tokens = 0
+                for m in self._message_data:
+                    content = m.get("content", "")
+                    if content:
+                        total_tokens += len(enc.encode(content))
+            except Exception:
+                total_tokens = max(1, total_chars // 2)
+
+            context_window = 128000
+            try:
+                idx = self._model_combo.currentIndex()
+                if idx >= 0:
+                    model_key = self._model_combo.itemData(idx)
+                    if model_key:
+                        from ..database.db import get_ai_config_by_key
+                        cfg = get_ai_config_by_key(model_key, mask_secrets=True)
+                        if cfg:
+                            context_window = cfg.get("context_window", 128000)
+            except Exception:
+                pass
+
+            if context_window >= 1000:
+                ctx_str = f"{context_window // 1000}K"
+            else:
+                ctx_str = str(context_window)
+
+            if total_tokens >= 10000:
+                used_str = f"~{total_tokens // 1000}K"
+            elif total_tokens >= 1000:
+                used_str = f"~{total_tokens:,}"
+            else:
+                used_str = str(total_tokens)
+
+            ratio = total_tokens / context_window if context_window > 0 else 0
+            if ratio > 0.95:
+                color = THEME["danger"]
+            elif ratio > 0.80:
+                color = THEME["warning"]
+            else:
+                color = THEME["text_secondary"]
+
+            self._ctx_indicator.setText(f"📊 上下文: {used_str}/{ctx_str}")
+            self._ctx_indicator.setStyleSheet(
+                f"color: {color}; font-size: 11px; padding: 2px 10px;"
+                f"background: {THEME['bg_input']}; border-radius: 10px;"
+            )
+        except Exception:
+            pass
 
 
     def _clear_messages(self):
@@ -1185,7 +1243,7 @@ class ChatPage(QWidget):
                 pass
             self._scroll.verticalScrollBar().valueChanged.connect(
                 self._on_history_scroll)
-
+        self._update_context_indicator()
 
     def _scroll_to_bottom(self):
         scroll = self._scroll
@@ -1868,7 +1926,7 @@ class ChatPage(QWidget):
 
             self._streaming_assistant_bubble = None
 
-
+        self._update_context_indicator()
 
         # 刷新会话列表
 
@@ -1920,6 +1978,7 @@ class ChatPage(QWidget):
             logger.info("[ChatPage] calling _add_message assistant")
 
             self._add_message("assistant", result, cost=cost, iterations=iterations)
+            self._update_context_indicator()
 
             logger.info("[ChatPage] full render ok")
 

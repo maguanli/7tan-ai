@@ -1418,13 +1418,17 @@ class ChatPage(QWidget):
 
     def _toggle_voice_gender(self):
         """切换男女声"""
-        is_female = self._gender_btn.isChecked()
-        if is_female:
-            self._voice_gender = "female"
-            self._gender_btn.setText("♀ 女声")
-        else:
+        # 直接基于当前性别取反，不依赖 isChecked()
+        if self._voice_gender == "female":
             self._voice_gender = "male"
             self._gender_btn.setText("♂ 男声")
+            self._gender_btn.setChecked(False)
+        else:
+            self._voice_gender = "female"
+            self._gender_btn.setText("♀ 女声")
+            self._gender_btn.setChecked(True)
+
+        print(f"[Voice] 切换为: {self._voice_gender}")
 
         # 持久化保存
         self._save_voice_gender()
@@ -1432,9 +1436,9 @@ class ChatPage(QWidget):
         try:
             from data.plugins.tts_piper.tools import tts_set_gender
             result = tts_set_gender(self._voice_gender)
-            logger.info(f"[TTS] 声音切换: {result}")
+            print(f"[Voice] TTS 引擎切换结果: {result}")
         except Exception as e:
-            logger.error(f"[TTS] 声音切换失败: {e}")
+            print(f"[Voice] TTS 引擎切换失败: {e}")
 
     # ---- 语音性别持久化（JSON 文件 + QSettings 双写）----
     _QSET_ORG = "7Tan"

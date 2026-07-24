@@ -11,6 +11,7 @@ import threading
 import re
 import subprocess
 from pathlib import Path
+from loguru import logger
 
 # === 女声配置 (Piper) ===
 VOICE_ONNX = Path(r"G:\piper\piper\voices\zh_CN-huayan-medium.onnx")
@@ -190,7 +191,11 @@ def tts_speak(text: str, play: bool = True, strip_code: bool = True) -> dict:
     if _voice_gender == "male":
         return _speak_edge_tts(text, play)
     else:
-        return _speak_piper(text, play)
+        try:
+            return _speak_piper(text, play)
+        except Exception as e:
+            logger.warning(f"[TTS] Piper 女声失败，自动回退到 Edge TTS 男声: {e}")
+            return _speak_edge_tts(text, play)
 
 
 def tts_status() -> dict:

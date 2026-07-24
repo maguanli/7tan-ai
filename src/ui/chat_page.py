@@ -1444,108 +1444,60 @@ class ChatPage(QWidget):
     _QSET_ORG = "7Tan"
     _QSET_APP = "7Tan"
 
-    def _voice_json_path(self):
-        """获取 voice_settings.json 路径"""
-        import sys
+    def _db_get_setting(self, key: str, default: str = "") -> str:
+        """从数据库读取设置（SQLite ACID 事务保证可靠性）"""
+        import sqlite3
         from pathlib import Path
-        if getattr(sys, 'frozen', False):
-            return Path(sys.executable).parent / "data" / "voice_settings.json"
-        else:
-            return Path(__file__).parent.parent.parent / "data" / "voice_settings.json"
+        try:
+            db_path = Path(__file__).parent.parent.parent / "data" / "games.db"
+            conn = sqlite3.connect(str(db_path))
+            row = conn.execute("SELECT value FROM app_settings WHERE key=?", (key,)).fetchone()
+            conn.close()
+            return row[0] if row else default
+        except Exception as e:
+            print(f"[Voice] DB读取失败: {e}")
+            return default
+
+    def _db_set_setting(self, key: str, value: str):
+        """写入设置到数据库"""
+        import sqlite3
+        from pathlib import Path
+        try:
+            db_path = Path(__file__).parent.parent.parent / "data" / "games.db"
+            conn = sqlite3.connect(str(db_path))
+            conn.execute("INSERT OR REPLACE INTO app_settings(key, value) VALUES(?, ?)", (key, value))
+            conn.commit()
+            conn.close()
+            print(f"[Voice] DB写入: {key}={value}")
+            return True
+        except Exception as e:
+            print(f"[Voice] DB写入失败: {e}")
+            return False
 
     def _load_voice_gender(self):
-        """恢复上次的语音性别：优先 JSON 文件 → QSettings → config.yaml"""
-        import json
-        saved = ""
-
-        # 1) 优先从 JSON 文件读取（最可靠，可直接检查文件内容）
-        json_path = self._voice_json_path()
-        try:
-            if json_path.exists():
-                data = json.loads(json_path.read_text("utf-8"))
-                saved = data.get("voice_gender", "")
-                self._voice_mode = bool(data.get("voice_mode", False))
-                if saved in ("female", "male"):
-                    print(f"[Voice] 从 JSON 恢复: gender={saved}, mode={self._voice_mode}")
-        except Exception as e:
-            print(f"[Voice] JSON 读取失败: {e}")
-
-        # 2) 回退到 QSettings
-        if not saved:
-            try:
-                from PyQt6.QtCore import QSettings
-                settings = QSettings(self._QSET_ORG, self._QSET_APP)
-                saved = settings.value("voice/gender", "")
-                self._voice_mode = bool(settings.value("voice/mode", False))
-                if saved in ("female", "male"):
-                    print(f"[Voice] 从 QSettings 恢复: gender={saved}")
-                    # 迁移到 JSON
-                    self._save_voice_json(saved, self._voice_mode)
-            except Exception as e:
-                print(f"[Voice] QSettings 读取失败: {e}")
-
-        # 3) 最后回退到 config.yaml
-        if not saved:
-            try:
-                from ..config.loader import load_config
-                cfg = load_config()
-                saved = cfg.get("tts", {}).get("voice_gender", "female")
-                print(f"[Voice] 从 config.yaml 恢复: gender={saved}")
-            except Exception as e:
-                print(f"[Voice] config.yaml 读取失败: {e}")
-                saved = "female"
+        """从数据库恢复上次的语音性别"""
+        saved = self._db_get_setting("voice_gender", "")
+        mode_str = self._db_get_setting("voice_mode", "false")
+        self._voice_mode = mode_str.lower() == "true"
 
         if saved in ("female", "male"):
             self._voice_gender = saved
-        print(f"[Voice] 最终使用: gender={self._voice_gender}")
+            print(f"[Voice] DB恢复: gender={saved}, mode={self._voice_mode}")
+        else:
+            self._db_set_setting("voice_gender", "female")
+            self._db_set_setting("voice_mode", "false")
+            print(f"[Voice] 首次使用，默认: gender=female")
 
-        # 应用到 TTS 引擎
         try:
             from data.plugins.tts_piper.tools import tts_set_gender
             tts_set_gender(self._voice_gender)
         except Exception as e:
-            print(f"[Voice] TTS 引擎设置失败: {e}")
-
-    def _save_voice_json(self, gender: str = None, mode: bool = None):
-        """仅写入 JSON 文件（内部方法）"""
-        import json
-        g = gender if gender is not None else self._voice_gender
-        m = mode if mode is not None else self._voice_mode
-        json_path = self._voice_json_path()
-        try:
-            json_path.parent.mkdir(parents=True, exist_ok=True)
-            content_json = json.dumps({"voice_gender": g, "voice_mode": m}, ensure_ascii=False, indent=2)
-            json_path.write_text(content_json, "utf-8")
-            # 验证写入成功
-            verify = json.loads(json_path.read_text("utf-8"))
-            if verify.get("voice_gender") == g:
-                print(f"[Voice] JSON 保存成功: gender={g}, mode={m}")
-                return True
-            else:
-                print(f"[Voice] JSON 保存验证失败！期望={g}, 实际={verify.get('voice_gender')}")
-                return False
-        except Exception as e:
-            print(f"[Voice] JSON 保存异常: {e}")
-            return False
+            print(f"[Voice] TTS引擎设置失败: {e}")
 
     def _save_voice_gender(self):
-        """持久化语音性别：JSON 文件（主）+ QSettings（备）"""
-        # 主存储：JSON 文件
-        ok = self._save_voice_json()
-
-        # 备用存储：QSettings
-        try:
-            from PyQt6.QtCore import QSettings
-            settings = QSettings(self._QSET_ORG, self._QSET_APP)
-            settings.setValue("voice/gender", self._voice_gender)
-            settings.setValue("voice/mode", self._voice_mode)
-            settings.sync()
-            print(f"[Voice] QSettings 同步完成")
-        except Exception as e:
-            print(f"[Voice] QSettings 保存失败: {e}")
-
-        if not ok:
-            print(f"[Voice] WARNING: 仅 QSettings 保存成功，JSON 写入失败，重启后可能回退")
+        """持久化语音性别到数据库"""
+        self._db_set_setting("voice_gender", self._voice_gender)
+        self._db_set_setting("voice_mode", str(self._voice_mode).lower())
 
     def _toggle_voice_mode(self):
         """切换语音/文字模式"""

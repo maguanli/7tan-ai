@@ -2206,7 +2206,7 @@ class ChatPage(QWidget):
                             f"[TTS Stream] 引擎已自动切换: {result.get('fallback_from', 'unknown')}"
                         )
                     wav_path = result["wav_path"]
-                    winsound.PlaySound(wav_path, winsound.SND_FILENAME | winsound.SND_SYNC)
+                    winsound.PlaySound(wav_path, winsound.SND_FILENAME)
                 elif result.get("status") != "ok":
                     logger.warning(
                         f"[TTS Stream] 句子合成失败: {result.get('message', '未知错误')}"
@@ -2253,7 +2253,7 @@ class ChatPage(QWidget):
                 result = tts_speak(sent, play=False, strip_code=False)
                 if result.get("status") == "ok" and not result.get("skipped"):
                     wav_path = result["wav_path"]
-                    winsound.PlaySound(wav_path, winsound.SND_FILENAME | winsound.SND_SYNC)
+                    winsound.PlaySound(wav_path, winsound.SND_FILENAME)
                 else:
                     logger.warning(
                         f"[TTS] 第{i+1}句合成失败: {result.get('message', '未知错误')}"

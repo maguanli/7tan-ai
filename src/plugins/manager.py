@@ -2,8 +2,8 @@
 插件管理器 — 安装/卸载/加载插件工具
 """
 import json
-import os
 import sys
+import shutil
 import importlib.util
 import importlib
 from pathlib import Path
@@ -66,27 +66,15 @@ class PluginManager:
         if not plugin_info:
             return {"ok": False, "error": f"未找到插件: {plugin_id}"}
 
-        installed = self.get_installed()
-        if plugin_id in installed:
-            return {"ok": False, "error": f"插件 {plugin_id} 已安装"}
-
-        # 处理内置插件
-        if plugin_info.get("type") == "builtin":
-            return self._install_builtin(plugin_id, plugin_info)
-
-        # 处理远程插件
-        if plugin_info.get("source_url"):
+        # 远程插件走下载流程
+        if plugin_info.get("type") == "remote":
             return self._install_remote(plugin_id, plugin_info)
 
-        return {"ok": False, "error": "插件无安装源"}
-
-    def _install_builtin(self, plugin_id: str, info: dict) -> dict:
-        """安装内置插件 — 从 data/plugins/{id}/ 加载"""
+        # 内置插件直装
         pkg_dir = PLUGIN_DIR / plugin_id
         if not pkg_dir.exists():
-            return {"ok": False, "error": f"内置插件目录不存在: {pkg_dir}"}
+            return {"ok": False, "error": f"插件目录不存在: {pkg_dir}"}
 
-        # 加载工具模块
         try:
             self._load_plugin(plugin_id, str(pkg_dir))
         except Exception as e:
@@ -99,13 +87,12 @@ class PluginManager:
             installed.append(plugin_id)
             self._save_installed(installed)
 
-        tool_count = len(info.get("tools", []))
-        return {"ok": True, "message": f"✅ 插件 {info.get('name', plugin_id)} 安装成功 ({tool_count} 个工具)", "tools": tool_count}
+        tool_count = len(plugin_info.get("tools", []))
+        return {"ok": True, "message": f"✅ 插件 {plugin_info.get('name', plugin_id)} 安装成功 ({tool_count} 个工具)", "tools": tool_count}
 
     def _install_remote(self, plugin_id: str, info: dict) -> dict:
         """从远程源安装插件"""
         import requests
-        import tempfile
         import shutil
 
         url = info.get("source_url")
@@ -144,7 +131,7 @@ class PluginManager:
         return {"ok": True, "message": f"✅ 插件 {info.get('name', plugin_id)} 安装成功 ({tool_count} 个工具)", "tools": tool_count}
 
     def uninstall(self, plugin_id: str) -> dict:
-        """卸载插件"""
+        """卸载插件（保留目录）"""
         installed = self.get_installed()
         if plugin_id not in installed:
             return {"ok": False, "error": f"插件 {plugin_id} 未安装"}
@@ -159,16 +146,59 @@ class PluginManager:
         # 不删除目录（保留用户修改），但标记为未安装
         return {"ok": True, "message": f"🗑️ 插件已卸载（工具代码保留在 data/plugins/{plugin_id}/）"}
 
+    # === pyc 缓存清理 ===
+
+    @staticmethod
+    def _clear_pycache(pkg_dir: str):
+        """删除插件目录的 __pycache__，防止 .pyc 缓存导致旧代码被加载"""
+        pycache = Path(pkg_dir) / "__pycache__"
+        if pycache.exists():
+            shutil.rmtree(pycache, ignore_errors=True)
+            logger.debug(f"🧹 清理 pyc 缓存: {pycache}")
+
+    @staticmethod
+    def _clear_all_pycache():
+        """清理所有插件目录的 __pycache__"""
+        if not PLUGIN_DIR.exists():
+            return
+        count = 0
+        for pkg_dir in PLUGIN_DIR.iterdir():
+            if not pkg_dir.is_dir():
+                continue
+            pycache = pkg_dir / "__pycache__"
+            if pycache.exists():
+                shutil.rmtree(pycache, ignore_errors=True)
+                count += 1
+        if count > 0:
+            logger.info(f"🧹 启动时清理了 {count} 个插件的 pyc 缓存")
+
     # === 模块加载/卸载 ===
 
     def _load_plugin(self, plugin_id: str, pkg_dir: str):
-        """动态加载插件工具模块"""
+        """动态加载插件工具模块
+        
+        🔴 三重保险确保不加载 .pyc 缓存：
+        1. 删除 __pycache__ 目录
+        2. importlib.invalidate_caches() 清除内部缓存
+        3. 从 sys.modules 中移除旧模块再重新加载
+        """
         tools_path = Path(pkg_dir) / "tools.py"
         if not tools_path.exists():
             logger.warning(f"插件 {plugin_id} 无 tools.py")
             return
 
-        # 如果之前已加载，先卸载旧版本
+        # 🔴 保险1: 删除 pyc 缓存文件
+        self._clear_pycache(pkg_dir)
+        # 🔴 保险2: 清除 importlib 内部缓存
+        importlib.invalidate_caches()
+
+        module_name = f"plugin_{plugin_id}"
+
+        # 🔴 保险3: 从 sys.modules 彻底移除旧模块
+        if module_name in sys.modules:
+            del sys.modules[module_name]
+
+        # 如果之前已加载，先卸载旧版本（清理 TOOL_REGISTRY）
         if plugin_id in self._loaded_modules:
             self._unload_plugin(plugin_id)
 
@@ -176,7 +206,6 @@ class PluginManager:
         if pkg_dir not in sys.path:
             sys.path.insert(0, pkg_dir)
 
-        module_name = f"plugin_{plugin_id}"
         spec = importlib.util.spec_from_file_location(module_name, str(tools_path))
         if spec is None or spec.loader is None:
             raise ImportError(f"无法加载模块: {tools_path}")
@@ -204,6 +233,11 @@ class PluginManager:
             del TOOL_REGISTRY[name]
             logger.info(f"🔧 卸载工具: {name}")
 
+        # 从 sys.modules 移除
+        module_name = f"plugin_{plugin_id}"
+        if module_name in sys.modules:
+            del sys.modules[module_name]
+
         if plugin_id in self._loaded_modules:
             del self._loaded_modules[plugin_id]
 
@@ -211,6 +245,10 @@ class PluginManager:
 
     def load_all_installed(self):
         """启动时加载所有已安装的插件（单个失败不影响整体）"""
+        # 🔴 启动时全局清理 pyc 缓存
+        self._clear_all_pycache()
+        importlib.invalidate_caches()
+
         installed = self.get_installed()
         manifest = self.get_manifest()
         manifest_map = {p.get("id"): p for p in manifest}
@@ -237,6 +275,8 @@ class PluginManager:
     def get_load_errors(self) -> dict:
         """获取插件加载错误信息"""
         return getattr(self, '_load_errors', {})
+
+    def get_plugin_status(self, plugin_id: str) -> str:
         """获取插件状态: installed / available"""
         if plugin_id in self.get_installed():
             return "installed"
@@ -247,143 +287,79 @@ class PluginManager:
     REMOTE_MANIFEST_URL = "https://raw.githubusercontent.com/7tan/7tan-plugins/main/manifest.json"
 
     def search_online(self, keyword: str = "") -> list:
-        """搜索全网插件 — 通过 DuckDuckGo 搜索 GitHub/PyPI 上的开源工具"""
-        import requests
-        import re
+        """搜索全网插件 — 通过 DuckDuckGo 搜索 GitHub/PyPI
 
-        if not keyword:
-            return self._search_local("")
+        Args:
+            keyword: 搜索关键词
 
+        Returns:
+            搜索结果列表
+        """
+        # 若配置了远程清单，先尝试下载
         try:
-            search_query = f"site:github.com OR site:pypi.org {keyword} game download tool"
-            resp = requests.get(
-                "https://api.duckduckgo.com/",
-                params={"q": search_query, "format": "json", "no_html": 1},
-                timeout=15,
-                headers={"User-Agent": "7tanAI-PluginManager/1.0"},
-            )
-            data = resp.json()
-            results = []
+            import requests
+            resp = requests.get(self.REMOTE_MANIFEST_URL, timeout=10)
+            if resp.status_code == 200:
+                remote_manifest = resp.json()
+                if keyword:
+                    kw_lower = keyword.lower()
+                    return [
+                        p for p in remote_manifest
+                        if kw_lower in p.get("name", "").lower()
+                        or kw_lower in p.get("description", "").lower()
+                        or kw_lower in p.get("category", "").lower()
+                    ]
+                return remote_manifest
+        except Exception:
+            pass
 
-            # 抽象
-            if data.get("AbstractText") and keyword.lower() in data.get("AbstractText", "").lower():
-                results.append({
-                    "id": f"web_{len(results)}",
-                    "name": data.get("AbstractText", "")[:60],
-                    "version": "?",
-                    "author": "Web",
-                    "type": "remote",
-                    "category": "搜索",
-                    "description": data.get("AbstractText", "")[:100],
-                    "tools": ["(需手动集成)"],
-                    "source_url": data.get("AbstractURL", ""),
-                    "icon": "🌐",
-                })
+        return []
 
-            for topic in data.get("RelatedTopics", [])[:8]:
-                if isinstance(topic, dict):
-                    text = topic.get("Text", "")
-                    url = topic.get("FirstURL", "")
-                    if text and url:
-                        results.append({
-                            "id": f"web_{len(results)}",
-                            "name": re.sub(r'<[^>]+>', '', text)[:60],
-                            "version": "?",
-                            "author": url.split("/")[2] if "/" in url else "Web",
-                            "type": "remote",
-                            "category": "搜索",
-                            "description": re.sub(r'<[^>]+>', '', text)[:100],
-                            "tools": ["(查看链接了解)"],
-                            "source_url": url,
-                            "icon": "🔗",
-                        })
-
-            if not results:
-                return self._search_local(keyword)
-
-            # 合并本地结果
-            local = self._search_local(keyword)
-            local_ids = {p.get("id") for p in local}
-            for r in results:
-                if r["id"] not in local_ids:
-                    local.append(r)
-
-            return local
-        except Exception as e:
-            logger.warning(f"在线搜索失败: {e}")
-            return self._search_local(keyword)
-
-    def _search_local(self, keyword: str = "") -> list:
-        """仅本地搜索"""
-        installed = set(self.get_installed())
-        results = []
-        for p in self.get_manifest():
-            if not keyword or keyword.lower() in str(p).lower():
-                p["source"] = "local"
-                p["installed"] = p["id"] in installed
-                results.append(p)
-        return results
+    def get_plugin_info(self, plugin_id: str) -> Optional[dict]:
+        """获取单个插件信息"""
+        manifest = self.get_manifest()
+        for p in manifest:
+            if p.get("id") == plugin_id:
+                return p
+        return None
 
     # === 默认清单 ===
 
-    @staticmethod
-    def _default_manifest() -> list:
+    def _default_manifest(self) -> list:
         """内置插件清单"""
         return [
             {
-                "id": "web_search",
-                "name": "联网搜索",
-                "version": "1.0.0",
-                "author": "Microsoft Bing",
+                "id": "tts_piper",
+                "name": "TTS 语音合成 (Piper + Edge TTS)",
+                "version": "1.2.0",
+                "author": "7tanAI Team",
                 "type": "builtin",
-                "category": "搜索",
-                "description": "让 AI 能够搜索互联网获取最新资讯、游戏攻略、补丁信息。基于 Microsoft Bing 搜索引擎，国内直连可用。",
-                "tools": ["web_search", "fetch_news"],
-                "icon": "🔍",
+                "category": "AI / 语音",
+                "description": "女声 Piper 本地推理 + 男声 Edge TTS 在线合成，双引擎自动回退。支持逐句流式播放。",
+                "tools": ["tts_speak", "tts_status", "tts_set_gender", "tts_stop"],
+                "icon": "🔊",
             },
             {
-                "id": "deep_analysis",
-                "name": "深度分析",
+                "id": "browser_automation",
+                "name": "浏览器自动化",
                 "version": "1.0.0",
                 "author": "7tanAI Team",
                 "type": "builtin",
-                "category": "分析",
-                "description": "对游戏进行深度分析：评价、优缺点、用户反馈汇总、竞品对比。由 AI 驱动生成结构化报告。",
-                "tools": ["analyze_game", "compare_games", "summarize_reviews"],
-                "icon": "📊",
-            },
-            {
-                "id": "auto_images",
-                "name": "自动配图",
-                "version": "1.0.0",
-                "author": "7tanAI Team",
-                "type": "builtin",
-                "category": "媒体",
-                "description": "发布时自动从页面截取高清截图、提取 LOGO 并压缩优化。基于 Qt WebEngine 截图引擎。",
-                "tools": ["auto_screenshot", "extract_logo"],
-                "icon": "🖼️",
+                "category": "工具",
+                "description": "操控浏览器浏览网页、截图、点击、提取图片和下载链接。",
+                "tools": ["browse_page", "screenshot", "click_element", "get_page_images", "find_download_links", "scroll_down"],
+                "icon": "🌐",
             },
             {
                 "id": "form_enhance",
-                "name": "自动填表增强",
+                "name": "表单增强",
                 "version": "1.0.0",
                 "author": "7tanAI Team",
                 "type": "builtin",
-                "category": "发布",
-                "description": "智能检测表单所有字段并批量填写。自动匹配字段名称、处理富文本编辑器、下拉选择框。",
+                "category": "工具",
+                "description": "自动检测和填写表单字段。",
                 "tools": ["detect_form_fields", "fill_all_fields"],
                 "icon": "📝",
-            },
-            {
-                "id": "smart_translate",
-                "name": "智能翻译",
-                "version": "1.0.0",
-                "author": "Google Translate",
-                "type": "builtin",
-                "category": "语言",
-                "description": "自动翻译英文游戏介绍、Steam商店页面描述为中文。基于 Google 翻译免费 API。",
-                "tools": ["translate_text", "translate_page"],
-                "icon": "🌐",
             },
             {
                 "id": "price_monitor",
@@ -398,35 +374,24 @@ class PluginManager:
             },
             {
                 "id": "ocr_reader",
-                "name": "页面内容提取",
+                "name": "OCR 文字识别",
+                "version": "1.0.0",
+                "author": "7tanAI Team",
+                "type": "builtin",
+                "category": "AI / 识别",
+                "description": "对截图进行 OCR 文字识别，提取页面中的游戏名称、版本号等信息。",
+                "tools": ["ocr_screenshot"],
+                "icon": "👁️",
+            },
+            {
+                "id": "auto_screenshotter",
+                "name": "自动截图",
                 "version": "1.0.0",
                 "author": "7tanAI Team",
                 "type": "builtin",
                 "category": "工具",
-                "description": "从页面提取标题和完整文字内容，用于分析游戏详情、版本更新日志等。",
-                "tools": ["ocr_screenshot"],
-                "icon": "📄",
-            },
-            {
-                "id": "cloud_ai",
-                "name": "Cloud Code 云端AI增强",
-                "version": "1.0.0",
-                "author": "OpenAI",
-                "type": "builtin",
-                "category": "AI",
-                "description": "接入 OpenAI GPT-4o-mini 云端模型增强推理。比本地模型聪明10倍，自动写简介/分析游戏。需配置 API Key。",
-                "tools": ["cloud_analyze", "cloud_write_intro"],
-                "icon": "☁️",
+                "description": "对当前页面自动截取高质量截图，用于获取游戏详情页预览图。",
+                "tools": ["auto_screenshot", "extract_logo"],
+                "icon": "📸",
             },
         ]
-
-
-# 全局单例
-_manager: Optional[PluginManager] = None
-
-
-def get_manager() -> PluginManager:
-    global _manager
-    if _manager is None:
-        _manager = PluginManager()
-    return _manager

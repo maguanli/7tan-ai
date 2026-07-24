@@ -1560,9 +1560,11 @@ class ChatPage(QWidget):
             # 独立连接读回验证
             verify = self._db_get("voice_gender", "")
             if verify == self._voice_gender:
+                self._voice_diag(f"[save] VERIFY OK: db has gender={verify!r}")
                 print(f"[Voice] 数据库保存成功并验证通过: gender={verify}, mode={self._voice_mode}")
                 logger.info(f"[Voice] 数据库保存成功并验证通过: gender={verify}, mode={self._voice_mode}")
             else:
+                self._voice_diag(f"[save] VERIFY FAIL: wrote={self._voice_gender!r}, read back={verify!r}")
                 print(f"[Voice] 数据库验证失败! 写入={self._voice_gender}, 读回={verify}")
                 logger.error(f"[Voice] 数据库验证失败! 写入={self._voice_gender}, 读回={verify}")
         except Exception as e:

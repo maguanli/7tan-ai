@@ -241,19 +241,42 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                     wav_path
                 ], capture_output=True, timeout=15, check=True)
                 os.remove(mp3_path)
-            except Exception:
-                # ffmpeg 不可用 → 直接播放 MP3
-                wav_path = mp3_path
+            except FileNotFoundError:
+                # ffmpeg 二进制不存在
+                logger.warning("[TTS] ffmpeg 未找到，无法转换 MP3→WAV")
                 if play:
                     os.startfile(mp3_path) if os.name == 'nt' else None
-                _update_circuit_breaker(True)
-                return {
-                    "status": "ok",
-                    "wav_path": mp3_path,
-                    "size_kb": round(os.path.getsize(mp3_path) / 1024, 1),
-                    "voice": "yunxi",
-                    "engine": "Edge TTS",
-                }
+                    _update_circuit_breaker(True)
+                    return {
+                        "status": "ok",
+                        "wav_path": mp3_path,
+                        "size_kb": round(os.path.getsize(mp3_path) / 1024, 1),
+                        "voice": "yunxi",
+                        "engine": "Edge TTS",
+                    }
+                else:
+                    return {
+                        "status": "error",
+                        "message": "ffmpeg 未找到，无法将 MP3 转为 WAV（winsound 仅支持 WAV）",
+                    }
+            except Exception as e:
+                # ffmpeg 转换失败
+                logger.warning(f"[TTS] ffmpeg 转换失败: {e}")
+                if play:
+                    os.startfile(mp3_path) if os.name == 'nt' else None
+                    _update_circuit_breaker(True)
+                    return {
+                        "status": "ok",
+                        "wav_path": mp3_path,
+                        "size_kb": round(os.path.getsize(mp3_path) / 1024, 1),
+                        "voice": "yunxi",
+                        "engine": "Edge TTS",
+                    }
+                else:
+                    return {
+                        "status": "error",
+                        "message": f"ffmpeg 转换失败: {e}",
+                    }
 
             size_kb = round(os.path.getsize(wav_path) / 1024, 1)
             if play:

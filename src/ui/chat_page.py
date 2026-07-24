@@ -2181,7 +2181,7 @@ class ChatPage(QWidget):
         self._tts_stream_text_pos += last_end
 
     def _tts_stream_worker(self):
-        """后台线程：从队列取句子 → 合成 → 播放（同步等待播完再取下一句）"""
+        """后台线程：从队列取句子 → 合成 → 播放"""
         import winsound
         logger.info("[TTS Stream] Worker started")
         try:
@@ -2189,7 +2189,6 @@ class ChatPage(QWidget):
         except Exception as e:
             logger.error(f"[TTS Stream] 无法导入 TTS 引擎: {e}")
             return
-        fallback_notified = False  # 只通知一次引擎回退
         while True:
             sentence = self._tts_stream_queue.get()
             if sentence is None:  # 停止信号
@@ -2197,70 +2196,27 @@ class ChatPage(QWidget):
                 break
             try:
                 logger.debug(f"[TTS Stream] Synthesizing: {sentence[:50]}...")
-                result = tts_speak(sentence, play=False, strip_code=True)
-                if result.get("status") == "ok" and not result.get("skipped"):
-                    # 检测是否发生了引擎回退（首次通知）
-                    if result.get("fallback") and not fallback_notified:
-                        fallback_notified = True
-                        logger.info(
-                            f"[TTS Stream] 引擎已自动切换: {result.get('fallback_from', 'unknown')}"
-                        )
-                    wav_path = result["wav_path"]
-                    winsound.PlaySound(wav_path, winsound.SND_FILENAME)
-                elif result.get("status") != "ok":
-                    logger.warning(
-                        f"[TTS Stream] 句子合成失败: {result.get('message', '未知错误')}"
-                    )
+                # play=True: 内部自动处理 MP3->WAV 转换（含 ffmpeg 缺失回退）
+                # 使用 os.startfile 作为回退播放方式
+                tts_speak(sentence, play=True, strip_code=True)
             except Exception as e:
                 logger.error(f"[TTS Stream] 句子播放失败: {e}")
 
     def _speak_response(self, text: str):
-        """后台线程：语音模式下逐句朗读 AI 回复（首句 1 秒内开始播放）"""
-        logger.info(f"[TTS] _speak_response START: text_len={len(text) if text else 0}")
+        """后台线程：语音模式下朗读 AI 回复"""
         try:
             from data.plugins.tts_piper.tools import tts_speak
             from data.plugins.tts_piper.tools import _strip_code_blocks
-            import winsound
 
-            # 去除代码块
             clean = _strip_code_blocks(text).strip()
             if not clean:
-                logger.info("[TTS] 去除代码块后无可朗读文本")
                 return
 
-            # 逐句拆分（与流式 TTS 使用相同的边界检测）
-            sentences = []
-            last_end = 0
-            for m in re.finditer(r'[。！？]|\n\n', clean):
-                sent = clean[last_end:m.end()].strip()
-                if sent and len(sent) >= 2:
-                    sentences.append(sent)
-                last_end = m.end()
-            # 剩余文本
-            remaining = clean[last_end:].strip()
-            if remaining and len(remaining) >= 2:
-                sentences.append(remaining)
-
-            if not sentences:
-                # 没有检测到句子边界，整段合成
-                result = tts_speak(clean, play=True, strip_code=False)
-                logger.info(f"[TTS] _speak_response OK (整段): {result}")
-                return
-
-            logger.info(f"[TTS] 拆分为 {len(sentences)} 句，开始逐句播放")
-            for i, sent in enumerate(sentences):
-                logger.debug(f"[TTS] 合成第{i+1}/{len(sentences)}句: {sent[:50]}...")
-                result = tts_speak(sent, play=False, strip_code=False)
-                if result.get("status") == "ok" and not result.get("skipped"):
-                    wav_path = result["wav_path"]
-                    winsound.PlaySound(wav_path, winsound.SND_FILENAME)
-                else:
-                    logger.warning(
-                        f"[TTS] 第{i+1}句合成失败: {result.get('message', '未知错误')}"
-                    )
-            logger.info(f"[TTS] _speak_response OK: {len(sentences)}句播放完毕")
+            # 全文合成 + 播放（内部自动处理 MP3->WAV 转换和回退）
+            result = tts_speak(clean, play=True, strip_code=False)
+            logger.info(f"[TTS] _speak_response OK: engine={result.get('engine', '?')}")
         except Exception as e:
-            logger.error(f"[TTS] 朗读失败: {e}", exc_info=True)
+            logger.error(f"[TTS] 朗读失败: {e}")
 
     def _on_error(self, error_msg: str, thinking_msg=None):
 

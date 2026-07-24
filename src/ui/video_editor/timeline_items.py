@@ -12,6 +12,8 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+from loguru import logger
+
 from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal, QObject, QThread
 from PyQt6.QtWidgets import (
     QGraphicsRectItem, QGraphicsTextItem, QGraphicsLineItem,
@@ -214,6 +216,7 @@ def _extract_thumbs_worker(clip_id: str, src_path: str, duration: float,
             "-v", "quiet",
             "-",
         ]
+        logger.debug(f"[thumb] ffmpeg start: {clip_id[:8]} src={Path(src_path).name} dur={used_duration:.1f}s")
         proc = subprocess.run(
             cmd, capture_output=True, timeout=30,
         )
@@ -229,8 +232,13 @@ def _extract_thumbs_worker(clip_id: str, src_path: str, duration: float,
             if len(raw_frames) > THUMB_COUNT:
                 step = len(raw_frames) / THUMB_COUNT
                 raw_frames = [raw_frames[int(i * step)] for i in range(THUMB_COUNT)]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[thumb] ffmpeg failed: {clip_id[:8]} src={Path(src_path).name} err={e}")
+
+    if raw_frames:
+        logger.debug(f"[thumb] ffmpeg done: {clip_id[:8]} frames={len(raw_frames)}")
+    else:
+        logger.warning(f"[thumb] ffmpeg produced no frames: {clip_id[:8]} src={Path(src_path).name}")
 
     # save to disk cache
     if raw_frames:
@@ -368,9 +376,11 @@ class ClipItem(QGraphicsRectItem):
         ck = _thumb_cache_key(src, ss, se)
         cached = _thumb_load_cache(ck)
         if cached:
+            logger.debug(f"[thumb] cache hit: {self.clip_id[:8]} key={ck[:8]}")
             self._on_thumbs_ready(self.clip_id, cached)
             return
 
+        logger.debug(f"[thumb] enqueue: {self.clip_id[:8]} src={Path(src).name} dur={dur:.1f}s")
         _thumb_callbacks[self.clip_id] = self._on_thumbs_ready
 
         # use queue to limit concurrent ffmpeg processes
@@ -411,6 +421,8 @@ class ClipItem(QGraphicsRectItem):
         def decode_next():
             if self._thumb_load_idx >= len(self._thumb_raw):
                 self._thumb_raw = []
+                if not self._thumbnails:
+                    self._loading_failed = True
                 self.update()
                 return
             jpeg_bytes = self._thumb_raw[self._thumb_load_idx]
@@ -422,6 +434,8 @@ class ClipItem(QGraphicsRectItem):
                 QTimer.singleShot(5, decode_next)
             else:
                 self._thumb_raw = []
+                if not self._thumbnails:
+                    self._loading_failed = True
                 self.update()
 
         QTimer.singleShot(0, decode_next)
@@ -489,16 +503,14 @@ class ClipItem(QGraphicsRectItem):
                                   Qt.TransformationMode.SmoothTransformation)
                     painter.drawPixmap(int(r.x()) + i * fw + ox, int(r.y()) + oy, scaled)
             painter.restore()
-        elif not thumbs and not self._thumb_loaded and rect.width() > 40:
-            # 加载中 — 显示半透明 "···"
-            painter.setPen(QColor(255, 255, 255, 80))
-            painter.setFont(QFont("Microsoft YaHei", 14))
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "···")
         elif self._loading_failed and rect.width() > 40:
-            # 加载失败 — 显示降级图标
             painter.setPen(QColor(255, 255, 255, 120))
             painter.setFont(QFont("Microsoft YaHei", 16))
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "🎬")
+        elif not thumbs and rect.width() > 40:
+            painter.setPen(QColor(255, 255, 255, 80))
+            painter.setFont(QFont("Microsoft YaHei", 14))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "···")
 
         # 文本
         if rect.width() > 30:

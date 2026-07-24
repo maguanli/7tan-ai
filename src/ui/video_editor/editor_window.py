@@ -165,10 +165,6 @@ class VideoEditorPage(QWidget):
         self.timeline.delete_requested.connect(self._on_delete_clip)
         self.timeline.clip_trimmed.connect(self._on_clip_trim)
 
-        # ---- 剪辑工具栏（素材库/播放器下方、时间轴上方） ----
-        self._clip_toolbar = self._build_clip_toolbar()
-        layout.addWidget(self._clip_toolbar)
-
         layout.addWidget(self.timeline, 1)
 
         # ---- 底部工具栏 ----
@@ -283,52 +279,18 @@ class VideoEditorPage(QWidget):
         l.setContentsMargins(8, 4, 8, 4)
         l.setSpacing(6)
 
-        # ==== 文件 & 录制 ====
-        file_btns = [
-            ("💾 保存", self._on_save_project, "保存项目 (Ctrl+S)"),
-            ("📂 打开", self._on_load_project, "打开项目 / 导入媒体"),
+        # ==== 录屏 + 制图 + 语音 ====
+        core_btns = [
             ("🎥 录屏", self._on_start_recording, "录制屏幕"),
+            ("🖼️ 制图", self._on_open_cover, "制作视频封面"),
+            ("🎙️ 语音", self._on_ai_dub, "AI 文字转语音"),
         ]
-        for text, handler, tip in file_btns:
+        for text, handler, tip in core_btns:
             btn = QPushButton(text)
             btn.setToolTip(tip)
             btn.setStyleSheet(TOOLBAR_STYLESHEET)
             btn.clicked.connect(handler)
             l.addWidget(btn)
-
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.Shape.VLine)
-        sep2.setStyleSheet(f"color:{THEME['border']};")
-        l.addWidget(sep2)
-
-        # ==== AI & 后期 ====
-        ai_btns = [
-            ("🎙️ AI配音", self._on_ai_dub, "AI 文字转语音"),
-            ("📝 AI字幕", self._on_ai_subtitle, "AI 语音识别字幕"),
-            ("🎨 滤镜", self._on_filter_panel, "颜色滤镜调节"),
-            ("🎬 转场", self._on_add_transition, "片段间转场效果"),
-            ("🎯 关键帧", self._on_keyframe_panel, "关键帧动画"),
-            ("🖼️ 封面", self._on_open_cover, "制作视频封面"),
-            ("🤖 AI视频", self._on_ai_video, "AI 图文成片"),
-        ]
-        for text, handler, tip in ai_btns:
-            btn = QPushButton(text)
-            btn.setToolTip(tip)
-            btn.setStyleSheet(TOOLBAR_STYLESHEET)
-            btn.clicked.connect(handler)
-            l.addWidget(btn)
-
-        sep3 = QFrame()
-        sep3.setFrameShape(QFrame.Shape.VLine)
-        sep3.setStyleSheet(f"color:{THEME['border']};")
-        l.addWidget(sep3)
-
-        # ==== 导出 ====
-        export_btn = QPushButton("📤 导出")
-        export_btn.setToolTip("导出为 MP4 视频")
-        export_btn.setStyleSheet(TOOLBAR_STYLESHEET)
-        export_btn.clicked.connect(self._on_export)
-        l.addWidget(export_btn)
 
         l.addStretch()
         return w

@@ -1808,7 +1808,7 @@ class ChatBrowserSplitPage(QWidget):
         self._btn_browser = self._make_panel_btn("🌐 浏览器", True)
         self._btn_code = self._make_panel_btn("📝 源代码", False)
         self._btn_console = self._make_panel_btn("📟 控制台", False)
-        self._btn_video_editor = self._make_panel_btn("🎬 视频剪辑器", False)
+        self._btn_video_editor = self._make_panel_btn("🎬 录屏", False)
 
         self._btn_browser.clicked.connect(lambda: self._switch_panel(0, self._btn_browser))
         self._btn_code.clicked.connect(lambda: self._switch_panel(1, self._btn_code))

@@ -36,6 +36,31 @@ _edge_lock = threading.Lock()
 EDGE_MAX_RETRIES = 3
 EDGE_RETRY_DELAY = 2  # 秒
 
+# === Edge TTS 熔断器 ===
+_edge_tts_circuit_open = False  # True=熔断，直接跳过 edge-tts
+_edge_tts_failure_count = 0
+_edge_tts_circuit_reset_time = 0  # 下次可重试的时间戳
+CIRCUIT_FAILURE_THRESHOLD = 3  # 连续失败 3 次后熔断
+CIRCUIT_RESET_SECONDS = 120  # 2 分钟后自动尝试恢复
+
+
+def _update_circuit_breaker(success: bool):
+    """更新 Edge TTS 熔断器状态"""
+    global _edge_tts_circuit_open, _edge_tts_failure_count, _edge_tts_circuit_reset_time
+    if success:
+        _edge_tts_circuit_open = False
+        _edge_tts_failure_count = 0
+        _edge_tts_circuit_reset_time = 0
+    else:
+        _edge_tts_failure_count += 1
+        if _edge_tts_failure_count >= CIRCUIT_FAILURE_THRESHOLD:
+            _edge_tts_circuit_open = True
+            _edge_tts_circuit_reset_time = time.time() + CIRCUIT_RESET_SECONDS
+            logger.warning(
+                f"[TTS] Edge TTS 熔断！连续失败 {_edge_tts_failure_count} 次，"
+                f"{CIRCUIT_RESET_SECONDS}s 内自动回退 Piper"
+            )
+
 
 def _get_voice():
     """延迟加载 PiperVoice，线程安全"""
@@ -137,7 +162,25 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
       2. API 失败则回退到 CLI（edge-tts 命令行）
       3. 失败自动重试（最多 EDGE_MAX_RETRIES 次）
       4. 并发锁防止多线程同时调用
+      5. 熔断器：连续失败自动跳过，避免反复超时
     """
+    global _edge_tts_circuit_open
+
+    # === 熔断检查 ===
+    if _edge_tts_circuit_open:
+        if time.time() < _edge_tts_circuit_reset_time:
+            remaining = int(_edge_tts_circuit_reset_time - time.time())
+            return {
+                "status": "error",
+                "message": f"Edge TTS 已熔断（{remaining}s 后自动恢复），请稍后再试",
+                "circuit_open": True,
+            }
+        else:
+            # 冷却时间到，尝试恢复
+            _edge_tts_circuit_open = False
+            _edge_tts_failure_count = 0
+            logger.info("[TTS] Edge TTS 熔断冷却时间到，尝试恢复")
+
     ts = int(time.time() * 1000)
     mp3_path = str(OUTPUT_DIR / f"tts_{ts}.mp3")
     wav_path = str(OUTPUT_DIR / f"tts_{ts}.wav")
@@ -181,6 +224,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                         if attempt < EDGE_MAX_RETRIES:
                             time.sleep(EDGE_RETRY_DELAY * attempt)
                             continue
+                        _update_circuit_breaker(False)
                         return {
                             "status": "error",
                             "message": (
@@ -202,6 +246,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                 wav_path = mp3_path
                 if play:
                     os.startfile(mp3_path) if os.name == 'nt' else None
+                _update_circuit_breaker(True)
                 return {
                     "status": "ok",
                     "wav_path": mp3_path,
@@ -218,6 +263,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
 
             if attempt > 1:
                 logger.info(f"[TTS] Edge TTS 第{attempt}次重试成功")
+            _update_circuit_breaker(True)
             return {
                 "status": "ok",
                 "wav_path": wav_path,
@@ -234,6 +280,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
             if attempt < EDGE_MAX_RETRIES:
                 time.sleep(EDGE_RETRY_DELAY * attempt)
                 continue
+            _update_circuit_breaker(False)
             return {
                 "status": "error",
                 "message": f"Edge TTS 超时(已重试{EDGE_MAX_RETRIES}次)",
@@ -247,6 +294,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
             if attempt < EDGE_MAX_RETRIES:
                 time.sleep(EDGE_RETRY_DELAY * attempt)
                 continue
+            _update_circuit_breaker(False)
             return {
                 "status": "error",
                 "message": (
@@ -254,6 +302,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                 ),
             }
 
+    _update_circuit_breaker(False)
     return {"status": "error", "message": f"Edge TTS 失败: {last_error}"}
 
 
@@ -282,7 +331,9 @@ def _speak_piper(text: str, play: bool) -> dict:
 
     size_kb = round(os.path.getsize(wav_path) / 1024, 1)
     if play:
-        threading.Thread(target=_play_wav, args=(wav_path,), daemon=True).start()
+        threading.Thread(
+            target=_play_wav, args=(wav_path,), daemon=True
+        ).start()
 
     return {
         "status": "ok",
@@ -294,22 +345,25 @@ def _speak_piper(text: str, play: bool) -> dict:
 
 
 # ============================================================
-# 公共 API
+# 统一接口
 # ============================================================
 
 def tts_speak(text: str, play: bool = True, strip_code: bool = True) -> dict:
     """
-    TTS 语音合成 — 根据当前性别设置自动选择引擎。
+    朗读文本（根据当前性别自动选择引擎）。
+
+    - 女声：Piper 本地合成 → 失败自动回退 Edge TTS
+    - 男声：Edge TTS 在线合成 → 失败自动回退 Piper（含熔断保护）
 
     Args:
         text: 要朗读的文本
-        play: 是否自动播放（默认 True）
-        strip_code: 是否自动移除代码块（默认 True）
+        play: 是否自动播放（False=仅合成不播放，调用方自行 winsound）
+        strip_code: 是否移除代码块后再朗读
 
     Returns:
-        {"status": "ok", "wav_path": "...", "voice": "huayan"|"yunxi", ...}
+        {"status": "ok", "wav_path": "...", "fallback": True/False, ...}
     """
-    if not text or not text.strip():
+    if not text:
         return {"status": "error", "message": "文本为空"}
 
     if strip_code:
@@ -319,8 +373,24 @@ def tts_speak(text: str, play: bool = True, strip_code: bool = True) -> dict:
         return {"status": "ok", "message": "移除代码块后无可朗读文本", "skipped": True}
 
     if _voice_gender == "male":
-        return _speak_edge_tts(text, play)
+        # 男声：Edge TTS 主引擎，失败自动回退 Piper
+        result = _speak_edge_tts(text, play)
+        if result.get("status") == "error":
+            logger.warning(
+                f"[TTS] Edge TTS 失败，自动回退 Piper 女声: {result.get('message')}"
+            )
+            try:
+                fallback = _speak_piper(text, play)
+                fallback["fallback"] = True
+                fallback["fallback_from"] = "Edge TTS → Piper"
+                fallback["fallback_reason"] = result.get("message", "未知错误")
+                return fallback
+            except Exception as e2:
+                logger.error(f"[TTS] Piper 回退也失败: {e2}")
+                return result  # 返回原始错误
+        return result
     else:
+        # 女声：Piper 主引擎，失败自动回退 Edge TTS
         try:
             return _speak_piper(text, play)
         except Exception as e:
@@ -329,17 +399,19 @@ def tts_speak(text: str, play: bool = True, strip_code: bool = True) -> dict:
 
 
 def tts_status() -> dict:
-    """查看 TTS 状态"""
-    voice_available = VOICE_ONNX.exists() and VOICE_JSON.exists()
+    """获取 TTS 状态信息（含熔断器状态）"""
+    voice_available = True
     sample_rate = None
-    if voice_available:
+    if _voice_gender == "female":
         try:
             voice = _get_voice()
             sample_rate = voice.config.sample_rate
         except Exception:
-            pass
+            voice_available = False
+    else:
+        voice_available = not _edge_tts_circuit_open
 
-    return {
+    result = {
         "engine": "Piper TTS" if _voice_gender == "female" else "Edge TTS",
         "gender": _voice_gender,
         "voice": "huayan (花颜)" if _voice_gender == "female" else "yunxi (云希)",
@@ -348,3 +420,16 @@ def tts_status() -> dict:
         "output_dir": str(OUTPUT_DIR),
         "playback": "winsound (async thread)",
     }
+
+    # 熔断器状态
+    if _voice_gender == "male":
+        result["circuit_breaker"] = {
+            "open": _edge_tts_circuit_open,
+            "failure_count": _edge_tts_failure_count,
+            "reset_in_seconds": (
+                max(0, int(_edge_tts_circuit_reset_time - time.time()))
+                if _edge_tts_circuit_open else 0
+            ),
+        }
+
+    return result

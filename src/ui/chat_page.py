@@ -2189,6 +2189,7 @@ class ChatPage(QWidget):
         except Exception as e:
             logger.error(f"[TTS Stream] 无法导入 TTS 引擎: {e}")
             return
+        fallback_notified = False  # 只通知一次引擎回退
         while True:
             sentence = self._tts_stream_queue.get()
             if sentence is None:  # 停止信号
@@ -2198,8 +2199,18 @@ class ChatPage(QWidget):
                 logger.debug(f"[TTS Stream] Synthesizing: {sentence[:50]}...")
                 result = tts_speak(sentence, play=False, strip_code=True)
                 if result.get("status") == "ok" and not result.get("skipped"):
+                    # 检测是否发生了引擎回退（首次通知）
+                    if result.get("fallback") and not fallback_notified:
+                        fallback_notified = True
+                        logger.info(
+                            f"[TTS Stream] 引擎已自动切换: {result.get('fallback_from', 'unknown')}"
+                        )
                     wav_path = result["wav_path"]
                     winsound.PlaySound(wav_path, winsound.SND_FILENAME | winsound.SND_SYNC)
+                elif result.get("status") != "ok":
+                    logger.warning(
+                        f"[TTS Stream] 句子合成失败: {result.get('message', '未知错误')}"
+                    )
             except Exception as e:
                 logger.error(f"[TTS Stream] 句子播放失败: {e}")
 

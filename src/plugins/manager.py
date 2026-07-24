@@ -395,3 +395,11 @@ class PluginManager:
                 "icon": "📸",
             },
         ]
+
+
+def get_manager() -> PluginManager:
+    """获取全局插件管理器单例"""
+    global _manager_singleton
+    if '_manager_singleton' not in globals():
+        _manager_singleton = PluginManager()
+    return _manager_singleton

@@ -76,9 +76,20 @@ def list_files(directory: str, pattern: str = "*") -> str:
     },
     category="file",
 )
-def read_file_content(path: str = None, encoding: str = "utf-8", max_lines: int = 200, offset: int = 0, limit: int = None, filepath: str = None, file_path: str = None) -> str:
+def read_file_content(
+    path: str = None,
+    encoding: str = "utf-8",
+    max_lines: int = 200,
+    offset: int = 0,
+    limit: int = None,
+    filepath: str = None,
+    file_path: str = None,
+    file: str = None,
+) -> str:
     """读取文件内容"""
     # 兼容 AI 可能使用不同的参数名
+    if file is not None:
+        path = file
     if filepath is not None:
         path = filepath
     if file_path is not None:
@@ -123,21 +134,19 @@ def read_file_content(path: str = None, encoding: str = "utf-8", max_lines: int 
     },
     category="file",
 )
-def write_file_content(path: str, content: str, encoding: str = "utf-8", mode: str = "text") -> str:
-    """写入文件（支持文本和二进制）"""
+def write_file(path: str, content: str, encoding: str = "utf-8", mode: str = "text") -> str:
+    """写入文件"""
     p = Path(path)
     ensure_dir(str(p.parent))
+
     try:
         if mode == "binary":
-            # base64 解码 → 写入二进制
-            binary_data = base64.b64decode(content)
-            p.write_bytes(binary_data)
-            return f"✅ 已写入(二进制): {path} ({len(binary_data)} bytes)"
+            raw = base64.b64decode(content)
+            p.write_bytes(raw)
+            return f"✅ 已写入（二进制）: {path} ({len(raw)} bytes)"
         else:
             p.write_text(content, encoding=encoding)
-            return f"✅ 已写入: {path} ({len(content)} 字符)"
-    except base64.binascii.Error as e:
-        return f"❌ Base64 解码失败: {e}"
+            return f"✅ 已写入: {path}"
     except Exception as e:
         return f"❌ 写入失败: {e}"
 
@@ -148,7 +157,7 @@ def write_file_content(path: str, content: str, encoding: str = "utf-8", mode: s
     parameters={
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "要删除的文件/目录路径"},
+         "path": {"type": "string", "description": "要删除的文件/目录路径"},
         },
         "required": ["path"]
     },

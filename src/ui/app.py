@@ -3842,6 +3842,17 @@ class MainWindow(QMainWindow):
                 t.join(timeout=2)
             except Exception:
                 pass
+
+        # ===== 保存语音设置到数据库（关闭前兜底）=====
+        try:
+            workspace = self._pages.get("workspace") if hasattr(self, "_pages") else None
+            chat = getattr(workspace, "chat", None) if workspace is not None else None
+            if chat is not None and hasattr(chat, "_save_voice_gender"):
+                chat._save_voice_gender()
+                logger.info("[Voice] 主窗口closeEvent: 语音设置已写入数据库")
+        except Exception as e:
+            logger.warning(f"[Voice] 主窗口closeEvent保存语音失败: {e}")
+
         super().closeEvent(event)
 
 

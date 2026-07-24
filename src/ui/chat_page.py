@@ -1487,6 +1487,8 @@ class ChatPage(QWidget):
 
     def _load_voice_gender(self):
         """启动时从数据库恢复语音设置"""
+        print(f"[Voice] __file__ = {__file__}")
+        print(f"[Voice] 数据库路径 = {self._db_path()}")
         gender = self._db_get("voice_gender", "")
         mode = self._db_get("voice_mode", "")
         print(f"[Voice] 数据库读取: gender={gender!r}, mode={mode!r}")
@@ -1506,6 +1508,7 @@ class ChatPage(QWidget):
 
     def _save_voice_gender(self):
         """把当前语音设置写入数据库（立即生效，供下次启动读取）"""
+        print(f"[Voice] 保存到数据库路径 = {self._db_path()}")
         try:
             self._db_set("voice_gender", self._voice_gender)
             self._db_set("voice_mode", "true" if self._voice_mode else "false")

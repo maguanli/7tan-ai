@@ -316,18 +316,9 @@ def _speak_piper(text: str, play: bool) -> dict:
     ts = int(time.time() * 1000)
     wav_path = str(OUTPUT_DIR / f"tts_{ts}.wav")
 
-    # 生成原始 PCM 数据
-    audio_data = b""
-    for chunk in voice.synthesize_stream_raw(text):
-        audio_data += chunk
-
-    # 写入 WAV
-    sample_rate = voice.config.sample_rate
+    # 使用 synthesize_wav 直接写入 WAV（新版 Piper API）
     with wave.open(wav_path, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        wf.writeframes(audio_data)
+        voice.synthesize_wav(text, wf)
 
     size_kb = round(os.path.getsize(wav_path) / 1024, 1)
     if play:

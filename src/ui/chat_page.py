@@ -2215,12 +2215,50 @@ class ChatPage(QWidget):
                 logger.error(f"[TTS Stream] 句子播放失败: {e}")
 
     def _speak_response(self, text: str):
-        """后台线程：语音模式下朗读 AI 回复"""
+        """后台线程：语音模式下逐句朗读 AI 回复（首句 1 秒内开始播放）"""
         logger.info(f"[TTS] _speak_response START: text_len={len(text) if text else 0}")
         try:
             from data.plugins.tts_piper.tools import tts_speak
-            result = tts_speak(text, play=True, strip_code=True)
-            logger.info(f"[TTS] _speak_response OK: {result}")
+            from data.plugins.tts_piper.tools import _strip_code_blocks
+            import winsound
+
+            # 去除代码块
+            clean = _strip_code_blocks(text).strip()
+            if not clean:
+                logger.info("[TTS] 去除代码块后无可朗读文本")
+                return
+
+            # 逐句拆分（与流式 TTS 使用相同的边界检测）
+            sentences = []
+            last_end = 0
+            for m in re.finditer(r'[。！？]|\n\n', clean):
+                sent = clean[last_end:m.end()].strip()
+                if sent and len(sent) >= 2:
+                    sentences.append(sent)
+                last_end = m.end()
+            # 剩余文本
+            remaining = clean[last_end:].strip()
+            if remaining and len(remaining) >= 2:
+                sentences.append(remaining)
+
+            if not sentences:
+                # 没有检测到句子边界，整段合成
+                result = tts_speak(clean, play=True, strip_code=False)
+                logger.info(f"[TTS] _speak_response OK (整段): {result}")
+                return
+
+            logger.info(f"[TTS] 拆分为 {len(sentences)} 句，开始逐句播放")
+            for i, sent in enumerate(sentences):
+                logger.debug(f"[TTS] 合成第{i+1}/{len(sentences)}句: {sent[:50]}...")
+                result = tts_speak(sent, play=False, strip_code=False)
+                if result.get("status") == "ok" and not result.get("skipped"):
+                    wav_path = result["wav_path"]
+                    winsound.PlaySound(wav_path, winsound.SND_FILENAME | winsound.SND_SYNC)
+                else:
+                    logger.warning(
+                        f"[TTS] 第{i+1}句合成失败: {result.get('message', '未知错误')}"
+                    )
+            logger.info(f"[TTS] _speak_response OK: {len(sentences)}句播放完毕")
         except Exception as e:
             logger.error(f"[TTS] 朗读失败: {e}", exc_info=True)
 

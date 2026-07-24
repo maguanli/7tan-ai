@@ -23,8 +23,9 @@ ChatPage — 全新 AI 对话界面
 """
 
 import json
-
 import time
+import queue
+import re
 
 from datetime import datetime
 
@@ -226,6 +227,10 @@ class ChatPage(QWidget):
         self._voice_gender = "female"  # 语音性别: female(花颜) / male(云希)
         self._load_voice_gender()  # 从配置恢复上次的语音性别
         self._voice_recording = False  # 是否正在录音
+        # 🎤 流式 TTS：逐句合成+播放，消除语音延迟
+        self._tts_stream_queue: queue.Queue = None  # 句子队列
+        self._tts_stream_worker_thread = None       # 后台播放线程
+        self._tts_stream_text_pos = 0               # 已发送到 TTS 的文本位置
         self._render_queue: list = []
         self._render_timer = None
         self._render_insert_pos: int = 0
@@ -1819,8 +1824,23 @@ class ChatPage(QWidget):
         self._streaming_tool_calls = []  # 工具调用列表
 
         self._streaming_text = ""  # 累积文本
-
         self._streaming_session_id = self._current_session_id
+
+        # 🎤 流式 TTS 初始化：先停旧 worker，再新建
+        if self._voice_mode and not self._voice_recording:
+            old_queue = self._tts_stream_queue
+            if old_queue is not None:
+                try:
+                    old_queue.put(None)
+                except Exception:
+                    pass
+            self._tts_stream_queue = queue.Queue()
+            self._tts_stream_text_pos = 0
+            import threading
+            self._tts_stream_worker_thread = threading.Thread(
+                target=self._tts_stream_worker, daemon=True
+            )
+            self._tts_stream_worker_thread.start()
 
 
 
@@ -1923,6 +1943,9 @@ class ChatPage(QWidget):
             chunk = event.get("content", "")
 
             self._streaming_text += chunk
+            # 🎤 流式 TTS：检测完整句子，推入播放队列
+            if self._voice_mode and self._tts_stream_queue is not None:
+                self._push_new_sentences_to_tts()
 
             if self._streaming_assistant_bubble is None:
 
@@ -2068,10 +2091,19 @@ class ChatPage(QWidget):
 
             QTimer.singleShot(500, self._refresh_sessions)
 
-        # 🎤 语音模式：后台线程朗读（合成+播放全在后台，不阻塞UI）
+        # 🎤 语音模式：流式 TTS 收尾 or 传统全量朗读
         if self._voice_mode and not self._voice_recording and success and result:
-            import threading
-            threading.Thread(target=self._speak_response, args=(result,), daemon=True).start()
+            if self._tts_stream_queue is not None:
+                # 流式 TTS：推送剩余文本 + 停止信号
+                remaining = self._streaming_text[self._tts_stream_text_pos:].strip()
+                if remaining and len(remaining) >= 2:
+                    self._tts_stream_queue.put(remaining)
+                self._tts_stream_queue.put(None)  # 停止信号
+                self._tts_stream_queue = None
+            else:
+                # 传统模式（非流式）：全量朗读
+                import threading
+                threading.Thread(target=self._speak_response, args=(result,), daemon=True).start()
 
 
 
@@ -2131,6 +2163,45 @@ class ChatPage(QWidget):
 
 
 
+
+    # ==================== 流式 TTS ====================
+
+    def _push_new_sentences_to_tts(self):
+        """从 _streaming_text 中检测新完成的句子，推入 TTS 播放队列"""
+        new_text = self._streaming_text[self._tts_stream_text_pos:]
+        if not new_text:
+            return
+        # 检测句子边界：。！？或连续两个换行
+        last_end = 0
+        for m in re.finditer(r'[。！？]|\n\n', new_text):
+            sent = new_text[last_end:m.end()].strip()
+            if sent and len(sent) >= 2:  # 至少 2 个字符，过滤纯标点
+                self._tts_stream_queue.put(sent)
+            last_end = m.end()
+        self._tts_stream_text_pos += last_end
+
+    def _tts_stream_worker(self):
+        """后台线程：从队列取句子 → 合成 → 播放（同步等待播完再取下一句）"""
+        import winsound
+        logger.info("[TTS Stream] Worker started")
+        try:
+            from data.plugins.tts_piper.tools import tts_speak
+        except Exception as e:
+            logger.error(f"[TTS Stream] 无法导入 TTS 引擎: {e}")
+            return
+        while True:
+            sentence = self._tts_stream_queue.get()
+            if sentence is None:  # 停止信号
+                logger.info("[TTS Stream] Worker stopped")
+                break
+            try:
+                logger.debug(f"[TTS Stream] Synthesizing: {sentence[:50]}...")
+                result = tts_speak(sentence, play=False, strip_code=True)
+                if result.get("status") == "ok" and not result.get("skipped"):
+                    wav_path = result["wav_path"]
+                    winsound.PlaySound(wav_path, winsound.SND_FILENAME | winsound.SND_SYNC)
+            except Exception as e:
+                logger.error(f"[TTS Stream] 句子播放失败: {e}")
 
     def _speak_response(self, text: str):
         """后台线程：语音模式下朗读 AI 回复"""

@@ -364,7 +364,13 @@ class ClipItem(QGraphicsRectItem):
         ss = self._data.get("source_start", 0)
         se = self._data.get("source_end", dur)
 
-        # register with global dispatcher
+        # 先检查磁盘缓存 — 命中则直接加载，跳过队列和线程
+        ck = _thumb_cache_key(src, ss, se)
+        cached = _thumb_load_cache(ck)
+        if cached:
+            self._on_thumbs_ready(self.clip_id, cached)
+            return
+
         _thumb_callbacks[self.clip_id] = self._on_thumbs_ready
 
         # use queue to limit concurrent ffmpeg processes

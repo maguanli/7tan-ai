@@ -364,9 +364,9 @@ class ChatPage(QWidget):
 
 
 
-        model_label = QLabel("🤖")
+        model_label = QLabel("当前模型")
 
-        model_label.setStyleSheet("font-size: 14px;")
+        model_label.setStyleSheet("font-size: 12px; color: #94a3b8; padding-right: 2px;")
 
         top_bar.addWidget(model_label)
 

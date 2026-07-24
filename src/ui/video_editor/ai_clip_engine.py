@@ -207,13 +207,13 @@ class AIClipEngine:
         try:
             # -- 撤销 / 重做 --
             if intent.action == "undo":
-                if self._editor._undo_manager.undo():
+                if self._editor._undo_manager.undo(self._editor.project):
                     self._editor._sync_timeline()
                     return "✅ 已撤销上一步操作"
                 return "⚠️ 没有可撤销的操作"
 
             if intent.action == "redo":
-                if self._editor._undo_manager.redo():
+                if self._editor._undo_manager.redo(self._editor.project):
                     self._editor._sync_timeline()
                     return "✅ 已重做"
                 return "⚠️ 没有可重做的操作"
@@ -235,8 +235,9 @@ class AIClipEngine:
                         self._editor._delete_clip_by_index(idx - 1)
                         return f"✅ 已删除第{idx}段"
                 # 无索引 → 删除当前选中的
-                if self._editor.timeline._selected_clip_id:
-                    self._editor._on_delete_clip()
+                cid = self._editor.timeline.get_selected_clip_id()
+                if cid:
+                    self._editor._on_delete_clip(cid)
                     return "✅ 已删除选中片段"
                 return "⚠️ 请指定要删除第几段，或先点击选中一个片段"
 
@@ -264,7 +265,7 @@ class AIClipEngine:
             # -- 变速 --
             if intent.action == "set_speed":
                 speed = p.get("speed", 1.0)
-                cid = self._editor.timeline._selected_clip_id
+                cid = self._editor.timeline.get_selected_clip_id()
                 if cid:
                     for clip in self._editor.project.all_clips:
                         if clip.id == cid:
@@ -294,7 +295,7 @@ class AIClipEngine:
 
             # -- 录屏 --
             if intent.action == "start_recording":
-                self._editor._on_start_recording()
+                self._editor._start_recording()
                 return "🔴 录屏已启动"
 
             if intent.action == "stop_recording":

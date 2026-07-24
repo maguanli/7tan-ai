@@ -196,6 +196,7 @@ class VideoEditorPage(QWidget):
         self._btn_skip_prev = QPushButton("⏮")
         self._btn_skip_prev.setToolTip("上一段")
         self._btn_skip_prev.setStyleSheet(btn_style)
+        self._btn_skip_prev.clicked.connect(self._on_skip_prev)
 
         self._btn_back = QPushButton("⏪")
         self._btn_back.setToolTip("后退 5 秒")
@@ -215,6 +216,7 @@ class VideoEditorPage(QWidget):
         self._btn_skip_next = QPushButton("⏭")
         self._btn_skip_next.setToolTip("下一段")
         self._btn_skip_next.setStyleSheet(btn_style)
+        self._btn_skip_next.clicked.connect(self._on_skip_next)
 
         for b in [self._btn_skip_prev, self._btn_back, self._btn_play,
                    self._btn_fwd, self._btn_skip_next]:
@@ -466,6 +468,55 @@ class VideoEditorPage(QWidget):
 
     def _seek_relative(self, delta: float):
         self.player.seek_relative(delta)
+
+    # ---- EditorAPI / AI引擎 桥接方法 ----
+
+    def _media_bin_add(self, info: dict):
+        self.media_bin._add_to_list(info)
+
+    def _timeline_refresh(self):
+        self.timeline.set_project(self.project)
+
+    def _player_play(self):
+        self.player.play()
+
+    def _player_pause(self):
+        self.player.pause()
+
+    def _player_seek(self, time_sec: float):
+        self.player.seek(time_sec)
+
+    def _player_get_time(self) -> float:
+        return self.player.get_time()
+
+    def _on_start_recording(self):
+        self._start_recording()
+
+    def _on_skip_prev(self):
+        """跳到上一个剪辑点"""
+        t = self.player.get_time()
+        points = []
+        for track in self.project.tracks:
+            for clip in track.clips:
+                points.append(clip.timeline_start)
+                points.append(clip.timeline_start + clip.effective_duration)
+        points = sorted(set(p for p in points if p < t - 0.05))
+        if points:
+            self.player.seek(points[-1])
+            self.timeline.set_playhead(points[-1])
+
+    def _on_skip_next(self):
+        """跳到下一个剪辑点"""
+        t = self.player.get_time()
+        points = []
+        for track in self.project.tracks:
+            for clip in track.clips:
+                points.append(clip.timeline_start)
+                points.append(clip.timeline_start + clip.effective_duration)
+        points = sorted(set(p for p in points if p > t + 0.05))
+        if points:
+            self.player.seek(points[0])
+            self.timeline.set_playhead(points[0])
 
     def _on_fullscreen(self):
         """全屏切换"""

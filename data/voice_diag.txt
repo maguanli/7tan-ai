@@ -1,0 +1,11 @@
+14:22:00 [toggle] switched to 'female'
+14:22:00 [toggle] saving: gender='female' mode=True
+14:22:00 [save] START: gender='female' mode=True
+14:22:00 [save] VERIFY OK: db has gender='female'
+14:22:00 [save] DONE
+14:22:08 [save] START: gender='female' mode=False
+14:22:08 [save] VERIFY OK: db has gender='female'
+14:22:08 [save] DONE
+14:22:09 [save] START: gender='female' mode=True
+14:22:09 [save] VERIFY OK: db has gender='female'
+14:22:09 [save] DONE

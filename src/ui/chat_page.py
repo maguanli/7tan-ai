@@ -644,8 +644,14 @@ class ChatPage(QWidget):
             self._voice_btn.setChecked(True)
             self._voice_btn.setText("🎤 语音中")
             self._voice_btn.blockSignals(False)
+            # 🎤 启动时恢复语音模式的 UI 和 Agent 回调
+            self._input.setPlaceholderText("语音模式：点击录音按钮开始说话...")
+            from ..agent.agent_loop import set_agent_speak_callback
+            set_agent_speak_callback(self._speak_response)
 
         self._send_btn = QPushButton("发送 ▲")
+        if self._voice_mode:
+            self._send_btn.setText("🎤 录音发送")
         self._send_btn.setFixedHeight(30)
         self._send_btn.setMinimumWidth(90)
         self._send_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))

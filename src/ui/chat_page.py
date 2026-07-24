@@ -1431,6 +1431,7 @@ class ChatPage(QWidget):
         msg = f"[Voice] 切换为: {self._voice_gender}"
         print(msg)
         logger.info(msg)
+        self._add_message("system", f"[Voice] {msg}")
 
         # 持久化保存
         self._save_voice_gender()
@@ -1510,6 +1511,7 @@ class ChatPage(QWidget):
         self._voice_mode = (str(mode).lower() == "true")
         print(f"[Voice] 已从数据库恢复: gender={self._voice_gender}, mode={self._voice_mode}")
         logger.info(f"[Voice] 已从数据库恢复: gender={self._voice_gender}, mode={self._voice_mode}")
+        self._add_message("system", f"[Voice] 启动恢复: gender={self._voice_gender}, mode={self._voice_mode}")
 
         try:
             from data.plugins.tts_piper.tools import tts_set_gender

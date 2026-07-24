@@ -1428,7 +1428,9 @@ class ChatPage(QWidget):
             self._gender_btn.setText("♀ 女声")
             self._gender_btn.setChecked(True)
 
-        print(f"[Voice] 切换为: {self._voice_gender}")
+        msg = f"[Voice] 切换为: {self._voice_gender}"
+        print(msg)
+        logger.info(msg)
 
         # 持久化保存
         self._save_voice_gender()
@@ -1436,9 +1438,13 @@ class ChatPage(QWidget):
         try:
             from data.plugins.tts_piper.tools import tts_set_gender
             result = tts_set_gender(self._voice_gender)
-            print(f"[Voice] TTS 引擎切换结果: {result}")
+            msg2 = f"[Voice] TTS 引擎切换结果: {result}"
+            print(msg2)
+            logger.info(msg2)
         except Exception as e:
-            print(f"[Voice] TTS 引擎切换失败: {e}")
+            msg3 = f"[Voice] TTS 引擎切换失败: {e}"
+            print(msg3)
+            logger.warning(msg3)
 
     # ---- 语音设置持久化（纯数据库 app_settings 表）----
 
@@ -1483,15 +1489,19 @@ class ChatPage(QWidget):
                 con.close()
         except Exception as e:
             print(f"[Voice] 数据库读取异常: {type(e).__name__}: {e}")
+            logger.error(f"[Voice] 数据库读取异常: {type(e).__name__}: {e}")
             return default
 
     def _load_voice_gender(self):
         """启动时从数据库恢复语音设置"""
         print(f"[Voice] __file__ = {__file__}")
+        logger.info(f"[Voice] __file__ = {__file__}")
         print(f"[Voice] 数据库路径 = {self._db_path()}")
+        logger.info(f"[Voice] 数据库路径 = {self._db_path()}")
         gender = self._db_get("voice_gender", "")
         mode = self._db_get("voice_mode", "")
         print(f"[Voice] 数据库读取: gender={gender!r}, mode={mode!r}")
+        logger.info(f"[Voice] 数据库读取: gender={gender!r}, mode={mode!r}")
 
         if gender in ("female", "male"):
             self._voice_gender = gender
@@ -1499,16 +1509,19 @@ class ChatPage(QWidget):
             self._voice_gender = "female"
         self._voice_mode = (str(mode).lower() == "true")
         print(f"[Voice] 已从数据库恢复: gender={self._voice_gender}, mode={self._voice_mode}")
+        logger.info(f"[Voice] 已从数据库恢复: gender={self._voice_gender}, mode={self._voice_mode}")
 
         try:
             from data.plugins.tts_piper.tools import tts_set_gender
             tts_set_gender(self._voice_gender)
         except Exception as e:
             print(f"[Voice] TTS引擎设置失败: {e}")
+            logger.warning(f"[Voice] TTS引擎设置失败: {e}")
 
     def _save_voice_gender(self):
         """把当前语音设置写入数据库（立即生效，供下次启动读取）"""
         print(f"[Voice] 保存到数据库路径 = {self._db_path()}")
+        logger.info(f"[Voice] 保存到数据库路径 = {self._db_path()}")
         try:
             self._db_set("voice_gender", self._voice_gender)
             self._db_set("voice_mode", "true" if self._voice_mode else "false")
@@ -1516,10 +1529,13 @@ class ChatPage(QWidget):
             verify = self._db_get("voice_gender", "")
             if verify == self._voice_gender:
                 print(f"[Voice] 数据库保存成功并验证通过: gender={verify}, mode={self._voice_mode}")
+                logger.info(f"[Voice] 数据库保存成功并验证通过: gender={verify}, mode={self._voice_mode}")
             else:
                 print(f"[Voice] 数据库验证失败! 写入={self._voice_gender}, 读回={verify}")
+                logger.error(f"[Voice] 数据库验证失败! 写入={self._voice_gender}, 读回={verify}")
         except Exception as e:
             print(f"[Voice] 数据库保存异常: {type(e).__name__}: {e}")
+            logger.error(f"[Voice] 数据库保存异常: {type(e).__name__}: {e}")
 
 
     def closeEvent(self, event):
@@ -1527,8 +1543,10 @@ class ChatPage(QWidget):
         try:
             self._save_voice_gender()
             print("[Voice] closeEvent 已保存语音设置")
+            logger.info("[Voice] closeEvent 已保存语音设置")
         except Exception as e:
             print(f"[Voice] closeEvent 保存异常: {e}")
+            logger.warning(f"[Voice] closeEvent 保存异常: {e}")
         try:
             super().closeEvent(event)
         except Exception:

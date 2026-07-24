@@ -494,12 +494,18 @@ class VideoEditorPage(QWidget):
 
     def _on_skip_prev(self):
         """跳到上一个剪辑点"""
+        from src.ui.video_editor.data_models import SubtitleClip
         t = self.player.get_time()
         points = []
         for track in self.project.tracks:
             for clip in track.clips:
-                points.append(clip.timeline_start)
-                points.append(clip.timeline_start + clip.effective_duration)
+                if isinstance(clip, SubtitleClip):
+                    points.append(clip.start_time)
+                    points.append(clip.end_time)
+                elif hasattr(clip, 'timeline_start'):
+                    points.append(clip.timeline_start)
+                    if hasattr(clip, 'effective_duration'):
+                        points.append(clip.timeline_start + clip.effective_duration)
         points = sorted(set(p for p in points if p < t - 0.05))
         if points:
             self.player.seek(points[-1])
@@ -507,12 +513,18 @@ class VideoEditorPage(QWidget):
 
     def _on_skip_next(self):
         """跳到下一个剪辑点"""
+        from src.ui.video_editor.data_models import SubtitleClip
         t = self.player.get_time()
         points = []
         for track in self.project.tracks:
             for clip in track.clips:
-                points.append(clip.timeline_start)
-                points.append(clip.timeline_start + clip.effective_duration)
+                if isinstance(clip, SubtitleClip):
+                    points.append(clip.start_time)
+                    points.append(clip.end_time)
+                elif hasattr(clip, 'timeline_start'):
+                    points.append(clip.timeline_start)
+                    if hasattr(clip, 'effective_duration'):
+                        points.append(clip.timeline_start + clip.effective_duration)
         points = sorted(set(p for p in points if p > t + 0.05))
         if points:
             self.player.seek(points[0])
@@ -990,14 +1002,23 @@ class VideoEditorPage(QWidget):
     # ==================================================================
 
     def _on_filter_panel(self):
-        clips = self.project.all_clips
-        if not clips:
+        clip = self._get_selected_clip() or (self.project.all_clips[0] if self.project.all_clips else None)
+        if not clip:
             self._status.setText("⚠️ 请先添加视频片段")
             return
         from src.ui.video_editor.filter_panel import FilterPanel
-        dlg = FilterPanel(clips[0], self)
+        dlg = FilterPanel(clip, self)
         dlg.filter_applied.connect(lambda c: self._on_filter_applied(c))
         dlg.exec()
+
+    def _get_selected_clip(self):
+        """获取当前选中的片段对象"""
+        cid = self.timeline.get_selected_clip_id()
+        if cid:
+            for clip in self.project.all_clips:
+                if clip.id == cid:
+                    return clip
+        return None
 
     def _on_filter_applied(self, clip: "Clip"):
         self._status.setText(f"🎨 滤镜已应用: {clip.id[:8]}")
@@ -1030,12 +1051,12 @@ class VideoEditorPage(QWidget):
     # ==================================================================
 
     def _on_keyframe_panel(self):
-        clips = self.project.all_clips
-        if not clips:
+        clip = self._get_selected_clip() or (self.project.all_clips[0] if self.project.all_clips else None)
+        if not clip:
             self._status.setText("⚠️ 请先添加视频片段")
             return
         from src.ui.video_editor.keyframe_panel import KeyframePanel
-        dlg = KeyframePanel(clips[0], self)
+        dlg = KeyframePanel(clip, self)
         dlg.keyframes_changed.connect(lambda c: self._on_keyframes_changed(c))
         dlg.exec()
 

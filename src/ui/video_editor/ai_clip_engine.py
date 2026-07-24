@@ -246,7 +246,16 @@ class AIClipEngine:
                 a, b = p.get("index_a", 0), p.get("index_b", 0)
                 clips = self._editor.project.all_clips
                 if 1 <= a <= len(clips) and 1 <= b <= len(clips):
-                    clips[a-1], clips[b-1] = clips[b-1], clips[a-1]
+                    ca, cb = clips[a-1], clips[b-1]
+                    # 在轨道内交换
+                    for track in self._editor.project.tracks:
+                        try:
+                            ia = track.clips.index(ca)
+                            ib = track.clips.index(cb)
+                            track.clips[ia], track.clips[ib] = track.clips[ib], track.clips[ia]
+                            break
+                        except ValueError:
+                            pass
                     self._editor._sync_timeline()
                     return f"✅ 已交换第{a}段和第{b}段"
                 return "⚠️ 片段索引超出范围"

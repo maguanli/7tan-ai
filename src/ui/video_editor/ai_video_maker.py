@@ -234,32 +234,20 @@ class AIVideoMaker:
                 # 纯文本模式：生成纯色背景
                 bg_color = bg_colors[i % len(bg_colors)]
                 bg_path = self._create_color_bg(bg_color, project.resolution, i)
-                if bg_path and self._media_bin:
-                    self._media_bin.import_file(str(bg_path))
-
-                # 添加到视频轨
-                if bg_path:
-                    self._editor_api.add_clip_to_track(
-                        str(bg_path), track_index=0,
-                        start_time=scene_start, end_time=scene_end,
-                    )
+                bg_media = self._media_bin.add_media(str(bg_path)) if (bg_path and self._media_bin) else None
+                if bg_media:
+                    self._editor_api.add_clip_to_timeline(bg_media, track_index=0, timeline_start=scene_start)
             elif scene.image_path:
                 # 图文模式 / AI 生图模式
-                if self._media_bin:
-                    self._media_bin.import_file(scene.image_path)
-                self._editor_api.add_clip_to_track(
-                    scene.image_path, track_index=0,
-                    start_time=scene_start, end_time=scene_end,
-                )
+                img_media = self._media_bin.add_media(scene.image_path) if self._media_bin else None
+                if img_media:
+                    self._editor_api.add_clip_to_timeline(img_media, track_index=0, timeline_start=scene_start)
 
             # 2) 音频轨 — 配音
             if scene.audio_path:
-                if self._media_bin:
-                    self._media_bin.import_file(scene.audio_path)
-                self._editor_api.add_clip_to_track(
-                    scene.audio_path, track_index=1,
-                    start_time=scene_start, end_time=scene_end,
-                )
+                audio_media = self._media_bin.add_media(scene.audio_path) if self._media_bin else None
+                if audio_media:
+                    self._editor_api.add_clip_to_timeline(audio_media, track_index=1, timeline_start=scene_start)
 
             # 3) 字幕轨 — 文字
             self._editor_api.add_subtitle(

@@ -224,6 +224,7 @@ class ChatPage(QWidget):
         self._LAZY_CHUNK = 10
         self._voice_mode = False  # 语音模式开关
         self._voice_gender = "female"  # 语音性别: female(花颜) / male(云希)
+        self._load_voice_gender()  # 从配置恢复上次的语音性别
         self._voice_recording = False  # 是否正在录音
         self._render_queue: list = []
         self._render_timer = None
@@ -581,7 +582,8 @@ class ChatPage(QWidget):
         self._gender_btn.setMaximumWidth(140)
         self._gender_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._gender_btn.setCheckable(True)
-        self._gender_btn.setChecked(True)  # 默认女声
+        self._gender_btn.setChecked(self._voice_gender == "female")
+        self._gender_btn.setText("♀ 女声" if self._voice_gender == "female" else "♂ 男声")
         self._gender_btn.clicked.connect(self._toggle_voice_gender)
         self._gender_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1424,12 +1426,46 @@ class ChatPage(QWidget):
             self._voice_gender = "male"
             self._gender_btn.setText("♂ 男声")
 
+        # 持久化保存
+        self._save_voice_gender()
+
         try:
             from data.plugins.tts_piper.tools import tts_set_gender
             result = tts_set_gender(self._voice_gender)
             logger.info(f"[TTS] 声音切换: {result}")
         except Exception as e:
             logger.error(f"[TTS] 声音切换失败: {e}")
+
+    def _load_voice_gender(self):
+        """从 config.yaml 恢复上次的语音性别设置"""
+        try:
+            from ..config.loader import load_config
+            cfg = load_config()
+            saved = cfg.get("tts", {}).get("voice_gender", "female")
+            if saved in ("female", "male"):
+                self._voice_gender = saved
+                logger.info(f"[TTS] 已恢复声音设置: {saved}")
+            # 应用到 TTS 引擎
+            try:
+                from data.plugins.tts_piper.tools import tts_set_gender
+                tts_set_gender(self._voice_gender)
+            except Exception:
+                pass  # 插件可能尚未加载，等首次切换时再设置
+        except Exception as e:
+            logger.debug(f"[TTS] 读取声音设置失败（使用默认女声）: {e}")
+
+    def _save_voice_gender(self):
+        """持久化语音性别到 config.yaml"""
+        try:
+            from ..config.loader import load_config, save_config
+            cfg = load_config()
+            if "tts" not in cfg:
+                cfg["tts"] = {}
+            cfg["tts"]["voice_gender"] = self._voice_gender
+            save_config(cfg)
+            logger.info(f"[TTS] 已保存声音设置: {self._voice_gender}")
+        except Exception as e:
+            logger.error(f"[TTS] 保存声音设置失败: {e}")
 
     def _toggle_voice_mode(self):
         """切换语音/文字模式"""

@@ -1440,61 +1440,63 @@ class ChatPage(QWidget):
         except Exception as e:
             print(f"[Voice] TTS 引擎切换失败: {e}")
 
-    # ---- 语音性别持久化（JSON 文件，写入后立即验证）----
+    # ---- 语音设置持久化（纯数据库 app_settings 表）----
 
     @staticmethod
-    def _voice_settings_path():
-        """获取 voice_settings.json 路径 — 基于 __file__，不受工作目录影响"""
+    def _db_path():
+        """games.db 路径 — 基于 __file__，不受工作目录影响"""
         from pathlib import Path
-        return str(Path(__file__).resolve().parent.parent.parent / "data" / "voice_settings.json")
+        return str(Path(__file__).resolve().parent.parent.parent / "data" / "games.db")
+
+    def _db_set(self, key, value):
+        """写入一条设置到 app_settings 表（独立短连接，立即提交）"""
+        import sqlite3
+        con = sqlite3.connect(self._db_path())
+        try:
+            cur = con.cursor()
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)"
+            )
+            cur.execute(
+                "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, str(value)),
+            )
+            con.commit()
+        finally:
+            con.close()
+
+    def _db_get(self, key, default=""):
+        """从 app_settings 表读取一条设置（独立短连接）"""
+        import sqlite3
+        try:
+            con = sqlite3.connect(self._db_path())
+            try:
+                cur = con.cursor()
+                cur.execute(
+                    "CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)"
+                )
+                cur.execute("SELECT value FROM app_settings WHERE key=?", (key,))
+                row = cur.fetchone()
+                return row[0] if row else default
+            finally:
+                con.close()
+        except Exception as e:
+            print(f"[Voice] 数据库读取异常: {type(e).__name__}: {e}")
+            return default
 
     def _load_voice_gender(self):
-        """从 JSON + QSettings 恢复语音设置（双重保险）"""
-        import json, os
-        path = self._voice_settings_path()
-        print(f"[Voice] 加载路径: {path}")
-        print(f"[Voice] 文件存在: {os.path.exists(path)}")
+        """启动时从数据库恢复语音设置"""
+        gender = self._db_get("voice_gender", "")
+        mode = self._db_get("voice_mode", "")
+        print(f"[Voice] 数据库读取: gender={gender!r}, mode={mode!r}")
 
-        loaded = False
-
-        # === 第一优先级：JSON 文件 ===
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                gender = data.get("voice_gender", "")
-                mode = data.get("voice_mode", False)
-                print(f"[Voice] JSON读取成功: gender={gender}, mode={mode}")
-                if gender in ("female", "male"):
-                    self._voice_gender = gender
-                    self._voice_mode = bool(mode)
-                    loaded = True
-                    print(f"[Voice] 已从 JSON 恢复: gender={self._voice_gender}, mode={self._voice_mode}")
-            except Exception as e:
-                print(f"[Voice] JSON读取异常: {e}")
-
-        # === 第二优先级：QSettings 备份 ===
-        if not loaded:
-            try:
-                from PyQt6.QtCore import QSettings
-                qs = QSettings("7Tan", "7Tan")
-                saved_gender = qs.value("voice_gender", "")
-                saved_mode = qs.value("voice_mode", False)
-                print(f"[Voice] QSettings读取: gender={saved_gender}, mode={saved_mode}")
-                if saved_gender in ("female", "male"):
-                    self._voice_gender = saved_gender
-                    self._voice_mode = bool(saved_mode) if saved_mode else False
-                    loaded = True
-                    print(f"[Voice] 已从 QSettings 恢复: gender={self._voice_gender}")
-            except Exception as e:
-                print(f"[Voice] QSettings读取异常: {e}")
-
-        # === 默认值 ===
-        if not loaded:
-            print("[Voice] 首次使用，创建默认设置: female")
+        if gender in ("female", "male"):
+            self._voice_gender = gender
+        else:
             self._voice_gender = "female"
-            self._voice_mode = False
-            self._save_voice_gender()
+        self._voice_mode = (str(mode).lower() == "true")
+        print(f"[Voice] 已从数据库恢复: gender={self._voice_gender}, mode={self._voice_mode}")
 
         try:
             from data.plugins.tts_piper.tools import tts_set_gender
@@ -1503,44 +1505,31 @@ class ChatPage(QWidget):
             print(f"[Voice] TTS引擎设置失败: {e}")
 
     def _save_voice_gender(self):
-        """持久化语音设置 — JSON(主) + QSettings(备)，fsync 强制落盘"""
-        import json, os
-        path = self._voice_settings_path()
-        data = {
-            "voice_gender": self._voice_gender,
-            "voice_mode": self._voice_mode,
-        }
-        print(f"[Voice] 准备写入: {data}")
-        print(f"[Voice] 写入路径: {path}")
-        
-        # === 主存储：JSON 文件（fsync 强制落盘）===
+        """把当前语音设置写入数据库（立即生效，供下次启动读取）"""
         try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
-            print(f"[Voice] JSON 写入+fsync 完成")
-            # 读回验证
-            with open(path, "r", encoding="utf-8") as f:
-                verify = json.load(f)
-            if verify.get("voice_gender") == self._voice_gender:
-                print(f"[Voice] 验证通过: {verify}")
+            self._db_set("voice_gender", self._voice_gender)
+            self._db_set("voice_mode", "true" if self._voice_mode else "false")
+            # 独立连接读回验证
+            verify = self._db_get("voice_gender", "")
+            if verify == self._voice_gender:
+                print(f"[Voice] 数据库保存成功并验证通过: gender={verify}, mode={self._voice_mode}")
             else:
-                print(f"[Voice] 验证失败! 写入={data}, 读回={verify}")
+                print(f"[Voice] 数据库验证失败! 写入={self._voice_gender}, 读回={verify}")
         except Exception as e:
-            print(f"[Voice] JSON 写入异常: {type(e).__name__}: {e}")
-        
-        # === 备用存储：QSettings（系统注册表/plist）===
+            print(f"[Voice] 数据库保存异常: {type(e).__name__}: {e}")
+
+
+    def closeEvent(self, event):
+        """窗口关闭时兜底保存语音设置到数据库"""
         try:
-            from PyQt6.QtCore import QSettings
-            qs = QSettings("7Tan", "7Tan")
-            qs.setValue("voice_gender", self._voice_gender)
-            qs.setValue("voice_mode", self._voice_mode)
-            qs.sync()
-            print(f"[Voice] QSettings 备份完成: gender={self._voice_gender}")
+            self._save_voice_gender()
+            print("[Voice] closeEvent 已保存语音设置")
         except Exception as e:
-            print(f"[Voice] QSettings 备份异常: {e}")
+            print(f"[Voice] closeEvent 保存异常: {e}")
+        try:
+            super().closeEvent(event)
+        except Exception:
+            pass
 
     def _toggle_voice_mode(self):
         """切换语音/文字模式"""

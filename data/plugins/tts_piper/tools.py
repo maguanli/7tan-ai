@@ -10,6 +10,8 @@ import wave
 import threading
 import re
 import subprocess
+import asyncio as _asyncio
+import concurrent.futures
 from pathlib import Path
 from loguru import logger
 
@@ -90,8 +92,52 @@ def tts_get_gender() -> dict:
     return {"gender": "female", "voice": "huayan (花颜)", "engine": "Piper TTS"}
 
 
+# ============================================================
+# Edge TTS 核心 — Python API 优先 + CLI 回退
+# ============================================================
+
+def _run_edge_tts_api(text: str, voice: str, output_path: str, timeout: int = 30) -> None:
+    """
+    使用 edge_tts Python API 合成语音（无子进程，更可靠）。
+
+    Raises:
+        TimeoutError: 合成超时
+        Exception: 其他 edge_tts 内部错误
+    """
+    async def _synthesize():
+        communicate = __import__('edge_tts').Communicate(text, voice)
+        with open(output_path, 'wb') as f:
+            async for chunk in communicate.stream():
+                if chunk['type'] == 'audio':
+                    f.write(chunk['data'])
+                elif chunk['type'] == 'WordBoundary':
+                    pass  # 忽略词边界事件
+
+    try:
+        # 检查当前线程是否已有事件循环（如 GUI 主线程）
+        try:
+            _asyncio.get_running_loop()
+            # 已有事件循环 → 在新线程中运行（避免嵌套事件循环）
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_asyncio.run, _synthesize())
+                future.result(timeout=timeout)
+        except RuntimeError:
+            # 当前线程无事件循环 → 直接运行
+            _asyncio.run(_synthesize())
+    except _asyncio.TimeoutError:
+        raise TimeoutError(f"Edge TTS API 超时（{timeout}秒）")
+
+
 def _speak_edge_tts(text: str, play: bool) -> dict:
-    """Edge TTS 男声合成 → WAV → 播放（带重试 + 并发锁）"""
+    """
+    Edge TTS 男声合成 → WAV → 播放。
+
+    策略:
+      1. 优先使用 Python API（edge_tts.Communicate）— 无子进程，更稳定
+      2. API 失败则回退到 CLI（edge-tts 命令行）
+      3. 失败自动重试（最多 EDGE_MAX_RETRIES 次）
+      4. 并发锁防止多线程同时调用
+    """
     ts = int(time.time() * 1000)
     mp3_path = str(OUTPUT_DIR / f"tts_{ts}.mp3")
     wav_path = str(OUTPUT_DIR / f"tts_{ts}.wav")
@@ -99,25 +145,51 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
     last_error = ""
     for attempt in range(1, EDGE_MAX_RETRIES + 1):
         try:
-            # 并发锁：防止两个线程同时调用 edge-tts CLI 导致崩溃
+            # 并发锁：防止两个线程同时调用 edge-tts
             with _edge_lock:
-                cmd = [
-                    "edge-tts", "--voice", MALE_VOICE,
-                    "--volume", MALE_VOLUME,
-                    "--text", text,
-                    "--write-media", mp3_path,
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                # === 方法1: Python API（优先） ===
+                api_success = False
+                try:
+                    _run_edge_tts_api(text, MALE_VOICE, mp3_path)
+                    api_success = True
+                    logger.debug(f"[TTS] Python API 合成成功 ({os.path.getsize(mp3_path)} bytes)")
+                except Exception as api_err:
+                    logger.info(
+                        f"[TTS] Python API 失败 → 回退 CLI: "
+                        f"{type(api_err).__name__}: {api_err}"
+                    )
 
-            if result.returncode != 0:
-                last_error = result.stderr[:300] if result.stderr else f"返回码 {result.returncode}"
-                logger.warning(f"[TTS] Edge TTS 第{attempt}/{EDGE_MAX_RETRIES}次失败: {last_error}")
-                if attempt < EDGE_MAX_RETRIES:
-                    time.sleep(EDGE_RETRY_DELAY * attempt)
-                    continue
-                return {"status": "error", "message": f"Edge TTS 失败(已重试{EDGE_MAX_RETRIES}次): {last_error}"}
+                # === 方法2: CLI 回退 ===
+                if not api_success:
+                    cmd = [
+                        "edge-tts", "--voice", MALE_VOICE,
+                        "--volume", MALE_VOLUME,
+                        "--text", text,
+                        "--write-media", mp3_path,
+                    ]
+                    result = subprocess.run(
+                        cmd, capture_output=True, text=True, timeout=30
+                    )
+                    if result.returncode != 0:
+                        last_error = (
+                            result.stderr or f"返回码 {result.returncode}"
+                        )[:800]
+                        logger.warning(
+                            f"[TTS] Edge TTS CLI 第{attempt}/{EDGE_MAX_RETRIES}"
+                            f"次失败: {last_error}"
+                        )
+                        if attempt < EDGE_MAX_RETRIES:
+                            time.sleep(EDGE_RETRY_DELAY * attempt)
+                            continue
+                        return {
+                            "status": "error",
+                            "message": (
+                                f"Edge TTS 失败(已重试{EDGE_MAX_RETRIES}次): "
+                                f"{last_error}"
+                            ),
+                        }
 
-            # MP3 → WAV（用于 winsound 播放）
+            # === MP3 → WAV（用于 winsound 播放） ===
             try:
                 subprocess.run([
                     r"G:\ffmpeg\bin\ffmpeg.exe", "-y", "-i", mp3_path,
@@ -126,6 +198,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                 ], capture_output=True, timeout=15, check=True)
                 os.remove(mp3_path)
             except Exception:
+                # ffmpeg 不可用 → 直接播放 MP3
                 wav_path = mp3_path
                 if play:
                     os.startfile(mp3_path) if os.name == 'nt' else None
@@ -139,7 +212,9 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
 
             size_kb = round(os.path.getsize(wav_path) / 1024, 1)
             if play:
-                threading.Thread(target=_play_wav, args=(wav_path,), daemon=True).start()
+                threading.Thread(
+                    target=_play_wav, args=(wav_path,), daemon=True
+                ).start()
 
             if attempt > 1:
                 logger.info(f"[TTS] Edge TTS 第{attempt}次重试成功")
@@ -153,20 +228,75 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
 
         except subprocess.TimeoutExpired:
             last_error = "超时（30秒）"
-            logger.warning(f"[TTS] Edge TTS 第{attempt}/{EDGE_MAX_RETRIES}次超时")
+            logger.warning(
+                f"[TTS] Edge TTS 第{attempt}/{EDGE_MAX_RETRIES}次超时"
+            )
             if attempt < EDGE_MAX_RETRIES:
                 time.sleep(EDGE_RETRY_DELAY * attempt)
                 continue
-            return {"status": "error", "message": f"Edge TTS 超时(已重试{EDGE_MAX_RETRIES}次)"}
+            return {
+                "status": "error",
+                "message": f"Edge TTS 超时(已重试{EDGE_MAX_RETRIES}次)",
+            }
         except Exception as e:
-            last_error = str(e)[:300]
-            logger.warning(f"[TTS] Edge TTS 第{attempt}/{EDGE_MAX_RETRIES}次异常: {last_error}")
+            last_error = f"{type(e).__name__}: {e}"[:500]
+            logger.warning(
+                f"[TTS] Edge TTS 第{attempt}/{EDGE_MAX_RETRIES}"
+                f"次异常: {last_error}"
+            )
             if attempt < EDGE_MAX_RETRIES:
                 time.sleep(EDGE_RETRY_DELAY * attempt)
                 continue
-            return {"status": "error", "message": f"Edge TTS 失败(已重试{EDGE_MAX_RETRIES}次): {last_error}"}
+            return {
+                "status": "error",
+                "message": (
+                    f"Edge TTS 失败(已重试{EDGE_MAX_RETRIES}次): {last_error}"
+                ),
+            }
 
     return {"status": "error", "message": f"Edge TTS 失败: {last_error}"}
+
+
+# ============================================================
+# Piper TTS（女声，本地）
+# ============================================================
+
+def _speak_piper(text: str, play: bool) -> dict:
+    """Piper 女声合成 → WAV → 播放"""
+    voice = _get_voice()
+    ts = int(time.time() * 1000)
+    wav_path = str(OUTPUT_DIR / f"tts_{ts}.wav")
+
+    # 生成原始 PCM 数据
+    audio_data = b""
+    for chunk in voice.synthesize_stream_raw(text):
+        audio_data += chunk
+
+    # 写入 WAV
+    sample_rate = voice.config.sample_rate
+    with wave.open(wav_path, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(audio_data)
+
+    size_kb = round(os.path.getsize(wav_path) / 1024, 1)
+    if play:
+        threading.Thread(target=_play_wav, args=(wav_path,), daemon=True).start()
+
+    return {
+        "status": "ok",
+        "wav_path": wav_path,
+        "size_kb": size_kb,
+        "voice": "huayan",
+        "engine": "Piper TTS",
+    }
+
+
+# ============================================================
+# 公共 API
+# ============================================================
+
 def tts_speak(text: str, play: bool = True, strip_code: bool = True) -> dict:
     """
     TTS 语音合成 — 根据当前性别设置自动选择引擎。

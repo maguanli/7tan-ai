@@ -847,6 +847,8 @@ class ChatPage(QWidget):
 
 
 
+        if not hasattr(self, '_messages_layout') or self._messages_layout is None:
+            return  # 初始化阶段，布局尚未创建
         self._messages_layout.addWidget(bubble)
 
         self._messages.append(bubble)

@@ -1445,6 +1445,7 @@ class ChatPage(QWidget):
         self._voice_diag(f"[toggle] switched to {self._voice_gender!r}")
 
         # 持久化保存
+        self._voice_diag(f"[toggle] saving: gender={self._voice_gender!r} mode={self._voice_mode!r}")
         self._save_voice_gender()
 
         try:
@@ -1550,6 +1551,7 @@ class ChatPage(QWidget):
 
     def _save_voice_gender(self):
         """把当前语音设置写入数据库（立即生效，供下次启动读取）"""
+        self._voice_diag(f"[save] START: gender={self._voice_gender!r} mode={self._voice_mode!r}")
         print(f"[Voice] 保存到数据库路径 = {self._db_path()}")
         logger.info(f"[Voice] 保存到数据库路径 = {self._db_path()}")
         try:
@@ -1566,6 +1568,8 @@ class ChatPage(QWidget):
         except Exception as e:
             print(f"[Voice] 数据库保存异常: {type(e).__name__}: {e}")
             logger.error(f"[Voice] 数据库保存异常: {type(e).__name__}: {e}")
+            self._voice_diag(f"[save] FAILED: {type(e).__name__}: {e}")
+        self._voice_diag("[save] DONE")
 
 
 

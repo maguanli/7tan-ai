@@ -337,6 +337,11 @@ class TimelineView(QGraphicsView):
         self._scene.addItem(item)
         logger.info(f"[_add_clip_item] scene.addItem 完成")
         self._clip_items[clip.id] = item
+
+        # 加入场景后再启动缩略图提取，确保 update() 能正确触发重绘
+        if clip.type == "video" and clip.source_path:
+            logger.info(f"[_add_clip_item] 启动缩略图提取: {clip.id[:8]}")
+            item.start_thumb_extraction()
         item.set_snap_points(self._collect_snap_points())
         logger.info(f"[_add_clip_item] 完成")
 

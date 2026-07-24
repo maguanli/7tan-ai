@@ -217,7 +217,7 @@ def _extract_thumbs_worker(clip_id: str, src_path: str, duration: float,
             "-v", "error",
             "-",
         ]
-        logger.debug(f"[thumb] ffmpeg start: {clip_id[:8]} src={Path(src_path).name} dur={used_duration:.1f}s")
+        logger.info(f"[thumb] ffmpeg start: {clip_id[:8]} src={Path(src_path).name} dur={used_duration:.1f}s")
         proc = subprocess.run(
             cmd, capture_output=True, timeout=15,
         )
@@ -239,7 +239,7 @@ def _extract_thumbs_worker(clip_id: str, src_path: str, duration: float,
         logger.warning(f"[thumb] ffmpeg failed: {clip_id[:8]} src={Path(src_path).name} err={e}")
 
     if raw_frames:
-        logger.debug(f"[thumb] ffmpeg done: {clip_id[:8]} frames={len(raw_frames)}")
+        logger.info(f"[thumb] ffmpeg done: {clip_id[:8]} frames={len(raw_frames)}")
     else:
         stderr_tail = (proc.stderr or b"").decode(errors="replace")[-200:] if proc and proc.stderr else "(no stderr)"
         logger.warning(f"[thumb] ffmpeg produced no frames: {clip_id[:8]} src={Path(src_path).name} rc={proc.returncode if proc else '?'} stderr={stderr_tail}")
@@ -307,9 +307,8 @@ class ClipItem(QGraphicsRectItem):
                 self._thumbnails = [p]
                 self._thumb_loaded = True
 
-        # 视频类型：自动启动后台抽帧
-        if self.clip_type == "video" and self.source_path:
-            self._start_thumb_extraction()
+        # 缩略图提取由外部在 addItem 后调用 start_thumb_extraction()
+        # 以确保 item 已加入场景，update() 能正确触发重绘
 
     # ---- 属性 ----
 
@@ -367,6 +366,10 @@ class ClipItem(QGraphicsRectItem):
 
     # ---- 缩略图后台提取 ----
 
+    def start_thumb_extraction(self):
+        """公开方法：启动后台缩略图提取"""
+        self._start_thumb_extraction()
+
     def _start_thumb_extraction(self):
         """启动后台缩略图提取（加入队列，限制并发）"""
         src = self._data.get("source_path", "")
@@ -387,11 +390,11 @@ class ClipItem(QGraphicsRectItem):
         ck = _thumb_cache_key(src, ss, se)
         cached = _thumb_load_cache(ck)
         if cached:
-            logger.debug(f"[thumb] cache hit: {self.clip_id[:8]} key={ck[:8]}")
+            logger.info(f"[thumb] cache hit: {self.clip_id[:8]} key={ck[:8]}")
             self._on_thumbs_ready(self.clip_id, cached)
             return
 
-        logger.debug(f"[thumb] enqueue: {self.clip_id[:8]} src={Path(src).name} dur={dur:.1f}s")
+        logger.info(f"[thumb] enqueue: {self.clip_id[:8]} src={Path(src).name} dur={dur:.1f}s")
         _thumb_callbacks[self.clip_id] = self._on_thumbs_ready
 
         # use queue to limit concurrent ffmpeg processes

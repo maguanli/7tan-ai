@@ -12,7 +12,7 @@ from PyQt6.QtCore import Qt, QTimer
 from loguru import logger
 
 from ..theme import THEME
-from src.ui.video_editor.data_models import Project, RecordingConfig
+from src.ui.video_editor.data_models import RecordingConfig
 from src.ui.video_editor.project_manager import ProjectManager
 from src.ui.video_editor.screen_recorder import ScreenRecorder
 from src.ui.video_editor.recorder_overlay import RecorderOverlay
@@ -75,6 +75,9 @@ class VideoEditorPage(QWidget):
             }
             QPushButton:hover { background-color: #c9302c; }
             QPushButton:pressed { background-color: #ac2925; }
+            QPushButton:disabled {
+                background-color: #5cb85c; color: white;
+            }
         """)
         self._btn_record.clicked.connect(self._on_start_recording)
         cl.addWidget(self._btn_record)
@@ -118,12 +121,16 @@ class VideoEditorPage(QWidget):
             ok = self._recorder.start(config)
             if ok and self._recording_starting:
                 QTimer.singleShot(0, lambda: (
+                    self._btn_record.setText("🔴 正在录屏…"),
+                    self._btn_record.setEnabled(False),
                     self._status.setText("🔴 正在录制…"),
                     self._recording_timer.start(),
                     setattr(self, '_recording_starting', False),
                 ))
             else:
                 QTimer.singleShot(0, lambda: (
+                    self._btn_record.setText("🎥 开始录屏"),
+                    self._btn_record.setEnabled(True),
                     self._overlay.hide(),
                     self._status.setText("❌ 录制启动失败"),
                     setattr(self, '_recording_starting', False),
@@ -145,6 +152,8 @@ class VideoEditorPage(QWidget):
     def _on_overlay_stop(self):
         self._recording_timer.stop()
         self._overlay.hide()
+        self._btn_record.setText("🎥 开始录屏")
+        self._btn_record.setEnabled(True)
         result = self._recorder.stop()
         if result:
             self._status.setText(f"✅ 录制完成: {result}")
@@ -172,8 +181,12 @@ class VideoEditorPage(QWidget):
         elif state == "recording":
             self._status.setText("🔴 正在录制…")
         elif state == "stopped":
+            self._btn_record.setText("🎥 开始录屏")
+            self._btn_record.setEnabled(True)
             self._status.setText("✅ 录制已停止")
 
     def _on_recording_error(self, msg: str):
         self._status.setText(f"❌ 录制错误: {msg}")
+        self._btn_record.setText("🎥 开始录屏")
+        self._btn_record.setEnabled(True)
         QTimer.singleShot(3000, self._overlay.hide)

@@ -1436,26 +1436,57 @@ class ChatPage(QWidget):
         except Exception as e:
             logger.error(f"[TTS] 声音切换失败: {e}")
 
+    def _voice_settings_path(self):
+        """语音设置 JSON 文件路径"""
+        import sys
+        from pathlib import Path
+        if getattr(sys, 'frozen', False):
+            root = Path(sys.executable).parent
+        else:
+            root = Path(__file__).parent.parent.parent
+        return root / "data" / "voice_settings.json"
+
     def _load_voice_gender(self):
-        """从 config.yaml 恢复上次的语音性别设置"""
+        """从 JSON 文件恢复上次的语音性别（回退到 config.yaml）"""
+        import json
+        saved = None
+        json_path = self._voice_settings_path()
         try:
-            from ..config.loader import load_config
-            cfg = load_config()
-            saved = cfg.get("tts", {}).get("voice_gender", "female")
-            if saved in ("female", "male"):
-                self._voice_gender = saved
-                logger.info(f"[TTS] 已恢复声音设置: {saved}")
-            # 应用到 TTS 引擎
+            if json_path.exists():
+                data = json.loads(json_path.read_text("utf-8"))
+                saved = data.get("voice_gender")
+                if saved in ("female", "male"):
+                    self._voice_gender = saved
+                    self._voice_mode = data.get("voice_mode", False)
+        except Exception:
+            pass
+        if saved is None:
             try:
-                from data.plugins.tts_piper.tools import tts_set_gender
-                tts_set_gender(self._voice_gender)
+                from ..config.loader import load_config
+                cfg = load_config()
+                saved = cfg.get("tts", {}).get("voice_gender", "female")
+                if saved in ("female", "male"):
+                    self._voice_gender = saved
             except Exception:
-                pass  # 插件可能尚未加载，等首次切换时再设置
-        except Exception as e:
-            logger.debug(f"[TTS] 读取声音设置失败（使用默认女声）: {e}")
+                pass
+        try:
+            from data.plugins.tts_piper.tools import tts_set_gender
+            tts_set_gender(self._voice_gender)
+        except Exception:
+            pass
+        print(f"[Voice] 已恢复声音设置: {self._voice_gender}")
 
     def _save_voice_gender(self):
-        """持久化语音性别到 config.yaml"""
+        """持久化语音性别到 JSON 文件 + config.yaml"""
+        import json
+        json_path = self._voice_settings_path()
+        try:
+            json_path.parent.mkdir(parents=True, exist_ok=True)
+            data = {"voice_gender": self._voice_gender, "voice_mode": self._voice_mode}
+            json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
+            print(f"[Voice] 已保存到 JSON: {data}")
+        except Exception as e:
+            print(f"[Voice] JSON 保存失败: {e}")
         try:
             from ..config.loader import load_config, save_config
             cfg = load_config()
@@ -1463,9 +1494,8 @@ class ChatPage(QWidget):
                 cfg["tts"] = {}
             cfg["tts"]["voice_gender"] = self._voice_gender
             save_config(cfg)
-            logger.info(f"[TTS] 已保存声音设置: {self._voice_gender}")
-        except Exception as e:
-            logger.error(f"[TTS] 保存声音设置失败: {e}")
+        except Exception:
+            pass
 
     def _toggle_voice_mode(self):
         """切换语音/文字模式"""
@@ -1484,6 +1514,9 @@ class ChatPage(QWidget):
             # 🎤 清除 Agent 语音回调
             from ..agent.agent_loop import set_agent_speak_callback
             set_agent_speak_callback(None)
+
+        # 持久化语音模式
+        self._save_voice_gender()
 
     def _on_send_clicked(self):
         """发送按钮点击：语音模式走录音，文字模式走发送"""

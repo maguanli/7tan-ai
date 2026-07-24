@@ -1513,7 +1513,10 @@ class ChatPage(QWidget):
         self._voice_mode = (str(mode).lower() == "true")
         print(f"[Voice] 已从数据库恢复: gender={self._voice_gender}, mode={self._voice_mode}")
         logger.info(f"[Voice] 已从数据库恢复: gender={self._voice_gender}, mode={self._voice_mode}")
-        self._add_message("system", f"[Voice] 启动恢复: gender={self._voice_gender}, mode={self._voice_mode}")
+        try:
+            self._add_message("system", f"[Voice] 启动恢复: gender={self._voice_gender}, mode={self._voice_mode}")
+        except Exception:
+            pass  # UI 未就绪时忽略，核心值已在上面设置完毕
 
         try:
             from data.plugins.tts_piper.tools import tts_set_gender
@@ -1542,19 +1545,6 @@ class ChatPage(QWidget):
             logger.error(f"[Voice] 数据库保存异常: {type(e).__name__}: {e}")
 
 
-    def closeEvent(self, event):
-        """窗口关闭时兜底保存语音设置到数据库"""
-        try:
-            self._save_voice_gender()
-            print("[Voice] closeEvent 已保存语音设置")
-            logger.info("[Voice] closeEvent 已保存语音设置")
-        except Exception as e:
-            print(f"[Voice] closeEvent 保存异常: {e}")
-            logger.warning(f"[Voice] closeEvent 保存异常: {e}")
-        try:
-            super().closeEvent(event)
-        except Exception:
-            pass
 
     def _toggle_voice_mode(self):
         """切换语音/文字模式"""

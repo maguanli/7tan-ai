@@ -282,6 +282,23 @@ class PluginManager:
             return "installed"
         return "available"
 
+    # === 本地搜索 ===
+
+    def _search_local(self, keyword: str = "") -> list:
+        """搜索本地已安装和内置插件"""
+        manifest = self.get_manifest()
+        installed = self.get_installed()
+        results = []
+        kw = keyword.lower()
+        for p in manifest:
+            pid = p.get("id", "")
+            if kw and kw not in pid.lower() and kw not in p.get("name", "").lower():
+                continue
+            entry = dict(p)
+            entry["installed"] = pid in installed
+            results.append(entry)
+        return results
+
     # === 全网搜索 ===
 
     REMOTE_MANIFEST_URL = "https://raw.githubusercontent.com/7tan/7tan-plugins/main/manifest.json"

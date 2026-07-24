@@ -162,4 +162,4 @@ def fill_all_fields(title: str, intro: str, download_url: str,
         data = json.loads(result)
         return "📝 批量填表结果:\n" + "\n".join(data)
     except Exception:
-        return f"📝 填表已执行: {result[:300]}"
+        return f"📝 填表已执行: {result[:800]}"

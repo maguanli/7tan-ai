@@ -29,6 +29,11 @@ _voice_lock = threading.Lock()
 # === 性别切换 ===
 _voice_gender: str = "female"  # "female" | "male"
 
+# === Edge TTS 并发锁 ===
+_edge_lock = threading.Lock()
+EDGE_MAX_RETRIES = 3
+EDGE_RETRY_DELAY = 2  # 秒
+
 
 def _get_voice():
     """延迟加载 PiperVoice，线程安全"""
@@ -86,87 +91,82 @@ def tts_get_gender() -> dict:
 
 
 def _speak_edge_tts(text: str, play: bool) -> dict:
-    """Edge TTS 男声合成 → WAV → 播放"""
+    """Edge TTS 男声合成 → WAV → 播放（带重试 + 并发锁）"""
     ts = int(time.time() * 1000)
     mp3_path = str(OUTPUT_DIR / f"tts_{ts}.mp3")
     wav_path = str(OUTPUT_DIR / f"tts_{ts}.wav")
 
-    try:
-        # 使用 edge-tts CLI（最可靠方式）
-        cmd = [
-            "edge-tts", "--voice", MALE_VOICE,
-            "--volume", MALE_VOLUME,
-            "--text", text,
-            "--write-media", mp3_path,
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-
-        if result.returncode != 0:
-            return {"status": "error", "message": f"Edge TTS 失败: {result.stderr[:200]}"}
-
-        # MP3 → WAV（用于 winsound 播放）
+    last_error = ""
+    for attempt in range(1, EDGE_MAX_RETRIES + 1):
         try:
-            subprocess.run([
-                r"G:\ffmpeg\bin\ffmpeg.exe", "-y", "-i", mp3_path,
-                "-af", "volume=2.0", "-acodec", "pcm_s16le", "-ar", "22050",
-                wav_path
-            ], capture_output=True, timeout=15, check=True)
-            os.remove(mp3_path)
-        except Exception:
-            # ffmpeg 不可用时直接用 mp3（winsound 不支持 mp3，但保留文件）
-            wav_path = mp3_path
-            # 尝试用 Windows Media Player 播放 mp3
+            # 并发锁：防止两个线程同时调用 edge-tts CLI 导致崩溃
+            with _edge_lock:
+                cmd = [
+                    "edge-tts", "--voice", MALE_VOICE,
+                    "--volume", MALE_VOLUME,
+                    "--text", text,
+                    "--write-media", mp3_path,
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+
+            if result.returncode != 0:
+                last_error = result.stderr[:300] if result.stderr else f"返回码 {result.returncode}"
+                logger.warning(f"[TTS] Edge TTS 第{attempt}/{EDGE_MAX_RETRIES}次失败: {last_error}")
+                if attempt < EDGE_MAX_RETRIES:
+                    time.sleep(EDGE_RETRY_DELAY * attempt)
+                    continue
+                return {"status": "error", "message": f"Edge TTS 失败(已重试{EDGE_MAX_RETRIES}次): {last_error}"}
+
+            # MP3 → WAV（用于 winsound 播放）
+            try:
+                subprocess.run([
+                    r"G:\ffmpeg\bin\ffmpeg.exe", "-y", "-i", mp3_path,
+                    "-af", "volume=2.0", "-acodec", "pcm_s16le", "-ar", "22050",
+                    wav_path
+                ], capture_output=True, timeout=15, check=True)
+                os.remove(mp3_path)
+            except Exception:
+                wav_path = mp3_path
+                if play:
+                    os.startfile(mp3_path) if os.name == 'nt' else None
+                return {
+                    "status": "ok",
+                    "wav_path": mp3_path,
+                    "size_kb": round(os.path.getsize(mp3_path) / 1024, 1),
+                    "voice": "yunxi",
+                    "engine": "Edge TTS",
+                }
+
+            size_kb = round(os.path.getsize(wav_path) / 1024, 1)
             if play:
-                os.startfile(mp3_path) if os.name == 'nt' else None
+                threading.Thread(target=_play_wav, args=(wav_path,), daemon=True).start()
+
+            if attempt > 1:
+                logger.info(f"[TTS] Edge TTS 第{attempt}次重试成功")
             return {
                 "status": "ok",
-                "wav_path": mp3_path,
-                "size_kb": round(os.path.getsize(mp3_path) / 1024, 1),
+                "wav_path": wav_path,
+                "size_kb": size_kb,
                 "voice": "yunxi",
                 "engine": "Edge TTS",
             }
 
-        size_kb = round(os.path.getsize(wav_path) / 1024, 1)
-        if play:
-            threading.Thread(target=_play_wav, args=(wav_path,), daemon=True).start()
+        except subprocess.TimeoutExpired:
+            last_error = "超时（30秒）"
+            logger.warning(f"[TTS] Edge TTS 第{attempt}/{EDGE_MAX_RETRIES}次超时")
+            if attempt < EDGE_MAX_RETRIES:
+                time.sleep(EDGE_RETRY_DELAY * attempt)
+                continue
+            return {"status": "error", "message": f"Edge TTS 超时(已重试{EDGE_MAX_RETRIES}次)"}
+        except Exception as e:
+            last_error = str(e)[:300]
+            logger.warning(f"[TTS] Edge TTS 第{attempt}/{EDGE_MAX_RETRIES}次异常: {last_error}")
+            if attempt < EDGE_MAX_RETRIES:
+                time.sleep(EDGE_RETRY_DELAY * attempt)
+                continue
+            return {"status": "error", "message": f"Edge TTS 失败(已重试{EDGE_MAX_RETRIES}次): {last_error}"}
 
-        return {
-            "status": "ok",
-            "wav_path": wav_path,
-            "size_kb": size_kb,
-            "voice": "yunxi",
-            "engine": "Edge TTS",
-        }
-
-    except subprocess.TimeoutExpired:
-        return {"status": "error", "message": "Edge TTS 超时（30秒）"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-def _speak_piper(text: str, play: bool) -> dict:
-    """Piper 女声合成 → WAV → 播放"""
-    voice = _get_voice()
-    ts = int(time.time() * 1000)
-    wav_path = str(OUTPUT_DIR / f"tts_{ts}.wav")
-
-    with wave.open(wav_path, 'wb') as wav_file:
-        voice.synthesize_wav(text, wav_file)
-
-    size_kb = round(os.path.getsize(wav_path) / 1024, 1)
-
-    if play:
-        threading.Thread(target=_play_wav, args=(wav_path,), daemon=True).start()
-
-    return {
-        "status": "ok",
-        "wav_path": wav_path,
-        "size_kb": size_kb,
-        "voice": "huayan",
-        "engine": "Piper TTS",
-    }
-
-
+    return {"status": "error", "message": f"Edge TTS 失败: {last_error}"}
 def tts_speak(text: str, play: bool = True, strip_code: bool = True) -> dict:
     """
     TTS 语音合成 — 根据当前性别设置自动选择引擎。

@@ -639,6 +639,12 @@ class ChatPage(QWidget):
         """)
         bottom_row.addWidget(self._voice_btn)
 
+        if self._voice_mode:
+            self._voice_btn.blockSignals(True)
+            self._voice_btn.setChecked(True)
+            self._voice_btn.setText("🎤 语音中")
+            self._voice_btn.blockSignals(False)
+
         self._send_btn = QPushButton("发送 ▲")
         self._send_btn.setFixedHeight(30)
         self._send_btn.setMinimumWidth(90)

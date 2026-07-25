@@ -78,7 +78,7 @@ class VideoEditorPage(QWidget):
             QPushButton:hover { background-color: #c9302c; }
             QPushButton:pressed { background-color: #ac2925; }
             QPushButton:disabled {
-                background-color: #5cb85c; color: white;
+                background-color: #337ab7; color: white;
             }
         """)
         self._btn_record.clicked.connect(self._on_start_recording)

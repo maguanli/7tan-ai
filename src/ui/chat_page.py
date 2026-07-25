@@ -168,7 +168,7 @@ class ChatPage(QWidget):
         # 线程安全的信号连接
         self.session_loaded_signal.connect(self._on_session_loaded)
         self.messages_parsed_signal.connect(self._on_messages_parsed)
-        self.error_signal.connect(lambda msg: self._add_message("error", msg))
+        self.error_signal.connect(self._on_load_error)
 
 
 
@@ -261,6 +261,7 @@ class ChatPage(QWidget):
 
         self._sessions_ever_loaded = False
         self._loading_sessions = False  # 防抖：防止并发加载导致列表被清空
+        self._session_loading = False  # 防并发加载同一会话
 
 
 
@@ -946,29 +947,26 @@ class ChatPage(QWidget):
 
 
     def _clear_messages(self):
-
-        """清除所有消息"""
-
-                # 停止渐进渲染
-        if self._render_timer:
-            self._render_timer.stop()
-        self._render_queue.clear()
-        while self._messages_layout.count() > 0:
-
-            item = self._messages_layout.takeAt(0)
-
-            if item.widget():
-
-                item.widget().deleteLater()
-
-        self._messages.clear()
-        self._message_data.clear()
-        self._current_parsed_data.clear()
-        self._full_history_messages.clear()
-        self._rendered_start = 0
-        self._rendered_end = 0
-        self._all_rendered = True
-
+        """清除所有消息 — 抑制更新避免布局重算风暴"""
+        self._scroll.setUpdatesEnabled(False)
+        try:
+            # 停止渐进渲染
+            if self._render_timer:
+                self._render_timer.stop()
+            self._render_queue.clear()
+            while self._messages_layout.count() > 0:
+                item = self._messages_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            self._messages.clear()
+            self._message_data.clear()
+            self._current_parsed_data.clear()
+            self._full_history_messages.clear()
+            self._rendered_start = 0
+            self._rendered_end = 0
+            self._all_rendered = True
+        finally:
+            self._scroll.setUpdatesEnabled(True)
 
 
     # ==================== 模型管理 ====================
@@ -1076,6 +1074,10 @@ class ChatPage(QWidget):
                     logger.warning(f"自动加载对话最终失败: {e}")
 
         threading.Thread(target=_do_load, daemon=True).start()
+    def _on_load_error(self, msg: str):
+        """加载错误处理：重置状态 + 显示错误消息"""
+        self._session_loading = False
+        self._add_message("error", msg)
 
     def _on_sessions_loaded(self, sessions, attempt=0):
 
@@ -1092,7 +1094,7 @@ class ChatPage(QWidget):
             sidebar.load_sessions(sessions)
             logger.info(f"[ChatPage] 会话列表已更新: {len(sessions)} 条")
             if sessions:
-                sidebar.select_session(sessions[0].get("session_id", ""))
+                QTimer.singleShot(150, lambda s=sidebar, sid=sessions[0].get("session_id", ""): s.select_session(sid))
         except Exception as e:
             logger.warning(f"[ChatPage] _on_sessions_loaded 失败: {e}", exc_info=True)
         finally:
@@ -1109,7 +1111,9 @@ class ChatPage(QWidget):
         if session_id == self._current_session_id:
             logger.info(f"[ChatPage] 跳过重复加载: {session_id[:8]}...")
             return
-
+        if self._session_loading:
+            return
+        self._session_loading = True
         import threading
 
         def _do_load():
@@ -1126,13 +1130,19 @@ class ChatPage(QWidget):
 
             except Exception as e:
                 logger.warning(f"[ChatPage] 加载会话失败: {e}")
+                self._session_loading = False
                 self.error_signal.emit(f"❌ 加载对话失败: {e}")
 
         threading.Thread(target=_do_load, daemon=True).start()
+    def _on_load_error(self, msg: str):
+        """加载错误处理：重置状态 + 显示错误消息"""
+        self._session_loading = False
+        self._add_message("error", msg)
 
     def _on_session_loaded(self, session_id: str, data: dict):
         """在主线程渲染历史消息 — 后台预解析 HTML 后渲染"""
         messages = data.get("messages", [])
+        self._session_loading = False
         self._current_session_id = session_id
         self._clear_messages()
         self._full_history_messages = messages  # 保存完整历史，供向上滚动懒加载使用
@@ -1265,13 +1275,6 @@ class ChatPage(QWidget):
             self._scroll.verticalScrollBar().valueChanged.connect(
                 self._on_history_scroll)
         self._update_context_indicator()
-
-    def _scroll_to_bottom(self):
-        scroll = self._scroll
-        vbar = scroll.verticalScrollBar()
-        vbar.setValue(vbar.maximum())
-        self._messages_container.adjustSize()
-        self._messages_container.updateGeometry()
 
     def _on_history_scroll(self, value: int):
         """滚动到顶部时自动加载更多历史消息"""
@@ -1412,7 +1415,9 @@ class ChatPage(QWidget):
         if reply != QMessageBox.StandardButton.Yes:
 
             return
-
+        if self._session_loading:
+            return
+        self._session_loading = True
         import threading
 
         def _do_delete():

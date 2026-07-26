@@ -9,7 +9,6 @@ POST   /api/sources/{id}/crawl — 立即爬取
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
 
 from ...database.db import get_session, SourceSite
 from ...scheduler.jobs import crawl_source
@@ -45,44 +44,14 @@ class SourceUpdate(BaseModel):
 
 @router.get("")
 async def list_sources():
-    """获取源站列表（合并数据库 + config.yaml 中的源站）"""
-    all_sources = {}
-    
-    # 1. 从数据库读取
+    """获取源站列表（纯数据库读取，不再合并 config.yaml）"""
     session = get_session()
     try:
         db_sources = session.query(SourceSite).order_by(SourceSite.name).all()
-        for s in db_sources:
-            all_sources[s.name] = s.to_dict()
+        result = [s.to_dict() for s in db_sources]
     finally:
         session.close()
-    
-    # 2. 从 config.yaml 读取（补充数据库中没有的）
-    try:
-        from ...config.loader import load_config
-        config = load_config()
-        sources_cfg = config.get("sources", {})
-        config_sites = sources_cfg.get("sites", []) if isinstance(sources_cfg, dict) else []
-        
-        for site in config_sites:
-            if not isinstance(site, dict):
-                continue
-            name = site.get("name", "")
-            if name and name not in all_sources:
-                all_sources[name] = {
-                    "id": 0,
-                    "name": name,
-                    "url": site.get("url", ""),
-                    "site_type": site.get("type", site.get("site_type", "game")),
-                    "need_login": 0,
-                    "enabled": 1 if site.get("enabled", True) else 0,
-                    "last_crawl_at": site.get("last_crawl_at"),
-                    "crawl_interval": site.get("crawl_interval", 360),
-                }
-    except Exception as e:
-        logger.warning(f"从 config.yaml 读取源站失败: {e}")
-    
-    return {"sources": list(all_sources.values())}
+    return {"sources": result}
 
 
 @router.post("")
@@ -90,6 +59,11 @@ async def create_source(source: SourceCreate):
     """添加新源站"""
     session = get_session()
     try:
+        # 检查同名源站
+        existing = session.query(SourceSite).filter(SourceSite.name == source.name).first()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"源站已存在: {source.name}")
+        
         site = SourceSite(
             name=source.name,
             url=source.url,
@@ -104,8 +78,10 @@ async def create_source(source: SourceCreate):
         session.add(site)
         session.commit()
         session.refresh(site)
-        logger.info(f"🌐 源站已添加: {site.name}")
-        return site.to_dict()
+        logger.info(f"➕ 源站已添加: {site.name}")
+        return {"success": True, "data": site.to_dict()}
+    except HTTPException:
+        raise
     except Exception as e:
         session.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -114,23 +90,25 @@ async def create_source(source: SourceCreate):
 
 
 @router.put("/{source_id}")
-async def update_source(source_id: int, updates: SourceUpdate):
+async def update_source(source_id: int, source: SourceUpdate):
     """更新源站"""
     session = get_session()
     try:
         site = session.query(SourceSite).filter(SourceSite.id == source_id).first()
         if not site:
             raise HTTPException(status_code=404, detail="源站不存在")
-
-        update_data = updates.model_dump(exclude_none=True)
-        if "need_login" in update_data:
-            update_data["need_login"] = 1 if update_data["need_login"] else 0
-
+        
+        update_data = source.model_dump(exclude_unset=True)
         for key, value in update_data.items():
-            setattr(site, key, value)
-
+            if key in ("need_login",):
+                setattr(site, key, 1 if value else 0)
+            else:
+                setattr(site, key, value)
+        
         session.commit()
-        return site.to_dict()
+        session.refresh(site)
+        logger.info(f"✏️ 源站已更新: {site.name}")
+        return {"success": True, "data": site.to_dict()}
     except HTTPException:
         raise
     except Exception as e:
@@ -163,19 +141,17 @@ async def delete_source(source_id: int):
 
 
 @router.post("/{source_id}/crawl")
-async def crawl_now(source_id: int):
-    """立即爬取源站"""
+async def trigger_crawl(source_id: int):
+    """手动触发源站爬取"""
     session = get_session()
     try:
         site = session.query(SourceSite).filter(SourceSite.id == source_id).first()
         if not site:
             raise HTTPException(status_code=404, detail="源站不存在")
-
         if not site.enabled:
             raise HTTPException(status_code=400, detail="源站已禁用")
-
-        # 后台执行爬取
-        from ...pipeline.task_queue import get_task_queue, TaskPriority
+        
+        from ...core.pipeline.task_queue import get_task_queue, TaskPriority
         tq = get_task_queue()
         task_id = tq.submit_function(
             func=crawl_source,

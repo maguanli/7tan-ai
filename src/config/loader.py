@@ -70,17 +70,11 @@ def load_config(config_path: Path = None) -> dict:
 
 
 def get_active_ai_config() -> dict:
-    """获取当前活跃的 AI 模型配置（数据库为单一数据源）。
-
-    优先级：
-    1. 数据库 ai_configs 表中 is_active=1 的记录
-    2. config.yaml 中 ai.configs[ai.active] 的回退配置
-    3. 空 dict
+    """获取当前活跃的 AI 模型配置（数据库为单一数据源，零回退）。
 
     所有需要获取模型名/API Key/上下文窗口等参数的代码，
     必须通过此函数获取，禁止硬编码模型名。
     """
-    # 优先从数据库读取（单一数据源）
     try:
         from ..database.db import get_active_ai_config_raw
         cfg = get_active_ai_config_raw()
@@ -88,13 +82,7 @@ def get_active_ai_config() -> dict:
             return dict(cfg)
     except Exception:
         pass
-
-    # 回退到 config.yaml
-    config = load_config()
-    ai = config.get("ai", {})
-    active_key = ai.get("active", "")
-    configs = ai.get("configs", {})
-    return dict(configs.get(active_key, {}))
+    return {}
 
 
 def create_default_config(config_path: Path = None):

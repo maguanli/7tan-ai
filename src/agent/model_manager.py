@@ -224,20 +224,6 @@ class ModelManager:
         api_key = getattr(self, '_db_api_key', '').strip()
         base_url = getattr(self, '_db_base_url', '').strip()
 
-        # 回退：从 YAML 按 provider 查找
-        if not api_key or not base_url:
-            from ..config.loader import load_config
-            import re
-            import os as _os
-            cfg = load_config()
-            ai_config = cfg.get("ai", {})
-            configs = ai_config.get("configs", {})
-            provider_key = self.provider or ai_config.get("active", "deepseek")
-            model_cfg = configs.get(provider_key, configs.get(self.model_name, {}))
-            api_key = model_cfg.get("api_key", "").strip()
-            base_url = model_cfg.get("base_url", "https://api.deepseek.com/v1")
-            # 展开环境变量引用
-            api_key = re.sub(r'\$\{(\w+)\}', lambda m: _os.environ.get(m.group(1), ''), api_key)
 
         if not api_key:
             raise RuntimeError(

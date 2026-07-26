@@ -298,7 +298,7 @@ def _execute_tool_optimized(name: str, args: dict) -> str:
         if acquired:
             _heavy_lock.release()
 def _get_active_ai_config(config: dict) -> dict:
-    """从数据库获取当前活跃 AI 配置"""
+    """从数据库获取当前活跃 AI 配置（纯 DB，零回退）"""
     try:
         from ..database.db import get_active_ai_config_raw
         cfg = get_active_ai_config_raw()
@@ -306,12 +306,7 @@ def _get_active_ai_config(config: dict) -> dict:
             return cfg
     except Exception:
         pass
-    # 回退：从 config dict 读取（兼容旧格式）
-    ai = config.get("ai", {})
-    if "configs" in ai:
-        active_key = ai.get("active", "deepseek")
-        return ai["configs"].get(active_key, {})
-    return ai
+    return {}
 def run_agent_loop(
     task: str,
     session_id: str = None,

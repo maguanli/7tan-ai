@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Mini RTS - 红色警报</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;display:flex;justify-content:center;align-items:center;height:100vh;font-family:'Microsoft YaHei',sans-serif;overflow:hidden}
+#wrap{display:flex;gap:10px;height:95vh}
+#gameArea{position:relative}
+canvas{border:2px solid #444;border-radius:4px;cursor:crosshair}
+#panel{width:200px;background:#16213e;border-radius:8px;padding:14px;color:#eee;display:flex;flex-direction:column;gap:8px;overflow-y:auto;font-size:13px}
+#panel h2{text-align:center;color:#e94560;font-size:17px;border-bottom:1px solid #333;padding-bottom:8px}
+#panel .res{background:#0f3460;padding:8px;border-radius:6px;text-align:center}
+#panel .res .val{font-size:22px;font-weight:bold;color:#ffd700}
+#panel button{width:100%;padding:10px;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:bold;transition:all .2s;font-family:inherit}
+#panel button:hover{filter:brightness(1.2);transform:scale(1.02)}
+#panel button:disabled{opacity:0.4;cursor:not-allowed;filter:none;transform:none}
+.btn-build{background:#e94560;color:#fff}
+.btn-unit{background:#0f3460;color:#fff;border:1px solid #e94560}
+.btn-special{background:#ffd700;color:#000}
+#log{background:#0a0a1a;border-radius:6px;padding:8px;height:140px;overflow-y:auto;font-size:11px;color:#aaa;line-height:1.5}
+#log .good{color:#4f4}
+#log .bad{color:#f44}
+#log .info{color:#ff0}
+#miniMap{width:100%;height:100px;border:1px solid #444;border-radius:4px;background:#0a0a1a;image-rendering:pixelated}
+#hint{text-align:center;font-size:11px;color:#ff9800;min-height:20px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="gameArea">
+    <canvas id="c"></canvas>
+  </div>
+  <div id="panel">
+    <h2>⚔ 红色警报</h2>
+    <div class="res">💰 金币 <div class="val" id="goldDisp">500</div></div>
+    <div class="res">👥 人口 <span id="popDisp">0/20</span></div>
+    <button class="btn-build" id="btnBarracks" onclick="buildBarracks()">🏚 建造兵营 200💰</button>
+    <button class="btn-unit" id="btnWorker" onclick="train('worker')">👷 训练工人 50💰</button>
+    <button class="btn-unit" id="btnSoldier" onclick="train('soldier')">⚔ 训练士兵 100💰</button>
+    <button class="btn-unit" id="btnTank" onclick="train('tank')">🛡 训练坦克 250💰</button>
+    <button class="btn-special" onclick="selectAll()">📋 全选战斗单位</button>
+    <canvas id="miniMap" width="160" height="80"></canvas>
+    <div id="hint">🖱 左键选择 | 右键移动/攻击</div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+// ============ 全局变量（零class，零this） ============
+const COLS=28, ROWS=20, TILE=32;
+const W=COLS*TILE, H=ROWS*TILE;
+const canvas=document.getElementById('c');
+canvas.width=W; canvas.height=H;
+const ctx=canvas.getContext('2d');
+const miniCtx=document.getElementById('miniMap').getContext('2d');
+
+// --- 游戏状态 ---
+let pGold=500, aiGold=500;       // 独立金币！
+let pHP=300, aiHP=300;           // HQ血量
+let pMaxPop=20, aiMaxPop=20;
+let units=[], buildings=[];
+let selIds=new Set();            // 选中的单位ID
+let dragStart=null, dragEnd=null;
+let nextId=1;
+let cameraX=0, cameraY=0;
+let gameOver='';                 // ''|'win'|'lose'
+let frameCount=0;
+
+// --- 金矿 ---
+const GOLDS=[
+  {x:3,y:3},{x:8,y:2},{x:15,y:4},{x:22,y:3},{x:25,y:8},
+  {x:5,y:10},{x:12,y:12},{x:18,y:10},{x:24,y:14},{x:3,y:16},
+  {x:10,y:17},{x:20,y:17}
+];
+
+// ============ 建筑 ============
+function addBuilding(type,x,y,owner){
+  buildings.push({type,x,y,owner,hp:type==='hq'?300:150,maxHP:type==='hq'?300:150,building:true});
+}
+
+// 初始化
+function init(){
+  units=[]; buildings=[]; selIds.clear();
+  addBuilding('hq',3,2,'player');
+  addBuilding('hq',COLS-5,ROWS-3,'ai');
+  pGold=500; aiGold=500; pHP=300; aiHP=300;
+  gameOver=''; nextId=1; frameCount=0;
+  logMsg('游戏开始！造兵营→训工人采矿→训兵→攻击敌方HQ！','info');
+}
+
+// ============ 单位 ============
+function addUnit(type,x,y,owner){
+  const stats={
+    worker: {hp:30,speed:1.5,atk:3,range:1.2,name:'工人',costGold:50,pop:1},
+    soldier:{hp:60,speed:1.8,atk:10,range:4,name:'士兵',costGold:100,pop:1},
+    tank:  {hp:150,speed:1.2,atk:30,range:5,name:'坦克',costGold:250,pop:2}
+  };
+  const s=stats[type];
+  units.push({
+    id:nextId++, type,x,y,owner,
+    hp:s.hp, maxHP:s.hp, speed:s.speed, atk:s.atk, range:s.range*TILE,
+    name:s.name, costGold:s.costGold, pop:s.pop,
+    targetX:null, targetY:null, targetUnit:null,
+    goldCarry:0, mining:false, mineTarget:null,
+    attackCD:0
+  });
+}
+
+// ============ 训练 ============
+function train(type){
+  if(gameOver) return;
+  const costs={worker:50,soldier:100,tank:250};
+  const popCost={worker:1,soldier:1,tank:2};
+  if(pGold<costs[type]){logMsg('💰 金币不足！','bad');return;}
+  const pop=units.filter(u=>u.owner==='player').reduce((s,u)=>s+u.pop,0);
+  if(pop+popCost[type]>pMaxPop){logMsg('👥 人口不足！造更多兵营！','bad');return;}
+  // 需要兵营
+  const hasBarracks=buildings.some(b=>b.owner==='player'&&b.type==='barracks');
+  if(!hasBarracks){logMsg('🏚 需要先建造兵营！','bad');return;}
+
+  pGold-=costs[type];
+  const hq=buildings.find(b=>b.owner==='player'&&b.type==='hq');
+  addUnit(type,hq.x,hq.y,'player');
+  updateUI();
+  logMsg(`✅ 训练了1个${type==='worker'?'工人':type==='soldier'?'士兵':'坦克'} (-${costs[type]}💰)`,'good');
+}
+
+function buildBarracks(){
+  if(gameOver) return;
+  if(pGold<200){logMsg('💰 金币不足200！','bad');return;}
+  const hq=buildings.find(b=>b.owner==='player'&&b.type==='hq');
+  // 检查是否已有兵营
+  if(buildings.some(b=>b.owner==='player'&&b.type==='barracks')){logMsg('🏚 已有兵营！','info');return;}
+  pGold-=200;
+  addBuilding('barracks',hq.x+2,hq.y,'player');
+  pMaxPop+=10;
+  updateUI();
+  logMsg('🏚 兵营建成！人口上限+10','good');
+}
+
+// ============ 选择 ============
+function screenToWorld(sx,sy){
+  const rect=canvas.getBoundingClientRect();
+  return {x:(sx-rect.left)+cameraX, y:(sy-rect.top)+cameraY};
+}
+
+canvas.addEventListener('mousedown',e=>{
+  if(e.button===0){
+    const p=screenToWorld(e.clientX,e.clientY);
+    if(!e.ctrlKey) selIds.clear();
+    // 检查点击单位
+    let hit=null;
+    for(let i=units.length-1;i>=0;i--){
+      const u=units[i];
+      if(u.owner!=='player') continue;
+      const dx=p.x-u.x*TILE-TILE/2, dy=p.y-u.y*TILE-TILE/2;
+      if(Math.sqrt(dx*dx+dy*dy)<18){hit=u;break;}
+    }
+    if(hit){
+      if(selIds.has(hit.id)) selIds.delete(hit.id); else selIds.add(hit.id);
+    }else{
+      dragStart=p;
+    }
+  }
+});
+
+canvas.addEventListener('mousemove',e=>{
+  if(dragStart) dragEnd=screenToWorld(e.clientX,e.clientY);
+});
+
+canvas.addEventListener('mouseup',e=>{
+  if(dragStart&&dragEnd){
+    const x1=Math.min(dragStart.x,dragEnd.x), x2=Math.max(dragStart.x,dragEnd.x);
+    const y1=Math.min(dragStart.y,dragEnd.y), y2=Math.max(dragStart.y,dragEnd.y);
+    if(x2-x1>10||y2-y1>10){
+      selIds.clear();
+      for(const u of units){
+        if(u.owner!=='player') continue;
+        const ux=u.x*TILE+TILE/2, uy=u.y*TILE+TILE/2;
+        if(ux>=x1&&ux<=x2&&uy>=y1&&uy<=y2) selIds.add(u.id);
+      }
+    }
+  }
+  dragStart=null; dragEnd=null;
+});
+
+canvas.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  if(gameOver) return;
+  const p=screenToWorld(e.clientX,e.clientY);
+  const gx=Math.round((p.x-TILE/2)/TILE), gy=Math.round((p.y-TILE/2)/TILE);
+  const cx=Math.max(0,Math.min(COLS-1,gx)), cy=Math.max(0,Math.min(ROWS-1,gy));
+
+  // 检查右键目标是不是敌人
+  let enemyHit=null;
+  for(const u of units){
+    if(u.owner==='player') continue;
+    const dx=p.x-u.x*TILE-TILE/2, dy=p.y-u.y*TILE-TILE/2;
+    if(Math.sqrt(dx*dx+dy*dy)<20){enemyHit=u;break;}
+  }
+  // 检查是不是敌方建筑
+  let bldHit=null;
+  if(!enemyHit){
+    for(const b of buildings){
+      if(b.owner==='player') continue;
+      const dx=p.x-b.x*TILE-TILE/2, dy=p.y-b.y*TILE-TILE/2;
+      if(Math.sqrt(dx*dx+dy*dy)<TILE){bldHit=b;break;}
+    }
+  }
+
+  for(const id of selIds){
+    const u=units.find(v=>v.id===id);
+    if(!u) continue;
+    if(enemyHit){u.targetUnit=enemyHit; u.targetX=null; u.targetY=null;}
+    else if(bldHit){u.targetX=bldHit.x; u.targetY=bldHit.y; u.targetUnit=null;}
+    else{u.targetX=cx; u.targetY=cy; u.targetUnit=null;}
+  }
+  if(selIds.size>0){
+    const tgt=enemyHit?`攻击${enemyHit.name}`:bldHit?`攻击建筑`:`移动到(${cx},${cy})`;
+    logMsg(`📋 ${selIds.size}个单位 → ${tgt}`,'info');
+  }
+});
+
+// ============ 全选 ============
+function selectAll(){
+  selIds.clear();
+  for(const u of units){
+    if(u.owner!=='player') continue;
+    if(u.type!=='worker') selIds.add(u.id);
+  }
+  logMsg(`📋 已选中 ${selIds.size} 个战斗单位`,'info');
+}
+
+// ============ 键盘 ============
+document.addEventListener('keydown',e=>{
+  const speed=8;
+  if(e.key==='w'||e.key==='ArrowUp') cameraY=Math.max(0,cameraY-speed);
+  if(e.key==='s'||e.key==='ArrowDown') cameraY=Math.min(H-canvas.clientHeight,cameraY+speed);
+  if(e.key==='a'||e.key==='ArrowLeft') cameraX=Math.max(0,cameraX-speed);
+  if(e.key==='d'||e.key==='ArrowRight') cameraX=Math.min(W-canvas.clientWidth,cameraX+speed);
+  if(e.key==='Escape'){selIds.clear();logMsg('已取消选择','info');}
+});
+
+// ============ AI ============
+function aiTick(){
+  if(gameOver) return;
+  const aiUnits=units.filter(u=>u.owner==='ai');
+  const aiBlds=buildings.filter(b=>b.owner==='ai');
+  const hasBarracks=aiBlds.some(b=>b.type==='barracks');
+  const workers=aiUnits.filter(u=>u.type==='worker');
+  const fighters=aiUnits.filter(u=>u.type!=='worker');
+  const aiPop=aiUnits.reduce((s,u)=>s+u.pop,0);
+
+  // 建兵营
+  if(!hasBarracks&&aiGold>=200){
+    const hq=aiBlds.find(b=>b.type==='hq');
+    addBuilding('barracks',hq.x-2,hq.y,'ai');
+    aiGold-=200; aiMaxPop+=10;
+  }
+
+  // 训工人
+  if(workers.length<3&&aiGold>=50&&aiPop+1<=aiMaxPop&&hasBarracks){
+    const hq=aiBlds.find(b=>b.type==='hq');
+    addUnit('worker',hq.x,hq.y,'ai');
+    aiGold-=50;
+  }
+
+  // 训兵
+  if(fighters.length<5&&aiGold>=100&&aiPop+1<=aiMaxPop&&hasBarracks){
+    const hq=aiBlds.find(b=>b.type==='hq');
+    const r=Math.random();
+    if(r<0.7) addUnit('soldier',hq.x,hq.y,'ai');
+    else if(aiGold>=250&&aiPop+2<=aiMaxPop) addUnit('tank',hq.x,hq.y,'ai');
+    aiGold-=(r<0.7?100:250);
+  }
+
+  // AI单位行为
+  for(const u of aiUnits){
+    if(u.type==='worker'){
+      // 采矿
+      if(u.goldCarry>=15){
+        const hq=aiBlds.find(b=>b.type==='hq');
+        u.targetX=hq.x; u.targetY=hq.y; u.targetUnit=null; u.mining=false;
+      }else if(!u.mining||!u.mineTarget){
+        let nearest=null,nd=Infinity;
+        for(const g of GOLDS){
+          const d=Math.abs(u.x-g.x)+Math.abs(u.y-g.y);
+          if(d<nd){nd=d;nearest=g;}
+        }
+        if(nearest){u.mineTarget=nearest; u.mining=true; u.targetX=nearest.x; u.targetY=nearest.y; u.targetUnit=null;}
+      }
+    }else{
+      // 战斗单位：攻击玩家HQ
+      const pHQ=buildings.find(b=>b.owner==='player'&&b.type==='hq');
+      u.targetX=pHQ.x; u.targetY=pHQ.y;
+    }
+  }
+}
+
+// ============ 游戏逻辑 ============
+function updateUnits(){
+  for(const u of units){
+    if(u.attackCD>0) u.attackCD--;
+
+    // 攻击
+    if(u.targetUnit&&u.targetUnit.hp>0){
+      const dx=u.targetUnit.x-u.x, dy=u.targetUnit.y-u.y;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist<u.range&&u.attackCD<=0){
+        u.targetUnit.hp-=u.atk;
+        u.attackCD=20;
+        if(u.targetUnit.hp<=0&&u.targetUnit.owner==='player') logMsg(`💀 你的${u.targetUnit.name}被敌方${u.name}击杀`,'bad');
+        if(u.targetUnit.hp<=0&&u.targetUnit.owner==='ai') logMsg(`💀 敌方${u.targetUnit.name}被你的${u.name}击杀`,'good');
+      }else if(dist>u.range*1.5){
+        u.targetX=u.targetUnit.x; u.targetY=u.targetUnit.y;
+      }
+    }
+
+    // 攻击建筑
+    if(!u.targetUnit&&u.targetX!==null&&u.targetY!==null){
+      const bld=buildings.find(b=>b.x===u.targetX&&b.y===u.targetY&&b.owner!==u.owner);
+      if(bld){
+        const dx=bld.x-u.x, dy=bld.y-u.y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<u.range&&u.attackCD<=0){
+          bld.hp-=u.atk;
+          u.attackCD=20;
+          if(bld.owner==='player'&&bld.hp<=0) logMsg(`💥 你的建筑被摧毁！`,'bad');
+          if(bld.owner==='ai'&&bld.hp<=0) logMsg(`💥 敌方建筑被摧毁！`,'good');
+        }
+        if(dist>u.range*1.5) u.targetUnit=null; // 继续移动靠近
+      }
+    }
+
+    // 移动
+    if(u.targetX!==null&&u.targetY!==null&&!u.targetUnit){
+      const dx=u.targetX-u.x, dy=u.targetY-u.y;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist>0.5){
+        // 简单避障：跳过建筑格子
+        let nx=u.x+(dx/dist)*u.speed*0.02;
+        let ny=u.y+(dy/dist)*u.speed*0.02;
+        let blocked=false;
+        for(const b of buildings){
+          if(Math.abs(nx-b.x)<0.8&&Math.abs(ny-b.y)<0.8&&u.owner!==b.owner){blocked=true;break;}
+        }
+        if(!blocked){u.x=nx; u.y=ny;}
+      }else{
+        u.targetX=null; u.targetY=null;
+      }
+    }
+
+    // 工人采矿
+    if(u.type==='worker'&&u.mining&&u.mineTarget&&u.targetX===null){
+      // 在矿旁边
+      const dx2=u.mineTarget.x-u.x, dy2=u.mineTarget.y-u.y;
+      if(Math.abs(dx2)<0.8&&Math.abs(dy2)<0.8){
+        u.goldCarry+=0.3;
+        if(u.goldCarry>=15){
+          const hq=buildings.find(b=>b.owner===u.owner&&b.type==='hq');
+          u.targetX=hq.x; u.targetY=hq.y; u.mining=false;
+        }
+      }else{
+        // 走向矿
+        const d=Math.sqrt(dx2*dx2+dy2*dy2);
+        u.x+=dx2/d*u.speed*0.02;
+        u.y+=dy2/d*u.speed*0.02;
+      }
+    }
+
+    // 工人送货到HQ
+    if(u.type==='worker'&&u.goldCarry>=15&&u.targetX!==null){
+      const hq=buildings.find(b=>b.owner===u.owner&&b.type==='hq');
+      const dx3=hq.x-u.x, dy3=hq.y-u.y;
+      if(Math.abs(dx3)<0.6&&Math.abs(dy3)<0.6){
+        if(u.owner==='player') pGold+=u.goldCarry;
+        else aiGold+=u.goldCarry;
+        u.goldCarry=0;
+        u.targetX=null; u.targetY=null;
+        // 继续采矿
+        let nearest=null,nd=Infinity;
+        for(const g of GOLDS){
+          const d=Math.abs(u.x-g.x)+Math.abs(u.y-g.y);
+          if(d<nd){nd=d;nearest=g;}
+        }
+        if(nearest){u.mineTarget=nearest; u.mining=true;}
+      }
+    }
+
+    // 移动到目标（非战斗移动）
+    if(u.targetX!==null&&u.targetY!==null&&!u.targetUnit&&u.type!=='worker'){
+      const dx4=u.targetX-u.x, dy4=u.targetY-u.y;
+      const dist4=Math.sqrt(dx4*dx4+dy4*dy4);
+      if(dist4>0.4){
+        u.x+=dx4/dist4*u.speed*0.02;
+        u.y+=dy4/dist4*u.speed*0.02;
+      }else{u.targetX=null;u.targetY=null;}
+    }
+    // 工人移动
+    if(u.type==='worker'&&u.targetX!==null&&u.targetY!==null&&u.goldCarry<15){
+      const dx5=u.targetX-u.x, dy5=u.targetY-u.y;
+      const dist5=Math.sqrt(dx5*dx5+dy5*dy5);
+      if(dist5>0.4){
+        u.x+=dx5/dist5*u.speed*0.02;
+        u.y+=dy5/dist5*u.speed*0.02;
+      }else{u.targetX=null;u.targetY=null;}
+    }
+  }
+
+  // 清理死单位
+  units=units.filter(u=>u.hp>0);
+  // 清理死建筑
+  buildings=buildings.filter(b=>b.hp>0);
+}
+
+function checkWin(){
+  const pHQ=buildings.find(b=>b.owner==='player'&&b.type==='hq');
+  const aHQ=buildings.find(b=>b.owner==='ai'&&b.type==='hq');
+  if(!pHQ){gameOver='lose';logMsg('💀 你的HQ被摧毁了！你输了！','bad');}
+  if(!aHQ){gameOver='win';logMsg('🏆 敌方HQ被摧毁！你赢了！','good');}
+}
+
+function updateUI(){
+  document.getElementById('goldDisp').textContent=Math.floor(pGold);
+  const pop=units.filter(u=>u.owner==='player').reduce((s,u)=>s+u.pop,0);
+  document.getElementById('popDisp').textContent=`${pop}/${pMaxPop}`;
+  // 按钮状态
+  const hasBarracks=buildings.some(b=>b.owner==='player'&&b.type==='barracks');
+  document.getElementById('btnBarracks').disabled=!!hasBarracks||pGold<200||!!gameOver;
+  document.getElementById('btnWorker').disabled=!hasBarracks||pGold<50||!!gameOver;
+  document.getElementById('btnSoldier').disabled=!hasBarracks||pGold<100||!!gameOver;
+  document.getElementById('btnTank').disabled=!hasBarracks||pGold<250||!!gameOver;
+}
+
+// ============ 渲染 ============
+function draw(){
+  ctx.clearRect(0,0,W,H);
+
+  // 背景网格
+  ctx.fillStyle='#1a3a1a';
+  ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#1f4f1f';
+  ctx.lineWidth=0.5;
+  for(let i=0;i<=COLS;i++){ctx.beginPath();ctx.moveTo(i*TILE,0);ctx.lineTo(i*TILE,H);ctx.stroke();}
+  for(let i=0;i<=ROWS;i++){ctx.beginPath();ctx.moveTo(0,i*TILE);ctx.lineTo(W,i*TILE);ctx.stroke();}
+
+  // 金矿
+  for(const g of GOLDS){
+    ctx.fillStyle='#ffd700';
+    ctx.beginPath();ctx.arc(g.x*TILE+TILE/2,g.y*TILE+TILE/2,12,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#000';
+    ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText('⛏',g.x*TILE+TILE/2,g.y*TILE+TILE/2+5);
+  }
+
+  // 建筑
+  for(const b of buildings){
+    const isPlayer=b.owner==='player';
+    ctx.fillStyle=isPlayer?'#3388ff':'#dd3333';
+    ctx.fillRect(b.x*TILE+2,b.y*TILE+2,TILE-4,TILE-4);
+    if(b.type==='hq'){
+      ctx.fillStyle='#fff';
+      ctx.font='16px sans-serif';ctx.textAlign='center';
+      ctx.fillText(isPlayer?'🏠':'🏠',b.x*TILE+TILE/2,b.y*TILE+TILE/2+6);
+    }else if(b.type==='barracks'){
+      ctx.fillStyle='#fff';
+      ctx.font='14px sans-serif';ctx.textAlign='center';
+      ctx.fillText('⚔',b.x*TILE+TILE/2,b.y*TILE+TILE/2+5);
+    }
+    // HP条
+    const hpPct=b.hp/b.maxHP;
+    ctx.fillStyle='#000';
+    ctx.fillRect(b.x*TILE,b.y*TILE-6,TILE,4);
+    ctx.fillStyle=hpPct>0.5?'#0f0':hpPct>0.25?'#ff0':'#f00';
+    ctx.fillRect(b.x*TILE,b.y*TILE-6,TILE*hpPct,4);
+    // 边框
+    ctx.strokeStyle=isPlayer?'#66aaff':'#ff6666';
+    ctx.lineWidth=2;
+    ctx.strokeRect(b.x*TILE,b.y*TILE,TILE,TILE);
+  }
+
+  // 单位
+  for(const u of units){
+    const isPlayer=u.owner==='player';
+    const ux=u.x*TILE, uy=u.y*TILE;
+    ctx.fillStyle=isPlayer?'#44aaff':'#ff4444';
+    ctx.beginPath();ctx.arc(ux+TILE/2,uy+TILE/2,u.type==='tank'?14:10,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=isPlayer?'#88ccff':'#ff8888';
+    ctx.lineWidth=1.5;ctx.stroke();
+    // emoji
+    ctx.font=u.type==='tank'?'16px sans-serif':'12px sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText(u.type==='worker'?'👷':u.type==='soldier'?'⚔':'🛡',ux+TILE/2,uy+TILE/2+5);
+    // 选中高亮
+    if(selIds.has(u.id)){
+      ctx.strokeStyle='#00ff00';
+      ctx.lineWidth=3;
+      ctx.beginPath();ctx.arc(ux+TILE/2,uy+TILE/2,16,0,Math.PI*2);ctx.stroke();
+    }
+    // HP条
+    const hpPct2=u.hp/u.maxHP;
+    ctx.fillStyle='#000';
+    ctx.fillRect(ux,uy-5,TILE,3);
+    ctx.fillStyle=hpPct2>0.5?'#0f0':hpPct2>0.25?'#ff0':'#f00';
+    ctx.fillRect(ux,uy-5,TILE*hpPct2,3);
+    // 采矿进度
+    if(u.type==='worker'&&u.goldCarry>0){
+      ctx.fillStyle='#ffd700';
+      ctx.fillRect(ux,uy-9,TILE*(u.goldCarry/15),2);
+    }
+  }
+
+  // 框选虚线
+  if(dragStart&&dragEnd){
+    const x1=Math.min(dragStart.x,dragEnd.x), y1=Math.min(dragStart.y,dragEnd.y);
+    ctx.strokeStyle='#0f0';
+    ctx.lineWidth=1;
+    ctx.setLineDash([4,4]);
+    ctx.strokeRect(x1,y1,Math.abs(dragEnd.x-dragStart.x),Math.abs(dragEnd.y-dragStart.y));
+    ctx.setLineDash([]);
+  }
+
+  // 游戏结束
+  if(gameOver){
+    ctx.fillStyle='rgba(0,0,0,0.7)';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=gameOver==='win'?'#ffd700':'#ff3333';
+    ctx.font='bold 60px "Microsoft YaHei",sans-serif';ctx.textAlign='center';
+    ctx.fillText(gameOver==='win'?'🏆 胜利！':'💀 失败！',W/2,H/2);
+    ctx.fillStyle='#fff';
+    ctx.font='24px "Microsoft YaHei",sans-serif';
+    ctx.fillText('按 R 重新开始',W/2,H/2+50);
+  }
+}
+
+function drawMiniMap(){
+  miniCtx.fillStyle='#0a0a1a';
+  miniCtx.fillRect(0,0,160,80);
+  const sx=160/COLS, sy=80/ROWS;
+  // 建筑
+  for(const b of buildings){
+    miniCtx.fillStyle=b.owner==='player'?'#44f':'#f44';
+    miniCtx.fillRect(b.x*sx,b.y*sy,2,2);
+  }
+  // 金矿
+  miniCtx.fillStyle='#ffd700';
+  for(const g of GOLDS) miniCtx.fillRect(g.x*sx,g.y*sy,1,1);
+  // 单位
+  for(const u of units){
+    miniCtx.fillStyle=u.owner==='player'?'#8cf':'#f88';
+    miniCtx.fillRect(u.x*sx,u.y*sy,1,1);
+  }
+  // 视野框
+  miniCtx.strokeStyle='#fff';
+  miniCtx.strokeRect(cameraX/W*160,cameraY/H*80,canvas.clientWidth/W*160,canvas.clientHeight/H*80);
+}
+
+// ============ 日志 ============
+function logMsg(msg,cls){
+  const log=document.getElementById('log');
+  log.innerHTML+=`<span class="${cls}">${msg}</span><br>`;
+  log.scrollTop=log.scrollHeight;
+}
+
+// ============ 主循环 ============
+function gameLoop(){
+  if(!gameOver){
+    frameCount++;
+    updateUnits();
+    if(frameCount%60===0) aiTick();
+    if(frameCount%120===0) checkWin();
+    if(frameCount%10===0) updateUI();
+  }
+  draw();
+  drawMiniMap();
+  requestAnimationFrame(gameLoop);
+}
+
+// 重启
+document.addEventListener('keydown',e=>{
+  if(e.key==='r'||e.key==='R'){
+    if(gameOver){init();updateUI();}
+  }
+});
+
+// 启动！
+init();
+updateUI();
+gameLoop();
+</script>
+</body>
+</html>

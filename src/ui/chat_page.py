@@ -306,8 +306,9 @@ class ChatPage(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
-        # 每次显示都重新加载会话列表（带短延迟确保 sidebar 就绪）
+        # 每次显示都重新加载会话列表和模型列表（带短延迟确保 sidebar 就绪）
         QTimer.singleShot(300, self._auto_load_sessions)
+        QTimer.singleShot(300, self._load_model_list)
 
 
     def _sidebar_ref(self):
@@ -1474,9 +1475,9 @@ class ChatPage(QWidget):
 
     @staticmethod
     def _db_path():
-        """games.db 路径 — 基于 __file__，不受工作目录影响"""
-        from pathlib import Path
-        return str(Path(__file__).resolve().parent.parent.parent / "data" / "games.db")
+        """games.db 路径 — 复用 db._get_data_dir()，确保与核心模块一致"""
+        from src.database.db import _get_data_dir
+        return str(_get_data_dir() / "games.db")
 
     def _db_set(self, key, value):
         """写入一条设置到 app_settings 表（独立短连接，立即提交）"""

@@ -377,8 +377,29 @@ def self_restart(delay_seconds: int = 2) -> str:
     if not os.path.exists(exe_path):
         return f"❌ 找不到可执行文件: {exe_path}"
 
+    # 构建启动命令
+    if getattr(sys, 'frozen', False):
+        # PyInstaller 打包的 exe — 直接运行
+        cmd = [exe_path]
+    else:
+        # Python 脚本模式 — 需要传 main.py
+        # sys.argv[0] 可能是 main.py 的相对路径，转绝对路径
+        script_path = Path(sys.argv[0]).resolve()
+        if not script_path.exists():
+            # 回退：在项目根目录找 main.py
+            script_path = PROJECT_ROOT / "main.py"
+        cmd = [exe_path, str(script_path)]
+
+    logger.info(f"🔄 重启命令: {' '.join(cmd)}")
+
     # 启动新进程
-    subprocess.Popen([exe_path], creationflags=0x00000008 if os.name == 'nt' else 0)
+    if os.name == 'nt':
+        subprocess.Popen(cmd, creationflags=0x00000008)  # CREATE_NO_WINDOW
+    else:
+        subprocess.Popen(cmd, start_new_session=True)
+
+    # 等待指定秒数后退出（让调用方有时间响应）
+    time.sleep(delay_seconds)
 
     # 退出当前进程
     os._exit(0)

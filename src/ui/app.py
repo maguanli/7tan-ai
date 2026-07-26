@@ -168,6 +168,14 @@ QSplitter::handle {{
     background-color: {THEME['border']};
     width: 1px;
 }}
+QToolTip {{
+    background-color: {THEME['bg_card']};
+    color: {THEME['text_primary']};
+    border: 1px solid {THEME['border']};
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+}}
 """
 
 import math as _math
@@ -833,11 +841,11 @@ class TasksPage(QWidget):
         times = {name: picker.time().toString("HH:mm") for name, picker in self._time_pickers.items()}
         payload = {"enabled": enable, "times": times}
         
-        worker = ApiWorker("PUT", f"{API_BASE}/api/settings/scheduler", payload)
-        worker.finished.connect(lambda d: self._on_scheduler_saved(enable))
-        worker.error.connect(lambda e: QMessageBox.warning(self, "错误", f"操作失败: {e}"))
-        worker.start()
-        self._keep_worker(worker)
+        self._edit_worker = ApiWorker("PUT", f"{API_BASE}/api/settings/scheduler", payload)
+        self._edit_worker.finished.connect(lambda d: self._on_scheduler_saved(enable))
+        self._edit_worker.error.connect(lambda e: QMessageBox.warning(self, "错误", f"操作失败: {e}"))
+        self._edit_worker.start()
+        self._keep_worker(self._edit_worker)
 
     def _on_scheduler_saved(self, enabled: bool):
         if enabled:
@@ -1071,16 +1079,16 @@ class SourcesPage(QWidget):
         dialog_layout.addRow(buttons)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            worker = ApiWorker("PUT", f"{API_BASE}/api/sources/{source['id']}", {
+            self._edit_worker = ApiWorker("PUT", f"{API_BASE}/api/sources/{source['id']}", {
                 "name": name_edit.text(),
                 "url": url_edit.text(),
                 "site_type": type_combo.currentText(),
                 "need_login": need_login.isChecked(),
                 "enabled": enabled_check.isChecked(),
             })
-            worker.finished.connect(lambda d: self.refresh())
-            worker.error.connect(lambda e: QMessageBox.warning(self, "错误", f"编辑失败: {e}"))
-            worker.start()
+            self._edit_worker.finished.connect(lambda d: self.refresh())
+            self._edit_worker.error.connect(lambda e: QMessageBox.warning(self, "错误", f"编辑失败: {e}"))
+            self._edit_worker.start()
 
     def _delete_selected(self):
         source = self._get_selected_source()
@@ -1090,10 +1098,10 @@ class SourcesPage(QWidget):
             f"确定要删除源站 '{source['name']}' 吗？\n此操作不可撤销。",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-            worker = ApiWorker("DELETE", f"{API_BASE}/api/sources/{source['id']}")
-            worker.finished.connect(lambda d: self.refresh())
-            worker.error.connect(lambda e: QMessageBox.warning(self, "错误", f"删除失败: {e}"))
-            worker.start()
+            self._del_worker = ApiWorker("DELETE", f"{API_BASE}/api/sources/{source['id']}")
+            self._del_worker.finished.connect(lambda d: self.refresh())
+            self._del_worker.error.connect(lambda e: QMessageBox.warning(self, "错误", f"删除失败: {e}"))
+            self._del_worker.start()
 
     def _add_source(self):
         dialog = QDialog(self)
@@ -1220,7 +1228,7 @@ class BrowserPage(QWidget):
         self._back_btn.setFixedWidth(36)
         self._back_btn.clicked.connect(self._back_current)
         self._back_btn.setEnabled(False)
-        self._back_btn.setStyleSheet(f"QPushButton {{ font-size:14px; padding:4px; }}")
+        self._back_btn.setStyleSheet("QPushButton { font-size:14px; padding:4px; }")
         url_layout.addWidget(self._back_btn)
 
         self._forward_btn = QPushButton("➡")
@@ -1228,14 +1236,14 @@ class BrowserPage(QWidget):
         self._forward_btn.setFixedWidth(36)
         self._forward_btn.clicked.connect(self._forward_current)
         self._forward_btn.setEnabled(False)
-        self._forward_btn.setStyleSheet(f"QPushButton {{ font-size:14px; padding:4px; }}")
+        self._forward_btn.setStyleSheet("QPushButton { font-size:14px; padding:4px; }")
         url_layout.addWidget(self._forward_btn)
 
         refresh_btn = QPushButton("🔄")
         refresh_btn.setToolTip("刷新")
         refresh_btn.setFixedWidth(36)
         refresh_btn.clicked.connect(self._refresh_current)
-        refresh_btn.setStyleSheet(f"QPushButton {{ font-size:14px; padding:4px; }}")
+        refresh_btn.setStyleSheet("QPushButton { font-size:14px; padding:4px; }")
         url_layout.addWidget(refresh_btn)
 
         self._url_input = QLineEdit()
@@ -1805,9 +1813,9 @@ class ChatBrowserSplitPage(QWidget):
         panel_label.setStyleSheet("font-size: 18px; padding-right: 2px;")
         self._panel_bar.addWidget(panel_label)
 
-        self._btn_browser = self._make_panel_btn("🌐 浏览器", True)
+        self._btn_browser = self._make_panel_btn("🌐 浏览器", False)
         self._btn_code = self._make_panel_btn("📝 源代码", False)
-        self._btn_console = self._make_panel_btn("📟 控制台", False)
+        self._btn_console = self._make_panel_btn("📟 控制台", True)
         self._btn_video_editor = self._make_panel_btn("🎬 录屏", False)
 
         self._btn_browser.clicked.connect(lambda: self._switch_panel(0, self._btn_browser))
@@ -1832,6 +1840,9 @@ class ChatBrowserSplitPage(QWidget):
 
         splitter.addWidget(left_container)
         splitter.addWidget(self.chat)
+
+        # 默认显示控制台
+        self._browser_stack.setCurrentIndex(3)
         splitter.setSizes([700, 540])
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
@@ -1852,6 +1863,8 @@ class ChatBrowserSplitPage(QWidget):
         super().showEvent(event)
         if not self._initialized:
             self._initialized = True
+        # refresh model list when switching to workspace
+        QTimer.singleShot(100, self.chat._load_model_list)
 
     def _make_panel_btn(self, text: str, active: bool = False):
         """创建面板切换按钮"""
@@ -2096,7 +2109,7 @@ class SettingsPage(QWidget):
         super().showEvent(event)
         if not self._loaded:
             self._loaded = True
-            self._load_settings()
+        self._load_settings()  # refresh every show
 
     # =================== AI 模型 Tab ===================
     def _build_ai_tab(self):
@@ -3570,7 +3583,6 @@ class SettingsPage(QWidget):
         item = self._plugin_list.item(row)
         if not item:
             return
-        pid = item.data(Qt.ItemDataRole.UserRole)
         info = item.data(Qt.ItemDataRole.UserRole + 1)  # 存储完整插件信息
         is_installed = item.data(Qt.ItemDataRole.UserRole + 2) or False
 

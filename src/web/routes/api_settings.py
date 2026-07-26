@@ -126,9 +126,10 @@ async def update_settings(updates: dict):
                 _update_env_model(active_key, active_model)
 
         elif ai_updates and "active" in ai_updates:
-            # 仅切换 active（无 configs 变更）→ 同步到 YAML
-            config.setdefault("ai", {})["active"] = ai_updates["active"]
-            logger.info(f"⚙️ AI active 已同步到 YAML: {ai_updates['active']}")
+            # 仅切换 active（无 configs 变更）→ 写入数据库
+            from ...database.db import set_active_ai_config
+            set_active_ai_config(ai_updates["active"])
+            logger.info(f"⚙️ AI active 已写入数据库: {ai_updates['active']}")
 
             # 🔄 同步 .env 中的模型变量（从数据库读取模型名）
             try:

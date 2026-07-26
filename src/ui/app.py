@@ -606,6 +606,10 @@ class ResourceTablePage(QWidget):
         self._table = QTableWidget()
         self._table.setColumnCount(6)
         self._table.setHorizontalHeaderLabels(["ID", "标题", "类型", "来源", "状态", "创建时间"])
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._table.customContextMenuRequested.connect(self._on_context_menu)
         self._table.horizontalHeader().setStretchLastSection(True)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -623,6 +627,24 @@ class ResourceTablePage(QWidget):
         refresh_btn = QPushButton("🔄 刷新")
         refresh_btn.clicked.connect(self.refresh)
         bottom.addWidget(refresh_btn)
+
+        delete_btn = QPushButton("🗑️ 删除选中")
+        delete_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {THEME['danger']};
+                color: #fff;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 13px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #ff4444;
+            }}
+        """)
+        delete_btn.clicked.connect(self._delete_selected)
+        bottom.addWidget(delete_btn)
         bottom.addStretch()
         self._count_label = QLabel("共 0 条")
         self._count_label.setStyleSheet(f"color: {THEME['text_muted']};")
@@ -689,6 +711,61 @@ class ResourceTablePage(QWidget):
         rid = self._table.item(row, 0).text()
         title = self._table.item(row, 1).text()
         QMessageBox.information(self, "资源详情", f"ID: {rid}\n标题: {title}\n\n完整详情功能开发中...")
+
+    def _on_context_menu(self, pos):
+        """右键菜单"""
+        menu = QMenu(self)
+        delete_action = menu.addAction("🗑️ 删除")
+        action = menu.exec(self._table.viewport().mapToGlobal(pos))
+        if action == delete_action:
+            self._delete_selected()
+
+    def _delete_selected(self):
+        """删除选中的资源"""
+        selected = self._table.selectionModel().selectedRows()
+        if not selected:
+            QMessageBox.warning(self, "提示", "请先选中要删除的资源")
+            return
+
+        ids = []
+        titles = []
+        for idx in selected:
+            row = idx.row()
+            rid = self._table.item(row, 0).text()
+            title = self._table.item(row, 1).text()
+            ids.append(rid)
+            titles.append(title)
+
+        names = "\n".join(f"  [{i}] {t}" for i, t in zip(ids, titles))
+        reply = QMessageBox.question(
+            self, "确认删除",
+            f"确定要删除以下 {len(ids)} 个资源吗？\n\n{names}\n\n此操作不可撤销！",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        deleted = 0
+        failed = 0
+        for rid in ids:
+            try:
+                resp = requests.delete(f"{API_BASE}/api/resources/{rid}", timeout=10)
+                if resp.status_code == 200:
+                    deleted += 1
+                else:
+                    failed += 1
+                    logger.error(f"删除失败 ID={rid}: {resp.text}")
+            except Exception as e:
+                failed += 1
+                logger.error(f"删除异常 ID={rid}: {e}")
+
+        if failed == 0:
+            QMessageBox.information(self, "完成", f"已删除 {deleted} 个资源")
+        else:
+            QMessageBox.warning(self, "完成", f"成功 {deleted} 个，失败 {failed} 个")
+
+        self.refresh()
 
 
 # ===== 任务监控页面 =====
@@ -823,6 +900,10 @@ class TasksPage(QWidget):
         self._table = QTableWidget()
         self._table.setColumnCount(5)
         self._table.setHorizontalHeaderLabels(["任务ID", "类型", "状态", "进度", "开始时间"])
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._table.customContextMenuRequested.connect(self._on_context_menu)
         self._table.horizontalHeader().setStretchLastSection(True)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self._table.verticalHeader().setVisible(False)
@@ -991,6 +1072,10 @@ class SourcesPage(QWidget):
         self._table = QTableWidget()
         self._table.setColumnCount(7)
         self._table.setHorizontalHeaderLabels(["ID", "名称", "URL", "类型", "需登录", "状态", "上次爬取"])
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self._table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._table.customContextMenuRequested.connect(self._on_context_menu)
         self._table.horizontalHeader().setStretchLastSection(True)
         self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self._table.setColumnHidden(0, True)  # 隐藏 ID 列

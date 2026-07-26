@@ -1,5 +1,5 @@
 """
-数据库操作工具 — 去重检查、版本比较、资源查询
+数据库操作工具 — 去重检查、版本比较、资源查询、资源删除
 """
 from datetime import datetime
 
@@ -66,51 +66,72 @@ def db_check_duplicate(source_site: str, source_id: str, title: str = "") -> str
     category="db",
     requires_db=True,
 )
-def db_save_resource(**kwargs) -> str:
-    """保存资源到数据库"""
-    import json as _json
+def db_save_resource(
+    resource_type: str = "game",
+    title: str = "",
+    source_url: str = "",
+    source_site: str = "",
+    source_id: str = "",
+    category: str = "",
+    version: str = "",
+    platform: str = "",
+    language: str = "",
+    file_size: str = "",
+    intro: str = "",
+    tags: str = "",
+    status: str = "pending",
+) -> str:
+    """保存或更新资源"""
     session = get_session()
     try:
-        # 去重
-        source_site = kwargs.get("source_site", "")
-        source_id = kwargs.get("source_id", "")
+        # 查重：按 source_site + source_id
+        existing = None
         if source_site and source_id:
             existing = session.query(Resource).filter(
                 Resource.source_site == source_site,
                 Resource.source_id == source_id,
             ).first()
-            if existing:
-                # 更新
-                for key, val in kwargs.items():
-                    if key == "tags" and isinstance(val, str):
-                        try:
-                            val = _json.loads(val)
-                        except Exception:
-                            pass
-                    if hasattr(existing, key) and val is not None:
-                        setattr(existing, key, val)
-                existing.updated_at = datetime.now()
-                session.commit()
-                return f"✅ 资源已更新: ID={existing.id}"
 
-        # 新建
-        tags_val = kwargs.pop("tags", None)
-        resource = Resource(**kwargs)
-        if tags_val:
-            if isinstance(tags_val, str):
-                try:
-                    resource.tags = _json.loads(tags_val)
-                except Exception:
-                    resource.tags = [tags_val]
-            else:
-                resource.tags = tags_val
-
-        session.add(resource)
-        session.commit()
-        logger.info(f"💾 资源已保存: ID={resource.id}, 标题={resource.title}")
-        return f"✅ 资源已保存: ID={resource.id}"
+        if existing:
+            # 更新
+            existing.title = title or existing.title
+            existing.source_url = source_url or existing.source_url
+            existing.category = category or existing.category
+            existing.version = version or existing.version
+            existing.platform = platform or existing.platform
+            existing.language = language or existing.language
+            existing.file_size = file_size or existing.file_size
+            existing.intro = intro or existing.intro
+            if tags:
+                import json
+                existing.tags = json.loads(tags) if isinstance(tags, str) else tags
+            existing.status = status or existing.status
+            session.commit()
+            return f"✅ 已更新: {existing.title} (ID={existing.id})"
+        else:
+            # 新建
+            import json
+            resource = Resource(
+                resource_type=resource_type,
+                title=title,
+                source_url=source_url,
+                source_site=source_site,
+                source_id=source_id,
+                category=category,
+                version=version,
+                platform=platform,
+                language=language,
+                file_size=file_size,
+                intro=intro,
+                tags=json.loads(tags) if isinstance(tags, str) and tags else [],
+                status=status,
+            )
+            session.add(resource)
+            session.commit()
+            return f"✅ 已创建: {title} (ID={resource.id})"
     except Exception as e:
         session.rollback()
+        logger.error(f"保存资源失败: {e}")
         return f"❌ 保存失败: {e}"
     finally:
         session.close()
@@ -133,31 +154,35 @@ def db_save_resource(**kwargs) -> str:
     category="db",
     requires_db=True,
 )
-def db_query_resources(resource_type: str = None, status: str = None,
-                       keyword: str = None, limit: int = 20, offset: int = 0) -> str:
+def db_query_resources(
+    resource_type: str = "",
+    status: str = "",
+    keyword: str = "",
+    limit: int = 20,
+    offset: int = 0,
+) -> str:
     """查询资源列表"""
     session = get_session()
     try:
-        q = session.query(Resource)
+        query = session.query(Resource)
         if resource_type:
-            q = q.filter(Resource.resource_type == resource_type)
+            query = query.filter(Resource.resource_type == resource_type)
         if status:
-            q = q.filter(Resource.status == status)
+            query = query.filter(Resource.status == status)
         if keyword:
-            q = q.filter(Resource.title.contains(keyword))
+            query = query.filter(Resource.title.contains(keyword))
 
-        total = q.count()
-        rows = q.order_by(Resource.created_at.desc()).offset(offset).limit(limit).all()
+        total = query.count()
+        rows = query.order_by(Resource.created_at.desc()).offset(offset).limit(limit).all()
 
-        lines = [f"📦 资源列表 (共 {total} 个, 显示 {len(rows)} 个):\n"]
+        if not rows:
+            return "📭 没有符合条件的资源"
+
+        lines = [f"📋 资源列表 (共 {total} 条，显示 {len(rows)} 条):"]
         for r in rows:
-            size_str = r.file_size or "未知"
-            status_icon = {"published": "✅", "pending": "⏳", "downloading": "🔄",
-                           "failed": "❌", "rewriting": "✏️"}.get(r.status, "📌")
-            type_icon = "🎮" if r.resource_type == "game" else "💻"
             lines.append(
-                f"  {status_icon} [{r.id}] {type_icon} {r.title} "
-                f"v{r.version or '?'} | {size_str} | {r.status}"
+                f"  [{r.id}] {r.title} | {r.resource_type} | {r.status} | "
+                f"{r.version or '-'} | {r.created_at.strftime('%Y-%m-%d') if r.created_at else '-'}"
             )
         return "\n".join(lines)
     finally:
@@ -180,7 +205,7 @@ def db_query_resources(resource_type: str = None, status: str = None,
     requires_db=True,
 )
 def db_check_version(title: str, new_version: str, source_site: str = "") -> str:
-    """版本比较"""
+    """检查版本"""
     session = get_session()
     try:
         existing = session.query(Resource).filter(
@@ -236,5 +261,65 @@ def db_add_task_log(resource_id: int, task_type: str, status: str, message: str 
         session.add(log)
         session.commit()
         return f"✅ 日志已记录: {task_type} - {status}"
+    finally:
+        session.close()
+
+
+@register_tool(
+    name="db_delete_resource",
+    description="删除资源及其关联的任务日志。支持按ID删除或按标题模糊匹配删除（唯一匹配时）。需要 confirm=True 确认。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "resource_id": {"type": "integer", "description": "资源 ID（与 title 二选一）"},
+            "title": {"type": "string", "description": "资源标题（模糊匹配，与 resource_id 二选一）"},
+            "confirm": {"type": "boolean", "description": "必须显式确认删除，防止误操作", "default": False},
+        },
+        "required": ["confirm"]
+    },
+    category="db",
+    requires_db=True,
+)
+def db_delete_resource(resource_id: int = None, title: str = "", confirm: bool = False) -> str:
+    """删除资源及其关联任务日志"""
+    if not confirm:
+        return "⚠️ 请设置 confirm=True 确认删除操作"
+
+    session = get_session()
+    try:
+        if resource_id:
+            resource = session.query(Resource).filter(Resource.id == resource_id).first()
+            if not resource:
+                return f"❌ 未找到 ID={resource_id} 的资源"
+        elif title.strip():
+            resources = session.query(Resource).filter(
+                Resource.title.contains(title.strip())
+            ).all()
+            if not resources:
+                return f"❌ 未找到标题包含「{title}」的资源"
+            if len(resources) > 1:
+                lines = [f"⚠️ 找到 {len(resources)} 条匹配资源，请用 resource_id 精确指定："]
+                for r in resources:
+                    lines.append(f"  ID={r.id}: {r.title} [{r.resource_type}] {r.status}")
+                return "\n".join(lines)
+            resource = resources[0]
+        else:
+            return "❌ 请提供 resource_id 或 title"
+
+        rid = resource.id
+        rtitle = resource.title
+
+        # 删除关联任务日志
+        deleted_logs = session.query(TaskLog).filter(TaskLog.resource_id == rid).delete()
+        # 删除资源
+        session.delete(resource)
+        session.commit()
+
+        logger.info(f"🗑️ 已删除资源: {rtitle} (ID={rid}), 关联日志 {deleted_logs} 条")
+        return f"✅ 已删除: {rtitle} (ID={rid})\n  同时删除了 {deleted_logs} 条关联任务日志"
+    except Exception as e:
+        session.rollback()
+        logger.error(f"删除资源失败: {e}")
+        return f"❌ 删除失败: {e}"
     finally:
         session.close()

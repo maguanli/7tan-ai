@@ -1253,6 +1253,30 @@ class SourcesPage(QWidget):
             self._worker2.error.connect(lambda e: QMessageBox.warning(self, "错误", f"添加失败: {e}"))
             self._worker2.start()
 
+    def _on_context_menu(self, pos):
+        """右键菜单 — 删除源站"""
+        menu = QMenu(self)
+        delete_action = menu.addAction("🗑️ 删除")
+        action = menu.exec(self._table.viewport().mapToGlobal(pos))
+        if action == delete_action:
+            self._delete_selected_source()
+
+    def _delete_selected_source(self):
+        selected = self._table.selectionModel().selectedRows()
+        if not selected:
+            QMessageBox.warning(self, "提示", "请先选中要删除的源站")
+            return
+        for idx in selected:
+            row = idx.row()
+            sid = self._table.item(row, 0).text()
+            if sid:
+                try:
+                    self._worker3 = ApiWorker("DELETE", f"{API_BASE}/api/sources/{sid}")
+                    self._worker3.finished.connect(self.refresh)
+                    self._worker3.start()
+                except Exception as e:
+                    logger.error(f"删除源站失败: {e}")
+
 
 
 # ===== 独立浏览器窗口 =====

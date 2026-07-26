@@ -470,7 +470,7 @@ def run_agent_loop(
             "iteration": iteration,
             "role": "assistant",
             "content": content,
-            "tool_calls": [tc.model_dump() for tc in tool_calls_raw] if tool_calls_raw else None,
+            "tool_calls": [_safe_tc_to_dict(tc) for tc in tool_calls_raw] if tool_calls_raw else None,
             "finish_reason": finish_reason,
         }
         all_logs.append(log_entry)
@@ -781,6 +781,28 @@ def _truncate_args(args: dict) -> str:
     if len(s) > 80:
         return s[:77] + "..."
     return s
+
+
+def _safe_tc_to_dict(tc) -> dict:
+    """安全地将 tool_call 对象转为 dict，兼容 SimpleNamespace / Pydantic / 原生 dict"""
+    if isinstance(tc, dict):
+        return tc
+    if hasattr(tc, 'model_dump'):
+        return tc.model_dump()
+    # SimpleNamespace 或其他对象：手动提取关键字段
+    result = {}
+    for attr in ('id', 'type', 'function'):
+        if hasattr(tc, attr):
+            val = getattr(tc, attr)
+            if attr == 'function' and hasattr(val, '__dict__'):
+                result[attr] = {k: v for k, v in val.__dict__.items()}
+            elif hasattr(val, '__dict__') and not isinstance(val, dict):
+                result[attr] = {k: v for k, v in val.__dict__.items()}
+            else:
+                result[attr] = val
+    return result
+
+
 def run_agent_loop_streaming(
     task: str,
     session_id: str = None,
@@ -900,7 +922,7 @@ def run_agent_loop_streaming(
             "iteration": iteration,
             "role": "assistant",
             "content": content,
-            "tool_calls": [tc.model_dump() for tc in tool_calls_raw] if tool_calls_raw else None,
+            "tool_calls": [_safe_tc_to_dict(tc) for tc in tool_calls_raw] if tool_calls_raw else None,
             "finish_reason": finish_reason,
         }
         all_logs.append(log_entry)

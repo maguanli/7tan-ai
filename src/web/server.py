@@ -74,119 +74,66 @@ app.include_router(chat_router)
 app.include_router(project_router)
 app.include_router(terminal_router)
 
-# ===== 根路由 =====
 
-@app.get("/")
-async def root():
-    """根路由 — API 信息"""
-    return JSONResponse({"app": "7Tan", "version": app.version, "mode": "desktop"})
-
-
+# ===== 健康检查 =====
 @app.get("/api/health")
-async def health():
-    """健康检查 — 返回版本号和系统状态"""
-    try:
-        from ..tools.monitor_tools import health_check
-        detail = health_check()
-    except Exception:
-        detail = "ok"
-    return JSONResponse({"status": "ok", "version": app.version, "detail": detail})
+async def health_check():
+    return {"status": "ok", "version": "5.1.0"}
 
 
-@app.get("/api/version")
-async def version():
-    """版本信息"""
-    return JSONResponse({"version": app.version, "name": "7Tan"})
-
-
-# ===== 生命周期 =====
-
-@app.on_event("startup")
-async def startup():
-    # 确保 CDN 离线缓存目录存在（§21.2）
-    cache_dir = PROJECT_ROOT / "data" / "web_cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    logger.info("🌐 API 服务器启动于 http://localhost:9800")
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    logger.info("🌐 API 服务器关闭")
-
-
-# ===== WebSocket =====
-
+# ===== WebSocket 端点 =====
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     client_id = await ws_manager.connect(ws)
-
     try:
         while True:
             data = await ws.receive_json()
-            await _handle_ws_message(ws, client_id, data)
+            msg_type = data.get("type", "")
+            if msg_type == "chat":
+                await _handle_chat(ws, client_id, data)
+            elif msg_type == "pipeline":
+                await _handle_pipeline(ws, client_id, data)
+            elif msg_type == "status":
+                await _handle_status(ws, client_id)
+            elif msg_type == "jobs":
+                await _handle_jobs(ws, client_id)
+            elif msg_type == "resources":
+                await _handle_resources(ws, client_id)
+            elif msg_type == "get_sessions":
+                await _handle_get_sessions(ws)
+            else:
+                await ws.send_json({"type": "error", "data": {"message": f"未知消息类型: {msg_type}"}})
     except WebSocketDisconnect:
-        logger.info(f"🔌 WebSocket 断开: {client_id}")
-    except Exception as e:
-        logger.error(f"WebSocket 错误: {e}")
-    finally:
         ws_manager.disconnect(client_id)
-
-
-async def _handle_ws_message(ws: WebSocket, client_id: str, data: dict):
-    """处理 WebSocket 消息 — 路由到具体处理器"""
-    msg_type = data.get("type", "")
-
-    if msg_type == "ping":
-        await ws.send_json({"type": "pong"})
-
-    elif msg_type == "chat":
-        await _handle_chat(ws, client_id, data)
-
-    elif msg_type == "run_pipeline":
-        await _handle_pipeline(ws, client_id, data)
-
-    elif msg_type == "get_status":
-        await _handle_status(ws, client_id)
-
-    elif msg_type == "get_jobs":
-        await _handle_jobs(ws, client_id)
-
-    elif msg_type == "get_resources":
-        await _handle_resources(ws, client_id)
-
-    elif msg_type == "confirm_response":
-        await ws_manager.handle_message(client_id, data)
-
-    elif msg_type == "get_chat_history":
-        await _handle_get_chat_history(ws, data)
-
-    elif msg_type == "get_sessions":
-        await _handle_get_sessions(ws)
-
-    else:
-        await ws.send_json({"type": "error", "data": {"message": f"未知消息类型: {msg_type}"}})
+    except Exception as e:
+        logger.error(f"WebSocket 异常: {e}")
+        try:
+            ws_manager.disconnect(client_id)
+        except Exception:
+            pass
 
 
 async def _handle_chat(ws: WebSocket, client_id: str, data: dict):
-    """处理 AI 对话"""
+    """处理聊天消息"""
+    import threading
+    from ..agent.agent_loop import run_agent_loop
+    from ..agent.conversation import save_message
+    from ..database.db import get_session, save_message as db_save
+
+    session_id = data.get("session_id", "")
     message = data.get("message", "")
-    model = data.get("model")
-    session_id = data.get("session_id")
+    model = data.get("model", "")
 
-    from ..agent.conversation import create_session, save_message
-
-    if not session_id:
-        session_id = create_session()
-
-    save_message(session_id, "user", message)
-    await ws.send_json({"type": "chat_start", "session_id": session_id})
+    if not message.strip():
+        await ws.send_json({"type": "chat_error", "session_id": session_id, "error": "消息不能为空"})
+        return
 
     loop = asyncio.get_event_loop()
 
     def run_and_report():
         try:
-            from ..agent.agent_loop import run_agent_loop
-            result = run_agent_loop(task=message, session_id=session_id, model_name=model)
+            save_message(session_id, "user", message)
+            result = run_agent_loop(task=message, model_name=model, session_id=session_id)
             save_message(session_id, "assistant", result.get("result", ""))
             asyncio.run_coroutine_threadsafe(
                 ws.send_json({
@@ -254,20 +201,6 @@ async def _handle_resources(ws: WebSocket, client_id: str):
         await ws.send_json({"type": "error", "data": {"message": str(e)}})
 
 
-async def _handle_get_chat_history(ws: WebSocket, data: dict):
-    session_id = data.get("session_id")
-    try:
-        from ..agent.conversation import get_session_messages
-        messages = get_session_messages(session_id) if session_id else []
-        await ws.send_json({
-            "type": "chat_history",
-            "session_id": session_id,
-            "data": messages,
-        })
-    except Exception as e:
-        await ws.send_json({"type": "error", "data": {"message": str(e)}})
-
-
 async def _handle_get_sessions(ws: WebSocket):
     try:
         from ..agent.conversation import get_recent_sessions
@@ -278,11 +211,34 @@ async def _handle_get_sessions(ws: WebSocket):
 
 
 def start_server(host: str = "0.0.0.0", port: int = 9800):
-    """启动 FastAPI 服务器"""
+    """
+    启动 FastAPI 服务器
+
+    使用预创建的 socket（设置 SO_REUSEADDR），避免重启时
+    Windows TIME_WAIT（最长 120 秒）导致端口被占用，新进程无法 bind。
+    """
     import uvicorn
+    import socket
+
     logger.info(f"🌐 正在启动 API 服务器 on {host}:{port}...")
+
+    # 预创建 socket，在 bind 前设置 SO_REUSEADDR
+    # 这样旧进程退出后，新进程可以立即复用端口，无需等待 TIME_WAIT 释放
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    sock.bind((host, port))
+
+    config = uvicorn.Config(app, log_level="info", log_config=None)
+    server = uvicorn.Server(config)
+
     try:
-        uvicorn.run(app, host=host, port=port, log_level="info", log_config=None)
+        server.run(sockets=[sock])
     except Exception as e:
         logger.exception(f"❌ API 服务器异常退出: {e}")
         raise
+    finally:
+        try:
+            sock.close()
+        except Exception:
+            pass

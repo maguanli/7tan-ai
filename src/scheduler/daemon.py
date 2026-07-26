@@ -7,6 +7,7 @@ import sys
 import signal
 import subprocess
 import time
+import urllib.request
 from pathlib import Path
 from typing import Optional
 
@@ -14,62 +15,111 @@ from loguru import logger
 
 
 # ============================================================
-# 自重启 (§13)
+# 统一优雅重启 (§13) — Web API 和 AI 工具共用
 # ============================================================
 
-def restart_self():
+def graceful_restart(delay_seconds: int = 2, close_browser_flag: bool = True):
     """
-    Python 进程优雅重启
+    统一优雅重启函数
+    
+    供两处调用:
+    - Web API:  POST /api/settings/restart → restart_self()
+    - AI 工具:  self_restart() → self_modify_tools.py
 
-    工作流:
-    1. 保存当前状态到磁盘
-    2. 关闭所有资源（浏览器/数据库连接）
-    3. 启动新进程（subprocess.Popen）
-    4. 退出当前进程
-
-    局限性见 §13.2
+    完整流程:
+    1. 停止调度器（避免任务中断残留）
+    2. 关闭浏览器（可选，由调用方决定）
+    3. 释放数据库连接池（避免 SQLite 损坏）
+    4. 保存运行状态到磁盘
+    5. 启动新进程
+    6. 轮询验证新进程健康（最多 10 秒）
+    7. 退出当前进程
     """
-    logger.info("🔄 正在重启...")
+    logger.info("🔄 正在优雅重启...")
 
-    # 1. 保存状态
+    # ===== 阶段 1: 停止调度器 =====
+    try:
+        from src.scheduler.scheduler import stop_scheduler
+        stop_scheduler()
+        logger.info("⏰ 调度器已停止")
+    except Exception as e:
+        logger.warning(f"调度器停止失败（继续重启）: {e}")
+
+    # ===== 阶段 2: 关闭浏览器 =====
+    if close_browser_flag:
+        try:
+            from src.tools.browser_tools import close_browser
+            close_browser()
+            logger.info("🌐 浏览器已关闭")
+        except Exception:
+            pass  # 浏览器可能未启动
+
+    # ===== 阶段 3: 释放数据库连接池 =====
+    try:
+        from src.database.db import _engine as _db_engine
+        if _db_engine:
+            _db_engine.dispose()
+            logger.info("💾 数据库连接池已释放")
+    except Exception as e:
+        logger.warning(f"数据库关闭失败（继续重启）: {e}")
+
+    # ===== 阶段 4: 保存运行状态 =====
     try:
         _save_state()
+        logger.info("💾 运行状态已保存")
     except Exception as e:
         logger.warning(f"状态保存失败（继续重启）: {e}")
 
-    # 2. 关闭资源
-    try:
-        from src.tools.browser_tools import close_browser
-        close_browser()
-    except Exception:
-        pass  # 浏览器可能未启动，忽略关闭异常
-
-    # 3. 启动新进程
+    # ===== 阶段 5: 启动新进程 =====
     if getattr(sys, 'frozen', False):
-        exe = sys.executable
-        args = sys.argv[1:]
+        cmd = [sys.executable, *sys.argv[1:]]
     else:
-        exe = sys.executable
-        args = [sys.argv[0], *sys.argv[1:]]
+        script_path = Path(sys.argv[0]).resolve()
+        if not script_path.exists():
+            script_path = _get_project_root() / "main.py"
+        cmd = [sys.executable, str(script_path), *sys.argv[1:]]
+
+    logger.info(f"🔄 启动新进程: {' '.join(cmd)}")
 
     try:
-        subprocess.Popen(
-            [exe, *args],
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
-            start_new_session=True,
-        )
-        logger.info("✅ 新进程已启动，即将退出")
-        # 给新进程一点时间初始化
-        time.sleep(1)
+        if os.name == 'nt':
+            subprocess.Popen(
+                cmd,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+        else:
+            subprocess.Popen(cmd, start_new_session=True)
+        logger.info("✅ 新进程已启动")
     except Exception as e:
         logger.error(f"❌ 启动新进程失败: {e}")
+        # 新进程启动失败，不退出当前进程，让用户知道出了问题
+        return
 
-    # 4. 退出
+    # ===== 阶段 6: 验证新进程健康 =====
+    port = _get_server_port()
+    time.sleep(delay_seconds)
+
+    if _verify_new_process(port, timeout=10):
+        logger.info("✅ 新进程健康检查通过")
+    else:
+        logger.warning("⚠️ 新进程健康检查超时（可能端口未就绪），继续退出")
+
+    # ===== 阶段 7: 退出 =====
     os._exit(0)
 
 
+def restart_self():
+    """
+    Web API 重启入口
+    
+    由 POST /api/settings/restart 调用。
+    关闭浏览器后重启（前端用户可见操作）。
+    """
+    graceful_restart(delay_seconds=2, close_browser_flag=True)
+
+
 def _save_state():
-    """保存关键运行状态"""
+    """保存关键运行状态到 data/state.json"""
     from datetime import datetime
     import json
 
@@ -81,6 +131,46 @@ def _save_state():
     state_path = Path("data/state.json")
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2))
+
+
+def _get_project_root() -> Path:
+    """获取项目根目录"""
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent.parent.parent
+
+
+def _get_server_port() -> int:
+    """从配置文件读取服务器端口，默认 9800"""
+    try:
+        from src.config.loader import load_config
+        config = load_config()
+        return config.get("server", {}).get("port", 9800)
+    except Exception:
+        return 9800
+
+
+def _verify_new_process(port: int, timeout: int = 10) -> bool:
+    """
+    轮询验证新进程是否成功启动
+    
+    通过 GET /api/health 检查，每秒一次，直到超时。
+    返回 True 表示新进程已就绪。
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/health",
+                method="GET",
+            )
+            resp = urllib.request.urlopen(req, timeout=2)
+            if resp.status == 200:
+                return True
+        except Exception:
+            pass
+        time.sleep(1)
+    return False
 
 
 # ============================================================
@@ -172,16 +262,17 @@ class Daemon:
         pid = self.get_pid()
         if pid:
             try:
-                if os.name == "nt":
-                    os.kill(pid, signal.CTRL_BREAK_EVENT)
-                else:
-                    os.kill(pid, signal.SIGTERM)
-                logger.info(f"🛑 已发送停止信号到 PID {pid}")
-            except OSError as e:
-                logger.error(f"停止进程失败: {e}")
+                os.kill(pid, signal.SIGTERM)
+                time.sleep(0.5)
+                if self.is_running():
+                    os.kill(pid, signal.SIGKILL)
+                    time.sleep(0.5)
+                logger.info(f"🛑 守护进程已停止 (PID: {pid})")
+            except OSError:
+                pass
         self._remove_pidfile()
 
-    def setup_signal_handlers(self):
+    def _setup_signal_handlers(self):
         """设置信号处理器"""
         def _handle_exit(signum, frame):
             logger.info(f"收到信号 {signum}，正在退出...")
@@ -198,33 +289,25 @@ class Daemon:
     def run_forever(self, main_func, *args, **kwargs):
         """
         守护进程主循环
-
+        
         Args:
-            main_func: 主逻辑函数
-            *args, **kwargs: 传递给 main_func 的参数
+            main_func: 主循环回调函数，应返回 True 继续或 False 退出
         """
-        self.setup_signal_handlers()
+        self._setup_signal_handlers()
         self._write_pidfile()
-
-        logger.info(f"🏃 守护进程运行中 (PID: {os.getpid()})")
+        logger.info(f"🛡️ 守护进程已启动 (PID: {os.getpid()})")
 
         try:
-            main_func(*args, **kwargs)
-
-            # 如果 main_func 返回，进入空闲循环
             while self._running:
-                time.sleep(1)
-
+                try:
+                    result = main_func(*args, **kwargs)
+                    if result is False:
+                        break
+                except Exception as e:
+                    logger.error(f"守护进程主循环异常: {e}")
+                    time.sleep(5)
         except KeyboardInterrupt:
-            logger.info("👋 守护进程被中断")
-        finally:
-            self._cleanup()
-
-    def _cleanup(self):
-        """清理资源"""
-        try:
-            from src.tools.browser_tools import close_browser
-            close_browser()
+            logger.info("收到键盘中断")
         except Exception:
             pass
         self._remove_pidfile()

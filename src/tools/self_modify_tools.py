@@ -368,39 +368,8 @@ def verify_integrity() -> str:
     category="self_modify",
 )
 def self_restart(delay_seconds: int = 2) -> str:
-    """重启应用程序"""
-    logger.warning("🔄 正在重启...")
-    import subprocess
-    import os
-
-    exe_path = sys.executable
-    if not os.path.exists(exe_path):
-        return f"❌ 找不到可执行文件: {exe_path}"
-
-    # 构建启动命令
-    if getattr(sys, 'frozen', False):
-        # PyInstaller 打包的 exe — 直接运行
-        cmd = [exe_path]
-    else:
-        # Python 脚本模式 — 需要传 main.py
-        # sys.argv[0] 可能是 main.py 的相对路径，转绝对路径
-        script_path = Path(sys.argv[0]).resolve()
-        if not script_path.exists():
-            # 回退：在项目根目录找 main.py
-            script_path = PROJECT_ROOT / "main.py"
-        cmd = [exe_path, str(script_path)]
-
-    logger.info(f"🔄 重启命令: {' '.join(cmd)}")
-
-    # 启动新进程
-    if os.name == 'nt':
-        subprocess.Popen(cmd, creationflags=0x00000008)  # CREATE_NO_WINDOW
-    else:
-        subprocess.Popen(cmd, start_new_session=True)
-
-    # 等待指定秒数后退出（让调用方有时间响应）
-    time.sleep(delay_seconds)
-
-    # 退出当前进程
-    os._exit(0)
+    """重启应用程序 — AI 工具调用入口，委托给 daemon.py:graceful_restart()"""
+    from ..scheduler.daemon import graceful_restart
+    logger.warning("🔄 正在重启（AI 工具触发）...")
+    graceful_restart(delay_seconds=delay_seconds, close_browser_flag=False)
     return "🔄 正在重启..."

@@ -1025,6 +1025,35 @@ class TasksPage(QWidget):
                 self._table.setItem(i, 3, QTableWidgetItem(str(progress)))
             self._table.setItem(i, 4, QTableWidgetItem(str(t.get("started_at", ""))))
 
+    def _on_context_menu(self, pos):
+        """右键菜单 — 删除任务"""
+        menu = QMenu(self)
+        delete_action = menu.addAction("🗑️ 删除")
+        action = menu.exec(self._table.viewport().mapToGlobal(pos))
+        if action == delete_action:
+            self._delete_selected_task()
+
+    def _delete_selected_task(self):
+        selected = self._table.selectionModel().selectedRows()
+        if not selected:
+            QMessageBox.warning(self, "提示", "请先选中要删除的任务")
+            return
+        ids = []
+        for idx in selected:
+            row = idx.row()
+            tid = self._table.item(row, 0).text()
+            if tid:
+                ids.append(tid)
+        if not ids:
+            return
+        for tid in ids:
+            try:
+                self._worker = ApiWorker("DELETE", f"{API_BASE}/api/scheduler/job/{tid}")
+                self._worker.finished.connect(self.refresh)
+                self._worker.start()
+            except Exception as e:
+                logger.error(f"删除任务失败: {e}")
+
 
 # ===== 数据源管理页面 =====
 

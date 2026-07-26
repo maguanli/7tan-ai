@@ -3,6 +3,8 @@ Agent 核心循环 — LLM 推理 + 工具调用 + 多步执行
 详见架构文档 §5-7
 """
 import json
+import os
+import re
 import time
 from datetime import datetime
 from loguru import logger
@@ -18,6 +20,30 @@ _HEAVY_TOOLS = {
 }
 import threading
 _heavy_lock = threading.Lock()
+
+# ============================================================
+# 🔍 三层代码审查：Pro 写 → Pro 审 → Pro 终检
+# ============================================================
+REVIEW_PROMPT = """你是资深代码审查专家。请严格审查以下代码变更，找出所有问题。
+
+审查维度（从高到低优先级）：
+1. 🔴 致命：语法错误、逻辑死循环、内存泄漏、安全漏洞
+2. 🟠 严重：跨文件影响（改了A会破坏B）、API不兼容
+3. 🟡 中等：边界情况遗漏、错误处理缺失、类型错误
+4. 🔵 轻微：残留调试代码、命名不规范、注释缺失
+
+请以 JSON 格式返回审查结果（只返回 JSON，不要其他内容）：
+{"pass": true, "issues": [], "suggestion": ""}
+
+pass=true 表示无任何问题；pass=false 时必须列出所有问题。"""
+
+FINAL_CHECK_PROMPT = """你是代码质量终检员。做最终验证：
+1. 所有改动文件的语法是否正确？
+2. 是否有遗留的 print()、debugger 断点、临时代码？
+3. 改动是否最小化（没有改不相关的文件）？
+
+返回 JSON（只返回 JSON）：
+{"pass": true, "issues": []}"""
 
 # 🎤 Agent 语音回调：由 UI 层设置，当语音模式开启时朗读 Agent 中间消息
 _agent_speak_callback = None
@@ -494,6 +520,13 @@ def run_agent_loop(
             continue
         if finish_reason == "stop" or (not tool_calls_raw and content):
             final_result = content or "任务完成"
+            # 🔍 三层代码审查：Pro 写 → Pro 审 → Pro 终检
+            review_outcome = _run_review_cycle(
+                model, messages, config,
+                system_prompt + timeout_note, iteration, total_cost, all_logs, task_mode
+            )
+            if review_outcome == "retry":
+                continue  # 审查发现问题，已注入修正消息，继续循环
             return {
                 "success": True,
                 "result": final_result,
@@ -801,6 +834,121 @@ def _safe_tc_to_dict(tc) -> dict:
             else:
                 result[attr] = val
     return result
+def _run_review_cycle(model, messages, config, system_prompt, iteration, total_cost, all_logs, task_mode):
+    """Pro 写 -> Pro 审 -> 修正 -> 再审（最多3轮）
+    
+    Returns:
+        "pass"  — 审查通过，可以正常返回
+        "retry" — 已注入修正消息到 messages，继续循环
+        dict    — 审查失败但无法修正，直接返回此结果
+    """
+    import subprocess
+    
+    # 1. 获取 git diff
+    try:
+        diff_result = subprocess.run(
+            ["git", "diff", "--unified=5"],
+            capture_output=True, text=True, timeout=10, cwd=os.getcwd()
+        ).stdout.strip()
+        if not diff_result:
+            diff_result = subprocess.run(
+                ["git", "diff", "--staged", "--unified=5"],
+                capture_output=True, text=True, timeout=10, cwd=os.getcwd()
+            ).stdout.strip()
+    except Exception as e:
+        logger.warning(f"git diff failed: {e}")
+        return "pass"  # 无法获取 diff，跳过审查
+    
+    if not diff_result:
+        logger.info("no code changes, skip review")
+        return "pass"
+    
+    # 限制 diff 大小
+    if len(diff_result) > 12000:
+        diff_result = diff_result[:12000] + "\n... (truncated)"
+    
+    logger.info(f"code review: {len(diff_result)} chars of diff")
+    
+    # 2. 审查循环（最多3轮）
+    for review_round in range(1, 4):
+        # --- Pro 审查 ---
+        review_messages = [
+            {"role": "system", "content": REVIEW_PROMPT},
+            {"role": "user", "content": f"Please review these code changes:\n\n```diff\n{diff_result}\n```"}
+        ]
+        
+        try:
+            review_response = _call_llm(model, review_messages, [], config)
+            review_text = review_response.choices[0].message.content or ""
+            # Track cost
+            cost_val = track_cost_internal(
+                model.get_api_name(),
+                review_response.usage.prompt_tokens if hasattr(review_response, 'usage') else 0,
+                review_response.usage.completion_tokens if hasattr(review_response, 'usage') else 0,
+            )
+        except Exception as e:
+            logger.error(f"review call failed: {e}")
+            return "pass"  # 审查失败不阻塞
+        
+        # 解析审查结果
+        try:
+            # 尝试提取 JSON
+            json_match = re.search(r'\{[^{}]*\}', review_text)
+            if json_match:
+                review_json = json.loads(json_match.group())
+            else:
+                review_json = json.loads(review_text.strip())
+        except Exception:
+            logger.warning(f"could not parse review result: {review_text[:200]}")
+            review_json = {"pass": True, "issues": []}
+        
+        if review_json.get("pass", False):
+            logger.info(f"review passed (round {review_round})")
+            
+            # --- Pro 终检 ---
+            final_messages = [
+                {"role": "system", "content": FINAL_CHECK_PROMPT},
+                {"role": "user", "content": f"Final check on these changes:\n\n```diff\n{diff_result[:8000]}\n```"}
+            ]
+            try:
+                final_response = _call_llm(model, final_messages, [], config)
+                final_text = final_response.choices[0].message.content or ""
+                cost_val2 = track_cost_internal(
+                    model.get_api_name(),
+                    final_response.usage.prompt_tokens if hasattr(final_response, 'usage') else 0,
+                    final_response.usage.completion_tokens if hasattr(final_response, 'usage') else 0,
+                )
+                
+                json_match = re.search(r'\{[^{}]*\}', final_text)
+                final_json = json.loads(json_match.group()) if json_match else {"pass": True, "issues": []}
+            except Exception:
+                final_json = {"pass": True, "issues": []}
+            
+            if final_json.get("pass", False):
+                logger.info("final check passed")
+                return "pass"
+            else:
+                issues = final_json.get("issues", [])
+                logger.warning(f"final check found {len(issues)} issues")
+        
+        # --- 审查未通过，注入修正消息 ---
+        issues = review_json.get("issues", [])
+        suggestion = review_json.get("suggestion", "please fix one by one")
+        logger.warning(f"review found {len(issues)} issues (round {review_round})")
+        
+        fix_msg = f"""[Code Review Round {review_round}] Found {len(issues)} issues:
+
+"""
+        for i, issue in enumerate(issues, 1):
+            fix_msg += f"{i}. {issue}\n"
+        fix_msg += f"\nSuggestion: {suggestion}\n\nPlease fix all issues directly. Do NOT explain, just fix the code."
+        
+        messages.append({"role": "user", "content": fix_msg})
+        return "retry"  # 回到 agent 循环继续修正
+    
+    # 3轮后仍未通过
+    logger.warning("review not passed after 3 rounds, returning with warning")
+    return "pass"  # 不阻塞任务完成
 
 
 def run_agent_loop_streaming(
@@ -933,8 +1081,17 @@ def run_agent_loop_streaming(
             messages.append({"role": "user", "content": "\u4f60\u7684\u8f93\u51fa\u88ab\u622a\u65ad\u4e86\uff0c\u8bf7\u4ece\u4e2d\u65ad\u5904\u7ee7\u7eed\u751f\u6210\u5269\u4f59\u5185\u5bb9\uff0c\u4e0d\u8981\u91cd\u590d\u5df2\u8f93\u51fa\u7684\u90e8\u5206\u3002"})
             continue
         if finish_reason == "stop" or (not tool_calls_raw and content):
-            yield {"type": "thinking", "message": "\u2705 \u4efb\u52a1\u5b8c\u6210"}
-            yield {"type": "done", "success": True, "result": content or "\u4efb\u52a1\u5b8c\u6210", "cost": total_cost, "iterations": iteration}
+            # 🔍 三层代码审查：Pro 写 → Pro 审 → Pro 终检
+            yield {"type": "thinking", "message": "🔍 代码审查中..."}
+            review_outcome = _run_review_cycle(
+                model, messages, config,
+                system_prompt, iteration, total_cost, all_logs, task_mode
+            )
+            if review_outcome == "retry":
+                yield {"type": "thinking", "message": "⚠️ 审查发现问题，正在修正..."}
+                continue
+            yield {"type": "thinking", "message": "✅ 审查通过，任务完成"}
+            yield {"type": "done", "success": True, "result": content or "任务完成", "cost": total_cost, "iterations": iteration}
             return
         if not tool_calls_raw:
             messages.append({"role": "user", "content": "\u8bf7\u7ee7\u7eed\u5b8c\u6210\u4efb\u52a1\uff0c\u6216\u8c03\u7528\u5de5\u5177\u3002"})

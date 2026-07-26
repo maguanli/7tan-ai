@@ -834,6 +834,64 @@ def _safe_tc_to_dict(tc) -> dict:
             else:
                 result[attr] = val
     return result
+
+
+def _split_diff_by_file(diff_text: str, max_chars: int = 60000):
+    """按文件拆分 git diff，确保每块不超过 max_chars。
+    
+    策略：
+    1. 先按 `diff --git` 分割为每个文件的 diff
+    2. 累加文件 diff，超过 max_chars 就新开一块
+    3. 单个文件 diff 超过 max_chars 时，按 hunk（@@ 行）继续拆分
+    """
+    # 按文件分割
+    file_sections = re.split(r'(?=^diff --git )', diff_text, flags=re.MULTILINE)
+    file_sections = [s.strip() for s in file_sections if s.strip()]
+    
+    chunks = []
+    current_chunk = []
+    current_size = 0
+    
+    for section in file_sections:
+        section_size = len(section)
+        
+        # 如果加入这个文件会超过限制，先保存当前块
+        if current_chunk and current_size + section_size > max_chars:
+            chunks.append("\n".join(current_chunk))
+            current_chunk = []
+            current_size = 0
+        
+        # 如果单个文件 diff 超过限制，按 hunk 拆分
+        if section_size > max_chars:
+            if current_chunk:
+                chunks.append("\n".join(current_chunk))
+                current_chunk = []
+                current_size = 0
+            
+            hunks = re.split(r'(?=^@@ )', section, flags=re.MULTILINE)
+            hunk_chunk = [hunks[0]]  # 文件头（diff --git + 文件路径）
+            hunk_size = len(hunks[0])
+            
+            for hunk in hunks[1:]:
+                hunk_len = len(hunk)
+                if hunk_size + hunk_len > max_chars:
+                    chunks.append("\n".join(hunk_chunk))
+                    hunk_chunk = [hunks[0]]  # 保留文件头
+                    hunk_size = len(hunks[0])
+                hunk_chunk.append(hunk)
+                hunk_size += hunk_len
+            
+            if len(hunk_chunk) > 1:  # 有实际内容
+                chunks.append("\n".join(hunk_chunk))
+        else:
+            current_chunk.append(section)
+            current_size += section_size
+    
+    if current_chunk:
+        chunks.append("\n".join(current_chunk))
+    
+    return chunks if chunks else [diff_text]
+
 def _run_review_cycle(model, messages, config, system_prompt, iteration, total_cost, all_logs, task_mode):
     """Pro 写 -> Pro 审 -> 修正 -> 再审（最多3轮）
     
@@ -863,44 +921,67 @@ def _run_review_cycle(model, messages, config, system_prompt, iteration, total_c
         logger.info("no code changes, skip review")
         return "pass"
     
-    # 限制 diff 大小
-    if len(diff_result) > 12000:
-        diff_result = diff_result[:12000] + "\n... (truncated)"
-    
+    # 分块审查：大 diff 按文件拆分，每块 ≤ 60000 字符（~15000 tokens，128K 上下文的安全值）
+    MAX_DIFF_CHARS = 60000
     logger.info(f"code review: {len(diff_result)} chars of diff")
+    
+    if len(diff_result) <= MAX_DIFF_CHARS:
+        diff_chunks = [diff_result]
+    else:
+        diff_chunks = _split_diff_by_file(diff_result, MAX_DIFF_CHARS)
+        logger.info(f"diff split into {len(diff_chunks)} chunks for review")
     
     # 2. 审查循环（最多3轮）
     for review_round in range(1, 4):
-        # --- Pro 审查 ---
-        review_messages = [
-            {"role": "system", "content": REVIEW_PROMPT},
-            {"role": "user", "content": f"Please review these code changes:\n\n```diff\n{diff_result}\n```"}
-        ]
+        # --- Pro 审查：逐块审查，汇总问题 ---
+        all_issues = []
+        all_suggestion_parts = []
         
-        try:
-            review_response = _call_llm(model, review_messages, [], config)
-            review_text = review_response.choices[0].message.content or ""
-            # Track cost
-            cost_val = track_cost_internal(
-                model.get_api_name(),
-                review_response.usage.prompt_tokens if hasattr(review_response, 'usage') else 0,
-                review_response.usage.completion_tokens if hasattr(review_response, 'usage') else 0,
-            )
-        except Exception as e:
-            logger.error(f"review call failed: {e}")
-            return "pass"  # 审查失败不阻塞
+        for ci, chunk in enumerate(diff_chunks):
+            chunk_label = f" (chunk {ci+1}/{len(diff_chunks)})" if len(diff_chunks) > 1 else ""
+            review_messages = [
+                {"role": "system", "content": REVIEW_PROMPT},
+                {"role": "user", "content": f"Please review these code changes{chunk_label}:\n\n```diff\n{chunk}\n```"}
+            ]
+            
+            try:
+                review_response = _call_llm(model, review_messages, [], config)
+                review_text = review_response.choices[0].message.content or ""
+                # Track cost
+                cost_val = track_cost_internal(
+                    model.get_api_name(),
+                    review_response.usage.prompt_tokens if hasattr(review_response, 'usage') else 0,
+                    review_response.usage.completion_tokens if hasattr(review_response, 'usage') else 0,
+                )
+            except Exception as e:
+                logger.error(f"review call failed for chunk {ci+1}: {e}")
+                continue  # 跳过一个块的审查，不阻塞
+            
+            # 解析该块的审查结果
+            try:
+                json_match = re.search(r'\{[^{}]*\}', review_text)
+                if json_match:
+                    chunk_json = json.loads(json_match.group())
+                else:
+                    chunk_json = json.loads(review_text.strip())
+            except Exception:
+                logger.warning(f"could not parse review result for chunk {ci+1}: {review_text[:200]}")
+                chunk_json = {"pass": True, "issues": []}
+            
+            # 累积问题
+            chunk_issues = chunk_json.get("issues", [])
+            if chunk_issues:
+                all_issues.extend(chunk_issues)
+            chunk_suggestion = chunk_json.get("suggestion", "")
+            if chunk_suggestion:
+                all_suggestion_parts.append(f"[Chunk {ci+1}] {chunk_suggestion}")
         
-        # 解析审查结果
-        try:
-            # 尝试提取 JSON
-            json_match = re.search(r'\{[^{}]*\}', review_text)
-            if json_match:
-                review_json = json.loads(json_match.group())
-            else:
-                review_json = json.loads(review_text.strip())
-        except Exception:
-            logger.warning(f"could not parse review result: {review_text[:200]}")
-            review_json = {"pass": True, "issues": []}
+        # 汇总所有块的结果
+        review_json = {
+            "pass": len(all_issues) == 0,
+            "issues": all_issues,
+            "suggestion": "; ".join(all_suggestion_parts) if all_suggestion_parts else ""
+        }
         
         if review_json.get("pass", False):
             logger.info(f"review passed (round {review_round})")
@@ -908,20 +989,29 @@ def _run_review_cycle(model, messages, config, system_prompt, iteration, total_c
             # --- Pro 终检 ---
             final_messages = [
                 {"role": "system", "content": FINAL_CHECK_PROMPT},
-                {"role": "user", "content": f"Final check on these changes:\n\n```diff\n{diff_result[:8000]}\n```"}
+                {"role": "user", "content": f"Please do final check on these changes:\n\n```diff\n{diff_result[:12000]}\n```"}
             ]
             try:
                 final_response = _call_llm(model, final_messages, [], config)
                 final_text = final_response.choices[0].message.content or ""
-                cost_val2 = track_cost_internal(
+                # Track cost
+                track_cost_internal(
                     model.get_api_name(),
                     final_response.usage.prompt_tokens if hasattr(final_response, 'usage') else 0,
                     final_response.usage.completion_tokens if hasattr(final_response, 'usage') else 0,
                 )
-                
+            except Exception as e:
+                logger.error(f"final check call failed: {e}")
+                return "pass"
+            
+            try:
                 json_match = re.search(r'\{[^{}]*\}', final_text)
-                final_json = json.loads(json_match.group()) if json_match else {"pass": True, "issues": []}
+                if json_match:
+                    final_json = json.loads(json_match.group())
+                else:
+                    final_json = json.loads(final_text.strip())
             except Exception:
+                logger.warning(f"could not parse final check result: {final_text[:200]}")
                 final_json = {"pass": True, "issues": []}
             
             if final_json.get("pass", False):
@@ -930,6 +1020,8 @@ def _run_review_cycle(model, messages, config, system_prompt, iteration, total_c
             else:
                 issues = final_json.get("issues", [])
                 logger.warning(f"final check found {len(issues)} issues")
+                # 继续到修正逻辑
+                review_json = final_json
         
         # --- 审查未通过，注入修正消息 ---
         issues = review_json.get("issues", [])

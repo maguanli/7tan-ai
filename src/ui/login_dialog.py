@@ -244,10 +244,23 @@ class LoginDialog(QDialog):
         layout.addStretch()
 
         # --- 底部 ---
-        footer = QLabel("没有账号？访问 7tan.com 注册")
+        footer = QPushButton("没有账号？访问 7tan.com 注册")
+        footer.setObjectName("btnLink")
         footer.setFont(QFont("Microsoft YaHei", 10))
-        footer.setStyleSheet(f"color: {TEXT_SECONDARY};")
-        footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        footer.setCursor(Qt.CursorShape.PointingHandCursor)
+        footer.clicked.connect(lambda: self._open_url("https://www.7tan.com/register/"))
+        footer.setStyleSheet(f"""
+            QPushButton#btnLink {{
+                background: transparent;
+                color: {TEXT_SECONDARY};
+                border: none;
+                font-weight: normal;
+                padding: 4px;
+            }}
+            QPushButton#btnLink:hover {{
+                color: {ACCENT};
+            }}
+        """)
         layout.addWidget(footer)
 
     # ============================================================
@@ -380,10 +393,14 @@ class LoginDialog(QDialog):
             self._input_pwd.setEchoMode(QLineEdit.EchoMode.Password)
             self._btn_toggle_pwd.setText("👁")
 
+    def _open_url(self, url: str):
+        """在浏览器中打开 URL"""
+        import webbrowser
+        webbrowser.open(url)
+
     def _on_forgot_password(self):
         """忘记密码 → 打开 7tan.com"""
-        import webbrowser
-        webbrowser.open("https://www.7tan.com/reset-password/")
+        self._open_url("https://www.7tan.com/forgot-password/")
         self._show_error("")  # 清除错误
 
     def _on_login(self):

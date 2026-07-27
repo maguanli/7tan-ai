@@ -38,7 +38,7 @@ $soon_users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 foreach ($soon_users as $user) {
     $days_left = max(0, (int)(($user['pro_expires'] - $now) / 86400));
 
-    // 发送站内信（假设网站有 messages 表）
+    // 发送站内信（依赖现有 user_messages 表，如不存在需先创建）
     $stmt = $db->prepare(
         'INSERT INTO user_messages (user_id, title, content, type, created_at)
          VALUES (:uid, :title, :content, :type, NOW())'

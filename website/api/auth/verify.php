@@ -46,7 +46,7 @@ if ($token === '') {
 // 验证 JWT
 // ============================================================
 try {
-    $payload = jwt_decode($token, $JWT_SECRET);
+    $payload = jwt_decode_auto($token, $JWT_SECRET);
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode([

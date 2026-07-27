@@ -40,7 +40,6 @@ import requests
 from loguru import logger
 
 from .theme import THEME
-from .pro_status_widget import ProStatusWidget
 
 DARK_STYLESHEET = f"""
 QMainWindow, QWidget {{
@@ -348,7 +347,6 @@ class Sidebar(QFrame):
 
     def __init__(self, user_info: dict | None = None):
         super().__init__()
-        self._user_info = user_info or {}
         self.setFixedWidth(200)
         self.setStyleSheet(f"background-color: {THEME['bg_sidebar']};")
         self._buttons = {}
@@ -409,12 +407,19 @@ class Sidebar(QFrame):
         self._session_sidebar.hide()
         layout.addWidget(self._session_sidebar)
 
-        # 专业版状态组件
-        self._pro_status = ProStatusWidget(self._user_info)
-        self._pro_status.status_updated.connect(self._on_pro_status_updated)
-        layout.addWidget(self._pro_status)
-
         layout.addStretch()
+
+        # --- 专业版状态组件 ---
+        from .pro_status_widget import ProStatusWidget
+        self._pro_widget = ProStatusWidget()
+        layout.addWidget(self._pro_widget)
+        layout.addSpacing(8)
+
+        # 分隔线
+        line2 = QFrame()
+        line2.setFrameShape(QFrame.Shape.HLine)
+        line2.setStyleSheet(f"color: {THEME['border']};")
+        layout.addWidget(line2)
 
         # 底部信息
         version = QLabel("7tan.com v5.1.0")
@@ -3913,7 +3918,7 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
 
         # 侧边栏
-        self._sidebar = Sidebar(user_info=self._user_info)
+        self._sidebar = Sidebar()
         self._sidebar.page_changed.connect(self._switch_page)
         self._sidebar.open_url.connect(self._on_open_url)
         main_layout.addWidget(self._sidebar)
@@ -3969,11 +3974,6 @@ class MainWindow(QMainWindow):
         if key in self._pages:
             self._stack.setCurrentWidget(self._pages[key])
             self._status.showMessage(f"📍 {key}")
-
-    def _on_pro_status_updated(self, info: dict):
-        """专业版状态刷新后更新全局信息"""
-        self._user_info.update(info)
-        self._status.showMessage(f"🟢 就绪  |  {self._user_info.get('username', '未登录')}  |  {info.get('level', 'basic')}")
 
     def _on_open_url(self, url: str):
         """侧边栏点击链接 → 切换到 AI 工作台并在浏览器打开"""
@@ -4058,18 +4058,6 @@ def launch_app():
             # 用户关闭登录窗口，退出应用
             logger.info("[Login] 用户取消登录，退出")
             return
-
-        # ===== 新手引导 =====
-        from .welcome_wizard import should_show_wizard, show_welcome_wizard
-        if should_show_wizard():
-            logger.info("[Wizard] 显示新手引导...")
-            api_key = show_welcome_wizard()
-            if api_key:
-                logger.info("[Wizard] 用户已填写 API Key")
-            else:
-                logger.info("[Wizard] 用户跳过/完成引导")
-        else:
-            logger.info("[Wizard] 已配置 API Key，跳过引导")
 
         logger.info("🏗️ 创建主窗口...")
         window = MainWindow(user_info=user_info)

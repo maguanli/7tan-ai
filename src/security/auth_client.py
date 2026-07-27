@@ -101,21 +101,22 @@ def login(username: str, password: str, remember_me: bool = False) -> dict:
     except Exception:
         raise ServerError("服务器返回数据格式异常")
 
-    if not data.get("success"):
+    if not data.get("code") == 0:
         msg = data.get("message", "登录失败")
         raise LoginFailed(msg)
 
-    token = data.get("token", "")
+    user_data = data.get("data", {})
+    token = user_data.get("token", "")
     if not token:
         raise ServerError("服务器未返回 Token")
 
     return {
         "token": token,
-        "user_id": data.get("user_id", 0),
-        "username": data.get("username", username),
-        "level": data.get("level", "basic"),
-        "pro_expires": data.get("pro_expires", 0),
-        "expires_in": data.get("expires_in", 2592000),
+        "user_id": user_data.get("user", {}).get("uid", 0),
+        "username": user_data.get("user", {}).get("username", username),
+        "level": user_data.get("user", {}).get("level", "basic"),
+        "pro_expires": user_data.get("user", {}).get("pro_expires", 0),
+        "expires_in": 2592000,
     }
 
 
@@ -140,7 +141,7 @@ def online_verify(token: str) -> dict:
         return {"valid": False, "level": "unknown", "error": "API 端点未配置"}
 
     try:
-        resp = requests.post(url, json={"token": token}, timeout=_TIMEOUT)
+        resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=_TIMEOUT)
     except requests.exceptions.RequestException as e:
         logger.warning(f"[Auth] 在线验证失败: {e}")
         return {"valid": False, "level": "unknown", "error": f"网络异常: {e}"}
@@ -157,7 +158,7 @@ def online_verify(token: str) -> dict:
         "valid": data.get("success", False),
         "level": data.get("level", "basic"),
         "pro_expires": data.get("pro_expires", 0),
-        "error": data.get("message") if not data.get("success") else None,
+        "error": data.get("message") if not data.get("code") == 0 else None,
     }
 
 
@@ -176,7 +177,7 @@ def refresh_token(token: str) -> dict:
         return {"success": False, "message": "API 端点未配置"}
 
     try:
-        resp = requests.post(url, json={"token": token}, timeout=_TIMEOUT)
+        resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=_TIMEOUT)
     except requests.exceptions.RequestException as e:
         return {"success": False, "message": f"网络异常: {e}"}
 

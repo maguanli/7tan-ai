@@ -62,7 +62,18 @@ website/
 0 2 * * * /usr/bin/php /www/wwwroot/7tan.com/cron/check_expiry.php >> /www/wwwroot/7tan.com/logs/expiry.log 2>&1
 ```
 
-### 6️⃣ 配置整合
+### 6️⃣ 生成 RSA 密钥对（推荐，启用离线验签）
+```bash
+# 生成 RSA 2048 私钥
+openssl genrsa -out private_key.pem 2048
+# 提取公钥
+openssl rsa -in private_key.pem -pubout -out public_key.pem
+```
+- `private_key.pem` → 服务器安全位置（权限 600），内容设为 JWT_SECRET
+- `public_key.pem` → 客户端 `src/security/public_key.pem`
+- 配置 RSA 后自动使用 RS256；不配则回退 HS256
+
+### 7️⃣ 配置整合
 `config/database.php` 是模板文件。
 - 如果网站已有数据库配置 → 只复制 `JWT_SECRET` 定义过去
 - 如果网站已有 `get_db_connection()` → 忽略此文件

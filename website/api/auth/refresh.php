@@ -45,7 +45,7 @@ if ($token === '') {
 // ============================================================
 try {
     // 验证签名但不检查过期时间
-    $payload = jwt_decode_skip_expiry($token, $JWT_SECRET);
+    $payload = jwt_decode_auto_skip_expiry($token, $JWT_SECRET);
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(['code' => -1, 'message' => 'Token 无效: ' . $e->getMessage()]);
@@ -88,7 +88,7 @@ $new_payload = [
     'jti'          => bin2hex(random_bytes(16)),
 ];
 
-$new_token = jwt_encode($new_payload, $JWT_SECRET);
+$new_token = jwt_encode_auto($new_payload, $JWT_SECRET);
 
 // ============================================================
 // 响应

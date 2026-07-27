@@ -1,7 +1,8 @@
 <?php
 // ============================================================
 // JWT 工具类（RS256 / HS256 双模式）
-// 客户端用 RSA 公钥离线验签，服务端用 HS256 签发
+// 默认 RS256：客户端用 RSA 公钥离线验签，服务端用 RSA 私钥签发
+// 兼容 HS256：未配置 RSA 密钥时自动回退（开发/过渡期用）
 // 位置: /lib/jwt_helper.php
 // ============================================================
 
@@ -80,6 +81,128 @@ function jwt_decode_skip_expiry(string $token, string $secret): array
     }
 
     return $payload;
+}
+
+// ============================================================
+// RS256 编解码（RSA-PKCS1v15 + SHA-256）
+// ============================================================
+
+/**
+ * JWT 编码（RS256）
+ * @param array  $payload          Payload 数组
+ * @param string $private_key_pem  RSA 私钥 PEM
+ * @return string JWT Token
+ */
+function jwt_encode_rs256(array $payload, string $private_key_pem): string
+{
+    $header = base64url_encode(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
+    $payload_b64 = base64url_encode(json_encode($payload));
+    $data = "$header.$payload_b64";
+    openssl_sign($data, $signature, $private_key_pem, 'sha256WithRSAEncryption');
+    if (!$signature) {
+        throw new JWTException('RSA 签名失败: ' . openssl_error_string());
+    }
+    return "$header.$payload_b64." . base64url_encode($signature);
+}
+
+/**
+ * JWT 解码 + 验证（RS256）
+ */
+function jwt_decode_rs256(string $token, string $public_key_pem): array
+{
+    $parts = explode('.', $token);
+    if (count($parts) !== 3) {
+        throw new JWTException('Token 格式错误');
+    }
+    [$header_b64, $payload_b64, $signature_b64] = $parts;
+    $data = "$header_b64.$payload_b64";
+    $signature = base64url_decode($signature_b64);
+    $result = openssl_verify($data, $signature, $public_key_pem, 'sha256WithRSAEncryption');
+    if ($result !== 1) {
+        throw new JWTException('签名验证失败');
+    }
+    $payload = json_decode(base64url_decode($payload_b64), true);
+    if (!$payload) {
+        throw new JWTException('Payload 解析失败');
+    }
+    if (isset($payload['exp']) && $payload['exp'] < time()) {
+        throw new JWTException('Token 已过期');
+    }
+    return $payload;
+}
+
+/**
+ * JWT 解码 RS256（跳过过期检查，refresh 用）
+ */
+function jwt_decode_rs256_skip_expiry(string $token, string $public_key_pem): array
+{
+    $parts = explode('.', $token);
+    if (count($parts) !== 3) {
+        throw new JWTException('Token 格式错误');
+    }
+    [$header_b64, $payload_b64, $signature_b64] = $parts;
+    $data = "$header_b64.$payload_b64";
+    $signature = base64url_decode($signature_b64);
+    $result = openssl_verify($data, $signature, $public_key_pem, 'sha256WithRSAEncryption');
+    if ($result !== 1) {
+        throw new JWTException('签名验证失败');
+    }
+    $payload = json_decode(base64url_decode($payload_b64), true);
+    if (!$payload) {
+        throw new JWTException('Payload 解析失败');
+    }
+    return $payload;
+}
+
+// ============================================================
+// 智能编解码：自动选择 RS256（优先）或 HS256（回退）
+// ============================================================
+
+/**
+ * 智能编码：有 RSA 私钥用 RS256，否则用 HS256
+ */
+function jwt_encode_auto(array $payload, string $secret_or_key): string
+{
+    // 检测是否为 RSA 私钥
+    if (strpos($secret_or_key, '-----BEGIN RSA PRIVATE KEY-----') !== false
+        || strpos($secret_or_key, '-----BEGIN PRIVATE KEY-----') !== false) {
+        return jwt_encode_rs256($payload, $secret_or_key);
+    }
+    return jwt_encode($payload, $secret_or_key);
+}
+
+/**
+ * 智能解码：自动识别 RS256/HS256
+ */
+function jwt_decode_auto(string $token, string $secret_or_key): array
+{
+    $parts = explode('.', $token);
+    if (count($parts) !== 3) {
+        throw new JWTException('Token 格式错误');
+    }
+    $header = json_decode(base64url_decode($parts[0]), true);
+    $alg = $header['alg'] ?? 'HS256';
+    if ($alg === 'RS256') {
+        return jwt_decode_rs256($token, $secret_or_key);
+    }
+    return jwt_decode($token, $secret_or_key);
+}
+
+/**
+ * 智能解码（跳过过期检查）
+ */
+function jwt_decode_auto_skip_expiry(string $token, string $secret_or_key): array
+{
+    $parts = explode('.', $token);
+    if (count($parts) !== 3) {
+        throw new JWTException('Token 格式错误');
+    }
+    $header = json_decode(base64url_decode($parts[0]), true);
+    $alg = $header['alg'] ?? 'HS256';
+    if ($alg === 'RS256') {
+        return jwt_decode_rs256_skip_expiry($token, $secret_or_key);
+    }
+    return jwt_decode_skip_expiry($token, $secret_or_key);
 }
 
 // ============================================================

@@ -42,7 +42,7 @@ if (!$input) {
     exit;
 }
 
-$account  = trim($input['account']  ?? '');
+$account  = trim($input['username'] ?? $input['account'] ?? '');
 $password = trim($input['password'] ?? '');
 
 if ($account === '' || $password === '') {
@@ -112,7 +112,7 @@ $payload = [
     'jti'          => bin2hex(random_bytes(16)),
 ];
 
-$token = jwt_encode($payload, $JWT_SECRET);
+$token = jwt_encode_auto($payload, $JWT_SECRET);
 
 // ============================================================
 // 响应

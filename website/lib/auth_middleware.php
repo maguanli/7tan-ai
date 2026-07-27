@@ -31,7 +31,7 @@ function require_login(string $jwt_secret): array
 
     // 验证
     try {
-        $payload = jwt_decode($token, $jwt_secret);
+        $payload = jwt_decode_auto($token, $jwt_secret);
     } catch (Exception $e) {
         http_response_code(401);
         echo json_encode(['code' => -1, 'message' => 'Token 无效或已过期，请重新登录'], JSON_UNESCAPED_UNICODE);

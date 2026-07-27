@@ -12,7 +12,7 @@ define('DB_HOST', '127.0.0.1');
 define('DB_PORT', '3306');
 define('DB_NAME', '7tan');
 define('DB_USER', 'root');
-define('DB_PASS', 'your-password-here');
+define('DB_PASS', '请修改为实际数据库密码');
 define('DB_CHARSET', 'utf8mb4');
 
 /**

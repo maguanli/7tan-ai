@@ -4,8 +4,12 @@
 -- 适用: 7tan.com 现有数据库
 -- ============================================================
 
--- 检查字段是否已存在（可选，MySQL 5.7+ 不支持 IF NOT EXISTS for column）
--- 如果字段已存在会报错，忽略即可
+-- ⚠️ 前置条件: 以下表必须已存在
+--   - ll_useregs       用户表（网站现有）
+--   - user_balance     用户余额表（purchase.php 余额扣款依赖）
+--   - user_messages    站内信表（check_expiry.php 到期提醒依赖）
+--
+-- ⚠️ MySQL 5.7 不支持 ADD COLUMN IF NOT EXISTS，重复执行会报错，忽略即可
 
 ALTER TABLE ll_useregs
     ADD COLUMN pro_activated TINYINT(1) NOT NULL DEFAULT 0 COMMENT '专业版是否激活: 0=否, 1=是',

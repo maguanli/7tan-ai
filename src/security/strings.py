@@ -35,12 +35,10 @@ def _assemble_key() -> bytes:
 
 # 占位符 — 实际值由 tools/encrypt_strings.py 生成后替换
 _STORE: dict[str, str] = {
-    # RSA 公钥（PEM 格式）
     "public_key": "",
-    # API 端点
-    "api_login": "",
-    "api_verify": "",
-    "api_refresh": "",
+    "api_login": "f0oukT+IouoxmFq8yDq30LGmubktv37e995lOD2TAJnNGPkjRgSFKmYvK+FTe3j4/+7qprFrrvuXWwxDfxwP",
+    "api_verify": "f0oukcBPoa893zJ8HtumxXvRswi/8BZif7jZQhaaVlZvy/cMldtRtlaME3ta2R0esiusOghS+qwhlIA0p+9Ksw==",
+    "api_refresh": "f0oukXXNS1WDi1BrYcwBuYgHuwhNFaOfY/pY9bhvG86U6rvrPnYg4GsNg99B6LjB724uek/NDFKUpcEA9A0mzBo=",
 }
 
 

@@ -40,19 +40,23 @@ $soon_users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 foreach ($soon_users as $user) {
     $days_left = max(0, (int)(($user['expires_at'] - $now) / 86400));
 
-    // 发送站内信（依赖 user_messages 表）
-    $stmt = $db->prepare(
-        'INSERT INTO user_messages (user_id, title, content, type, is_read, created_at)
-         VALUES (:uid, :title, :content, :type, 0, :now)'
-    );
-    $stmt->execute([
-        ':uid'     => $user['user_id'],
-        ':title'   => '专业版即将到期',
-        ':content' => "尊敬的用户 {$user['ll_name']}，您的专业版会员将在 {$days_left} 天后（"
-                      . date('Y-m-d', $user['expires_at']) . "）到期。续费可享优惠，点击查看：/user/pro",
-        ':type'    => 'system',
-        ':now'     => $now,
-    ]);
+    // 发送站内信（依赖 user_messages 表，不存在则跳过）
+    try {
+        $stmt = $db->prepare(
+            'INSERT INTO user_messages (user_id, title, content, type, is_read, created_at)
+             VALUES (:uid, :title, :content, :type, 0, :now)'
+        );
+        $stmt->execute([
+            ':uid'     => $user['user_id'],
+            ':title'   => '专业版即将到期',
+            ':content' => "尊敬的用户 {$user['ll_name']}，您的专业版会员将在 {$days_left} 天后（"
+                          . date('Y-m-d', $user['expires_at']) . "）到期。续费可享优惠，点击查看：/pro.php",
+            ':type'    => 'system',
+            ':now'     => $now,
+        ]);
+    } catch (PDOException $e) {
+        // user_messages 表不存在，跳过站内信
+    }
 
     echo "  📨 提醒: uid={$user['user_id']} {$user['ll_name']} {$days_left}天后到期\n";
 }

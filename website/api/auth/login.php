@@ -53,10 +53,10 @@ $db   = get_db_connection();
 $stmt = $db->prepare(
     'SELECT id, ll_name, ll_pass, ll_shouji, ll_mail
      FROM ll_useregs
-     WHERE ll_name = :name OR ll_shouji = :name OR ll_mail = :name
+     WHERE ll_name = :name1 OR ll_shouji = :name2 OR ll_mail = :name3
      LIMIT 1'
 );
-$stmt->execute([':name' => $username]);
+$stmt->execute([':name1' => $username, ':name2' => $username, ':name3' => $username]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$user) {
@@ -108,6 +108,18 @@ $token = jwt_encode_auto([
     'iat'           => $now,
     'exp'           => $now + 86400 * 30, // 30天过期
 ], $JWT_SECRET);
+
+// ============================================================
+// 设置 auth_token Cookie（供 pro.php 等页面读取）
+// ============================================================
+setcookie('auth_token', $token, [
+    'expires'  => $now + 86400 * 30,
+    'path'     => '/',
+    'domain'   => '',
+    'secure'   => false,
+    'httponly' => false,
+    'samesite' => 'Lax',
+]);
 
 // ============================================================
 // 响应

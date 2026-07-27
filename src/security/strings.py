@@ -36,9 +36,9 @@ def _assemble_key() -> bytes:
 # 占位符 — 实际值由 tools/encrypt_strings.py 生成后替换
 _STORE: dict[str, str] = {
     "public_key": "",
-    "api_login": "f0oukT+IouoxmFq8yDq30LGmubktv37e995lOD2TAJnNGPkjRgSFKmYvK+FTe3j4/+7qprFrrvuXWwxDfxwP",
-    "api_verify": "f0oukcBPoa893zJ8HtumxXvRswi/8BZif7jZQhaaVlZvy/cMldtRtlaME3ta2R0esiusOghS+qwhlIA0p+9Ksw==",
-    "api_refresh": "f0oukXXNS1WDi1BrYcwBuYgHuwhNFaOfY/pY9bhvG86U6rvrPnYg4GsNg99B6LjB724uek/NDFKUpcEA9A0mzBo=",
+    "api_login": "f0oukeI60CyaF4xSQuFAaLx/+/MQy9U9iolB2YZspQAlxBhbJLJ9ZhtdgZRnpLBvXOGXMDbHnJmCI3zT/KU0CL2INA==",
+    "api_verify": "f0oukeNPxGFI9rD8A/tDGFwDpb6G7ehmHhh9g4CvjSwxDONCvQQ/JP+CMQ16LqQ+h33z5Kq/yxZQ/ycarpBgJjLzx7Y=",
+    "api_refresh": "f0oukYIxG7j3yl5rQOlyGihuq1P1bAzz62D2YburpeQPBpFOfea8SmXTcDa9aQMBt8I+smPbA/ME0pf9xup9B/XuE+to=",
 }
 
 

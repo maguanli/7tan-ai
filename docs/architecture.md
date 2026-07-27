@@ -957,3 +957,311 @@ api/auth/refresh.php     ← 续费后刷新Token
 ---
 
 > 📌 本文档随开发进度持续更新。任何架构变更必须先更新本文档再实施。
+
+---
+
+## 十三、7tan.com 会员中心
+
+### 13.1 概述
+
+7tan.com 是配套网站，提供注册、登录、充值、购买专业版、查看会员状态等功能。客户端通过 API 与网站通信验证授权。
+
+### 13.2 用户完整流程
+
+```
+新用户访问 7tan.com
+    │
+    ├── 注册（用户名/手机号/邮箱/密码）
+    │
+    └── 登录
+          │
+          ↓
+     进入【个人中心】
+
+个人中心功能：
+    ├── 💰 账户充值（支付宝/微信）
+    ├── ⭐ 购买专业版（200元/半年，支持余额支付或直接支付）
+    ├── 📋 订单记录
+    └── 👤 个人信息管理
+```
+
+### 13.3 数据库表设计
+
+```sql
+-- 用户表
+CREATE TABLE users (
+    id          INT PRIMARY KEY AUTO_INCREMENT,
+    username    VARCHAR(50) NOT NULL UNIQUE,
+    phone       VARCHAR(20) DEFAULT NULL,
+    email       VARCHAR(100) DEFAULT NULL,
+    password    VARCHAR(255) NOT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_phone (phone),
+    INDEX idx_email (email)
+);
+
+-- 账户余额
+CREATE TABLE user_balance (
+    user_id     INT PRIMARY KEY,
+    balance     DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 充值记录
+CREATE TABLE recharge_records (
+    id              INT PRIMARY KEY AUTO_INCREMENT,
+    user_id         INT NOT NULL,
+    amount          DECIMAL(10,2) NOT NULL,
+    payment_method  VARCHAR(20) NOT NULL,
+    trade_no        VARCHAR(64),
+    status          TINYINT DEFAULT 0,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    paid_at         DATETIME DEFAULT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    INDEX idx_user (user_id),
+    INDEX idx_trade (trade_no)
+);
+
+-- 专业版购买记录
+CREATE TABLE pro_purchases (
+    id              INT PRIMARY KEY AUTO_INCREMENT,
+    user_id         INT NOT NULL,
+    months          INT NOT NULL DEFAULT 6,
+    amount          DECIMAL(10,2) NOT NULL,
+    pay_type        VARCHAR(20) NOT NULL,
+    trade_no        VARCHAR(64),
+    status          TINYINT DEFAULT 0,
+    activated_at    DATETIME DEFAULT NULL,
+    expires_at      DATETIME DEFAULT NULL,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    INDEX idx_user (user_id),
+    INDEX idx_expires (expires_at)
+);
+
+-- Token 签发记录
+CREATE TABLE auth_tokens (
+    id          INT PRIMARY KEY AUTO_INCREMENT,
+    user_id     INT NOT NULL,
+    jti         VARCHAR(64) NOT NULL UNIQUE,
+    expires_at  DATETIME NOT NULL,
+    revoked     TINYINT DEFAULT 0,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    INDEX idx_user (user_id)
+);
+```
+
+### 13.4 页面结构
+
+```
+7tan.com/
+├── /                             首页
+├── /register                     注册页
+├── /login                        登录页
+├── /user/                        个人中心（需登录）
+│   ├── /user/index               概览（余额、会员状态、到期时间）
+│   ├── /user/recharge            充值页面
+│   ├── /user/pro                 购买专业版页面
+│   ├── /user/orders              订单记录
+│   └── /user/profile             个人信息
+├── /api/auth/                    认证 API
+│   ├── login.php                 登录
+│   ├── register.php              注册
+│   ├── verify.php                验证Token+会员状态
+│   ├── refresh.php               刷新Token
+│   └── logout.php                登出
+├── /api/pay/                     支付 API
+│   ├── recharge.php              创建充值订单
+│   ├── notify.php                支付回调
+│   └── query.php                 查询支付结果
+└── /api/pro/                     专业版 API
+    ├── purchase.php              购买专业版
+    └── status.php                查询专业版状态
+```
+
+### 13.5 核心 API 接口
+
+#### 登录
+
+```
+POST /api/auth/login.php
+请求：  { "account": "用户名或手机号", "password": "密码" }
+响应：  { "code": 0, "data": { "token": "eyJ...", "user":
+          { "uid":10001, "username":"test", "level":"pro",
+            "balance":15.50, "pro_expires":"2026-06-15 12:00:00" } } }
+```
+
+#### 注册
+
+```
+POST /api/auth/register.php
+请求：  { "username":"test", "phone":"13800138000", "password":"xxx" }
+响应：  { "code": 0, "data": { "uid": 10001, "message": "注册成功" } }
+```
+
+#### 验证Token
+
+```
+GET /api/auth/verify.php
+响应：  { "code": 0, "data": { "uid":10001, "level":"pro",
+          "balance":15.50, "pro_expires":"2026-06-15 12:00:00" } }
+```
+
+#### 创建充值订单
+
+```
+POST /api/pay/recharge.php
+请求：  { "amount": 10.00, "method": "alipay" }
+响应：  { "code": 0, "data": { "order_no":"R20260115001",
+          "pay_url":"..." } }
+```
+
+#### 支付回调
+
+```
+POST /api/pay/notify.php
+支付宝/微信异步通知 → 验签 → 更新余额 → 更新订单状态
+```
+
+#### 购买专业版
+
+```
+POST /api/pro/purchase.php
+请求：  { "months": 6, "pay_type": "balance" }
+
+余额支付流程：
+① 验证余额 >= 200 元
+② 扣减余额
+③ 创建 pro_purchases 记录，status=已激活
+④ 更新用户 level="pro"，pro_expires 延长
+⑤ 签发新 JWT 返回客户端
+
+响应：  { "code": 0, "data": { "new_token":"eyJ...", "level":"pro",
+          "pro_expires":"2026-12-15 12:00:00", "balance":5.50 } }
+```
+
+#### 刷新Token
+
+```
+POST /api/auth/refresh.php
+响应：  { "code": 0, "data": { "new_token":"eyJ...", "level":"pro",
+          "pro_expires":"2026-12-15 12:00:00" } }
+```
+
+### 13.6 支付集成方案
+
+```
+用户在 7tan.com 点击充值
+    │
+    ├── 选择金额：10 / 20 / 50 / 100 / 自定义
+    ├── 选择方式：支付宝 / 微信
+    │
+    ↓
+后端创建订单 → 调用支付宝/微信下单接口
+    │
+    ↓
+前端展示二维码或跳转支付
+    │
+    ↓
+用户完成支付
+    │
+    ↓
+支付宝/微信 → POST /api/pay/notify.php
+    ├── 验签通过 → 更新余额 + 订单状态
+    └── 验签失败 → 记录日志，拒绝
+    │
+    ↓
+前端轮询 /api/pay/query.php → 显示充值成功
+```
+
+### 13.7 购买专业版流程
+
+```
+用户进入个人中心 → 点击 [购买专业版]
+    │
+    ├── 方式一：余额支付（余额足够时）
+    │   ├── 确认订单：200元 / 6个月
+    │   ├── 点击 [确认支付]
+    │   ├── 后端扣减余额 → 激活专业版 → 签发新Token
+    │   └── 完成 ✅
+    │
+    └── 方式二：直接支付（余额不足时）
+        ├── 确认订单：200元 / 6个月
+        ├── 选择支付宝/微信
+        ├── 跳转支付
+        ├── 支付成功回调 → 激活专业版
+        └── 完成 ✅
+
+激活后：
+    ├── 网站：会员状态立即更新
+    └── 客户端：打开软件 → [刷新状态] → 调用 refresh.php → 获取新Token
+```
+
+### 13.8 会员到期处理
+
+| 阶段 | 处理 |
+|:--|:--|
+| 到期前 7 天 | 个人中心显示提醒；客户端登录时提示 |
+| 到期当天 | level 自动降为 "basic"；下次刷新Token后权限降级 |
+| 到期前续费 | 从当前到期日延长（不损失剩余天数） |
+| 到期后续费 | 从购买日重新计算 |
+| 多次购买 | 可叠加（购买12个月=200×2=400元，或设年费优惠价） |
+
+### 13.9 安全措施
+
+| 措施 | 说明 |
+|:--|:--|
+| 密码加密 | bcrypt hash，永不明文存储 |
+| JWT签名 | RSA 签名，防篡改 |
+| 支付验签 | 支付宝/微信回调验签，防伪造通知 |
+| 余额操作 | 数据库事务，防并发扣款 |
+| Token吊销 | 支持服务端吊销，防泄露 |
+| 登录保护 | 连续失败5次锁定15分钟 |
+| HTTPS | 全站强制 HTTPS |
+| SQL注入 | 所有查询参数化 |
+| XSS | 输出转义 + CSP 头 |
+
+---
+
+## 十四、整体架构总览
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    7Tan 整体架构                         │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│   ┌──────────────┐         ┌──────────────────────┐    │
+│   │  7tan.com    │  HTTPS  │   7Tan 客户端        │    │
+│   │              │◄───────►│                      │    │
+│   │ · 注册/登录  │   API   │ · AI对话/写代码      │    │
+│   │ · 充值      │         │ · 游戏分析/发布      │    │
+│   │ · 购买专业版 │         │ · 开发运维工具       │    │
+│   │ · 个人中心   │         │ · 自我修改(专业版)   │    │
+│   └──────┬───────┘         └──────────┬───────────┘    │
+│          │                            │                 │
+│          │ MySQL                      │ SQLite          │
+│          ▼                            ▼                 │
+│   ┌──────────────┐         ┌──────────────────────┐    │
+│   │ 7tan.com DB  │         │ 本地数据库            │    │
+│   │ · users      │         │ · 游戏资源            │    │
+│   │ · balance    │         │ · 任务日志            │    │
+│   │ · pro_purch  │         │ · 配置缓存            │    │
+│   │ · auth_token │         │ · 代码片段            │    │
+│   └──────────────┘         └──────────────────────┘    │
+│                                                         │
+│   第三方服务：                                           │
+│   · 支付宝/微信支付（充值/购买专业版）                   │
+│   · DeepSeek API（AI模型）                              │
+│   · 云存储 OSS（游戏包）                                │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+> 📌 本文档随开发进度持续更新。任何架构变更必须先更新本文档再实施。
+
+```

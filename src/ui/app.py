@@ -40,6 +40,7 @@ import requests
 from loguru import logger
 
 from .theme import THEME
+from .pro_status_widget import ProStatusWidget
 
 DARK_STYLESHEET = f"""
 QMainWindow, QWidget {{
@@ -347,6 +348,7 @@ class Sidebar(QFrame):
 
     def __init__(self, user_info: dict | None = None):
         super().__init__()
+        self._user_info = user_info or {}
         self.setFixedWidth(200)
         self.setStyleSheet(f"background-color: {THEME['bg_sidebar']};")
         self._buttons = {}
@@ -406,6 +408,11 @@ class Sidebar(QFrame):
         self._session_sidebar.setFixedWidth(184)
         self._session_sidebar.hide()
         layout.addWidget(self._session_sidebar)
+
+        # 专业版状态组件
+        self._pro_status = ProStatusWidget(self._user_info)
+        self._pro_status.status_updated.connect(self._on_pro_status_updated)
+        layout.addWidget(self._pro_status)
 
         layout.addStretch()
 
@@ -3906,7 +3913,7 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
 
         # 侧边栏
-        self._sidebar = Sidebar()
+        self._sidebar = Sidebar(user_info=self._user_info)
         self._sidebar.page_changed.connect(self._switch_page)
         self._sidebar.open_url.connect(self._on_open_url)
         main_layout.addWidget(self._sidebar)
@@ -3962,6 +3969,11 @@ class MainWindow(QMainWindow):
         if key in self._pages:
             self._stack.setCurrentWidget(self._pages[key])
             self._status.showMessage(f"📍 {key}")
+
+    def _on_pro_status_updated(self, info: dict):
+        """专业版状态刷新后更新全局信息"""
+        self._user_info.update(info)
+        self._status.showMessage(f"🟢 就绪  |  {self._user_info.get('username', '未登录')}  |  {info.get('level', 'basic')}")
 
     def _on_open_url(self, url: str):
         """侧边栏点击链接 → 切换到 AI 工作台并在浏览器打开"""

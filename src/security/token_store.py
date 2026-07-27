@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 
@@ -68,7 +68,7 @@ def _derive_key() -> bytes:
     machine_id = _get_machine_id()
     # PBKDF2: 机器标识 + 混淆片段 → 256-bit 密钥
     material = machine_id.encode() + _PART1 + _PART2
-    kdf = PBKDF2(
+    kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
         salt=_SALT,

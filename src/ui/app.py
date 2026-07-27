@@ -4047,6 +4047,18 @@ def launch_app():
             logger.info("[Login] 用户取消登录，退出")
             return
 
+        # ===== 新手引导 =====
+        from .welcome_wizard import should_show_wizard, show_welcome_wizard
+        if should_show_wizard():
+            logger.info("[Wizard] 显示新手引导...")
+            api_key = show_welcome_wizard()
+            if api_key:
+                logger.info("[Wizard] 用户已填写 API Key")
+            else:
+                logger.info("[Wizard] 用户跳过/完成引导")
+        else:
+            logger.info("[Wizard] 已配置 API Key，跳过引导")
+
         logger.info("🏗️ 创建主窗口...")
         window = MainWindow(user_info=user_info)
         window.show()

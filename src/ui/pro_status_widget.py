@@ -229,7 +229,7 @@ class ProStatusWidget(QFrame):
                 result.get("message", "未知错误，请检查网络后重试。"))
 
     def _on_upgrade(self) -> None:
-        """打开 7tan.com 个人中心购买页面"""
-        url = "https://7tan.com/member/"
+        """打开 7tan.com 升级专业版页面"""
+        url = "https://www.7tan.com/pro.php"
         webbrowser.open(url)
-        logger.info("[ProStatus] 打开购买页面: 7tan.com/member/")
+        logger.info("[ProStatus] 打开升级页面: www.7tan.com/pro.php")

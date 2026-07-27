@@ -185,6 +185,18 @@ def refresh_token(token: str) -> dict:
         return {"success": False, "message": f"服务器错误 ({resp.status_code})"}
 
     try:
-        return resp.json()
+        raw = resp.json()
     except Exception:
-        return {"success": False, "message": "数据格式异常"}
+        return {"success": False, "message": "服务器返回数据格式异常"}
+
+    # PHP 响应: {"code": 0, "data": {"token": "...", "level": "pro", ...}}
+    if raw.get("code") != 0:
+        return {"success": False, "message": raw.get("message", "刷新失败")}
+    
+    data = raw.get("data", {})
+    return {
+        "success": True,
+        "token": data.get("token", ""),
+        "level": data.get("level", "basic"),
+        "pro_expires": data.get("pro_expires", 0),
+    }

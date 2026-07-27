@@ -47,37 +47,54 @@ $PLANS = [
 // 获取输入
 // ============================================================
 $input  = json_decode(file_get_contents('php://input'), true);
-$plan   = trim($input['plan'] ?? 'semi_annual');
+$plan   = $input['plan'] ?? '';
+$months = (int)($input['months'] ?? 0);
 
-if (!isset($PLANS[$plan])) {
+// 如果传了 plan，用 plan 查价格；否则用 months 反查
+if (!empty($plan) && isset($PLANS[$plan])) {
+    $plan_info = $PLANS[$plan];
+    $amount    = $plan_info['price'];
+    $months    = $plan_info['months'];
+} elseif ($months > 0) {
+    // 按 months 匹配套餐
+    $found = false;
+    foreach ($PLANS as $key => $info) {
+        if ($info['months'] === $months) {
+            $plan      = $key;
+            $plan_info = $info;
+            $amount    = $info['price'];
+            $found     = true;
+            break;
+        }
+    }
+    if (!$found) {
+        http_response_code(400);
+        echo json_encode(['code' => -1, 'message' => '无效的购买月数']);
+        exit;
+    }
+} else {
     http_response_code(400);
-    echo json_encode(['code' => -1, 'message' => '无效的套餐: ' . $plan]);
+    echo json_encode(['code' => -1, 'message' => '请指定套餐 plan 或购买月数 months']);
     exit;
 }
-
-$plan_info = $PLANS[$plan];
-$months    = $plan_info['months'];
-$amount    = $plan_info['price'];
 
 // ============================================================
 // 查询余额
 // ============================================================
-$db   = get_db_connection();
+$db  = get_db_connection();
 $stmt = $db->prepare('SELECT balance FROM user_balance WHERE user_id = :uid LIMIT 1');
 $stmt->execute([':uid' => $uid]);
-$row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-$balance = $row ? (float)$row['balance'] : 0.00;
+$balance = (float)($stmt->fetchColumn() ?: 0);
 
 if ($balance < $amount) {
     http_response_code(402);
     echo json_encode([
         'code'    => -1,
-        'message' => '余额不足',
+        'message' => '余额不足，需要 ' . $amount . ' 元，当前余额 ' . $balance . ' 元',
         'data'    => [
-            'balance' => $balance,
-            'need'    => $amount,
-            'short'   => round($amount - $balance, 2),
+            'required' => $amount,
+            'balance'  => $balance,
+            'shortage' => round($amount - $balance, 2),
         ],
     ]);
     exit;
@@ -86,20 +103,20 @@ if ($balance < $amount) {
 // ============================================================
 // 计算到期时间
 // ============================================================
-// 如果当前有未过期的专业版，在现有到期时间基础上叠加
 $now = time();
 
+// 如果当前有未过期的专业版，在现有到期时间基础上叠加
 $stmt = $db->prepare(
     'SELECT expires_at FROM user_pro_subscriptions
-     WHERE user_id = :uid AND status = 1 AND expires_at > NOW()
+     WHERE user_id = :uid AND status = 1 AND expires_at > :now
      ORDER BY expires_at DESC
      LIMIT 1'
 );
-$stmt->execute([':uid' => $uid]);
+$stmt->execute([':uid' => $uid, ':now' => $now]);
 $existing = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if ($existing) {
-    $base_time = strtotime($existing['expires_at']);
+    $base_time = (int)$existing['expires_at'];
 } else {
     $base_time = $now;
 }
@@ -122,19 +139,18 @@ try {
     );
     $stmt->execute([':amount' => $amount, ':uid' => $uid]);
 
-    // 2. 写入订阅记录（新表）
+    // 2. 写入订阅记录（expires_at/activated_at/created_at 都是 BIGINT Unix 时间戳）
     $stmt = $db->prepare(
-        'INSERT INTO user_pro_subscriptions (user_id, plan, months, amount, pay_type, trade_no, status, activated_at, expires_at, created_at)
-         VALUES (:uid, :plan, :months, :amount, :pay_type, :trade_no, 1, NOW(), :expires_at, NOW())'
+        'INSERT INTO user_pro_subscriptions (user_id, plan, months, amount, status, activated_at, expires_at, created_at)
+         VALUES (:uid, :plan, :months, :amount, 1, :now, :expires_at, :now)'
     );
     $stmt->execute([
         ':uid'        => $uid,
         ':plan'       => $plan,
         ':months'     => $months,
         ':amount'     => $amount,
-        ':pay_type'   => 'balance',
-        ':trade_no'   => $trade_no,
-        ':expires_at' => date('Y-m-d H:i:s', $new_expires),
+        ':now'        => $now,
+        ':expires_at' => $new_expires,
     ]);
 
     $db->commit();

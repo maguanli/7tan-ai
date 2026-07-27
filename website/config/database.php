@@ -1,18 +1,18 @@
 <?php
 // ============================================================
-// 数据库连接配置（模板）
+// 数据库连接配置
 // 位置: /config/database.php
 // 
-// ⚠️ 如果网站已有数据库配置文件，请忽略此文件，
-//    只需确保其他文件中的 get_db_connection() 函数存在即可。
+// ⚠️ 如果网站已有 get_db_connection() 函数，可跳过此文件，
+//    只需确保 API 文件中能获取 PDO 连接即可。
 // ============================================================
 
-// 数据库配置
-define('DB_HOST', '127.0.0.1');
+// 数据库配置（来自 D:\7T723\config.php）
+define('DB_HOST', 'localhost');
 define('DB_PORT', '3306');
-define('DB_NAME', '7tan');
+define('DB_NAME', '7tan_cn');
 define('DB_USER', 'root');
-define('DB_PASS', '请修改为实际数据库密码');
+define('DB_PASS', '7233DB_Pass!2024');
 define('DB_CHARSET', 'utf8mb4');
 
 /**

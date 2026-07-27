@@ -19,46 +19,45 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../lib/jwt_helper.php';
 
 $JWT_SECRET = defined('JWT_SECRET') ? JWT_SECRET : 'change-me-to-a-random-64-char-string';
-$JWT_ISSUER = '7tan.com';
-$JWT_EXPIRE = 30 * 24 * 3600;  // 30 天
 
 // ============================================================
-// 获取 Token
+// 提取 Token
 // ============================================================
 $token = '';
-$auth_header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-if (preg_match('/Bearer\s+(.+)/i', $auth_header, $m)) {
-    $token = $m[1];
+if (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
+    $auth = $_SERVER['HTTP_AUTHORIZATION'];
+    if (strpos($auth, 'Bearer ') === 0) {
+        $token = substr($auth, 7);
+    }
 }
-if ($token === '' && !empty($_GET['token'])) {
+if (empty($token) && !empty($_GET['token'])) {
     $token = $_GET['token'];
 }
 
-if ($token === '') {
+if (empty($token)) {
     http_response_code(401);
     echo json_encode(['code' => -1, 'message' => '缺少 Token']);
     exit;
 }
 
 // ============================================================
-// 解析旧 Token（允许已过期的 Token，只要签名有效）
+// 解码旧 Token（跳过过期检查）
 // ============================================================
 try {
-    // 验证签名但不检查过期时间
     $payload = jwt_decode_auto_skip_expiry($token, $JWT_SECRET);
-} catch (Exception $e) {
+} catch (JWTException $e) {
     http_response_code(401);
-    echo json_encode(['code' => -1, 'message' => 'Token 无效: ' . $e->getMessage()]);
+    echo json_encode(['code' => -1, 'message' => 'Token 无效']);
     exit;
 }
 
 $uid = (int)($payload['uid'] ?? 0);
 
 // ============================================================
-// 查数据库获取最新状态
+// 查用户基本信息（ll_useregs 实际列名）
 // ============================================================
 $db   = get_db_connection();
-$stmt = $db->prepare('SELECT id, username, pro_activated, pro_expires FROM ll_useregs WHERE id = :uid LIMIT 1');
+$stmt = $db->prepare('SELECT id, ll_name FROM ll_useregs WHERE id = :uid LIMIT 1');
 $stmt->execute([':uid' => $uid]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -68,27 +67,42 @@ if (!$user) {
     exit;
 }
 
-$now           = time();
-$pro_activated = (int)($user['pro_activated'] ?? 0);
-$pro_expires   = (int)($user['pro_expires']   ?? 0);
-$is_pro        = ($pro_activated === 1 && $pro_expires > $now);
+// ============================================================
+// 查最新的专业版状态（expires_at 是 BIGINT Unix 时间戳）
+// ============================================================
+$now = time();
+$stmt = $db->prepare(
+    'SELECT id, plan, months, amount, activated_at, expires_at
+     FROM user_pro_subscriptions
+     WHERE user_id = :uid AND status = 1 AND expires_at > :now
+     ORDER BY expires_at DESC
+     LIMIT 1'
+);
+$stmt->execute([':uid' => $uid, ':now' => $now]);
+$sub = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if ($sub) {
+    $pro_activated = 1;
+    $pro_expires   = (int)$sub['expires_at'];
+    $is_pro        = ($pro_expires > $now);
+} else {
+    $pro_activated = 0;
+    $pro_expires   = 0;
+    $is_pro        = false;
+}
 
 // ============================================================
-// 签发新 Token（含最新状态）
+// 签发新 JWT
 // ============================================================
-$new_payload = [
-    'iss'          => $JWT_ISSUER,
-    'iat'          => $now,
-    'exp'          => $now + $JWT_EXPIRE,
-    'uid'          => (int)$user['id'],
-    'username'     => $user['username'],
-    'level'        => $is_pro ? 'pro' : 'free',
-    'pro_activated'=> $pro_activated,
-    'pro_expires'  => $pro_expires,
-    'jti'          => bin2hex(random_bytes(16)),
-];
-
-$new_token = jwt_encode_auto($new_payload, $JWT_SECRET);
+$new_token = jwt_encode_auto([
+    'uid'           => (int)$user['id'],
+    'username'      => $user['ll_name'],
+    'level'         => $is_pro ? 'pro' : 'free',
+    'pro_activated' => $pro_activated,
+    'pro_expires'   => $pro_expires,
+    'iat'           => $now,
+    'exp'           => $now + 86400 * 30,
+], $JWT_SECRET);
 
 // ============================================================
 // 响应
@@ -98,8 +112,6 @@ echo json_encode([
     'message' => 'Token 已刷新',
     'data'    => [
         'token'         => $new_token,
-        'uid'           => (int)$user['id'],
-        'username'      => $user['username'],
         'level'         => $is_pro ? 'pro' : 'free',
         'pro_activated' => $pro_activated,
         'pro_expires'   => $pro_expires,

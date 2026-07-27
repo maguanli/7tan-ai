@@ -27,13 +27,31 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # 🔧 全局修复: subprocess text=True 在 Windows 中文系统下默认用 GBK 解码，
 # 遇到 UTF-8 内容会 UnicodeDecodeError。这里在入口统一补丁为 utf-8。
 import subprocess as _subprocess
+
 _original_run = _subprocess.run
+_original_popen = _subprocess.Popen
+
 def _patched_run(*args, **kwargs):
     if kwargs.get('text') and 'encoding' not in kwargs:
         kwargs['encoding'] = 'utf-8'
         kwargs['errors'] = 'replace'
+    if sys.platform == 'win32':
+        existing = kwargs.get('creationflags', 0)
+        kwargs['creationflags'] = existing | _subprocess.CREATE_NO_WINDOW
     return _original_run(*args, **kwargs)
+
+class _PatchedPopen(_subprocess.Popen):
+    def __init__(self, *args, **kwargs):
+        if kwargs.get('text') and 'encoding' not in kwargs:
+            kwargs['encoding'] = 'utf-8'
+            kwargs['errors'] = 'replace'
+        if sys.platform == 'win32':
+            existing = kwargs.get('creationflags', 0)
+            kwargs['creationflags'] = existing | _subprocess.CREATE_NO_WINDOW
+        super().__init__(*args, **kwargs)
+
 _subprocess.run = _patched_run
+_subprocess.Popen = _PatchedPopen
 
 # 修复 Windows 控制台 GBK 编码问题（emoji 字符无法编码）
 if sys.platform == 'win32':

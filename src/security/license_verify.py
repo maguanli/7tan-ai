@@ -60,7 +60,7 @@ def verify_license(token_str: str) -> dict[str, Any]:
         LicenseInvalid: 令牌格式错误或签名无效
         LicenseExpired: 授权已过期
     """
-    if not token_str or not token_str.strip():
+    if not token_str or not isinstance(token_str, str) or not token_str.strip():
         raise LicenseInvalid("令牌为空")
 
     # 1. 获取公钥

@@ -177,7 +177,12 @@ def refresh_token(token: str) -> dict:
         return {"success": False, "message": "API 端点未配置"}
 
     try:
-        resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=_TIMEOUT)
+        resp = requests.get(
+            url,
+            params={"token": token},  # 兼容不传 Authorization 头的主机
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=_TIMEOUT,
+        )
     except requests.exceptions.RequestException as e:
         return {"success": False, "message": f"网络异常: {e}"}
 

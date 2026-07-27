@@ -84,6 +84,10 @@ faulthandler.enable(file=open(_CRASH_DIR / f"segfault_{os.getpid()}.txt", "w"))
 from loguru import logger
 from dotenv import load_dotenv
 
+# ===== Phase 2: 启动安全防护 =====
+import ctypes as _ctypes
+from src.security.safe_modify import restore_latest_backup, restore_all_from_backup
+
 # 加载环境变量
 load_dotenv(PROJECT_ROOT / ".env")
 
@@ -131,11 +135,136 @@ def main():
         run_cli(args)
 
 
+def is_safe_mode():
+    """
+    检测是否进入安全模式。
+    触发方式：按住 Shift 启动 或 命令行 --safe-mode
+    """
+    if "--safe-mode" in sys.argv:
+        return True
+    try:
+        return bool(_ctypes.windll.user32.GetAsyncKeyState(0x10) & 0x8000)
+    except Exception:
+        return False
+
+
+def startup_self_check():
+    """
+    启动自检。
+    检查关键 .pyd 存在、核心模块导入、main.py 语法完整性。
+
+    Returns:
+        (ok: bool, msg: str)
+    """
+    required_pyd = [
+        "src/security/license_verify.pyd",
+        "src/security/rsa_verify.pyd",
+        "src/security/safe_modify.pyd",
+    ]
+
+    # ① 检查关键 .pyd 文件存在（未编译时用 .py 回退）
+    for f in required_pyd:
+        py_path = PROJECT_ROOT / f
+        py_fallback = PROJECT_ROOT / f.replace(".pyd", ".py")
+        if not py_path.exists() and not py_fallback.exists():
+            return False, f"核心文件缺失: {f}"
+
+    # ② 尝试导入关键模块
+    try:
+        from src.security.license_verify import verify_license  # noqa: F401
+        from src.security.safe_modify import pre_modify_check  # noqa: F401
+    except ImportError as e:
+        return False, f"核心模块导入失败: {e}"
+
+    # ③ 检查 main.py 语法完整性
+    try:
+        with open(__file__, "r", encoding="utf-8") as f:
+            compile(f.read(), __file__, "exec")
+    except SyntaxError as e:
+        return False, f"main.py 语法错误: {e}"
+
+    return True, "OK"
+
+
+def attempt_recovery():
+    """
+    尝试从备份恢复。
+
+    Returns:
+        成功恢复的文件列表（空列表=恢复失败或无备份）
+    """
+    try:
+        restored = restore_latest_backup()
+        if restored:
+            logger.info(f"🔄 已回滚 {len(restored)} 个文件: {restored}")
+        return restored
+    except Exception as e:
+        logger.error(f"回滚失败: {e}")
+        return []
+
+
 def run_desktop(args):
     """启动原生桌面应用 — PyQt6 全原生控件，后端异步初始化"""
     # 沙盒模式：由 sandbox_execute 的子进程设置，防止意外启动 GUI
     if os.environ.get("SANDBOX_MODE") == "1":
         return
+
+    # ===== 安全模式处理 =====
+    if is_safe_mode():
+        logger.warning("🛟 检测到安全模式启动信号")
+        restored = restore_all_from_backup()
+        if restored:
+            logger.info(f"🛟 安全模式: 已恢复 {len(restored)} 个文件到原始版本")
+            # 弹窗告知（用 tkinter，避免依赖任何可能损坏的模块）
+            try:
+                import tkinter.messagebox as _mb
+                _mb.showinfo(
+                    "7Tan - 安全模式",
+                    f"已进入安全模式。\n\n"
+                    f"所有用户修改已回滚到原始版本（{len(restored)} 个文件）。\n"
+                    "你可以重新开始修改。"
+                )
+            except Exception:
+                pass
+        else:
+            logger.warning("🛟 安全模式: 无备份可恢复")
+
+    # ===== 启动自检 =====
+    ok, msg = startup_self_check()
+    if not ok:
+        logger.error(f"❌ 启动自检失败: {msg}")
+        restored = attempt_recovery()
+        if restored:
+            try:
+                import tkinter.messagebox as _mb
+                _mb.showwarning(
+                    "7Tan - 自动修复",
+                    f"检测到以下文件修改导致启动失败：\n{msg}\n\n"
+                    f"已自动回滚 {len(restored)} 个文件。\n"
+                    "点击确定后重新启动。"
+                )
+            except Exception:
+                pass
+            # 重启
+            import subprocess as _sp
+            _sp.Popen([sys.executable] + sys.argv,
+                      creationflags=_sp.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
+            sys.exit(0)
+        else:
+            try:
+                import tkinter.messagebox as _mb
+                _mb.showerror(
+                    "7Tan - 启动失败",
+                    f"启动失败且无法自动修复：\n{msg}\n\n"
+                    "请尝试：\n"
+                    "1. 按住 Shift 双击启动 → 安全模式\n"
+                    "2. 重新安装软件"
+                )
+            except Exception:
+                pass
+            sys.exit(1)
+    else:
+        logger.info("✅ 启动自检通过")
 
     import threading
     from src.scheduler.scheduler import start_scheduler

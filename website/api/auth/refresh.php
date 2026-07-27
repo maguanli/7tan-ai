@@ -1,13 +1,13 @@
 <?php
 // ============================================================
-// B4: 刷新 Token（续费/升级后调用）
+// B4: Refresh Token
 // GET /api/auth/refresh.php
-// 用户续费后点 [刷新状态] → 重新签发含最新 pro_expires 的 JWT
+// Re-issues JWT with latest pro_expires after renewal
 // ============================================================
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -21,54 +21,76 @@ require_once __DIR__ . '/../../lib/jwt_helper.php';
 $JWT_SECRET = defined('JWT_SECRET') ? JWT_SECRET : 'change-me-to-a-random-64-char-string';
 
 // ============================================================
-// 提取 Token
+// Extract Token (4 sources)
 // ============================================================
 $token = '';
-if (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
-    $auth = $_SERVER['HTTP_AUTHORIZATION'];
-    if (strpos($auth, 'Bearer ') === 0) {
-        $token = substr($auth, 7);
-    }
+
+// 1. Authorization header (including Apache REDIRECT_ variant)
+$auth_header = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+if (!empty($auth_header) && preg_match('/Bearer\s+(.+)/i', $auth_header, $m)) {
+    $token = $m[1];
 }
+
+// 2. GET param
 if (empty($token) && !empty($_GET['token'])) {
     $token = $_GET['token'];
 }
 
+// 3. POST JSON body
+if (empty($token)) {
+    $raw_body = file_get_contents('php://input');
+    if (!empty($raw_body)) {
+        $body = json_decode($raw_body, true);
+        if (!empty($body['token'])) {
+            $token = $body['token'];
+        }
+    }
+}
+
+// 4. POST form
+if (empty($token) && !empty($_POST['token'])) {
+    $token = $_POST['token'];
+}
+
 if (empty($token)) {
     http_response_code(401);
-    echo json_encode(['code' => -1, 'message' => '缺少 Token']);
+    echo json_encode(['code' => -1, 'message' => 'Missing Token']);
     exit;
 }
 
 // ============================================================
-// 解码旧 Token（跳过过期检查）
+// Decode old Token (skip expiry check)
 // ============================================================
 try {
     $payload = jwt_decode_auto_skip_expiry($token, $JWT_SECRET);
 } catch (JWTException $e) {
     http_response_code(401);
-    echo json_encode(['code' => -1, 'message' => 'Token 无效']);
+    echo json_encode(['code' => -1, 'message' => 'Token invalid: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    exit;
+} catch (\Throwable $e) {
+    http_response_code(401);
+    echo json_encode(['code' => -1, 'message' => 'Token parse error: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 $uid = (int)($payload['uid'] ?? 0);
+$db = get_db_connection();
 
 // ============================================================
-// 查用户基本信息（ll_useregs 实际列名）
+// Query user info (ll_useregs)
 // ============================================================
-$db   = get_db_connection();
-$stmt = $db->prepare('SELECT id, ll_name FROM ll_useregs WHERE id = :uid LIMIT 1');
+$stmt = $db->prepare('SELECT id, ll_name, ll_pwd, ll_date, email FROM ll_useregs WHERE id = :uid LIMIT 1');
 $stmt->execute([':uid' => $uid]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$user) {
     http_response_code(401);
-    echo json_encode(['code' => -1, 'message' => '用户不存在']);
+    echo json_encode(['code' => -1, 'message' => 'User not found']);
     exit;
 }
 
 // ============================================================
-// 查最新的专业版状态（expires_at 是 BIGINT Unix 时间戳）
+// Query latest pro subscription status
 // ============================================================
 $now = time();
 $stmt = $db->prepare(
@@ -92,7 +114,7 @@ if ($sub) {
 }
 
 // ============================================================
-// 签发新 JWT
+// Issue new JWT
 // ============================================================
 $new_token = jwt_encode_auto([
     'uid'           => (int)$user['id'],
@@ -105,11 +127,11 @@ $new_token = jwt_encode_auto([
 ], $JWT_SECRET);
 
 // ============================================================
-// 响应
+// Response
 // ============================================================
 echo json_encode([
     'code'    => 0,
-    'message' => 'Token 已刷新',
+    'message' => 'Token refreshed',
     'data'    => [
         'token'         => $new_token,
         'level'         => $is_pro ? 'pro' : 'free',

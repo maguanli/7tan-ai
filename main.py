@@ -163,11 +163,13 @@ def startup_self_check():
     ]
 
     # ① 检查关键 .pyd 文件存在（未编译时用 .py 回退）
-    for f in required_pyd:
-        py_path = PROJECT_ROOT / f
-        py_fallback = PROJECT_ROOT / f.replace(".pyd", ".py")
-        if not py_path.exists() and not py_fallback.exists():
-            return False, f"核心文件缺失: {f}"
+    # PyInstaller 打包后模块在 exe 内部，文件系统中不存在，跳过文件检查
+    if not getattr(sys, 'frozen', False):
+        for f in required_pyd:
+            py_path = PROJECT_ROOT / f
+            py_fallback = PROJECT_ROOT / f.replace(".pyd", ".py")
+            if not py_path.exists() and not py_fallback.exists():
+                return False, f"核心文件缺失: {f}"
 
     # ② 尝试导入关键模块
     try:
@@ -176,10 +178,11 @@ def startup_self_check():
     except ImportError as e:
         return False, f"核心模块导入失败: {e}"
 
-    # ③ 检查 main.py 语法完整性
+    # ③ 检查 main.py 语法完整性（PyInstaller 打包后 __file__ 指向 exe 而非 .py，跳过）
     try:
-        with open(__file__, "r", encoding="utf-8") as f:
-            compile(f.read(), __file__, "exec")
+        if not getattr(sys, 'frozen', False):
+            with open(__file__, "r", encoding="utf-8") as f:
+                compile(f.read(), __file__, "exec")
     except SyntaxError as e:
         return False, f"main.py 语法错误: {e}"
 

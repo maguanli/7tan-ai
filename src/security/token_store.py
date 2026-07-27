@@ -135,7 +135,14 @@ def save_token(token: str, username: str = "", level: str = "basic",
     try:
         _AUTH_DIR.mkdir(parents=True, exist_ok=True)
 
-        # 如果 Token 已在本地保存中且非空，追加存储
+        # 防御：token 必须是字符串，不能是 dict 或其他类型
+        if not isinstance(token, str):
+            logger.error(f"[Token] save_token 收到了非字符串 token: {type(token)}")
+            return False
+        if not token.strip():
+            logger.error("[Token] save_token 收到了空 token")
+            return False
+
         payload = {
             "token": token,
             "username": username,

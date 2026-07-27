@@ -241,15 +241,34 @@ class ProStatusWidget(QFrame):
                 "level": result.get("level", token_data.get("level", "basic")),
                 "pro_expires": result.get("pro_expires", token_data.get("pro_expires", 0)),
             }
-            save_token(new_info)
+            save_token(
+                token=new_info["token"],
+                username=new_info.get("username", ""),
+                level=new_info.get("level", "basic"),
+                pro_expires=new_info.get("pro_expires", 0),
+                expires_in=new_info.get("expires_in", 2592000),
+            )
             self._user_info.update(new_info)
             self._update_display()
             self.status_updated.emit(new_info)
             QMessageBox.information(self, "刷新成功", "会员状态已更新！")
             logger.info("[ProStatus] Token 刷新成功")
         else:
-            QMessageBox.warning(self, "刷新失败",
-                result.get("message", "未知错误，请检查网络后重试。"))
+            msg = result.get("message", "未知错误，请检查网络后重试。")
+            if "401" in msg or "Token" in msg:
+                reply = QMessageBox.question(
+                    self, "刷新失败 — 需要重新登录",
+                    f"{msg}\n\n是否清除本地登录信息并重新登录？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes,
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    clear_token()
+                    self._user_info = {}
+                    self._update_display()
+                    self.logout_requested.emit()
+            else:
+                QMessageBox.warning(self, "刷新失败", msg)
 
     def _on_upgrade(self) -> None:
         """打开 7tan.com 升级专业版页面"""

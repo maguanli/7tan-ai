@@ -80,21 +80,11 @@ def login(username: str, password: str, remember_me: bool = False) -> dict:
 
     try:
         resp = requests.post(url, json=payload, timeout=_TIMEOUT)
-    except requests.exceptions.Timeout:
-        raise NetworkError("连接超时，请检查网络后重试")
-    except requests.exceptions.ConnectionError:
-        raise NetworkError("无法连接到服务器，请检查网络")
     except requests.exceptions.RequestException as e:
-        raise NetworkError(f"网络异常: {e}")
+        raise NetworkError(f"网络连接失败: {e}")
 
-    if resp.status_code == 401:
-        raise LoginFailed("用户名或密码错误")
-    elif resp.status_code == 403:
-        raise LoginFailed("账号已被禁用，请联系客服")
-    elif resp.status_code >= 500:
-        raise ServerError(f"服务器繁忙 ({resp.status_code})，请稍后重试")
-    elif resp.status_code != 200:
-        raise ServerError(f"服务器返回异常 ({resp.status_code})")
+    if resp.status_code != 200:
+        raise ServerError(f"服务器返回 {resp.status_code}")
 
     try:
         data = resp.json()
@@ -165,6 +155,7 @@ def online_verify(token: str) -> dict:
 def refresh_token(token: str) -> dict:
     """
     刷新 Token（续费/升级后使用）。
+    先尝试 GET + Authorization header，失败则尝试 POST body。
 
     Args:
         token: 当前 JWT Token
@@ -176,32 +167,53 @@ def refresh_token(token: str) -> dict:
     if not url:
         return {"success": False, "message": "API 端点未配置"}
 
-    try:
-        resp = requests.get(
-            url,
-            params={"token": token},  # 兼容不传 Authorization 头的主机
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=_TIMEOUT,
-        )
-    except requests.exceptions.RequestException as e:
-        return {"success": False, "message": f"网络异常: {e}"}
+    def _do_request(method: str) -> dict:
+        """执行单次请求并解析结果"""
+        try:
+            if method == "GET":
+                resp = requests.get(
+                    url,
+                    params={"token": token},
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=_TIMEOUT,
+                )
+            else:
+                resp = requests.post(
+                    url,
+                    json={"token": token},
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=_TIMEOUT,
+                )
+        except requests.exceptions.RequestException as e:
+            return {"success": False, "message": f"网络异常: {e}"}
 
-    if resp.status_code != 200:
-        return {"success": False, "message": f"服务器错误 ({resp.status_code})"}
+        # 尝试解析服务器消息
+        try:
+            raw = resp.json()
+            server_msg = raw.get("message", "")
+        except Exception:
+            server_msg = (resp.text or "")[:200]
 
-    try:
-        raw = resp.json()
-    except Exception:
-        return {"success": False, "message": "服务器返回数据格式异常"}
+        if resp.status_code != 200:
+            detail = server_msg or f"HTTP {resp.status_code}"
+            return {"success": False, "message": f"服务器错误: {detail}"}
 
-    # PHP 响应: {"code": 0, "data": {"token": "...", "level": "pro", ...}}
-    if raw.get("code") != 0:
-        return {"success": False, "message": raw.get("message", "刷新失败")}
-    
-    data = raw.get("data", {})
-    return {
-        "success": True,
-        "token": data.get("token", ""),
-        "level": data.get("level", "basic"),
-        "pro_expires": data.get("pro_expires", 0),
-    }
+        if raw.get("code") != 0:
+            return {"success": False, "message": raw.get("message", "刷新失败")}
+
+        data = raw.get("data", {})
+        return {
+            "success": True,
+            "token": data.get("token", ""),
+            "level": data.get("level", "basic"),
+            "pro_expires": data.get("pro_expires", 0),
+        }
+
+    # 先尝试 GET
+    result = _do_request("GET")
+    if result.get("success"):
+        return result
+
+    # GET 失败，尝试 POST（某些服务器配置可能不传 query string）
+    logger.info("[Auth] GET 刷新失败，尝试 POST...")
+    return _do_request("POST")

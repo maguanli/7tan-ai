@@ -10,7 +10,7 @@ echo ╚════════════════════════
 echo.
 
 :: ── 1. 检查 Python ──
-echo [1/5] 检查 Python...
+echo [1/6] 检查 Python...
 call .venv\Scripts\activate.bat 2>nul
 if errorlevel 1 (
     echo [错误] 请先运行 start.bat 创建虚拟环境！
@@ -21,7 +21,7 @@ python --version
 echo.
 
 :: ── 2. 安装/升级 PyInstaller ──
-echo [2/5] 安装 PyInstaller...
+echo [2/6] 安装 PyInstaller...
 python -m pip install pyinstaller --upgrade
 if errorlevel 1 (
     echo [错误] PyInstaller 安装失败！
@@ -31,7 +31,7 @@ if errorlevel 1 (
 echo.
 
 :: ── 3. 确认 PyQt6（必需！） ──
-echo [3/5] 确认 PyQt6 + QWebEngineView...
+echo [3/6] 确认 PyQt6 + QWebEngineView...
 python -c "from PyQt6.QtWebEngineWidgets import QWebEngineView; print('PyQt6 OK')" >nul 2>&1
 if errorlevel 1 (
     echo [信息] PyQt6 未安装，正在安装（约150MB，请耐心等待）...
@@ -48,8 +48,28 @@ if errorlevel 1 (
 echo PyQt6 OK
 echo.
 
-:: ── 4. PyInstaller 打包 ──
-echo [4/5] PyInstaller 打包中（需要5-15分钟，请耐心等待）...
+:: ── 4. Cython 编译安全模块（.py → .pyd）──
+echo [4/6] Cython 编译安全模块...
+echo.
+python -m pip install cython setuptools --quiet 2>nul
+python setup_cython.py
+if errorlevel 1 (
+    echo [警告] Cython 编译部分失败，将继续打包...
+    echo 如果 .pyd 文件未生成，安全模块将以 .py 形式打包。
+)
+:: 隐藏 .py 源文件，确保 PyInstaller 优先打包 .pyd
+for %%f in (src\security\rsa_verify.py src\security\license_verify.py src\security\safe_modify.py) do (
+    if exist "%%f" (
+        if exist "%%~dpnf.pyd" (
+            echo   隐藏源文件: %%~nxf → %%~nxf.bak
+            rename "%%f" "%%~nxf.bak"
+        )
+    )
+)
+echo.
+
+:: ── 5. PyInstaller 打包 ──
+echo [5/6] PyInstaller 打包中（需要5-15分钟，请耐心等待）...
 echo.
 :: 清理旧构建 — 先强制删除文件再用 rmdir，避免 PyInstaller 弹确认
 if exist "dist\7tan-editor" (
@@ -72,8 +92,15 @@ if errorlevel 1 (
 )
 echo.
 
-:: ── 5. 复制额外文件到 dist ──
-echo [5/5] 复制运行文件到 dist\7tan-editor\...
+:: ── 6. 复制额外文件到 dist ──
+echo [6/6] 复制运行文件到 dist\7tan-editor\...
+:: 恢复 .py 源文件（构建时被重命名为 .bak）
+for %%f in (src\security\rsa_verify.py src\security\license_verify.py src\security\safe_modify.py) do (
+    if exist "%%f.bak" (
+        echo   恢复源文件: %%~nxf.bak → %%~nxf
+        rename "%%f.bak" "%%~nxf"
+    )
+)
 :: 复制配置文件模板
 if not exist "dist\7tan-editor\config" mkdir "dist\7tan-editor\config"
 copy /y "config\config.yaml" "dist\7tan-editor\config\config.yaml" >nul

@@ -16,7 +16,7 @@ from loguru import logger
 
 from ..security.license_verify import verify_license, LicenseError
 from ..security.auth_client import refresh_token
-from ..security.token_store import load_token, save_token
+from ..security.token_store import load_token, save_token, clear_token
 from .theme import THEME
 
 
@@ -25,6 +25,8 @@ class ProStatusWidget(QFrame):
 
     # 刷新完成后通知外部
     status_updated = pyqtSignal(dict)
+    # 退出登录请求
+    logout_requested = pyqtSignal()
 
     def __init__(self, user_info: dict | None = None):
         super().__init__()
@@ -114,8 +116,29 @@ class ProStatusWidget(QFrame):
         """)
         self._upgrade_btn.clicked.connect(self._on_upgrade)
 
+        self._logout_btn = QPushButton("🚪 退出")
+        self._logout_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self._logout_btn.setFixedHeight(26)
+        self._logout_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {THEME['text_secondary']};
+                border: 1px solid {THEME['border']};
+                border-radius: 4px;
+                padding: 2px 8px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background-color: #ff6b6b;
+                color: #fff;
+                border-color: #ff6b6b;
+            }}
+        """)
+        self._logout_btn.clicked.connect(self._on_logout)
+
         btn_layout.addWidget(self._refresh_btn)
         btn_layout.addWidget(self._upgrade_btn)
+        btn_layout.addWidget(self._logout_btn)
         layout.addLayout(btn_layout)
 
         # 初始刷新
@@ -233,3 +256,19 @@ class ProStatusWidget(QFrame):
         url = "https://www.7tan.com/pro.php"
         webbrowser.open(url)
         logger.info("[ProStatus] 打开升级页面: www.7tan.com/pro.php")
+
+    def _on_logout(self) -> None:
+        """退出会员登录"""
+        reply = QMessageBox.question(
+            self, "退出登录", "确定要退出当前会员账号吗？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        clear_token()
+        self._user_info = {}
+        self._update_display()
+        self.logout_requested.emit()
+        logger.info("[ProStatus] 用户已退出登录")

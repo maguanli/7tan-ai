@@ -344,6 +344,7 @@ class StatCard(QFrame):
 class Sidebar(QFrame):
     page_changed = pyqtSignal(str)
     open_url = pyqtSignal(str)
+    logout_requested = pyqtSignal()
 
     def __init__(self, user_info: dict | None = None):
         super().__init__()
@@ -412,6 +413,7 @@ class Sidebar(QFrame):
         # --- 专业版状态组件 ---
         from .pro_status_widget import ProStatusWidget
         self._pro_widget = ProStatusWidget()
+        self._pro_widget.logout_requested.connect(self.logout_requested.emit)
         layout.addWidget(self._pro_widget)
         layout.addSpacing(8)
 
@@ -3921,6 +3923,7 @@ class MainWindow(QMainWindow):
         self._sidebar = Sidebar()
         self._sidebar.page_changed.connect(self._switch_page)
         self._sidebar.open_url.connect(self._on_open_url)
+        self._sidebar.logout_requested.connect(self._on_logout)
         main_layout.addWidget(self._sidebar)
 
         # 分隔线
@@ -3981,6 +3984,11 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentWidget(self._pages["workspace"])
         self._status.showMessage(f"🌐 正在打开 {url}...")
         self._pages["workspace"].navigate_to_url(url)
+
+    def _on_logout(self):
+        """退出登录 → 关闭主窗口，重新弹出登录框"""
+        self.close()
+        launch_app()
 
     def closeEvent(self, event):
         """关闭窗口时清理：停止录屏 + 等待线程结束"""

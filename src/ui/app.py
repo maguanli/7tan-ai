@@ -345,7 +345,7 @@ class Sidebar(QFrame):
     page_changed = pyqtSignal(str)
     open_url = pyqtSignal(str)
 
-    def __init__(self):
+    def __init__(self, user_info: dict | None = None):
         super().__init__()
         self.setFixedWidth(200)
         self.setStyleSheet(f"background-color: {THEME['bg_sidebar']};")
@@ -470,7 +470,7 @@ class Sidebar(QFrame):
 #  DashboardPage - 仪表盘
 # ============================================================
 class DashboardPage(QWidget):
-    def __init__(self):
+    def __init__(self, user_info: dict | None = None):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -569,7 +569,7 @@ from .chat_page import ChatPage, MessageInput, SessionSidebar
 #  ResourceTablePage - 资源列表
 # ============================================================
 class ResourceTablePage(QWidget):
-    def __init__(self):
+    def __init__(self, user_info: dict | None = None):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -775,7 +775,7 @@ class ResourceTablePage(QWidget):
 #  TasksPage - 任务管理 + 定时采集
 # ============================================================
 class TasksPage(QWidget):
-    def __init__(self):
+    def __init__(self, user_info: dict | None = None):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -1062,7 +1062,7 @@ class TasksPage(QWidget):
 #  SourcesPage - 源站管理
 # ============================================================
 class SourcesPage(QWidget):
-    def __init__(self):
+    def __init__(self, user_info: dict | None = None):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -1332,7 +1332,7 @@ class BrowserPage(QWidget):
         import src.tools.browser_tools as bt
         return bt
 
-    def __init__(self):
+    def __init__(self, user_info: dict | None = None):
         super().__init__()
         from PyQt6.QtWebEngineWidgets import QWebEngineView
         from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEngineSettings
@@ -1908,7 +1908,7 @@ class ChatBrowserSplitPage(QWidget):
 
     _switch_signal = pyqtSignal(str)  # 线程安全的切换信号
 
-    def __init__(self):
+    def __init__(self, user_info: dict | None = None):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -2077,7 +2077,7 @@ class ChatBrowserSplitPage(QWidget):
 #  AnalyticsPage - 数据分析
 # ============================================================
 class AnalyticsPage(QWidget):
-    def __init__(self):
+    def __init__(self, user_info: dict | None = None):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -2150,7 +2150,7 @@ class AnalyticsPage(QWidget):
 #  SettingsPage - 设置页面
 # ============================================================
 class SettingsPage(QWidget):
-    def __init__(self):
+    def __init__(self, user_info: dict | None = None):
         super().__init__()
         self._loaded = False
         layout = QVBoxLayout(self)
@@ -3890,8 +3890,9 @@ class SettingsPage(QWidget):
 #  MainWindow - 主窗口
 # ============================================================
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, user_info: dict | None = None):
         super().__init__()
+        self._user_info = user_info or {}
         self.setWindowTitle("7Tan — AI工具")
         self.resize(1280, 820)
         self.setMinimumSize(960, 600)
@@ -3938,7 +3939,7 @@ class MainWindow(QMainWindow):
 
         # 状态栏
         self._status = QStatusBar()
-        self._status.showMessage("🟢 就绪")
+        self._status.showMessage(f"🟢 就绪  |  {self._user_info.get('username', '未登录')}")
         self.setStatusBar(self._status)
 
         # 默认显示仪表盘
@@ -4017,8 +4018,37 @@ def launch_app():
         app.setStyleSheet(DARK_STYLESHEET)
         app.setApplicationName("7Tan")
 
+        # ===== 登录检查 =====
+        from ..security.token_store import is_token_available, load_token
+        from ..security.trial_store import has_trials
+        from .login_dialog import show_login_dialog
+
+        user_info = None
+
+        if is_token_available():
+            # 本地 Token 有效，直接使用
+            data = load_token()
+            if data:
+                user_info = {
+                    "token": data.get("token", ""),
+                    "username": data.get("username", ""),
+                    "level": data.get("level", "basic"),
+                    "pro_expires": data.get("pro_expires", 0),
+                }
+                logger.info(f"[Login] 使用本地 Token (用户: {user_info['username']})")
+
+        if user_info is None:
+            # 需要登录
+            logger.info("[Login] 显示登录对话框...")
+            user_info = show_login_dialog()
+
+        if user_info is None:
+            # 用户关闭登录窗口，退出应用
+            logger.info("[Login] 用户取消登录，退出")
+            return
+
         logger.info("🏗️ 创建主窗口...")
-        window = MainWindow()
+        window = MainWindow(user_info=user_info)
         window.show()
         logger.info("🖥️ 原生 PyQt6 桌面应用已启动")
         app.exec()

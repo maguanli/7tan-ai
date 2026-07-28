@@ -8,8 +8,6 @@ from typing import Any
 from loguru import logger
 
 from ..utils.retry import retry, is_retryable_error, classify_policy, RETRY_POLICIES
-
-
 # ===== 各模型价格（每百万 token，人民币，参考各厂商公开定价）=====
 
 MODEL_PRICES = {
@@ -18,8 +16,6 @@ MODEL_PRICES = {
     "GLM-5.2":           {"prompt": 1.5,  "completion": 6.0},
     "kimi-k3":           {"prompt": 2.0,  "completion": 8.0},
 }
-
-
 class CostTracker:
     """记录每次 API 调用的 token 和费用"""
 
@@ -32,8 +28,6 @@ class CostTracker:
              completion_tokens / 1_000_000 * price["completion"]),
             6,
         )
-
-
 def track_cost_internal(model: str, prompt_tokens: int, completion_tokens: int) -> float:
     """记录 API 调用费用（agent_loop 内部使用）"""
     return CostTracker.estimate_cost(model, prompt_tokens, completion_tokens)
@@ -47,8 +41,6 @@ def track_cost_internal(model: str, prompt_tokens: int, completion_tokens: int) 
             f"total_tokens={prompt_tokens + completion_tokens}, cost=¥{cost:.4f}"
         )
         return cost
-
-
 class ModelManager:
     """统一的 LLM 模型管理（带智能重试）"""
 
@@ -246,8 +238,6 @@ class ModelManager:
         if isinstance(base_url, dict):
             base_url = base_url.get("url", "") or base_url.get("base_url", "") or ""
         base_url = str(base_url).strip() if base_url else ""
-
-
         if not api_key:
             raise RuntimeError(
                 f"未配置 AI API Key！请在 设置→AI模型 中添加 {self.model_name} 的密钥"
@@ -303,12 +293,8 @@ class ModelManager:
             else:
                 cleaned[key] = value
         return cleaned
-
-
 # ===== 全局模型缓存 =====
 _model_cache: dict[str, ModelManager] = {}
-
-
 def get_model(model_name: str) -> ModelManager:
     """获取或创建模型管理器实例（全局单例缓存）"""
     if model_name not in _model_cache:
@@ -317,18 +303,14 @@ def get_model(model_name: str) -> ModelManager:
     else:
         logger.debug(f"🤖 模型已缓存: {model_name}")
     return _model_cache[model_name]
-
-
 def clear_model_cache():
     """清除模型缓存（配置变更后调用）"""
     _model_cache.clear()
-
-
 def get_config() -> dict:
     """获取默认 LLM 配置（兼容旧代码调用）"""
     return {
-        "model": "auto",
+        
         "temperature": 0.7,
         "max_tokens": 16384,
     }
-    logger.info("🔄 模型缓存已清除，下次请求将使用新配置")
+

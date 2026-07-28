@@ -108,7 +108,7 @@ def create_default_config(config_path: Path = None):
                     "api_key": "",
                     "context_window": 128000,
                     "max_tokens": 16384,
-                    "temperature": 0.7,
+                    "temperature": 0.25,
                 },
             },
         },
@@ -182,7 +182,7 @@ def _generate_default_config(answers: dict) -> dict:
                     "api_key": _env_var_ref("DEEPSEEK_API_KEY"),
                     "context_window": 128000,
                     "max_tokens": 16384,
-                    "temperature": 0.7,
+                    "temperature": 0.25,
                 }
             },
         },

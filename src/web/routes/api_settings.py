@@ -112,7 +112,7 @@ async def update_settings(updates: dict):
                     api_key=api_key,
                     context_window=cfg.get("context_window", 128000),
                     max_tokens=cfg.get("max_tokens", 16384),
-                    temperature=cfg.get("temperature", 0.7),
+                    temperature=cfg.get("temperature", 0.25),
                     is_active=is_active,
                 )
             # 确保 active 正确

@@ -50,7 +50,7 @@ class ModelManager:
         self._api_name = model_name  # API 实际调用的名称
         self.context_window = 128000
         self.max_tokens = 16384
-        self.temperature = 0.7
+        self.temperature = 0.25
         self._load_config_defaults()
 
     def _load_config_defaults(self):
@@ -63,7 +63,7 @@ class ModelManager:
             if cfg:
                 self.context_window = cfg.get("context_window", 128000)
                 self.max_tokens = cfg.get("max_tokens", 4096)
-                self.temperature = cfg.get("temperature", 0.7)
+                self.temperature = cfg.get("temperature", 0.25)
                 self.extra_config = cfg.get("extra_config") or {}
                 self.provider = cfg.get("provider", "")
                 self._db_api_key = cfg.get("api_key", "")  # 缓存 DB 中的 api_key
@@ -319,7 +319,7 @@ def get_config() -> dict:
     """获取默认 LLM 配置（兼容旧代码调用）"""
     return {
         
-        "temperature": 0.7,
+        "temperature": 0.25,
         "max_tokens": 16384,
     }
 

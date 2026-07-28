@@ -313,7 +313,7 @@ class AiConfig(Base):
     api_key = Column(String)  # 加密存储
     context_window = Column(Integer, default=128000)
     max_tokens = Column(Integer, default=16384)
-    temperature = Column(Float, default=0.7)
+    temperature = Column(Float, default=0.25)
     is_active = Column(Integer, default=0)  # 1=当前激活
     extra_config = Column(JSON)  # 扩展配置
     created_at = Column(DateTime, default=datetime.now)
@@ -460,7 +460,7 @@ def get_ai_config_by_key(config_key: str, mask_secrets: bool = False) -> dict | 
 
 def save_ai_config(config_key: str, provider: str, model: str, base_url: str = "",
                    api_key: str = "", context_window: int = 128000,
-                   max_tokens: int = 16384, temperature: float = 0.7,
+                   max_tokens: int = 16384, temperature: float = 0.25,
                    is_active: int = 0, extra_config: dict = None) -> AiConfig:
     """保存或更新 AI 配置"""
     session = get_session()
@@ -563,7 +563,7 @@ def migrate_ai_configs_from_yaml(yaml_config: dict):
                 base_url=cfg.get("base_url", ""),
                 context_window=cfg.get("context_window", 128000),
                 max_tokens=cfg.get("max_tokens", 16384),
-                temperature=cfg.get("temperature", 0.7),
+                temperature=cfg.get("temperature", 0.25),
                 is_active=is_active,
             )
             api_key = cfg.get("api_key", "")
@@ -656,7 +656,7 @@ def ensure_default_ai_config():
                 base_url="https://api.deepseek.com/v1",
                 context_window=128000,
                 max_tokens=16384,
-                temperature=0.7,
+                temperature=0.25,
                 is_active=1,
             )
             session2.add(cfg)

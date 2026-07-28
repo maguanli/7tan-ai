@@ -45,7 +45,7 @@ def cloud_analyze(prompt: str, context: str) -> str:
                 {"role": "system", "content": "资深游戏编辑。仔细思考，给出高质量中文回复。"},
                 {"role": "user", "content": f"任务：{prompt}\n\n资料：\n{context[:8000]}"},
             ],
-            max_tokens=2000, temperature=0.7,
+            max_tokens=2000, temperature=0.25,
         )
         return f"☁️ 深度分析结果:\n\n{resp.choices[0].message.content}"
     except Exception as e:

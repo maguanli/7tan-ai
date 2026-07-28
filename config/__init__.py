@@ -21,7 +21,7 @@ class DeepSeekConfig(BaseModel):
     base_url: str = "https://api.deepseek.com/v1"
     model: str = "deepseek-v4-flash"
     max_tokens: int = 4096
-    temperature: float = 0.7
+    temperature: float = 0.25
 
 
 class Site7tanConfig(BaseModel):

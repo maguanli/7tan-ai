@@ -76,7 +76,7 @@ class ProStatusWidget(QFrame):
 
         # --- 第三行：按钮 ---
         btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(4)
+        btn_layout.setSpacing(2)
 
         self._refresh_btn = QPushButton("🔄 刷新")
         self._refresh_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
@@ -87,7 +87,7 @@ class ProStatusWidget(QFrame):
                 color: {THEME['text_primary']};
                 border: none;
                 border-radius: 4px;
-                padding: 2px 8px;
+                padding: 2px 4px;
                 font-size: 11px;
             }}
             QPushButton:hover {{
@@ -106,7 +106,7 @@ class ProStatusWidget(QFrame):
                 color: #000;
                 border: none;
                 border-radius: 4px;
-                padding: 2px 8px;
+                padding: 2px 4px;
                 font-size: 11px;
                 font-weight: bold;
             }}
@@ -125,7 +125,7 @@ class ProStatusWidget(QFrame):
                 color: {THEME['text_secondary']};
                 border: 1px solid {THEME['border']};
                 border-radius: 4px;
-                padding: 2px 8px;
+                padding: 2px 4px;
                 font-size: 11px;
             }}
             QPushButton:hover {{
@@ -162,17 +162,28 @@ class ProStatusWidget(QFrame):
         level = self._user_info.get("level", "basic")
         pro_expires = self._user_info.get("pro_expires", 0)
 
-        is_pro = (level == "pro" and pro_expires > 0)
-
-        # 再次从本地 Token 做二次验证
+        # 从本地 Token 补充状态（load_token 保存了服务器登录响应中的
+        # level/pro_expires，比本地 verify_license 更可靠）
         token_data = load_token()
         if token_data:
+            # 优先使用存储的 level（服务器登录时直接返回）
+            stored_level = token_data.get("level", "")
+            stored_expires = token_data.get("pro_expires", 0)
+            if stored_level == "pro":
+                level = "pro"
+                if stored_expires > pro_expires:
+                    pro_expires = stored_expires
+            elif stored_level == "basic" and level != "pro":
+                level = "basic"
+            # 本地 RSA 验签二次确认（只升级不降级）
             try:
                 result = verify_license(token_data.get("token", ""))
-                is_pro = (result.get("level") == "pro")
-                pro_expires = result.get("expires_at", pro_expires)
+                if result.get("level") == "pro":
+                    level = "pro"
+                    pro_expires = result.get("expires_at", pro_expires)
             except LicenseError:
                 pass
+        is_pro = (level == "pro" and pro_expires > 0)
 
         if is_pro:
             self._level_badge.setText("PRO")
@@ -217,7 +228,7 @@ class ProStatusWidget(QFrame):
             """)
             self._level_text.setText("基础版")
             self._expiry_label.setVisible(False)
-            self._upgrade_btn.setText("⭐ 升级专业版")
+            self._upgrade_btn.setText("⭐ 专业版")
 
     def _on_refresh(self) -> None:
         """刷新 Token 状态"""

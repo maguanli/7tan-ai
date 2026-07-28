@@ -14,216 +14,122 @@ from PyQt6.QtWidgets import (
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name, TextLexer
 from pygments.formatters import HtmlFormatter
+from pygments.util import ClassNotFound
 
 from ._theme import THEME
 
 
-
 class MessageBubble(QFrame):
-
     """单条消息的气泡组件，支持 Markdown、复制、重试"""
 
     retry_requested = pyqtSignal(str)  # 触发重试
 
-
-
     def __init__(self, role: str, content: str, timestamp: str = "",
-
                  cost: float = 0, iterations: int = 0,
-
                  tool_calls: list = None, is_streaming: bool = False,
-
                  session_id: str = None, pre_parsed_html: str = None,
                  parent=None):
-
         super().__init__(parent)
-
         logger.info(f"[MessageBubble] init start role={role} len={len(content)}")
-
         self._role = role
-
         self._content = content
-
         self._session_id = session_id
-
         self._is_streaming = is_streaming
-
-
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
-
-
         layout = QVBoxLayout(self)
-
         layout.setContentsMargins(0, 0, 0, 0)
-
         layout.setSpacing(4)
 
-
-
         # ---- 头部：角色 + 时间戳 ----
-
         header = QHBoxLayout()
-
         header.setSpacing(8)
 
-
-
         role_icon = {"user": "🧑", "assistant": "🤖", "system": "⚙️", "error": "❌",
-
                      "tool_call": "🔧", "tool_result": "📎"}.get(role, "💬")
-
         role_name = {"user": "你", "assistant": "AI", "system": "系统",
+                     "error": "错误", "tool_call": "工具调用",
+                     "tool_result": "结果"}.get(role, role)
 
-                     "error": "错误", "tool_call": "工具", "tool_result": "结果"}.get(role, "")
+        icon_label = QLabel(role_icon)
+        icon_label.setFixedWidth(24)
+        icon_label.setStyleSheet("font-size: 14px; border: none; background: transparent;")
+        header.addWidget(icon_label)
 
-
-
-        role_label = QLabel(f"{role_icon} <b>{role_name}</b>")
-
-        role_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px; font-weight: bold;")
-
+        role_label = QLabel(role_name)
+        role_label.setStyleSheet(f"font-size: 12px; font-weight: bold; color: {THEME['text_secondary']}; border: none; background: transparent;")
         header.addWidget(role_label)
 
-
-
         if timestamp:
-
-            ts_label = QLabel(timestamp)
-
-            ts_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 10px;")
-
+            ts_label = QLabel(timestamp[:16] if len(timestamp) > 16 else timestamp)
+            ts_label.setStyleSheet(f"font-size: 10px; color: {THEME['text_muted']}; border: none; background: transparent;")
             header.addWidget(ts_label)
-
-
 
         header.addStretch()
 
-
-
         # 费用徽章
-
         if cost > 0 and role == "assistant":
-
             cost_badge = QLabel(f"💰 ¥{cost:.4f}")
-
             cost_badge.setStyleSheet(f"""
-
                 QLabel {{
-
                     background: {THEME['accent2']}44;
-
                     color: {THEME['accent2']};
-
                     border: 1px solid {THEME['accent2']}66;
-
                     border-radius: 8px;
-
                     padding: 1px 8px;
-
                     font-size: 10px;
-
                     font-weight: bold;
-
                 }}
-
             """)
-
             header.addWidget(cost_badge)
 
-
-
         if iterations > 1:
-
             iter_badge = QLabel(f"🔄 {iterations}次")
-
             iter_badge.setStyleSheet(f"""
-
                 QLabel {{
-
                     background: {THEME['warning']}33;
-
                     color: {THEME['warning']};
-
                     border-radius: 8px;
-
                     padding: 1px 8px;
-
                     font-size: 10px;
-
                 }}
-
             """)
-
             header.addWidget(iter_badge)
-
-
 
         layout.addLayout(header)
 
-
-
         # ---- 工具调用步骤 ----
-
         if tool_calls:
-
             for tc in tool_calls:
-
                 tc_widget = self._build_tool_call_widget(tc)
-
                 layout.addWidget(tc_widget)
 
-
-
         # ---- 消息内容 ----
-
         self._content_label = QLabel()
-
         self._content_label.setWordWrap(True)
-
         self._content_label.setTextFormat(Qt.TextFormat.RichText)
-
         self._content_label.setOpenExternalLinks(True)
-
         self._content_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.LinksAccessibleByMouse)
-
         self._content_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-
         self._content_label.setMinimumWidth(0)
-
         self._content_label.setStyleSheet("border: none; background: transparent;")
 
         if role == "user":
-
             bubble_color = THEME['accent']
-
             text_color = "#000000"
-
             margin = "0 0 0 60px"
-
         elif role == "assistant":
-
             bubble_color = THEME['bg_input']
-
             text_color = THEME['text_primary']
-
             margin = "0 60px 0 0"
-
         elif role == "error":
-
             bubble_color = f"{THEME['danger']}22"
-
             text_color = THEME['danger']
-
             margin = "0"
-
         else:
-
             bubble_color = "transparent"
-
             text_color = THEME['text_primary']
-
             margin = "0"
 
         if pre_parsed_html:
@@ -232,63 +138,34 @@ class MessageBubble(QFrame):
             html = self._md_to_html(content, text_color)
 
         self._content_label.setText(html)
-
         logger.info("[MessageBubble] setText done")
 
-
-
         self.setStyleSheet(f"""
-
             MessageBubble {{
-
                 background-color: {bubble_color};
-
                 border-radius: 10px;
-
                 padding: 10px 14px;
-
                 margin: {margin};
-
             }}
-
         """)
-
         layout.addWidget(self._content_label)
 
-
-
         # ---- 底部操作栏 ----
-
         actions = QHBoxLayout()
-
         actions.setSpacing(6)
 
-
-
         # 复制按钮
-
         copy_btn = QPushButton("复制")
-
         copy_btn.setFixedHeight(22)
-
         copy_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-
         copy_btn.clicked.connect(lambda: self._copy_content())
-
         copy_btn.setStyleSheet(f"""
-
             QPushButton {{
-
                 background: transparent; color: {text_color};
-
                 border: none; font-size: 10px; padding: 0 6px;
-
             }}
-
             QPushButton:hover {{ color: {THEME['accent']}; }}
-
         """)
-
         actions.addWidget(copy_btn)
 
         # edit button
@@ -308,42 +185,23 @@ class MessageBubble(QFrame):
         actions.addWidget(del_btn)
 
         # 重试按钮（仅 assistant）
-
         if role == "assistant" and session_id:
-
             retry_btn = QPushButton("重试")
-
             retry_btn.setFixedHeight(22)
-
             retry_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-
             retry_btn.clicked.connect(lambda: self.retry_requested.emit(self._content))
-
             retry_btn.setStyleSheet(f"""
-
                 QPushButton {{
-
                     background: transparent; color: {THEME['text_primary']};
-
                     border: none; font-size: 10px; padding: 0 6px;
-
                 }}
-
                 QPushButton:hover {{ color: {THEME['warning']}; }}
-
             """)
-
             actions.addWidget(retry_btn)
 
-
-
         actions.addStretch()
-
         layout.addLayout(actions)
-
         logger.info(f"[MessageBubble] init complete role={role}")
-
-
 
     def _md_to_html(self, md_text: str, text_color: str = None) -> str:
         """Markdown to HTML with pygments syntax highlighting"""
@@ -354,135 +212,78 @@ class MessageBubble(QFrame):
             html = _md.markdown(md_text, extensions=['fenced_code', 'tables'], output_format='html')
             html = self._pygments_highlight(html)
             html = html.replace('<a ', '<a style="color:#00d4ff;" ')
-            html = html.replace('<table>', '<table style="border-collapse:collapse;margin:8px 0;width:100%;table-layout:fixed;word-break:break-all;">')
-            html = html.replace('<th>', f'<th style="border:1px solid {THEME["border"]};padding:6px 10px;background:{THEME["bg_dark"]};">')
-            html = html.replace('<td>', f'<td style="border:1px solid {THEME["border"]};padding:4px 10px;">')
-            html = html.replace('<blockquote>', '<blockquote style="border-left:3px solid #00d4ff;padding-left:12px;margin:4px 0;color:#94a3b8;">')
-            html = html.replace('<img ', '<img style="max-width:100%;height:auto;" ')
-            html = html.replace('<hr>', '<hr style="border-color:#1e293b;margin:8px 0;">')
-            html = html.replace('<hr/>', '<hr style="border-color:#1e293b;margin:8px 0;">')
-            return f'<div style="color:{text_color or THEME["text_primary"]};font-size:13px;line-height:1.6;word-break:break-word;overflow-wrap:break-word;max-width:100%;">{html}</div>'
+            html = html.replace('<table>', '<table style="border-collapse:collapse;width:100%;">')
+            html = html.replace('<th>', '<th style="border:1px solid #334155;padding:6px;background:#1e293b;">')
+            html = html.replace('<td>', '<td style="border:1px solid #334155;padding:6px;">')
+            html = html.replace('<hr>', '<hr style="border-color:#334155;">')
+            html = html.replace('<blockquote>', '<blockquote style="border-left:3px solid #334155;padding-left:12px;margin:8px 0;color:#94a3b8;">')
+            html = html.replace('<img ', '<img style="max-width:100%;border-radius:6px;" ')
+            if text_color:
+                return f'<div style="color:{text_color};font-size:13px;line-height:1.6;word-break:break-word;overflow-wrap:break-word;max-width:100%;">{html}</div>'
+            return f'<div style="color:{THEME["text_primary"]};font-size:13px;line-height:1.6;word-break:break-word;overflow-wrap:break-word;max-width:100%;">{html}</div>'
         except ImportError:
-            return self._md_to_html_safe(md_text, text_color)
+            esc = md_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            if text_color:
+                return f'<div style="color:{text_color};font-size:13px;line-height:1.6;white-space:pre-wrap;max-width:100%;">{esc}</div>'
+            return f'<div style="color:{THEME["text_primary"]};font-size:13px;line-height:1.6;white-space:pre-wrap;max-width:100%;">{esc}</div>'
 
-    def _md_to_html_safe(self, md_text: str, text_color: str = None) -> str:
-        """Fallback: basic HTML escape + <pre> wrapping when markdown lib not available"""
-        esc = md_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-        return f'<div style="color:{text_color or THEME["text_primary"]};font-size:13px;line-height:1.6;word-break:break-word;white-space:pre-wrap;max-width:100%;">{esc}</div>'
+    @staticmethod
+    def _pygments_static(html: str) -> str:
+        """Pygments 语法高亮（静态版本，线程安全）"""
+        import re as _re
+        def _highlight_code(m):
+            code = m.group(2)
+            lang = m.group(1) or ""
+            try:
+                lexer = get_lexer_by_name(lang, stripall=True) if lang else TextLexer()
+            except ClassNotFound:
+                lexer = TextLexer()
+            formatter = HtmlFormatter(style='monokai', noclasses=True)
+            highlighted = highlight(code, lexer, formatter)
+            return f'<div style="background:#272822;border-radius:8px;padding:12px;margin:8px 0;overflow-x:auto;">{highlighted}</div>'
+        return _re.sub(r'<pre><code(?: class="language-([^"]*)")?>(.*?)</code></pre>',
+                       _highlight_code, html, flags=_re.DOTALL)
 
     def _pygments_highlight(self, html: str) -> str:
-
-        import re as _re
-
-        def _hl(match):
-
-            try:
-
-                lang = match.group(1) or "text"
-
-            except IndexError:
-
-                lang = "text"
-
-            code = match.group(2)
-
-            try:
-
-                lexer = get_lexer_by_name(lang, stripall=True)
-
-            except Exception:
-
-                lexer = TextLexer()
-
-            formatter = HtmlFormatter(style="monokai", nowrap=True, noclasses=True)
-
-            highlighted = highlight(code, lexer, formatter)
-
-            esc = code.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-
-            return (
-
-                '<div style="position:relative;margin:8px 0;border-radius:6px;overflow:hidden;border:1px solid #3e3d32;">'
-
-                '<div style="background:#272822;color:#75715e;font-size:11px;padding:4px 14px;'
-
-                'display:flex;justify-content:space-between;align-items:center;">'
-
-                '<span style="font-weight:bold;color:#a6e22e;">' + lang + '</span>'
-
-                '<span style="color:#75715e;font-size:10px;">[Ctrl+C 复制]</span>'
-
-                '</div>'
-
-                '<pre style="background:#272822;padding:12px;margin:0;overflow-x:auto;font-size:12px;line-height:1.5;border-radius:0 0 6px 6px;">' + highlighted + '</pre>'
-
-                '</div>'
-
-            )
-
-        return _re.sub(r'<pre><code(?:\s+class="language-(\w+)")?>([\s\S]*?)</code></pre>', _hl, html)
-
-
+        """实例方法包装，捕获异常"""
+        try:
+            return self._pygments_static(html)
+        except Exception as e:
+            logger.warning(f"[MessageBubble] pygments failed: {e}")
+            return html
 
     def _build_tool_call_widget(self, tc: dict) -> QFrame:
-        """Build collapsible tool-call step widget"""
+        """构建工具调用步骤的小部件"""
         w = QFrame()
-        w.setStyleSheet(f"""
-            QFrame {{
-                background: {THEME['bg_dark']}88;
-                border: 1px solid {THEME['border']};
-                border-radius: 6px;
-                padding: 4px 8px;
-                margin: 2px 0;
-            }}
-        """)
+        w.setStyleSheet(f"background:{THEME['bg_card']};border:1px solid {THEME['border']};border-radius:6px;padding:4px 8px;")
         wl = QVBoxLayout(w)
-        wl.setContentsMargins(6, 3, 6, 3)
+        wl.setContentsMargins(4, 2, 4, 2)
         wl.setSpacing(2)
 
-        tool_name = tc.get("tool", tc.get("name", "unknown"))
-        status = tc.get("status", "running")
-        status_icon = {"running": "...", "success": "OK", "failed": "XX"}.get(status, "...")
-        status_color = {"running": THEME["warning"], "success": THEME["success"],
-                        "failed": THEME["danger"]}.get(status, THEME["text_primary"])
-
-        # --- top row: status + name + collapse toggle ---
+        # top row: icon + tool name + toggle
         top_row = QHBoxLayout()
-        top_row.setSpacing(6)
+        top_row.setSpacing(4)
 
+        status_icon = {"running": "🔄", "success": "✅", "failed": "❌"}.get(tc.get("status", ""), "🔧")
         icon_lbl = QLabel(status_icon)
-        icon_lbl.setStyleSheet(f"color: {status_color}; font-size: 12px; font-weight: bold;")
+        icon_lbl.setStyleSheet("font-size:12px;border:none;background:transparent;")
         top_row.addWidget(icon_lbl)
 
-        name_lbl = QLabel(f"<b>{tool_name}</b>")
-        name_lbl.setStyleSheet(f"color: {THEME['text_primary']}; font-size: 12px;")
+        name_lbl = QLabel(f'<span style="color:{THEME["accent"]};font-weight:bold;">{tc.get("tool", "unknown")}</span>')
+        name_lbl.setStyleSheet("border:none;background:transparent;font-size:11px;")
         top_row.addWidget(name_lbl)
-
-        args = tc.get("args", tc.get("parameters", {}))
-        if args:
-            args_str = json.dumps(args, ensure_ascii=False)[:80]
-            args_lbl = QLabel(f'<span style="color:{THEME["text_muted"]}">{args_str}</span>')
-            args_lbl.setStyleSheet("font-size: 11px;")
-            top_row.addWidget(args_lbl)
-
-        if status == "running":
-            spinner = QLabel("...")
-            spinner.setStyleSheet(f"color: {THEME['accent']}; font-size: 16px; font-weight: bold;")
-            top_row.addWidget(spinner)
 
         top_row.addStretch()
 
-        # collapse toggle button
         toggle_btn = QPushButton("-")
-        toggle_btn.setFixedSize(22, 22)
+        toggle_btn.setFixedSize(18, 18)
         toggle_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         toggle_btn.setStyleSheet(f"""
             QPushButton {{
-                background: transparent; color: {THEME['text_secondary']};
-                border: 1px solid {THEME['border']}; border-radius: 4px;
-                font-size: 14px; font-weight: bold; padding: 0;
+                background: transparent; color: {THEME['text_muted']};
+                border: none; font-size: 12px; font-weight: bold;
             }}
-            QPushButton:hover {{ color: {THEME['accent']}; border-color: {THEME['accent']}; }}
+            QPushButton:hover {{ color: {THEME['accent']}; }}
         """)
         top_row.addWidget(toggle_btn)
 
@@ -541,21 +342,26 @@ class MessageBubble(QFrame):
         ed.setStyleSheet(f"background:{THEME['bg_input']};color:{THEME['text_primary']};border:1px solid {THEME['border']};border-radius:6px;")
         ly.addWidget(ed)
         br = QHBoxLayout()
+        cancel_btn = QPushButton("取消")
+        cancel_btn.clicked.connect(dlg.reject)
+        cancel_btn.setStyleSheet(f"background:transparent;color:{THEME['text_secondary']};padding:6px 14px;border-radius:4px;border:1px solid {THEME['border']};")
+        br.addWidget(cancel_btn)
+        br.addStretch()
         sv = QPushButton("保存")
         def do_save():
             self._content = ed.toPlainText()
             self.update_content(self._content)
             dlg.accept()
         sv.clicked.connect(do_save)
-        cc = QPushButton("取消")
-        cc.clicked.connect(dlg.reject)
-        br.addWidget(sv); br.addWidget(cc)
+        sv.setStyleSheet(f"background:{THEME['accent']};color:#fff;padding:6px 14px;border-radius:4px;")
+        br.addWidget(sv)
         ly.addLayout(br)
         dlg.exec()
 
     def _delete_self(self):
+        """删除自己的气泡（带确认）"""
         reply = QMessageBox.question(
-            self, "确认删除", "确定要删除这条消息吗？删除后无法恢复。",
+            self, "确认删除", "确定要删除这条消息吗？",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
@@ -563,53 +369,39 @@ class MessageBubble(QFrame):
             self.setVisible(False)
             self.deleteLater()
 
-
-
     def update_content(self, new_content: str, is_streaming: bool = False):
-
-        """更新消息内容（流式输出时自动节流，避免高频渲染崩溃）"""
-
+        """更新消息内容（流式模式会自动节流）"""
         self._content = new_content
-
         self._is_streaming = is_streaming
-
         if is_streaming:
-
             # 流式模式：用 timer 节流，最多 100ms 更新一次
-
             if not hasattr(self, '_update_timer'):
-
                 from PyQt6.QtCore import QTimer
-
                 self._update_timer = QTimer(self)
-
                 self._update_timer.setSingleShot(True)
-
                 self._update_timer.timeout.connect(self._do_update_label)
-
                 self._pending_content = new_content
-
             self._pending_content = new_content
-
             if not self._update_timer.isActive():
-
                 self._update_timer.start(100)
-
         else:
-
             self._do_update_label()
 
-
-
     def _do_update_label(self):
-
-        """实际执行 QLabel.setText"""
-
+        """实际执行 QLabel.setText
+        
+        流式模式下跳过 Markdown 解析（O(n²) 性能瓶颈），
+        只做简单 HTML 转义 + 换行，流式结束后再完整渲染。
+        """
         content = getattr(self, '_pending_content', self._content)
-
-        self._content_label.setText(self._md_to_html(content, "#000000" if self._role == "user" else None))
-
-
-
-
-
+        if self._is_streaming:
+            # 快速路径：纯文本转义 + 换行，不解析 Markdown
+            esc = content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            esc = esc.replace('\n', '<br>')
+            text_color = "#000000" if self._role == "user" else None
+            color_style = f'color:{text_color};' if text_color else ''
+            self._content_label.setText(
+                f'<div style="{color_style}font-size:13px;line-height:1.6;word-break:break-word;">{esc}</div>'
+            )
+        else:
+            self._content_label.setText(self._md_to_html(content, "#000000" if self._role == "user" else None))

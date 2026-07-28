@@ -348,7 +348,7 @@ class Sidebar(QFrame):
 
     def __init__(self, user_info: dict | None = None):
         super().__init__()
-        self.setFixedWidth(200)
+        self.setFixedWidth(220)
         self.setStyleSheet(f"background-color: {THEME['bg_sidebar']};")
         self._buttons = {}
         self._active_key = ""

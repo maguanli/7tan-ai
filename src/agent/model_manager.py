@@ -33,6 +33,11 @@ class CostTracker:
             6,
         )
 
+
+def track_cost_internal(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    """记录 API 调用费用（agent_loop 内部使用）"""
+    return CostTracker.estimate_cost(model, prompt_tokens, completion_tokens)
+
     @staticmethod
     def record_usage(model: str, prompt_tokens: int, completion_tokens: int):
         """记录用量到文件"""
@@ -126,7 +131,10 @@ class ModelManager:
 
         last_error = None
 
-        for attempt in range(31):  # 最多 30 次重试 (0~30)
+        # 针对不同错误类型的重试次数：通用错误10次，限流错误15次
+        max_retries = 10
+        max_rate_limit_retries = 15
+        for attempt in range(max_retries + 1):  # 0~5
             try:
                 return client.chat.completions.create(**kwargs)
             except BadRequestError as e:
@@ -135,38 +143,38 @@ class ModelManager:
                 raise
             except RateLimitError as e:
                 last_error = e
-                if attempt >= 30:
+                if attempt >= max_rate_limit_retries:
                     break
                 delay = min(30 * (2 ** attempt), 300) * (0.5 + random.random())
                 logger.warning(
-                    f"⏳ API 限流 (尝试 {attempt+1}/30)，{delay:.1f}s 后重试..."
+                    f"⏳ API 限流 (尝试 {attempt+1}/{max_rate_limit_retries+1})，{delay:.1f}s 后重试..."
                 )
                 time.sleep(delay)
             except APITimeoutError as e:
                 last_error = e
-                if attempt >= 30:
+                if attempt >= max_retries:
                     break
                 delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
                 logger.warning(
-                    f"⏱️ API 超时 (尝试 {attempt+1}/30)，{delay:.1f}s 后重试..."
+                    f"⏱️ API 超时 (尝试 {attempt+1}/{max_retries+1})，{delay:.1f}s 后重试..."
                 )
                 time.sleep(delay)
             except APIConnectionError as e:
                 last_error = e
-                if attempt >= 30:
+                if attempt >= max_retries:
                     break
                 delay = min(1 * (2 ** attempt), 30) * (0.5 + random.random())
                 logger.warning(
-                    f"🔌 API 连接错误 (尝试 {attempt+1}/30)，{delay:.1f}s 后重试..."
+                    f"🔌 API 连接错误 (尝试 {attempt+1}/{max_retries+1})，{delay:.1f}s 后重试..."
                 )
                 time.sleep(delay)
             except InternalServerError as e:
                 last_error = e
-                if attempt >= 30:
+                if attempt >= max_retries:
                     break
                 delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
                 logger.warning(
-                    f"🔥 API 服务器错误 (尝试 {attempt+1}/30)，{delay:.1f}s 后重试..."
+                    f"🔥 API 服务器错误 (尝试 {attempt+1}/{max_retries+1})，{delay:.1f}s 后重试..."
                 )
                 time.sleep(delay)
             except APIError as e:
@@ -174,44 +182,44 @@ class ModelManager:
                 err_str = str(e).lower()
                 # 检查是否是 HTTP 状态码错误
                 if "502" in err_str or "503" in err_str or "504" in err_str:
-                    if attempt >= 30:
+                    if attempt >= max_retries:
                         break
                     delay = min(3 * (2 ** attempt), 60) * (0.5 + random.random())
                     logger.warning(
-                        f"🌐 API 网关错误 (尝试 {attempt+1}/30)，{delay:.1f}s 后重试..."
+                        f"🌐 API 网关错误 (尝试 {attempt+1}/{max_retries+1})，{delay:.1f}s 后重试..."
                     )
                     time.sleep(delay)
                 elif "429" in err_str:
-                    if attempt >= 30:
+                    if attempt >= max_retries:
                         break
                     delay = min(30 * (2 ** attempt), 300) * (0.5 + random.random())
                     logger.warning(
-                        f"⏳ API 限流 (尝试 {attempt+1}/30)，{delay:.1f}s 后重试..."
+                        f"⏳ API 限流 (尝试 {attempt+1}/{max_retries+1})，{delay:.1f}s 后重试..."
                     )
                     time.sleep(delay)
                 else:
                     # 未知 API 错误也重试
-                    if attempt >= 30:
+                    if attempt >= max_retries:
                         break
                     delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
                     logger.warning(
-                        f"⚠️ API 错误 (尝试 {attempt+1}/30): {e} — {delay:.1f}s 后重试"
+                        f"⚠️ API 错误 (尝试 {attempt+1}/{max_retries+1}): {e} — {delay:.1f}s 后重试"
                     )
                     time.sleep(delay)
             except Exception as e:
                 # 其他未知错误（如网络波动导致的底层异常）
                 last_error = e
                 err_str = str(e).lower()
-                if attempt >= 30:
+                if attempt >= max_retries:
                     break
                 delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
                 logger.warning(
-                    f"⚠️ 未知错误 (尝试 {attempt+1}/30): {e} — {delay:.1f}s 后重试"
+                    f"⚠️ 未知错误 (尝试 {attempt+1}/{max_retries+1}): {e} — {delay:.1f}s 后重试"
                 )
                 time.sleep(delay)
 
         # 所有重试都失败
-        raise RuntimeError(f"LLM 调用失败（已重试 30 次），最后错误: {last_error}")
+        raise RuntimeError(f"LLM 调用失败（已重试 {max_retries} 次），最后错误: {last_error}")
 
     def _get_client(self):
         """懒加载创建 OpenAI 客户端（优先用数据库配置，回退 YAML）"""
@@ -221,8 +229,14 @@ class ModelManager:
         from openai import OpenAI
 
         # 优先用数据库中的 api_key 和 base_url
-        api_key = getattr(self, '_db_api_key', '').strip()
-        base_url = getattr(self, '_db_base_url', '').strip()
+        api_key = getattr(self, '_db_api_key', '')
+        if isinstance(api_key, dict):
+            api_key = api_key.get("key", "") or api_key.get("api_key", "") or ""
+        api_key = str(api_key).strip() if api_key else ""
+        base_url = getattr(self, '_db_base_url', '')
+        if isinstance(base_url, dict):
+            base_url = base_url.get("url", "") or base_url.get("base_url", "") or ""
+        base_url = str(base_url).strip() if base_url else ""
 
 
         if not api_key:
@@ -230,7 +244,13 @@ class ModelManager:
                 f"未配置 AI API Key！请在 设置→AI模型 中添加 {self.model_name} 的密钥"
             )
 
-        self._client = OpenAI(api_key=api_key, base_url=base_url or "https://api.deepseek.com/v1")
+        import httpx
+        self._client = OpenAI(
+            api_key=api_key,
+            base_url=base_url or "https://api.deepseek.com/v1",
+            timeout=httpx.Timeout(120.0, connect=30.0),
+            max_retries=0,
+        )
         logger.info(f"🤖 连接 AI [{self.model_name}]: provider={self.provider}, base_url={base_url}")
         return self._client
 

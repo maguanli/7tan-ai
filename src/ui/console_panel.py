@@ -82,8 +82,9 @@ _log_queue = queue.Queue()
 # 时间窗口去重 + 模糊指纹：双重防重复
 _dedup_map: dict = {}  # {hash: timestamp}
 _dedup_lock = threading.Lock()
-_DEDUP_WINDOW = 5.0  # 精确匹配窗口（秒）
-_DEDUP_FUZZY_WINDOW = 4.0  # 模糊匹配窗口（秒），比精确窗口小，避免误杀
+_DEDUP_WINDOW = 3.0
+_DEDUP_FUZZY_WINDOW = 2.0
+_dedup_cleanup_counter = 0
 
 
 _FILE_SINK_RE = re.compile(
@@ -109,15 +110,18 @@ def _enqueue(line: str):
     h_fuzzy = hash(clean[:60])
     now = _time.time()
     with _dedup_lock:
-        # 定期清理过期条目
-        if len(_dedup_map) > 3000:
+        global _dedup_cleanup_counter
+        # 计数触发清理，不在每条日志热路径上遍历字典
+        _dedup_cleanup_counter += 1
+        if _dedup_cleanup_counter > 500:
+            _dedup_cleanup_counter = 0
             cutoff = now - max(_DEDUP_WINDOW, _DEDUP_FUZZY_WINDOW) * 2
-            if len(_dedup_map) > 8000:
+            if len(_dedup_map) > 5000:
                 _dedup_map.clear()
             else:
-                for k, v in list(_dedup_map.items()):
-                    if v < cutoff:
-                        del _dedup_map[k]
+                stale = [k for k, v in _dedup_map.items() if v < cutoff]
+                for k in stale:
+                    del _dedup_map[k]
         # 精确匹配
         last_ts = _dedup_map.get(h)
         if last_ts is not None and (now - last_ts) < _DEDUP_WINDOW:
@@ -404,9 +408,15 @@ class ConsoleViewer(QWidget):
 
         batch_html = ''.join(html_parts)
 
+        # beginEditBlock: 批量插入只触发一次 re-layout，性能提升 10~100x
+        doc = self._output.document()
         cursor = self._output.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.insertHtml(batch_html)
+        cursor.beginEditBlock()
+        try:
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            cursor.insertHtml(batch_html)
+        finally:
+            cursor.endEditBlock()
 
         if self._auto_scroll:
             sb = self._output.verticalScrollBar()

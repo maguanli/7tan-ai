@@ -79,7 +79,12 @@ def _crash_handler(exc_type, exc_value, exc_tb):
 sys.excepthook = _crash_handler
 
 import faulthandler
-faulthandler.enable(file=open(_CRASH_DIR / f"segfault_{os.getpid()}.txt", "w"))
+_segfault_log = None
+try:
+    _segfault_log = open(_CRASH_DIR / f"segfault_{os.getpid()}.txt", "w", buffering=1)
+    faulthandler.enable(file=_segfault_log, all_threads=True)
+except Exception:
+    faulthandler.enable(file=sys.stderr, all_threads=True)
 
 from loguru import logger
 from dotenv import load_dotenv

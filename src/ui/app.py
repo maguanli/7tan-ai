@@ -369,6 +369,37 @@ class Sidebar(QFrame):
         layout.addWidget(line)
         layout.addSpacing(8)
 
+        # 可滚动的上部区域（导航按钮 + 对话列表）
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                background: transparent;
+                border: none;
+            }}
+            QScrollBar:vertical {{
+                background: {THEME['bg_dark']};
+                width: 6px;
+                border-radius: 3px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {THEME['text_muted']};
+                border-radius: 3px;
+                min-height: 20px;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0;
+            }}
+        """)
+
+        scroll_content = QWidget()
+        scroll_content.setStyleSheet("background: transparent;")
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
+        scroll_layout.setSpacing(4)
+
         # 导航项
         nav_items = [
             ("dashboard", "📊", "仪表盘"),
@@ -400,15 +431,19 @@ class Sidebar(QFrame):
             """)
             btn.clicked.connect(lambda checked, k=key: self._on_click(k))
             self._buttons[key] = btn
-            layout.addWidget(btn)
+            scroll_layout.addWidget(btn)
 
         # 对话列表 — 放在设置下方，仅 AI 工作台时可见
         self._session_sidebar = SessionSidebar()
         self._session_sidebar.setFixedWidth(184)
         self._session_sidebar.hide()
-        layout.addWidget(self._session_sidebar)
+        scroll_layout.addWidget(self._session_sidebar)
 
-        layout.addStretch()
+        scroll_layout.addStretch()
+        scroll_area.setWidget(scroll_content)
+        layout.addWidget(scroll_area, 1)
+
+        # 不再需要单独的 stretch，scroll_area 的 stretch factor 1 已处理
 
         # --- 专业版状态组件 ---
         from .pro_status_widget import ProStatusWidget

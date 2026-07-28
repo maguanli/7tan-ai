@@ -2055,6 +2055,9 @@ class ChatPage(QWidget):
 
         session_id = data.get("session_id", self._streaming_session_id)
 
+        # 💬 Agent 回复输出到实时控制台
+        if success and result:
+            logger.info(f"💬 Agent: {result}")
 
 
         if session_id:
@@ -2136,6 +2139,10 @@ class ChatPage(QWidget):
         iterations = data.get("iterations", 0)
 
         success = data.get("success", False)
+
+        # 💬 Agent 回复输出到实时控制台
+        if success and result:
+            logger.info(f"💬 Agent: {result}")
 
         logger.info(f"[ChatPage] result len={len(result)} cost={cost} iterations={iterations}")
 

@@ -8,12 +8,6 @@ ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(ROOT))
 from src.tools.registry import register_tool
 
-import sys
-from pathlib import Path
-ROOT = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(ROOT))
-from src.tools.registry import register_tool
-
 import subprocess
 import os
 import json
@@ -126,7 +120,7 @@ def rsync_deploy(local_path: str, remote_dest: str, remote_host: str = "",
         target = remote_dest
     cmd.append(target)
     
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     return {"success": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr}
 
 @register_tool(name="scp_upload",description="通过SCP上传文件到远程服务器",parameters={"local_file":{"type":"string","description":"本地文件"},"remote_path":{"type":"string","description":"远程路径"},"host":{"type":"string","description":"主机地址"}},category="devops")
@@ -161,57 +155,83 @@ def ssh_execute(host: str, command: str, user: str = "", port: int = 22) -> dict
         "stderr": result.stderr
     }
 
-# ========== 流水线自动化 ==========
-
 @register_tool(name="gradle_build",description="执行Gradle构建任务",parameters={"project_path":{"type":"string","description":"项目路径"},"task":{"type":"string","description":"构建任务","default":"assembleRelease"}},category="devops")
-def gradle_build(project_path: str, task: str = "assembleRelease", 
-                 clean_first: bool = True) -> dict:
-    """使用 Gradle 编译 Android 项目"""
-    if not os.path.exists(os.path.join(project_path, "gradlew.bat")):
-        return {"success": False, "error": "未找到 gradlew.bat，不是 Gradle 项目"}
+def gradle_build(project_path: str, task: str = "assembleRelease") -> dict:
+    """执行 Gradle 构建"""
+    p = Path(project_path)
+    if not p.exists():
+        return {"success": False, "error": f"项目路径不存在: {project_path}", "artifacts": []}
     
-    start = time.time()
+    # 检测 gradlew
+    if (p / "gradlew.bat").exists():
+        cmd = [str(p / "gradlew.bat"), task]
+    elif (p / "gradlew").exists():
+        cmd = [str(p / "gradlew"), task]
+    else:
+        cmd = ["gradle", task]
     
-    if clean_first:
-        subprocess.run(["cmd", "/c", "gradlew.bat", "clean"],
-                      cwd=project_path, capture_output=True, timeout=120)
-    
-    result = subprocess.run(["cmd", "/c", "gradlew.bat", task],
-                           cwd=project_path, capture_output=True, text=True, timeout=timeout)
-    
-    elapsed = time.time() - start
+    result = subprocess.run(cmd, cwd=str(p), capture_output=True, text=True, timeout=600)
     
     # 查找生成的 APK
-    apk_dir = os.path.join(project_path, "app", "build", "outputs", "apk")
-    apks = []
-    if os.path.exists(apk_dir):
-        for root, dirs, files in os.walk(apk_dir):
-            for f in files:
-                if f.endswith(".apk"):
-                    fp = os.path.join(root, f)
-                    apks.append({"path": fp, "size_mb": round(os.path.getsize(fp)/(1024*1024), 2)})
+    artifacts = []
+    apk_dir = p / "app" / "build" / "outputs" / "apk"
+    if apk_dir.exists():
+        for apk in apk_dir.rglob("*.apk"):
+            artifacts.append({
+                "path": str(apk),
+                "name": apk.name,
+                "size_mb": round(apk.stat().st_size / (1024*1024), 2)
+            })
     
-    return {
-        "success": result.returncode == 0,
-        "task": task,
-        "elapsed_seconds": round(elapsed, 1),
-        "artifacts": apks,
-        "stdout": result.stdout[-3000:] if len(result.stdout) > 3000 else result.stdout
-    }
-
-@register_tool(name="run_shell_script",description="执行Shell脚本",parameters={"script":{"type":"string","description":"脚本内容"},"cwd":{"type":"string","description":"工作目录","default":""},"timeout":{"type":"integer","description":"超时秒数，默认120","default":120}},category="devops")
-def run_shell_script(script: str, cwd: str = "", timeout: int = 120) -> dict:
-    """执行 shell 脚本（支持多行）"""
-    result = subprocess.run(
-        script, shell=True, cwd=cwd or os.getcwd(),
-        capture_output=True, text=True, timeout=timeout
-    )
     return {
         "success": result.returncode == 0,
         "exit_code": result.returncode,
-        "stdout": result.stdout,
-        "stderr": result.stderr
+        "stdout": result.stdout[-2000:],
+        "stderr": result.stderr[-1000:],
+        "artifacts": artifacts
     }
+
+
+def _resolve_cwd(cwd: str) -> str:
+    """验证并解析工作目录，无效时回退到当前目录"""
+    if cwd and cwd.strip():
+        try:
+            cwd_path = Path(cwd.strip()).resolve()
+            if cwd_path.is_dir():
+                return str(cwd_path)
+        except (OSError, ValueError):
+            pass
+    # fallback
+    try:
+        return str(Path(os.getcwd()).resolve())
+    except Exception:
+        return os.getcwd()
+
+
+@register_tool(name="run_shell_script",description="执行Shell脚本",parameters={"script":{"type":"string","description":"脚本内容"},"cwd":{"type":"string","description":"工作目录","default":""},"timeout":{"type":"integer","description":"超时秒数，默认120","default":120}},category="devops")
+def run_shell_script(script: str, cwd: str = "", timeout: int = 120) -> dict:
+    """执行 shell 脚本（支持多行），自动验证工作目录有效性"""
+    resolved_cwd = _resolve_cwd(cwd)
+    
+    try:
+        result = subprocess.run(
+            script, shell=True, cwd=resolved_cwd,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=timeout
+        )
+        return {
+            "success": result.returncode == 0,
+            "exit_code": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr
+        }
+    except subprocess.TimeoutExpired:
+        return {"success": False, "exit_code": -1, "stdout": "", "stderr": f"命令超时 ({timeout}s)"}
+    except FileNotFoundError:
+        return {"success": False, "exit_code": -1, "stdout": "", "stderr": "Shell 不可用或命令未找到"}
+    except OSError as e:
+        return {"success": False, "exit_code": -1, "stdout": "", "stderr": f"系统错误 (WinError {e.winerror if hasattr(e, 'winerror') else 'N/A'}): {e}"}
+
 
 @register_tool(name="deploy_pipeline",description="执行完整部署流水线(构建+安装)",parameters={"project_path":{"type":"string","description":"项目路径"},"build_type":{"type":"string","description":"构建类型","default":"android"}},category="devops")
 def deploy_pipeline(project_path: str, build_type: str = "android") -> dict:

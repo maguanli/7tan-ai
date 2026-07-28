@@ -467,6 +467,7 @@ def run_agent_loop(
     task_mode: str = "general",
     session_id: str = None,      # 兼容旧调用
     model_name: str = None,      # 兼容旧调用
+    event_callback=None,         # 流式事件回调: callable(dict) -> None
 ) -> dict:
     """Agent 主循环：多轮工具调用直到完成。
     
@@ -513,6 +514,13 @@ def run_agent_loop(
     all_logs = []
     iteration = 0
     
+    # 🔔 流式事件：开始分析
+    if event_callback:
+        try:
+            event_callback({"type": "thinking", "message": "🤔 AI 正在分析任务..."})
+        except Exception:
+            pass
+
     # 构建初始消息
     timeout_note = ""
     messages = [{"role": "system", "content": system_prompt + timeout_note}]
@@ -524,6 +532,12 @@ def run_agent_loop(
     while iteration < max_iterations:
         iteration += 1
         logger.info(f"🔄 Agent 迭代 {iteration}/{max_iterations}")
+        # 🔔 流式事件：迭代进度
+        if event_callback:
+            try:
+                event_callback({"type": "iteration", "iteration": iteration, "max_iterations": max_iterations})
+            except Exception:
+                pass
         
         # 调用 LLM
         try:
@@ -600,6 +614,13 @@ def run_agent_loop(
                 except Exception:
                     pass
         
+        # 🔔 流式事件：思考内容（如果有）
+        if event_callback and content:
+            try:
+                event_callback({"type": "thinking", "message": content[:300] + ("..." if len(content) > 300 else "")})
+            except Exception:
+                pass
+
         # 判断是否需要工具调用
         if finish_reason == "length":
             messages.append({"role": "user", "content": "你的输出被截断了，请从中断处继续生成剩余内容，不要重复已输出的部分。"})
@@ -657,6 +678,13 @@ def run_agent_loop(
         # 输出工具调用日志到控制台
         tool_names = [t["function"]["name"] for t in tc_dicts]
         logger.info(f"🔧 调用工具: {', '.join(tool_names)}")
+        # 🔔 流式事件：工具调用通知
+        if event_callback:
+            for t in tc_dicts:
+                try:
+                    event_callback({"type": "tool_call", "tool_name": t["function"]["name"], "args": t["function"]["arguments"][:500]})
+                except Exception:
+                    pass
         
         tool_results = execute_tools_parallel(tc_dicts, _execute_tool_optimized)
         
@@ -682,6 +710,12 @@ def run_agent_loop(
                 # 输出工具结果摘要到控制台
                 result_preview = result_str[:120].replace('\n', ' ')
                 logger.info(f"  ✅ {tool_name}: {result_preview}{'...' if len(result_str) > 120 else ''}")
+                # 🔔 流式事件：工具结果
+                if event_callback:
+                    try:
+                        event_callback({"type": "tool_result", "tool_name": tool_name, "summary": result_preview, "error": "error" in result_str[:50].lower()})
+                    except Exception:
+                        pass
                 
                 # 记录日志
                 log_entry = {
@@ -715,19 +749,60 @@ def run_agent_loop(
 
 def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str = None, tools: list = None):
     """
-    流式版 agent_loop — 包装 run_agent_loop，将最终结果以 SSE 事件流形式 yield。
+    流式版 agent_loop — 使用 event_callback 实时 yield 中间事件（思考、工具调用等）。
     
     Yields:
-        dict: {"type": "text_chunk", "content": "..."} / {"type": "done", ...} / ...
+        dict: {"type": "thinking"/"iteration"/"tool_call"/"tool_result"/"text_chunk", ...}
     """
+    import queue as _stream_queue
     from .model_manager import get_model
     
     model = get_model(model_name)
-    result = run_agent_loop(task=task, model=model, session_id=session_id, tools=tools)
+    event_queue = _stream_queue.Queue()
     
-    if result.get("success"):
+    def _on_event(event: dict):
+        """将事件放入队列供主线程消费"""
+        event_queue.put(event)
+    
+    # 在后台线程运行 agent_loop
+    import threading
+    result_holder = {}
+    
+    def _runner():
+        try:
+            r = run_agent_loop(
+                task=task, model=model, session_id=session_id,
+                tools=tools, event_callback=_on_event
+            )
+            result_holder["result"] = r
+        except Exception as e:
+            logger.error(f"Agent 循环异常: {e}")
+            result_holder["error"] = str(e)
+        finally:
+            event_queue.put(None)  # 结束信号
+    
+    thread = threading.Thread(target=_runner, daemon=True)
+    thread.start()
+    
+    # 从队列 yield 事件，直到收到结束信号
+    while True:
+        event = event_queue.get()
+        if event is None:
+            break
+        yield event
+    
+    thread.join()
+    
+    # 输出最终结果
+    result = result_holder.get("result")
+    if result is None:
+        error_msg = result_holder.get("error", "任务失败")
+        logger.error(f"💬 Agent: {error_msg}")
+        yield {"type": "done", "success": False, "result": error_msg}
+    elif result.get("success"):
         content = result.get("result", "")
         if content:
+            logger.info(f"💬 Agent: {content}")
             yield {"type": "text_chunk", "content": content}
         yield {
             "type": "done",
@@ -738,6 +813,7 @@ def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str 
         }
     else:
         error_msg = result.get("result", result.get("error", "任务失败"))
+        logger.error(f"💬 Agent: {error_msg}")
         yield {"type": "done", "success": False, "result": error_msg}
 
 

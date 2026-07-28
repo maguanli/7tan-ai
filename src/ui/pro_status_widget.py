@@ -197,7 +197,9 @@ class ProStatusWidget(QFrame):
                     font-weight: bold;
                 }
             """)
-            self._level_text.setText("专业版")
+            # 从 token_data 获取用户名（比 _user_info 更可靠）
+            username = token_data.get("username", "") if token_data else self._user_info.get("username", "")
+            self._level_text.setText(username if username else "专业版")
 
             # 到期时间
             if pro_expires:

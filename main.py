@@ -62,7 +62,11 @@ if sys.platform == 'win32':
         pass
 
 # ⚡ 尽早导入 console_panel，触发 OS 级管道重定向（必须在 loguru 之前）
-import src.ui.console_panel as _console_panel  # noqa: F401
+# ⚠️ 部分环境下 install_all() 中的 dup2 可能阻塞，容错跳过
+try:
+    import src.ui.console_panel as _console_panel  # noqa: F401
+except Exception:
+    pass
 
 # 🔍 崩溃诊断 — 捕获未处理异常和 segfault
 import traceback as _tb

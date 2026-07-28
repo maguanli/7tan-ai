@@ -684,6 +684,34 @@ def run_agent_loop(
     }
 
 
+def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str = None):
+    """
+    流式版 agent_loop — 包装 run_agent_loop，将最终结果以 SSE 事件流形式 yield。
+    
+    Yields:
+        dict: {"type": "text_chunk", "content": "..."} / {"type": "done", ...} / ...
+    """
+    from .model_manager import get_model
+    
+    model = get_model(model_name)
+    result = run_agent_loop(task=task, model=model, session_id=session_id)
+    
+    if result.get("success"):
+        content = result.get("result", "")
+        if content:
+            yield {"type": "text_chunk", "content": content}
+        yield {
+            "type": "done",
+            "success": True,
+            "result": content or "任务完成",
+            "iterations": result.get("iterations", 0),
+            "cost": result.get("cost", 0),
+        }
+    else:
+        error_msg = result.get("result", result.get("error", "任务失败"))
+        yield {"type": "done", "success": False, "result": error_msg}
+
+
 def _repair_messages(messages: list) -> list:
     """修复消息历史中的孤儿 tool_calls，防止 API 400 错误
     

@@ -500,6 +500,15 @@ def run_agent_loop(
         ctx = ConversationContext(task=task, session_id=session_id)
 
     tools = tools or []
+    # 🔧 自动加载工具：如果调用方没传 tools，从注册表自动获取
+    if not tools:
+        try:
+            from ..tools.registry import get_all_tools
+            tools = get_all_tools()
+            if tools:
+                logger.info(f"🔧 自动加载 {len(tools)} 个工具")
+        except Exception as e:
+            logger.warning(f"⚠️ 自动加载工具失败: {e}")
     total_cost = 0.0
     all_logs = []
     iteration = 0
@@ -645,6 +654,10 @@ def run_agent_loop(
                 }
             })
         
+        # 输出工具调用日志到控制台
+        tool_names = [t["function"]["name"] for t in tc_dicts]
+        logger.info(f"🔧 调用工具: {', '.join(tool_names)}")
+        
         tool_results = execute_tools_parallel(tc_dicts, _execute_tool_optimized)
         
         for tc, result in zip(tool_calls_raw, tool_results):
@@ -665,6 +678,10 @@ def run_agent_loop(
                     "name": tool_name,
                     "content": result_str,
                 })
+                
+                # 输出工具结果摘要到控制台
+                result_preview = result_str[:120].replace('\n', ' ')
+                logger.info(f"  ✅ {tool_name}: {result_preview}{'...' if len(result_str) > 120 else ''}")
                 
                 # 记录日志
                 log_entry = {
@@ -696,7 +713,7 @@ def run_agent_loop(
     }
 
 
-def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str = None):
+def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str = None, tools: list = None):
     """
     流式版 agent_loop — 包装 run_agent_loop，将最终结果以 SSE 事件流形式 yield。
     
@@ -706,7 +723,7 @@ def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str 
     from .model_manager import get_model
     
     model = get_model(model_name)
-    result = run_agent_loop(task=task, model=model, session_id=session_id)
+    result = run_agent_loop(task=task, model=model, session_id=session_id, tools=tools)
     
     if result.get("success"):
         content = result.get("result", "")

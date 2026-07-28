@@ -12,6 +12,8 @@ import threading
 import asyncio
 
 from ...agent.agent_loop import run_agent_loop, run_agent_loop_streaming
+from ...tools.registry import get_all_tools
+from ... import tools as _tools  # noqa: F401 触发 @register_tool 装饰器
 from ...agent.conversation import (
     create_session, save_message, get_session_messages,
     get_recent_sessions, delete_session,
@@ -66,6 +68,7 @@ async def send_message(req: ChatRequest):
                     task=req.message,
                     session_id=session_id,
                     model_name=req.model,
+                    tools=get_all_tools(),
                 )
                 loop.call_soon_threadsafe(future.set_result, result)
             except Exception as e:
@@ -132,6 +135,7 @@ async def send_message_stream(req: ChatRequest):
                     task=req.message,
                     session_id=session_id,
                     model_name=req.model,
+                    tools=get_all_tools(),
                 ):
                     # Put event into queue for the async generator to pick up
                     asyncio.run_coroutine_threadsafe(queue.put(event), loop).result()

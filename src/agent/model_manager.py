@@ -297,6 +297,15 @@ class ModelManager:
 _model_cache: dict[str, ModelManager] = {}
 def get_model(model_name: str) -> ModelManager:
     """获取或创建模型管理器实例（全局单例缓存）"""
+    # 解析 "auto" → 真实模型名
+    if not model_name or model_name == "auto":
+        try:
+            from ..database.db import get_active_ai_config_raw
+            cfg = get_active_ai_config_raw()
+            model_name = cfg.get("model_name", "deepseek-v4-pro") if cfg else "deepseek-v4-pro"
+        except Exception:
+            model_name = "deepseek-v4-pro"
+
     if model_name not in _model_cache:
         logger.debug(f"🤖 加载模型: {model_name}")
         _model_cache[model_name] = ModelManager(model_name)

@@ -92,6 +92,15 @@ class ModelManager:
     def get_api_name(self) -> str:
         return self._api_name
 
+    def call_with_retry(self, messages, tools=None, config=None, timeout=600):
+        """兼容旧 agent_loop 调用接口 → 委托给 chat()"""
+        kwargs = {"messages": messages}
+        if tools:
+            kwargs["tools"] = tools
+        if config:
+            kwargs.update(config)
+        return self.chat(**kwargs)
+
     def chat(self, **kwargs) -> dict:
         """
         调用 LLM chat completion — 带智能重试
@@ -313,4 +322,13 @@ def get_model(model_name: str) -> ModelManager:
 def clear_model_cache():
     """清除模型缓存（配置变更后调用）"""
     _model_cache.clear()
+
+
+def get_config() -> dict:
+    """获取默认 LLM 配置（兼容旧代码调用）"""
+    return {
+        "model": "auto",
+        "temperature": 0.7,
+        "max_tokens": 16384,
+    }
     logger.info("🔄 模型缓存已清除，下次请求将使用新配置")

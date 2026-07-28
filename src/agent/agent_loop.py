@@ -458,13 +458,15 @@ Instructions:
 
 def run_agent_loop(
     task: str,
-    model,
-    config: dict,
+    model=None,
+    config: dict = None,
     system_prompt: str = "",
     tools: list = None,
     ctx: ConversationContext = None,
     max_iterations: int = 300,
     task_mode: str = "general",
+    session_id: str = None,      # 兼容旧调用
+    model_name: str = None,      # 兼容旧调用
 ) -> dict:
     """Agent 主循环：多轮工具调用直到完成。
     
@@ -487,6 +489,16 @@ def run_agent_loop(
             "logs": list,
         }
     """
+    # 兼容旧调用：从 model_name / session_id 自动构建 model / config / ctx
+    if model_name and not model:
+        from .model_manager import get_model
+        model = get_model(model_name)
+    if not config:
+        from .model_manager import get_config
+        config = get_config()
+    if session_id and not ctx:
+        ctx = ConversationContext(task=task, session_id=session_id)
+
     tools = tools or []
     total_cost = 0.0
     all_logs = []

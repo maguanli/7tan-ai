@@ -142,3 +142,17 @@ class ContextManager:
 
     def __len__(self):
         return len(self.history)
+
+
+def should_compress_context(token_count: int, limit: int = 50_000) -> bool:
+    """是否需要压缩上下文"""
+    return token_count > limit
+
+
+def compress_context(ctx: ContextManager, model=None) -> str:
+    """压缩上下文，返回摘要"""
+    return ctx.summarize(model=model)
+
+
+# 别名
+ConversationContext = ContextManager

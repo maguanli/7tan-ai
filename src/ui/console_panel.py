@@ -36,6 +36,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QTextCursor, QFont
 
+import logging
+
 # ===== ANSI =====
 _ANSI_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
 
@@ -133,7 +135,37 @@ def _enqueue(line: str):
     _log_queue.put(f"{ts} │ {clean}")
 
 
-# ===== 1. loguru sink =====
+# ===== 1. Standard logging bridge =====
+class _LoggingBridge(logging.Handler):
+    """桥接标准 logging → 控制台队列"""
+    def __init__(self):
+        super().__init__(level=logging.DEBUG)
+        self.setFormatter(logging.Formatter("%(message)s"))
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            _enqueue(msg)
+        except Exception:
+            self.handleError(record)
+
+
+_logging_bridge_installed = False
+
+
+def _add_std_logging_bridge():
+    """安装标准 logging 桥接，让 logging.getLogger 的日志也显示在控制台"""
+    global _logging_bridge_installed
+    if _logging_bridge_installed:
+        return
+    _logging_bridge_installed = True
+    root_logger = logging.getLogger()
+    root_logger.addHandler(_LoggingBridge())
+    root_logger.setLevel(logging.DEBUG)
+    _enqueue("[系统] 标准 logging 桥接已安装")
+
+
+# ===== 2. loguru sink =====
 _loguru_sink_id = None
 
 
@@ -252,6 +284,7 @@ def install_all():
         pass
     _install_python_redirect()
     _install_os_pipe()
+    _add_std_logging_bridge()
     _add_loguru_sink()
     import atexit
     @atexit.register

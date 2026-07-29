@@ -49,14 +49,29 @@ if (empty($username) || empty($password)) {
 // ============================================================
 // 查用户（ll_useregs 实际列名：ll_name / ll_pass）
 // ============================================================
-$db   = get_db_connection();
-$stmt = $db->prepare(
-    'SELECT id, ll_name, ll_pass, ll_shouji, ll_mail
-     FROM ll_useregs
-     WHERE ll_name = :name1 OR ll_shouji = :name2 OR ll_mail = :name3
-     LIMIT 1'
-);
-$stmt->execute([':name1' => $username, ':name2' => $username, ':name3' => $username]);
+$db = get_db_connection();
+
+// 先尝试查含 trial_ai_count，如果列不存在则回退
+try {
+    $stmt = $db->prepare(
+        'SELECT id, ll_name, ll_pass, ll_shouji, ll_mail, trial_ai_count
+         FROM ll_useregs
+         WHERE ll_name = :name1 OR ll_shouji = :name2 OR ll_mail = :name3
+         LIMIT 1'
+    );
+    $stmt->execute([':name1' => $username, ':name2' => $username, ':name3' => $username]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    // trial_ai_count 列尚不存在 → 回退查询（等执行 migration.sql 后自动恢复）
+    $stmt = $db->prepare(
+        'SELECT id, ll_name, ll_pass, ll_shouji, ll_mail
+         FROM ll_useregs
+         WHERE ll_name = :name1 OR ll_shouji = :name2 OR ll_mail = :name3
+         LIMIT 1'
+    );
+    $stmt->execute([':name1' => $username, ':name2' => $username, ':name3' => $username]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+}
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$user) {
@@ -65,8 +80,9 @@ if (!$user) {
     exit;
 }
 
-// 密码直接对比（如果网站用 MD5，改为 md5($password) === $user['ll_pass']）
-if ($password !== $user['ll_pass']) {
+// 密码比对（兼容 MD5 哈希和明文两种存储格式）
+$password_ok = ($user['ll_pass'] === $password || $user['ll_pass'] === md5($password));
+if (!$password_ok) {
     http_response_code(401);
     echo json_encode(['code' => -1, 'message' => '账号或密码错误']);
     exit;
@@ -97,16 +113,29 @@ if ($sub) {
 }
 
 // ============================================================
+// 同步 BBS Session（让 BBS 和 API 互通登录状态）
+// ============================================================
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+$_SESSION['user_id'] = (int)$user['id'];
+$_SESSION['user_name'] = $user['ll_name'];
+$_SESSION['user_nickname'] = $user['ll_n_name'] ?? $user['ll_name'];
+
+$trial_ai_count = (int)($user['trial_ai_count'] ?? 0);
+
+// ============================================================
 // 签发 JWT
 // ============================================================
 $token = jwt_encode_auto([
-    'uid'           => (int)$user['id'],
-    'username'      => $user['ll_name'],
-    'level'         => $is_pro ? 'pro' : 'free',
-    'pro_activated' => $pro_activated,
-    'pro_expires'   => $pro_expires,
-    'iat'           => $now,
-    'exp'           => $now + 86400 * 30, // 30天过期
+    'uid'            => (int)$user['id'],
+    'username'       => $user['ll_name'],
+    'level'          => $is_pro ? 'pro' : 'free',
+    'pro_activated'  => $pro_activated,
+    'pro_expires'    => $pro_expires,
+    'trial_ai_count' => $trial_ai_count,    // 试用的 AI 次数（0=已用完）
+    'iat'            => $now,
+    'exp'            => $now + 86400 * 30,  // 30天过期
 ], $JWT_SECRET);
 
 // ============================================================
@@ -134,10 +163,11 @@ echo json_encode([
             'username'      => $user['ll_name'],
             'phone'         => $user['ll_shouji'] ?? '',
             'email'         => $user['ll_mail'] ?? '',
-            'level'         => $is_pro ? 'pro' : 'free',
-            'pro_activated' => $pro_activated,
-            'pro_expires'   => $pro_expires,
-            'pro_expires_at'=> $pro_expires > 0 ? date('Y-m-d H:i:s', $pro_expires) : null,
+            'level'          => $is_pro ? 'pro' : 'free',
+            'pro_activated'  => $pro_activated,
+            'pro_expires'    => $pro_expires,
+            'pro_expires_at' => $pro_expires > 0 ? date('Y-m-d H:i:s', $pro_expires) : null,
+            'trial_ai_count' => $trial_ai_count,   // AI 试用剩余次数
         ],
     ],
 ], JSON_UNESCAPED_UNICODE);

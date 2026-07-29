@@ -43,3 +43,11 @@ function get_db_connection(): PDO
 // 客户端 RSA 公钥验签用此密钥签发 JWT 的对称密钥
 // ============================================================
 define('JWT_SECRET', 'change-me-to-a-random-64-char-string-here-please!!!!');
+
+// ============================================================
+// DeepSeek API 配置（服务端持有，代理试用用户的 AI 请求）
+// ⚠️ 部署前替换为真实 API Key
+// ============================================================
+define('DEEPSEEK_API_KEY', 'sk-your-deepseek-api-key-here');
+define('DEEPSEEK_BASE_URL', 'https://api.deepseek.com/v1');
+define('TRIAL_MODEL', 'deepseek-chat');  // 试用用户使用的模型（建议用便宜的）

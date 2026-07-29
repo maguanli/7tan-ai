@@ -186,7 +186,7 @@ class ProStatusWidget(QFrame):
         is_pro = (level == "pro" and pro_expires > 0)
 
         if is_pro:
-            self._level_badge.setText("PRO")
+            self._level_badge.setText("[PRO]")
             self._level_badge.setStyleSheet("""
                 QLabel {
                     background-color: #f0c040;
@@ -199,7 +199,7 @@ class ProStatusWidget(QFrame):
             """)
             # 从 token_data 获取用户名（比 _user_info 更可靠）
             username = token_data.get("username", "") if token_data else self._user_info.get("username", "")
-            self._level_text.setText(username if username else "专业版")
+            self._level_text.setText(f"专业版 {username}" if username else "专业版")
 
             # 到期时间
             if pro_expires:
@@ -217,7 +217,7 @@ class ProStatusWidget(QFrame):
             self._expiry_label.setVisible(True)
             self._upgrade_btn.setText("⭐ 续费")
         else:
-            self._level_badge.setText("基础")
+            self._level_badge.setText("[基础]")
             self._level_badge.setStyleSheet(f"""
                 QLabel {{
                     background-color: {THEME['hover']};
@@ -228,9 +228,10 @@ class ProStatusWidget(QFrame):
                     font-weight: bold;
                 }}
             """)
-            self._level_text.setText("基础版")
+            username = token_data.get("username", "") if token_data else self._user_info.get("username", "")
+            self._level_text.setText(f"基础版 {username}" if username else "基础版")
             self._expiry_label.setVisible(False)
-            self._upgrade_btn.setText("⭐ 专业版")
+            self._upgrade_btn.setText("⭐ 升级专业版")
 
     def _on_refresh(self) -> None:
         """刷新 Token 状态"""

@@ -176,6 +176,20 @@ QToolTip {{
     padding: 6px 10px;
     font-size: 12px;
 }}
+
+/* 弹窗按钮白色字体，确保深色背景上可见 */
+QMessageBox {{
+    background-color: {THEME['bg_card']};
+}}
+QMessageBox QPushButton {{
+    color: #ffffff;
+    background-color: {THEME['accent']};
+    min-width: 60px;
+}}
+QMessageBox QPushButton:hover {{
+    color: #ffffff;
+    background-color: #33ddff;
+}}
 """
 
 import math as _math
@@ -352,6 +366,7 @@ class Sidebar(QFrame):
         self.setStyleSheet(f"background-color: {THEME['bg_sidebar']};")
         self._buttons = {}
         self._active_key = ""
+        self._user_info = user_info or {}
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 16, 8, 16)
@@ -447,7 +462,7 @@ class Sidebar(QFrame):
 
         # --- 专业版状态组件 ---
         from .pro_status_widget import ProStatusWidget
-        self._pro_widget = ProStatusWidget()
+        self._pro_widget = ProStatusWidget(user_info=self._user_info)
         self._pro_widget.logout_requested.connect(self.logout_requested.emit)
         layout.addWidget(self._pro_widget)
         layout.addSpacing(8)
@@ -3955,7 +3970,7 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
 
         # 侧边栏
-        self._sidebar = Sidebar()
+        self._sidebar = Sidebar(user_info=self._user_info)
         self._sidebar.page_changed.connect(self._switch_page)
         self._sidebar.open_url.connect(self._on_open_url)
         self._sidebar.logout_requested.connect(self._on_logout)

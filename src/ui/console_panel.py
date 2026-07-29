@@ -104,6 +104,22 @@ def _enqueue(line: str):
     clean = _FILE_SINK_RE.sub('', clean)
     if not clean.strip():
         return
+    # 过滤启动噪音和底层 HTTP 库的啰嗦日志，保持控制台清爽
+    _NOISE_PATTERNS = [
+        '🔧 注册工具',
+        '📦 插件已加载',
+        '✅ 数据库初始化完成',
+        '[系统] loguru 控制台 sink 已连接',
+        '[系统] 标准 logging 桥接已安装',
+        '[系统] Python stdout/stderr 重定向已安装',
+        '[系统] OS 管道已安装',
+        '[系统] GUI 模式，跳过 OS 管道',
+        '[系统] loguru sink 失败',
+        'Sending HTTP Request',
+    ]
+    for np_ in _NOISE_PATTERNS:
+        if np_ in clean:
+            return
     h = hash(clean)
     # 模糊指纹：取前60字符，防止loguru默认sink格式化(带时间戳)绕过精确去重
     h_fuzzy = hash(clean[:60])

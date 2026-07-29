@@ -103,6 +103,10 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 def setup_logging():
     """配置日志"""
+    import logging
+    # 屏蔽 httpx/httpcore 的 INFO 日志（OpenAI SDK 底层HTTP请求日志太啰嗦）
+    for noisy in ("httpx", "httpcore", "openai"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     from src.utils.logger import setup_logging as _setup
     _setup()
     # logger.remove() 会清除所有 sink，需要重新注册控制台 sink

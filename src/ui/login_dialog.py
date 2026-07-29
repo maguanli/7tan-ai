@@ -126,7 +126,7 @@ class LoginDialog(QDialog):
         title_bar.addStretch()
 
         # 关闭按钮
-        btn_close = QPushButton("✕")
+        btn_close = QPushButton("X")
         btn_close.setObjectName("btnClose")
         btn_close.setFixedSize(28, 28)
         btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -385,7 +385,7 @@ class LoginDialog(QDialog):
 
     def _on_forgot_password(self):
         """忘记密码 → 打开 7tan.com"""
-        self._open_url("https://www.7tan.com/forgot-password/")
+        self._open_url("https://www.7tan.com/bbs/77562/")
         self._show_error("")  # 清除错误
 
     def _on_login(self):

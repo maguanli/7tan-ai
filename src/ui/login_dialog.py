@@ -66,8 +66,10 @@ class LoginDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("7Tan — 登录")
 
-        # 设置任务栏图标
-        icon_path = Path(__file__).parent.parent.parent / "data" / "logo" / "app_single.ico"
+        # 设置任务栏图标（优先用 app.ico，回退到 PNG）
+        icon_path = Path(__file__).parent.parent.parent / "data" / "logo" / "app.ico"
+        if not icon_path.exists():
+            icon_path = Path(__file__).parent.parent.parent / "data" / "logo" / "logo_v4_256.png"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
 
@@ -132,11 +134,10 @@ class LoginDialog(QDialog):
         title_bar.addStretch()
 
         # 关闭按钮
-        btn_close = QPushButton(" X ")
+        btn_close = QPushButton("X")
         btn_close.setObjectName("btnClose")
         btn_close.setFixedSize(30, 30)
         btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_close.setFlat(True)
         btn_close.clicked.connect(self.reject)
         title_bar.addWidget(btn_close)
 
@@ -314,8 +315,8 @@ class LoginDialog(QDialog):
                 font-size: 13px;
                 font-weight: bold;
                 border-radius: 15px;
-                padding: 0;
-                margin: 0;
+                text-align: center;
+                padding: 0 0 1px 0;
             }}
             #btnClose:hover {{
                 background: #e81123;

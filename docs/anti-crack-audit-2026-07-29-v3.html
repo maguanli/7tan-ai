@@ -25,7 +25,7 @@ strong{color:#f0c040}
 <li><strong>审计日期</strong>: 2026-07-29</li>
 <li><strong>审计对象</strong>: D:\7tan\7tanAI（源码）+ dist\7tan-editor（发布构建）</li>
 <li><strong>v3 修订说明</strong>: 试用机制已从本地文件改为服务端 MySQL 计次 + 强制登录；更新商业模式描述；重新校准相关评分和 PoC</li>
-<li><strong>校正后评分</strong>: <strong>67 / 100（B- 级）</strong> — 试用漏洞已修复，P0 公钥缺失仍需处理</li>
+<li><strong>校正后评分</strong>: <strong>68 / 100（B- 级）</strong> — 试用漏洞已修复，P0 公钥缺失仍需处理</li>
 </ul>
 <hr />
 
@@ -105,7 +105,7 @@ strong{color:#f0c040}
 <tr>
 <td><strong>合计</strong></td>
 <td></td>
-<td><strong>67/100</strong></td>
+<td><strong>68/100</strong></td>
 <td></td>
 </tr>
 </tbody>
@@ -205,7 +205,8 @@ trial.php 验 JWT → DB 查 trial_ai_count → 代理 DeepSeek → UPDATE 扣 1
 <tr><td>旧 DeepSeek Key</td><td>⚠️</td><td>.env 确认"旧 Key 已泄露"——请确认已在后台吊销</td></tr>
 <tr><td>dist/config.yaml</td><td>⚠️</td><td>含绝对路径 <code>D:\7tan\7tanAI\data</code> 和 <code>username: admin</code></td></tr>
 <tr><td>插件清单</td><td>⚠️</td><td>指向 GitHub raw URL，无签名校验</td></tr>
-<tr><td><code>run_integrity()</code></td><td>🐛</td><td>引用不存在的 <code>checker._report</code> — AttributeError bug</td></tr>
+<tr><td><code>run_integrity()</code></td><td class="fixed">已移除</td><td>v1 报告遗留——此函数在代码中已不存在，integrity 模块只提供 generate/verify API</td></tr>
+<tr><td>pro_status_widget 验签</td><td class="fixed">✅ 已修复</td><td>验签失败不再静默 pass，改为降级为 free + 日志记录原因</td></tr>
 <tr><td>git 安全</td><td>✅</td><td>.gitignore 正确，历史无 key 残留</td></tr>
 <tr><td>token 机器绑定</td><td>✅</td><td>防"分享 PRO 账号"有效，换机自动失效</td></tr>
 <tr class="fixed"><td>登录按钮 UI</td><td>✅</td><td>已修复：关闭按钮可见、注册链接走 bbs/register.php、核查框正常、密码显隐按钮</td></tr>
@@ -241,14 +242,15 @@ trial.php 验 JWT → DB 查 trial_ai_count → 代理 DeepSeek → UPDATE 扣 1
 <table>
 <thead><tr><th>维度</th><th>v2</th><th>v3</th><th>变化原因</th></tr></thead>
 <tbody>
-<tr><td>试用限制</td><td>5/5（无意义）</td><td class="fixed">12/5</td><td>从删文件即重置改为服务端 MySQL 计次 + 强制登录</td></tr>
-<tr><td>其他维度</td><td>不变</td><td>不变</td><td>—</td></tr>
-<tr><td><strong>总分</strong></td><td>55/100</td><td class="fixed"><strong>67/100</strong></td><td>+12 分，从 C+ 升到 B-</td></tr>
+<tr><td>试用限制</td><td>5/5</td><td class="fixed">12/5</td><td>删本地文件 → 服务端 MySQL 计次 + 强制登录</td></tr>
+<tr><td>授权验证</td><td>5/20</td><td class="fixed">6/20</td><td>验签失败不再静默 pass，降级+日志</td></tr>
+<tr><td>P2 过时项</td><td>2 项</td><td class="fixed">0 项</td><td>run_integrity()/startup_self_check() 代码中已不存在</td></tr>
+<tr><td><strong>总分</strong></td><td>55/100</td><td class="fixed"><strong>68/100</strong></td><td>+13 分，C+ → B-</td></tr>
 </tbody>
 </table>
 <hr />
 
 <h2>六、最重要的一句话</h2>
-<p>试用漏洞<strong class="fixed">已修复</strong>。当前唯一卡着正版 PRO 用户的问题是<strong>公钥缺失</strong>——填上公钥并重建发布包，评分可从 67 跳到 ~80。</p>
+<p>试用漏洞<strong class="fixed">已修复</strong>。当前唯一卡着正版 PRO 用户的问题是<strong>公钥缺失</strong>——填上公钥并重建发布包，评分可从 68 跳到 ~80。</p>
 </body>
 </html>

@@ -2,6 +2,8 @@
 data/.encryption_key
 data/.encryption_salt
 data/auth/token.dat
+website/config/private_key.pem
+*.pem
 
 # 数据库文件（含密码等敏感数据）
 data/games.db

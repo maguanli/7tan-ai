@@ -203,6 +203,7 @@ def interactive_input() -> dict[str, str]:
         "api_verify": "https://img.7tan.cn/api/auth/verify.php",
         "api_refresh": "https://img.7tan.cn/api/auth/refresh.php",
         "api_trial": "https://img.7tan.cn/api/ai/trial.php",
+    }
 
     for key, default_url in defaults.items():
         label = key.replace("api_", "").title()

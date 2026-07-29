@@ -23,11 +23,14 @@ from ..utils.helpers import ensure_dir, human_readable_size
     },
     category="file",
 )
-def list_files(directory: str, pattern: str = "*") -> str:
+def list_files(directory: str = None, pattern: str = "*", path: str = None) -> str:
     """列出文件"""
-    p = Path(directory)
+    dir_path = directory or path
+    if not dir_path:
+        return "❌ 请提供目录路径 (directory 或 path 参数)"
+    p = Path(dir_path)
     if not p.exists():
-        return f"❌ 目录不存在: {directory}"
+        return f"❌ 目录不存在: {dir_path}"
 
     # 规范化 pattern — 去除可能的前缀匹配符号
     clean_pattern = pattern.strip()
@@ -47,9 +50,9 @@ def list_files(directory: str, pattern: str = "*") -> str:
         files = sorted(p.iterdir())
 
     if not files:
-        return f"📂 目录为空: {directory}"
+        return f"📂 目录为空: {dir_path}"
 
-    lines = [f"📂 {directory} ({len(files)} 个文件/目录):\n"]
+    lines = [f"📂 {dir_path} ({len(files)} 个文件/目录):\n"]
     for f in files[:50]:
         prefix = "📁" if f.is_dir() else "📄"
         size = human_readable_size(f.stat().st_size) if f.is_file() else "-"

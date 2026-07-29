@@ -65,7 +65,7 @@ class LoginDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("7Tan — 登录")
-        self.setFixedSize(420, 460)
+        self.setFixedSize(420, 490)
         self.setWindowFlags(
             Qt.WindowType.Dialog |
             Qt.WindowType.FramelessWindowHint
@@ -93,7 +93,7 @@ class LoginDialog(QDialog):
         # 卡片容器
         self._card = QFrame(self)
         self._card.setObjectName("card")
-        self._card.setFixedSize(420, 460)
+        self._card.setFixedSize(420, 490)
 
         # 阴影效果
         shadow = QGraphicsDropShadowEffect(self)
@@ -518,7 +518,7 @@ def check_and_login(parent=None) -> dict | None:
             return {
                 "token": data.get("token", ""),
                 "username": data.get("username", ""),
-                "level": data.get("level", "basic"),
+                "level": data.get("level", "free"),
                 "pro_expires": data.get("pro_expires", 0),
             }
 

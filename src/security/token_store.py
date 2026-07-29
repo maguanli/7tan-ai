@@ -118,7 +118,8 @@ def _decrypt(encrypted_b64: str) -> str:
 # ============================================================
 
 def save_token(token: str, username: str = "", level: str = "basic",
-               pro_expires: int = 0, expires_in: int = 0) -> bool:
+               pro_expires: int = 0, expires_in: int = 0,
+               trial_ai_count: int = 0) -> bool:
     """
     加密保存 JWT Token 到本地。
 
@@ -128,6 +129,7 @@ def save_token(token: str, username: str = "", level: str = "basic",
         level: 会员等级
         pro_expires: 专业版到期时间（Unix 时间戳）
         expires_in: Token 有效期（秒，0=使用默认30天）
+        trial_ai_count: AI 试用剩余次数（0=已用完，来自服务端 JWT）
 
     Returns:
         是否保存成功
@@ -150,6 +152,7 @@ def save_token(token: str, username: str = "", level: str = "basic",
             "pro_expires": pro_expires,
             "saved_at": int(__import__("time").time()),
             "expires_in": expires_in or 2592000,  # 默认 30 天
+            "trial_ai_count": trial_ai_count,
         }
 
         encrypted = _encrypt(json.dumps(payload, ensure_ascii=False))

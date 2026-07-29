@@ -199,10 +199,10 @@ def interactive_input() -> dict[str, str]:
     print("2. API 端点 URL")
 
     defaults = {
-        "api_login": "https://7tan.com/api/auth/login.php",
-        "api_verify": "https://7tan.com/api/auth/verify.php",
-        "api_refresh": "https://7tan.com/api/auth/refresh.php",
-    }
+        "api_login": "https://img.7tan.cn/api/auth/login.php",
+        "api_verify": "https://img.7tan.cn/api/auth/verify.php",
+        "api_refresh": "https://img.7tan.cn/api/auth/refresh.php",
+        "api_trial": "https://img.7tan.cn/api/ai/trial.php",
 
     for key, default_url in defaults.items():
         label = key.replace("api_", "").title()
@@ -236,7 +236,7 @@ def stdin_input() -> dict[str, str]:
         sys.exit(1)
 
     values: dict[str, str] = {}
-    for key in ["public_key", "api_login", "api_verify", "api_refresh"]:
+    for key in ["public_key", "api_login", "api_verify", "api_refresh", "api_trial"]:
         if key in data and data[key]:
             values[key] = encrypt(data[key])
 
@@ -312,7 +312,7 @@ def main():
         store_body = store_match.group(1)
         all_ok = True
 
-        for key in ["public_key", "api_login", "api_verify", "api_refresh"]:
+        for key in ["public_key", "api_login", "api_verify", "api_refresh", "api_trial"]:
             match = re.search(rf'"{key}"\s*:\s*"([^"]*)"', store_body)
             if match:
                 encrypted = match.group(1)

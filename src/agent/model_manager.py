@@ -105,6 +105,11 @@ class ModelManager:
         - 400 (参数错误) → 不重试，直接抛出
         """
         client = self._get_client()
+
+        # 试用模式：走服务端代理，跳过 retry（trial.php 自带错误处理）
+        if getattr(self, '_trial_mode', False):
+            return self._trial_chat(**kwargs)
+
         # 注入默认参数（允许调用方覆盖）
         kwargs.setdefault("model", self.model_name)
         kwargs.setdefault("max_tokens", self.max_tokens)
@@ -120,6 +125,74 @@ class ModelManager:
             kwargs["tools"] = self._sanitize_tools(kwargs["tools"])
 
         return self._chat_with_retry(client, **kwargs)
+
+    def _trial_chat(self, **kwargs) -> dict:
+        """
+        试用模式下的 AI 调用 — 通过 7tan.com 服务端代理转发 DeepSeek。
+
+        不重试（trial.php 服务端已做网络处理），失败直接 raise。
+        """
+        from ..security.auth_client import trial_call
+
+        messages = kwargs.get("messages", [])
+        model = kwargs.get("model", self.model_name)
+        result = trial_call(self._trial_token, model, messages)
+
+        if not result.get("success"):
+            error_msg = result.get("error", "AI 试用调用失败")
+            trials_left = result.get("trials_left", -1)
+            if trials_left == 0:
+                # 同步本地状态：试用次数已用完
+                self._update_local_trial_count(0)
+            raise RuntimeError(error_msg)
+
+        # 同步本地试用次数
+        new_count = result.get("trials_left", -1)
+        if new_count >= 0:
+            self._update_local_trial_count(new_count)
+
+        # 将 trial.php 返回的数据包装为 OpenAI 兼容格式
+        data = result
+        choices = []
+        for c in data.get("choices", []):
+            msg = c.get("message", {})
+            choices.append(type('Choice', (), {
+                'message': type('Message', (), {
+                    'content': msg.get('content', ''),
+                    'role': msg.get('role', 'assistant'),
+                })(),
+                'finish_reason': c.get('finish_reason', 'stop'),
+                'index': c.get('index', 0),
+            })())
+        usage_data = data.get("usage", {}) or {}
+        response = type('Response', (), {
+            'choices': choices,
+            'usage': type('Usage', (), {
+                'prompt_tokens': usage_data.get('prompt_tokens', 0),
+                'completion_tokens': usage_data.get('completion_tokens', 0),
+                'total_tokens': usage_data.get('total_tokens', 0),
+            })(),
+            'model': data.get('model', model),
+        })()
+        return response
+
+    def _update_local_trial_count(self, new_count: int):
+        """更新本地 Token 存储的试用次数（与服务端同步）"""
+        try:
+            from ..security.token_store import load_token, save_token
+            token_data = load_token()
+            if token_data:
+                save_token(
+                    token=token_data.get("token", ""),
+                    username=token_data.get("username", ""),
+                    level=token_data.get("level", "free"),
+                    pro_expires=token_data.get("pro_expires", 0),
+                    expires_in=token_data.get("expires_in", 2592000),
+                    trial_ai_count=new_count,
+                )
+                logger.info(f"🎫 试用次数已同步: {new_count}")
+        except Exception as e:
+            logger.warning(f"同步试用次数失败: {e}")
 
     def _chat_with_retry(self, client, **kwargs):
         """带智能重试的 chat 调用"""
@@ -239,6 +312,23 @@ class ModelManager:
             base_url = base_url.get("url", "") or base_url.get("base_url", "") or ""
         base_url = str(base_url).strip() if base_url else ""
         if not api_key:
+            # 检查试用模式：如果用户已登录且还有 AI 试用次数，走服务端代理
+            try:
+                from ..security.token_store import load_token
+                token_data = load_token()
+                if token_data:
+                    trial_token = token_data.get("token", "")
+                    trials_left = token_data.get("trial_ai_count", 0)
+                    if trial_token and trials_left > 0:
+                        self._trial_mode = True
+                        self._trial_token = trial_token
+                        logger.info(
+                            f"🎫 试用模式：通过 7tan.com 代理调用 AI（剩余 {trials_left} 次）"
+                        )
+                        return self  # 不创建真实 OpenAI client
+            except Exception:
+                pass
+
             raise RuntimeError(
                 f"未配置 AI API Key！请在 设置→AI模型 中添加 {self.model_name} 的密钥"
             )

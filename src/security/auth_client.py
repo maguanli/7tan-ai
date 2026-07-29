@@ -104,9 +104,10 @@ def login(username: str, password: str, remember_me: bool = False) -> dict:
         "token": token,
         "user_id": user_data.get("user", {}).get("uid", 0),
         "username": user_data.get("user", {}).get("username", username),
-        "level": user_data.get("user", {}).get("level", "basic"),
+        "level": user_data.get("user", {}).get("level", "free"),
         "pro_expires": user_data.get("user", {}).get("pro_expires", 0),
         "expires_in": 2592000,
+        "trial_ai_count": user_data.get("user", {}).get("trial_ai_count", 0),
     }
 
 
@@ -217,3 +218,70 @@ def refresh_token(token: str) -> dict:
     # GET 失败，尝试 POST（某些服务器配置可能不传 query string）
     logger.info("[Auth] GET 刷新失败，尝试 POST...")
     return _do_request("POST")
+
+
+# ============================================================
+# 试用 AI 代理调用（通过 7tan.com 服务端转发 DeepSeek）
+# ============================================================
+
+def trial_call(token: str, model: str, messages: list) -> dict:
+    """
+    通过服务端代理调用 AI（试用模式，服务端计次防羊毛）。
+
+    Args:
+        token: JWT Token
+        model: 模型名称（如 deepseek-chat）
+        messages: OpenAI 格式的消息列表
+
+    Returns:
+        {
+            "success": True/False,
+            "choices": [...],          # OpenAI 格式的 choices
+            "usage": {...},            # token 用量
+            "trials_left": int,        # 剩余试用次数
+            "error": str or None,      # 错误信息
+        }
+    """
+    from .strings import get_api_url
+    url = get_api_url("trial")
+    if not url:
+        return {"success": False, "error": "试用 API 端点未配置", "trials_left": 0}
+
+    try:
+        resp = requests.post(
+            url,
+            json={"token": token, "model": model, "messages": messages},
+            timeout=120,  # AI 调用较慢
+        )
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"[Trial] AI 代理请求失败: {e}")
+        return {"success": False, "error": f"网络异常: {e}", "trials_left": -1}
+
+    try:
+        data = resp.json()
+    except Exception:
+        return {"success": False, "error": "服务器返回数据格式异常", "trials_left": -1}
+
+    if resp.status_code == 402:
+        # 试用次数用完
+        return {
+            "success": False,
+            "error": data.get("message", "AI 试用次数已用完"),
+            "trials_left": 0,
+        }
+
+    if data.get("code") != 0:
+        return {
+            "success": False,
+            "error": data.get("message", "AI 调用失败"),
+            "trials_left": data.get("data", {}).get("trials_left", -1),
+        }
+
+    result = data.get("data", {})
+    return {
+        "success": True,
+        "choices": result.get("choices", []),
+        "usage": result.get("usage"),
+        "trials_left": result.get("trials_left", -1),
+        "error": None,
+    }

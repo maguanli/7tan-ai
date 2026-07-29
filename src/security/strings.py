@@ -39,6 +39,7 @@ _STORE: dict[str, str] = {
     "api_login": "f0oukeI60CyaF4xSQuFAaLx/+/MQy9U9iolB2YZspQAlxBhbJLJ9ZhtdgZRnpLBvXOGXMDbHnJmCI3zT/KU0CL2INA==",
     "api_verify": "f0oukeNPxGFI9rD8A/tDGFwDpb6G7ehmHhh9g4CvjSwxDONCvQQ/JP+CMQ16LqQ+h33z5Kq/yxZQ/ycarpBgJjLzx7Y=",
     "api_refresh": "f0oukYIxG7j3yl5rQOlyGihuq1P1bAzz62D2YburpeQPBpFOfea8SmXTcDa9aQMBt8I+smPbA/ME0pf9xup9B/XuE+to=",
+    "api_trial": "",   # AI 试用代理端点 https://img.7tan.cn/api/ai/trial.php
 }
 
 
@@ -89,7 +90,7 @@ def get_api_url(endpoint: str) -> str:
     获取 API 端点 URL。
 
     Args:
-        endpoint: "login" / "verify" / "refresh"
+        endpoint: "login" / "verify" / "refresh" / "trial"
 
     Returns:
         完整的 HTTPS URL，解密失败返回空字符串
@@ -98,6 +99,7 @@ def get_api_url(endpoint: str) -> str:
         "login": "api_login",
         "verify": "api_verify",
         "refresh": "api_refresh",
+        "trial": "api_trial",
     }
     store_key = key_map.get(endpoint, "")
     if not store_key:

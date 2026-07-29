@@ -4088,9 +4088,8 @@ def launch_app():
         app.setStyleSheet(DARK_STYLESHEET)
         app.setApplicationName("7Tan")
 
-        # ===== 登录检查 =====
+        # ===== 登录检查（必须登录，无试用跳过） =====
         from ..security.token_store import is_token_available, load_token
-        from ..security.trial_store import has_trials
         from .login_dialog import show_login_dialog
 
         user_info = None
@@ -4102,7 +4101,7 @@ def launch_app():
                 user_info = {
                     "token": data.get("token", ""),
                     "username": data.get("username", ""),
-                    "level": data.get("level", "basic"),
+                    "level": data.get("level", "free"),
                     "pro_expires": data.get("pro_expires", 0),
                 }
                 logger.info(f"[Login] 使用本地 Token (用户: {user_info['username']})")

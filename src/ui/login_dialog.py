@@ -6,9 +6,9 @@ PyQt6 原生控件，精美渐变色设计。
   - 用户名/手机号 + 密码登录
   - 记住30天
   - 忘记密码 → 跳转 7tan.com
-  - 跳过试用（3次）
   - 错误提示
   - 登录中加载状态
+  - 新用户赠送 3 次免费 AI 试用（服务端计次，防羊毛）
 """
 from pathlib import Path
 
@@ -30,7 +30,6 @@ from loguru import logger
 
 from ..security.auth_client import login, LoginFailed, NetworkError, ServerError
 from ..security.token_store import save_token, is_token_available
-from ..security.trial_store import use_trial, has_trials, MAX_TRIALS
 
 # ============================================================
 # 颜色方案
@@ -66,7 +65,7 @@ class LoginDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("7Tan — 登录")
-        self.setFixedSize(420, 520)
+        self.setFixedSize(420, 460)
         self.setWindowFlags(
             Qt.WindowType.Dialog |
             Qt.WindowType.FramelessWindowHint
@@ -94,7 +93,7 @@ class LoginDialog(QDialog):
         # 卡片容器
         self._card = QFrame(self)
         self._card.setObjectName("card")
-        self._card.setFixedSize(420, 520)
+        self._card.setFixedSize(420, 460)
 
         # 阴影效果
         shadow = QGraphicsDropShadowEffect(self)
@@ -220,26 +219,6 @@ class LoginDialog(QDialog):
         self._btn_login.clicked.connect(self._on_login)
         layout.addWidget(self._btn_login)
         layout.addSpacing(16)
-
-        # --- 试用入口 ---
-        trial_row = QHBoxLayout()
-        trial_row.addStretch()
-
-        trials_left = MAX_TRIALS  # 默认显示
-        try:
-            trials_left = __import__("src.security.trial_store", fromlist=["get_trials_left"]).get_trials_left()
-        except Exception:
-            pass
-
-        btn_skip = QPushButton(f"跳过，试用 {trials_left} 次（免费）")
-        btn_skip.setObjectName("btnLink")
-        btn_skip.setFont(QFont("Microsoft YaHei", 11))
-        btn_skip.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_skip.clicked.connect(self._on_skip_trial)
-        trial_row.addWidget(btn_skip)
-
-        trial_row.addStretch()
-        layout.addLayout(trial_row)
 
         layout.addStretch()
 
@@ -431,13 +410,14 @@ class LoginDialog(QDialog):
             remember = self._chk_remember.isChecked()
             result = login(username, password, remember_me=remember)
 
-            # 保存 Token
+            # 保存 Token（含试用次数）
             save_token(
                 token=result["token"],
                 username=result["username"],
                 level=result["level"],
                 pro_expires=result.get("pro_expires", 0),
                 expires_in=result.get("expires_in", 2592000),
+                trial_ai_count=result.get("trial_ai_count", 0),
             )
 
             self._user_info = result
@@ -459,26 +439,6 @@ class LoginDialog(QDialog):
             self._set_loading(False)
             self._show_error(f"未知错误: {e}")
             logger.exception(e)
-
-    def _on_skip_trial(self):
-        """跳过试用"""
-        if not has_trials():
-            self._show_error("试用次数已用完，请登录后使用")
-            return
-
-        remaining = use_trial()
-        if remaining <= 0:
-            self._show_error("这是最后一次试用，下次请登录")
-
-        logger.info(f"[Login] 跳过登录，试用模式（剩余 {remaining} 次）")
-        self._user_info = {
-            "token": "",
-            "username": f"试用用户",
-            "level": "trial",
-            "pro_expires": 0,
-            "trial_remaining": remaining,
-        }
-        self.accept()
 
     def _accept(self):
         """登录成功，关闭对话框"""
@@ -520,17 +480,17 @@ class LoginDialog(QDialog):
 
 def show_login_dialog(parent=None) -> dict | None:
     """
-    显示登录对话框，阻塞直到用户登录/跳过/关闭。
+    显示登录对话框，阻塞直到用户登录或关闭。
 
     Returns:
-        用户信息字典（登录成功或试用模式），关闭窗口返回 None
+        用户信息字典，关闭窗口返回 None
 
         {
             "token": "eyJhbGci...",
             "username": "player1",
-            "level": "basic" | "pro" | "trial",
+            "level": "free" | "pro",
             "pro_expires": 1735689600,
-            "trial_remaining": 2,     # 仅试用模式
+            "trial_ai_count": 3,     # AI 试用剩余次数
         }
     """
     dialog = LoginDialog(parent)

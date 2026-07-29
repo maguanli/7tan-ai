@@ -22,6 +22,9 @@ from loguru import logger
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
+# 用户中止标志 — 由 abort 端点设置，由 agent_loop 检查
+_abort_flags: dict[str, threading.Event] = {}
+
 def _get_agent_loop_timeout() -> int:
     """从配置读取超时时间，默认 600 秒"""
     try:
@@ -57,6 +60,10 @@ async def send_message(req: ChatRequest):
     # 保存用户消息
     save_message(session_id, "user", req.message)
 
+    # 创建中止标志（供 abort 端点和 agent_loop 检查）
+    abort_event = threading.Event()
+    _abort_flags[session_id] = abort_event
+
     try:
         # 在线程中运行 Agent（threading.Thread，避免 ThreadPoolExecutor 与 PyQt6 冲突）
         loop = asyncio.get_running_loop()
@@ -69,6 +76,7 @@ async def send_message(req: ChatRequest):
                     session_id=session_id,
                     model_name=req.model,
                     tools=get_all_tools(),
+                    abort_event=abort_event,
                 )
                 loop.call_soon_threadsafe(future.set_result, result)
             except Exception as e:
@@ -104,6 +112,8 @@ async def send_message(req: ChatRequest):
         logger.error(f"对话失败: {e}")
         save_message(session_id, "assistant", f"❌ {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        _abort_flags.pop(session_id, None)
 
 
 # ThreadPoolExecutor 用于 SSE 流式响应（惰性初始化）
@@ -124,6 +134,10 @@ async def send_message_stream(req: ChatRequest):
     session_id = req.session_id or create_session()
     save_message(session_id, "user", req.message)
     
+    # 创建中止标志
+    abort_event = threading.Event()
+    _abort_flags[session_id] = abort_event
+    
     async def event_generator():
         loop = asyncio.get_running_loop()
         # Run streaming agent in executor, collect events via queue
@@ -136,6 +150,7 @@ async def send_message_stream(req: ChatRequest):
                     session_id=session_id,
                     model_name=req.model,
                     tools=get_all_tools(),
+                    abort_event=abort_event,
                 ):
                     # Put event into queue for the async generator to pick up
                     asyncio.run_coroutine_threadsafe(queue.put(event), loop).result()
@@ -179,15 +194,19 @@ async def send_message_stream(req: ChatRequest):
             final_data["session_id"] = session_id
             yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
     
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        }
-    )
+    try:
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            }
+        )
+    finally:
+        _abort_flags.pop(session_id, None)
+
 
 @router.get("/history")
 async def chat_history(session_id: str = None):
@@ -205,3 +224,13 @@ async def delete_chat_session(session_id: str):
     """删除对话会话"""
     delete_session(session_id)
     return {"success": True, "message": f"已删除会话: {session_id}"}
+
+
+@router.post("/abort/{session_id}")
+async def abort_chat(session_id: str):
+    """中止正在执行的 AI 任务"""
+    if session_id in _abort_flags:
+        _abort_flags[session_id].set()
+        logger.info(f"⏹ [API] 用户中止会话 {session_id}")
+        return {"success": True, "message": "已发送中止信号"}
+    return {"success": False, "message": "没有正在执行的任务"}

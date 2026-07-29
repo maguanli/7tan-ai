@@ -468,6 +468,7 @@ def run_agent_loop(
     session_id: str = None,      # 兼容旧调用
     model_name: str = None,      # 兼容旧调用
     event_callback=None,         # 流式事件回调: callable(dict) -> None
+    abort_event=None,            # threading.Event — 用户中止信号
 ) -> dict:
     """Agent 主循环：多轮工具调用直到完成。
     
@@ -530,6 +531,16 @@ def run_agent_loop(
     
     # 主循环
     while iteration < max_iterations:
+        # 检查用户是否中止
+        if abort_event and abort_event.is_set():
+            logger.info(f"⏹ [Agent] 用户中止，会话: {session_id}")
+            return {
+                "success": False,
+                "result": "⏹ 用户已终止任务",
+                "iterations": iteration,
+                "cost": total_cost,
+                "reason": "user_aborted",
+            }
         iteration += 1
         logger.info(f"🔄 Agent 迭代 {iteration}/{max_iterations}")
         # 🔔 流式事件：迭代进度
@@ -747,7 +758,7 @@ def run_agent_loop(
     }
 
 
-def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str = None, tools: list = None):
+def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str = None, tools: list = None, abort_event=None):
     """
     流式版 agent_loop — 使用 event_callback 实时 yield 中间事件（思考、工具调用等）。
     
@@ -772,7 +783,8 @@ def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str 
         try:
             r = run_agent_loop(
                 task=task, model=model, session_id=session_id,
-                tools=tools, event_callback=_on_event
+                tools=tools, event_callback=_on_event,
+                abort_event=abort_event,
             )
             result_holder["result"] = r
         except Exception as e:

@@ -1635,13 +1635,20 @@ class ChatPage(QWidget):
     def _abort_task(self):
         """终止当前 AI 任务"""
         logger.info("[ChatPage] 用户请求终止任务")
-        # 终止流式 worker
+        # 1. 通知服务端中止
+        if self._current_session_id:
+            try:
+                import requests as _req
+                _req.post(f"{API_BASE}/api/chat/abort/{self._current_session_id}", timeout=3)
+            except Exception:
+                pass
+        # 2. 终止流式 worker
         if hasattr(self, '_stream_worker') and self._stream_worker and self._stream_worker.isRunning():
             self._stream_worker.abort()
-        # 停止轮询 timer
+        # 3. 停止轮询 timer
         if hasattr(self, '_poll_timer') and self._poll_timer:
             self._poll_timer.stop()
-        # 重置状态
+        # 4. 重置状态
         self._is_processing = False
         self._voice_recording = False
         self._set_send_button("voice" if self._voice_mode else "send")

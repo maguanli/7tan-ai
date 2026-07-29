@@ -123,10 +123,6 @@ class LoginDialog(QDialog):
             logo_label.setFont(QFont("Segoe UI Emoji", 28))
         title_bar.addWidget(logo_label)
 
-        # 7Tan 文字
-        brand = QLabel("7Tan")
-        brand.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px; font-weight: bold;")
-        title_bar.addWidget(brand)
         title_bar.addStretch()
 
         # 关闭按钮
@@ -305,17 +301,17 @@ class LoginDialog(QDialog):
                 color: {TEXT_SECONDARY};
             }}
             #btnClose {{
-                background: rgba(255,255,255,0.1);
-                color: rgba(255,255,255,0.7);
-                border: 1px solid rgba(255,255,255,0.15);
-                font-size: 16px;
+                background: {BG_INPUT};
+                color: {TEXT_PRIMARY};
+                border: 1px solid {BORDER};
+                font-size: 14px;
                 font-weight: bold;
                 border-radius: 14px;
             }}
             #btnClose:hover {{
-                background: rgba(255,80,80,0.6);
+                background: #e81123;
                 color: #ffffff;
-                border-color: rgba(255,80,80,0.8);
+                border-color: #e81123;
             }}
             #btnLink {{
                 background: transparent;

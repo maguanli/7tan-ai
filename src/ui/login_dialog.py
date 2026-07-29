@@ -293,15 +293,15 @@ class LoginDialog(QDialog):
             }}
             #btnClose {{
                 background: transparent;
-                color: {TEXT_SECONDARY};
+                color: rgba(255,255,255,0.45);
                 border: none;
-                font-size: 16px;
+                font-size: 20px;
                 font-weight: bold;
                 border-radius: 6px;
             }}
             #btnClose:hover {{
-                background-color: rgba(255,255,255,0.08);
-                color: {TEXT_PRIMARY};
+                background-color: rgba(255,255,255,0.12);
+                color: #ffffff;
             }}
             #btnLink {{
                 background: transparent;

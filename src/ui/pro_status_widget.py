@@ -181,8 +181,17 @@ class ProStatusWidget(QFrame):
                 if result.get("level") == "pro":
                     level = "pro"
                     pro_expires = result.get("expires_at", pro_expires)
-            except LicenseError:
-                pass
+                else:
+                    level = result.get("level", "free")
+            except LicenseError as e:
+                err_str = str(e).lower()
+                if "公钥缺失" in err_str or "公钥未配置" in err_str:
+                    logger.warning("[ProStatus] RSA 公钥缺失，无法验证授权 — 请在设置中配置公钥")
+                else:
+                    logger.warning(f"[ProStatus] 授权验证失败: {e}")
+                # 验签失败时降级为 free（不信任 token 文件的 level 字段）
+                level = "free"
+                pro_expires = 0
         is_pro = (level == "pro" and pro_expires > 0)
 
         if is_pro:

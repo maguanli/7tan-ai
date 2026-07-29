@@ -227,6 +227,7 @@ class ChatPage(QWidget):
         self._voice_gender = "female"  # 语音性别: female(花颜) / male(云希)
         self._load_voice_gender()  # 从配置恢复上次的语音性别
         self._voice_recording = False  # 是否正在录音
+        self._is_processing = False   # AI 是否正在处理中（用于发送↔终止按钮切换）
         # 🎤 流式 TTS：逐句合成+播放，消除语音延迟
         self._tts_stream_queue: queue.Queue = None  # 句子队列
         self._tts_stream_worker_thread = None       # 后台播放线程
@@ -679,6 +680,8 @@ class ChatPage(QWidget):
                     stop:0 {THEME['accent']}, stop:1 {THEME['accent2']});
             }}
         """)
+        # 保存正常样式供 _set_send_button 恢复使用
+        self._send_btn_normal_style = self._send_btn.styleSheet()
         bottom_row.addWidget(self._send_btn)
 
         input_layout.addLayout(bottom_row)
@@ -1578,14 +1581,14 @@ class ChatPage(QWidget):
         self._voice_mode = self._voice_btn.isChecked()
         if self._voice_mode:
             self._voice_btn.setText("🎤 语音中")
-            self._send_btn.setText("🎤 录音发送")
+            self._set_send_button("voice")
             self._input.setPlaceholderText("语音模式：点击录音按钮开始说话...")
             # 🎤 设置 Agent 语音回调：让 Agent 中间消息也能朗读
             from ..agent.agent_loop import set_agent_speak_callback
             set_agent_speak_callback(self._speak_response)
         else:
             self._voice_btn.setText("🎤 语音")
-            self._send_btn.setText("发送 ▲")
+            self._set_send_button("send")
             self._input.setPlaceholderText("输入消息... (Enter 发送, Shift+Enter 换行, 可拖拽文件)")
             # 🎤 清除 Agent 语音回调
             from ..agent.agent_loop import set_agent_speak_callback
@@ -1594,14 +1597,55 @@ class ChatPage(QWidget):
         # 持久化语音模式
         self._save_voice_gender()
 
+    def _set_send_button(self, state: str):
+        """设置发送按钮状态: send / processing / voice"""
+        self._send_btn.setEnabled(True)
+        if state == "processing":
+            self._send_btn.setText("⏹ 终止任务")
+            self._send_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: #e81123;
+                    color: #fff; border: none; border-radius: 6px;
+                    font-size: 13px; font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background: #ff1744;
+                }}
+            """)
+        elif state == "voice":
+            self._send_btn.setText("🎤 录音发送")
+            self._send_btn.setStyleSheet(self._send_btn_normal_style)
+        else:  # send
+            self._send_btn.setText("发送 ▲")
+            self._send_btn.setStyleSheet(self._send_btn_normal_style)
+
     def _on_send_clicked(self):
-        """发送按钮点击：语音模式走录音，文字模式走发送"""
+        """发送按钮点击：处理中→终止任务，语音模式→录音，文字模式→发送"""
+        if self._is_processing:
+            # 正在处理中 → 终止当前任务
+            self._abort_task()
+            return
         if self._voice_mode:
             self._voice_record_and_send()
         else:
             text = self._input.toPlainText().strip()
             if text:
                 self._send_message(text)
+
+    def _abort_task(self):
+        """终止当前 AI 任务"""
+        logger.info("[ChatPage] 用户请求终止任务")
+        # 终止流式 worker
+        if hasattr(self, '_stream_worker') and self._stream_worker and self._stream_worker.isRunning():
+            self._stream_worker.abort()
+        # 停止轮询 timer
+        if hasattr(self, '_poll_timer') and self._poll_timer:
+            self._poll_timer.stop()
+        # 重置状态
+        self._is_processing = False
+        self._voice_recording = False
+        self._set_send_button("voice" if self._voice_mode else "send")
+        self._add_message("system", "⏹ 已终止当前任务")
 
     def _voice_record_and_send(self):
         """录音 → STT → 发送"""
@@ -1678,11 +1722,8 @@ class ChatPage(QWidget):
             finally:
                 def _reset():
                     self._voice_recording = False
-                    self._send_btn.setEnabled(True)
-                    if self._voice_mode:
-                        self._send_btn.setText("🎤 录音发送")
-                    else:
-                        self._send_btn.setText("发送 ▲")
+                    if not self._is_processing:
+                        self._set_send_button("voice" if self._voice_mode else "send")
                 QTimer.singleShot(0, _reset)
         
         threading.Thread(target=_record_and_send, daemon=True).start()
@@ -1699,6 +1740,9 @@ class ChatPage(QWidget):
 
             return
 
+        # 标记处理中 + 按钮变终止
+        self._is_processing = True
+        self._set_send_button("processing")
 
 
         self._input.clear()
@@ -1820,6 +1864,9 @@ class ChatPage(QWidget):
     def _send_streaming(self, text: str, model: str = None):
 
         """使用 SSE 流式发送消息，展示思考过程 + 打字机效果"""
+        # 标记处理中 + 按钮变终止（_send_message 可能已设置，这里兜底）
+        self._is_processing = True
+        self._set_send_button("processing")
 
         # 创建"思考中"状态栏（将在收到第一个事件后保留）
 
@@ -2114,6 +2161,9 @@ class ChatPage(QWidget):
                 import threading
                 threading.Thread(target=self._speak_response, args=(result,), daemon=True).start()
 
+        # 重置发送按钮
+        self._is_processing = False
+        self._set_send_button("voice" if self._voice_mode else "send")
 
 
     def _on_response(self, data, thinking_msg=None):
@@ -2174,7 +2224,9 @@ class ChatPage(QWidget):
             import threading
             threading.Thread(target=self._speak_response, args=(result,), daemon=True).start()
 
-
+        # 重置发送按钮
+        self._is_processing = False
+        self._set_send_button("voice" if self._voice_mode else "send")
 
 
     # ==================== 流式 TTS ====================
@@ -2240,6 +2292,10 @@ class ChatPage(QWidget):
             self._remove_message(thinking_msg)
 
         self._add_message("error", f"\u274c \u8bf7\u6c42\u5931\u8d25: {error_msg}")
+
+        # 重置发送按钮
+        self._is_processing = False
+        self._set_send_button("voice" if self._voice_mode else "send")
 
 
 

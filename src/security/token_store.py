@@ -119,7 +119,7 @@ def _decrypt(encrypted_b64: str) -> str:
 
 def save_token(token: str, username: str = "", level: str = "basic",
                pro_expires: int = 0, expires_in: int = 0,
-               trial_ai_count: int = 0) -> bool:
+               trial_ai_count: int = 0, pro_license: str = "") -> bool:
     """
     加密保存 JWT Token 到本地。
 

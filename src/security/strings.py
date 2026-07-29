@@ -35,7 +35,7 @@ def _assemble_key() -> bytes:
 
 # 占位符 — 实际值由 tools/encrypt_strings.py 生成后替换
 _STORE: dict[str, str] = {
-    "public_key": "",
+    "public_key": "f0oukbh2fUnO3KudoG0bAG1sIlGnl+O4j5Z9ATGcqj9/Hv1WC6RxLRN+UHk67S/tR7zxncxCxOY73kyFtzMqjadXvm2J/7V7EQE/+Af5ya01TMUtBn00dZIFj6jtSaX9wJYkxh/8qs5m1CRaOC9q34vIJtqJxRxgIdrIcnZRT8RvTkfwOY0yw+d7F95szj0QxDxiNfpCbq9HHHp/39Q4eJ4RwVpLoz6S5lHkE3QeJ+jkVypiHpuCPJbl1YCD6VrcHdG9KANj+IMYlwbIdZ26iIdvSbFKvGAODPZgVezzmvMUU+N0sARMrzl5yLwKG966aOIi5s5PUoYGtkR7cBVsJd1d1ePQwp5c2PisRRzRaTkUbgq1i5Q3LVZElxNwGsdu5R6kkLFlQ/50+GwLAMSKA4t7GIUEpm0ZaUyHMGKmyIju65DSQgWpu2oQMa4oUUvJuSCtVCkq2u6bauG7od+RR3IBXPWIn90h+fWDRoVxQQsiPqyOtc4U7XxnjzJBZJ4Yicy8Sa0h39rX6C37G9kJ2FR1r9M0aGZkMsLnqbdeK+GUeBSVsLyeyiqJQ3IzPM2+56oTtnO31ZWNNS6PbTDc6gms8KaTS3jZi45qwNrOV+olCGVlljvJSiHdRIrjrJE=",
     "api_login": "f0oukeI60CyaF4xSQuFAaLx/+/MQy9U9iolB2YZspQAlxBhbJLJ9ZhtdgZRnpLBvXOGXMDbHnJmCI3zT/KU0CL2INA==",
     "api_verify": "f0oukeNPxGFI9rD8A/tDGFwDpb6G7ehmHhh9g4CvjSwxDONCvQQ/JP+CMQ16LqQ+h33z5Kq/yxZQ/ycarpBgJjLzx7Y=",
     "api_refresh": "f0oukYIxG7j3yl5rQOlyGihuq1P1bAzz62D2YburpeQPBpFOfea8SmXTcDa9aQMBt8I+smPbA/ME0pf9xup9B/XuE+to=",

@@ -434,6 +434,7 @@ class LoginDialog(QDialog):
                 pro_expires=result.get("pro_expires", 0),
                 expires_in=result.get("expires_in", 2592000),
                 trial_ai_count=result.get("trial_ai_count", 0),
+                pro_license=result.get("pro_license", ""),
             )
 
             self._user_info = result

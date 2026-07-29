@@ -175,14 +175,18 @@ class ProStatusWidget(QFrame):
                     pro_expires = stored_expires
             elif stored_level == "basic" and level != "pro":
                 level = "basic"
-            # 本地 RSA 验签二次确认（只升级不降级）
+            # 本地 RSA 验签（用服务器的 pro_license，不再信任 token 文件里的 level）
             try:
-                result = verify_license(token_data.get("token", ""))
-                if result.get("level") == "pro":
-                    level = "pro"
-                    pro_expires = result.get("expires_at", pro_expires)
+                pro_license = token_data.get("pro_license", "")
+                if pro_license:
+                    result = verify_license(pro_license)
+                    if result.get("level") == "pro":
+                        level = "pro"
+                        pro_expires = result.get("pro_expires", pro_expires)
                 else:
-                    level = result.get("level", "free")
+                    # 非 PRO 用户，无 pro_license
+                    level = "free"
+                    pro_expires = 0
             except LicenseError as e:
                 err_str = str(e).lower()
                 if "公钥缺失" in err_str or "公钥未配置" in err_str:

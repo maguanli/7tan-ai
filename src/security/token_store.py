@@ -153,6 +153,7 @@ def save_token(token: str, username: str = "", level: str = "basic",
             "saved_at": int(__import__("time").time()),
             "expires_in": expires_in or 2592000,  # 默认 30 天
             "trial_ai_count": trial_ai_count,
+            "pro_license": pro_license or "",
         }
 
         encrypted = _encrypt(json.dumps(payload, ensure_ascii=False))

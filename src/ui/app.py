@@ -4103,6 +4103,7 @@ def launch_app():
                     "username": data.get("username", ""),
                     "level": data.get("level", "free"),
                     "pro_expires": data.get("pro_expires", 0),
+                    "pro_license": data.get("pro_license", ""),
                 }
                 logger.info(f"[Login] 使用本地 Token (用户: {user_info['username']})")
 

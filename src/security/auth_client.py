@@ -108,6 +108,7 @@ def login(username: str, password: str, remember_me: bool = False) -> dict:
         "pro_expires": user_data.get("user", {}).get("pro_expires", 0),
         "expires_in": 2592000,
         "trial_ai_count": user_data.get("user", {}).get("trial_ai_count", 0),
+        "pro_license": user_data.get("pro_license", ""),
     }
 
 

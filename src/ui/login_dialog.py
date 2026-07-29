@@ -110,17 +110,30 @@ class LoginDialog(QDialog):
         # --- 标题栏（可拖拽） ---
         title_bar = QHBoxLayout()
 
-        # LOGO 图标
-        logo_label = QLabel("🎮")
-        logo_label.setFont(QFont("Segoe UI Emoji", 28))
+        # LOGO 图标（加载 7Tan PNG 图标）
+        logo_label = QLabel()
+        logo_label.setFixedSize(32, 32)
+        logo_path = Path(__file__).parent.parent.parent / "data" / "logo" / "logo_v4_256.png"
+        if logo_path.exists():
+            logo_label.setPixmap(QPixmap(str(logo_path)).scaled(
+                32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+            ))
+        else:
+            logo_label.setText("🎮")
+            logo_label.setFont(QFont("Segoe UI Emoji", 28))
         title_bar.addWidget(logo_label)
 
+        # 7Tan 文字
+        brand = QLabel("7Tan")
+        brand.setStyleSheet(f"color: {TEXT_PRIMARY}; font-size: 14px; font-weight: bold;")
+        title_bar.addWidget(brand)
         title_bar.addStretch()
 
         # 关闭按钮
         btn_close = QPushButton("✕")
         btn_close.setObjectName("btnClose")
-        btn_close.setFixedSize(32, 32)
+        btn_close.setFixedSize(28, 28)
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_close.clicked.connect(self.reject)
         title_bar.addWidget(btn_close)
 
@@ -292,16 +305,17 @@ class LoginDialog(QDialog):
                 color: {TEXT_SECONDARY};
             }}
             #btnClose {{
-                background: transparent;
-                color: rgba(255,255,255,0.45);
-                border: none;
-                font-size: 20px;
+                background: rgba(255,255,255,0.1);
+                color: rgba(255,255,255,0.7);
+                border: 1px solid rgba(255,255,255,0.15);
+                font-size: 16px;
                 font-weight: bold;
-                border-radius: 6px;
+                border-radius: 14px;
             }}
             #btnClose:hover {{
-                background-color: rgba(255,255,255,0.12);
+                background: rgba(255,80,80,0.6);
                 color: #ffffff;
+                border-color: rgba(255,80,80,0.8);
             }}
             #btnLink {{
                 background: transparent;
@@ -328,16 +342,8 @@ class LoginDialog(QDialog):
                 color: {TEXT_SECONDARY};
                 spacing: 8px;
             }}
-            QCheckBox::indicator {{
-                width: 20px;
-                height: 20px;
-                border: 2px solid {BORDER};
-                border-radius: 4px;
-                background-color: {BG_INPUT};
-            }}
-            QCheckBox::indicator:checked {{
-                background-color: {ACCENT};
-                border-color: {ACCENT};
+            QCheckBox:checked {{
+                color: {TEXT_PRIMARY};
             }}
         """)
 

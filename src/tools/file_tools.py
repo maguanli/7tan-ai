@@ -18,6 +18,7 @@ from ..utils.helpers import ensure_dir, human_readable_size
         "properties": {
             "directory": {"type": "string", "description": "目录路径"},
             "pattern": {"type": "string", "description": "文件扩展名筛选，如 .zip .rar", "default": "*"},
+            "path": {"type": "string", "description": "目录路径（与 directory 同义，二选一）"},
         },
         "required": ["directory"]
     },

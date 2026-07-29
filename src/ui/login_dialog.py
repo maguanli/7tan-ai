@@ -172,8 +172,9 @@ class LoginDialog(QDialog):
         # 显示/隐藏密码按钮
         self._btn_toggle_pwd = QPushButton("👁")
         self._btn_toggle_pwd.setObjectName("btnTogglePwd")
-        self._btn_toggle_pwd.setFixedSize(42, 42)
+        self._btn_toggle_pwd.setFixedSize(44, 42)
         self._btn_toggle_pwd.setToolTip("显示/隐藏密码")
+        self._btn_toggle_pwd.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_toggle_pwd.clicked.connect(self._toggle_password)
         pwd_row.addWidget(self._btn_toggle_pwd)
 
@@ -186,6 +187,7 @@ class LoginDialog(QDialog):
         self._chk_remember = QCheckBox("记住 30 天")
         self._chk_remember.setFont(QFont("Microsoft YaHei", 11))
         self._chk_remember.setChecked(True)
+        self._chk_remember.setCursor(Qt.CursorShape.PointingHandCursor)
         bottom_row.addWidget(self._chk_remember)
 
         bottom_row.addStretch()
@@ -227,7 +229,7 @@ class LoginDialog(QDialog):
         footer.setObjectName("btnLink")
         footer.setFont(QFont("Microsoft YaHei", 10))
         footer.setCursor(Qt.CursorShape.PointingHandCursor)
-        footer.clicked.connect(lambda: self._open_url("https://www.7tan.com/register/"))
+        footer.clicked.connect(lambda: self._open_url("https://www.7tan.com/bbs/register.php"))
         footer.setStyleSheet(f"""
             QPushButton#btnLink {{
                 background: transparent;
@@ -314,20 +316,22 @@ class LoginDialog(QDialog):
                 background: transparent;
                 color: {TEXT_SECONDARY};
                 border: none;
-                font-size: 16px;
+                font-size: 18px;
                 border-radius: 0 8px 8px 0;
+                padding: 0;
             }}
             #btnTogglePwd:hover {{
-                background-color: rgba(255,255,255,0.05);
+                background-color: rgba(255,255,255,0.08);
+                color: {TEXT_PRIMARY};
             }}
             QCheckBox {{
                 color: {TEXT_SECONDARY};
-                spacing: 6px;
+                spacing: 8px;
             }}
             QCheckBox::indicator {{
-                width: 18px;
-                height: 18px;
-                border: 1px solid {BORDER};
+                width: 20px;
+                height: 20px;
+                border: 2px solid {BORDER};
                 border-radius: 4px;
                 background-color: {BG_INPUT};
             }}

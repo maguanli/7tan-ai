@@ -16,6 +16,22 @@ class ContextManager:
         self.history = []
         self._total_tokens = 0
 
+        # 🔥 加载会话历史（AI 现在能记住之前的对话了）
+        if self.session_id:
+            try:
+                from .conversation import get_session_messages
+                db_msgs = get_session_messages(self.session_id, limit=self.max_messages)
+                for m in db_msgs:
+                    role = m.get("role", "user")
+                    content = m.get("content", "")
+                    if role in ("user", "assistant", "system"):
+                        self.history.append({"role": role, "content": content})
+                        self._total_tokens += len(content) // 2
+                if self.history:
+                    logger.info(f"📚 加载会话历史: {len(self.history)} 条消息")
+            except Exception as e:
+                logger.warning(f"⚠️ 加载会话历史失败: {e}")
+
     def add_user_message(self, content: str):
         """添加用户消息"""
         self.history.append({"role": "user", "content": content})

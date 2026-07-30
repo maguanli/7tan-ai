@@ -151,11 +151,11 @@ class ModelManager:
         kwargs.setdefault("model", self.model_name)
         kwargs.setdefault("max_tokens", self.max_tokens)
         # Kimi/Moonshot: temperature 必须显式设为 1（Kimi K3 要求）
-        # DeepSeek: temperature 不应传入
+        # DeepSeek: temperature=0.3，平衡创造性与确定性
         if self.provider == "moonshot":
             kwargs["temperature"] = 1
         elif self.provider == "deepseek":
-            kwargs.pop("temperature", None)
+            kwargs.setdefault("temperature", 0.3)
         else:
             kwargs.setdefault("temperature", self.temperature)
         # 注入 extra_config（如 reasoning_effort 等扩展参数）

@@ -5,6 +5,8 @@
 维度：
   - AI 模型 (25%): 根据当前配置的模型提供商、模型等级评估
   - 账号等级 (20%): free/pro/enterprise 对应的得分
+    - 专业版（pro）对战力值影响固定 ±20 分：
+      基础版→升级专业版 = +20，专业版过期 = -20
   - 插件/工具 (45%): 已安装插件数量、工具注册数量、品类覆盖度
   - 系统健康 (10%): 磁盘、数据库、网络等
 
@@ -169,8 +171,12 @@ def evaluate_account_level() -> float:
     """
     评估账号等级维度 (0-100)
 
-    free=30, pro=80, enterprise=100
-    另外考虑 Token 有效期、RSA 验签等加分因素。
+    free=0, pro=100, enterprise=100
+    差异 100 分 × 权重 0.20 = 战力值 ±20 分。
+    即：基础版→升级专业版 = +20，专业版过期 = -20。
+    RSA 验签用于安全验证（防伪造），过期/验签失败则降为 free。
+    HMAC 验证加分保留（防篡改奖励）。
+    Token 有效期检查基于 saved_at + expires_in。
     """
     try:
         from src.security.token_store import load_token
@@ -181,31 +187,47 @@ def evaluate_account_level() -> float:
             return 10.0  # 未登录
 
         level = token_data.get("level", "free")
-        base_scores = {
-            "enterprise": 95,
-            "pro": 80,
-            "free": 30,
-        }
-        score = base_scores.get(level, 20)
 
-        # RSA 验签加分
+        # ── 安全验证：RSA 验签优先，防伪造 level ──
+        # 如果 level 声称是 pro/enterprise，必须有有效的 pro_license（RSA 验签通过）
+        # 如果声称 pro 但验签失败 → 降级为 free（防篡改）
         pro_license = token_data.get("pro_license", "")
-        if pro_license:
-            try:
-                result = verify_license(pro_license)
-                if result.get("level") == "pro":
-                    score = min(score + 10, 100)  # RSA 验证通过 +10
-            except LicenseError:
-                pass
+        rsa_verified = False
+        if level in ("pro", "enterprise"):
+            if pro_license:
+                try:
+                    result = verify_license(pro_license)
+                    if result.get("level") == "pro":
+                        rsa_verified = True
+                except LicenseError:
+                    # RSA 验签失败 → level 可能被篡改，降级
+                    logger.warning("[Score] RSA 验签失败，level 可能被篡改，降级为 free")
+                    level = "free"
+            else:
+                # 声称 pro 但没有 license → 可能是旧版 token，信任 HMAC
+                if not token_data.get("_hmac_ok", False):
+                    logger.warning("[Score] 声称 pro 但无 license 且 HMAC 失败，降级为 free")
+                    level = "free"
 
-        # HMAC 验证加分
+        # 专业版对战力值影响固定 ±20 分（权重 0.20 × raw_score 差值 100 = 20）
+        # free=0, pro/enterprise=100，差异正好 100，加权后 = 20 分
+        base_scores = {
+            "enterprise": 100,
+            "pro": 100,
+            "free": 0,
+        }
+        score = base_scores.get(level, 10)
+
+        # HMAC 验证加分（防篡改奖励，pro/free 均享有）
         if token_data.get("_hmac_ok", False):
             score = min(score + 5, 100)
 
-        # Token 有效期检查
+        # Token 有效期检查（基于 saved_at + expires_in 计算）
         import time
-        expires_at = token_data.get("expires_at", 0)
-        if expires_at > 0:
+        saved_at = token_data.get("saved_at", 0)
+        expires_in = token_data.get("expires_in", 0)
+        if saved_at > 0 and expires_in > 0:
+            expires_at = saved_at + expires_in
             remaining = expires_at - time.time()
             if remaining > 30 * 86400:
                 score = min(score + 5, 100)  # 超过30天 +5

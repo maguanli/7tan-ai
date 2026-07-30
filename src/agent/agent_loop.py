@@ -663,7 +663,7 @@ def run_agent_loop(
             }
         
         # 上下文压缩检查
-        if should_compress_context(ctx._total_tokens, limit=16_000):
+        if should_compress_context(ctx._total_tokens, limit=32_000):
             logger.info("🗜️ 上下文过大，执行压缩...")
             summary = compress_context(ctx, model=model)
             if summary:

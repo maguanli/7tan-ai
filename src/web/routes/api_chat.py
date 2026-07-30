@@ -52,10 +52,23 @@ class ChatResponse(BaseModel):
     iterations: int = 0
 
 
+def _load_system_prompt() -> str:
+    """加载系统提示词，fallback 到内置默认"""
+    try:
+        from pathlib import Path
+        prompt_path = Path("data/prompts/system.txt")
+        if prompt_path.exists():
+            return prompt_path.read_text(encoding="utf-8").strip()
+    except Exception:
+        pass
+    return ""  # 空字符串表示无系统提示词，agent_loop 会跳过
+
+
 @router.post("/send")
 async def send_message(req: ChatRequest):
     """发送对话消息"""
     session_id = req.session_id or create_session()
+    system_prompt = _load_system_prompt()
 
     # 保存用户消息
     save_message(session_id, "user", req.message)
@@ -77,6 +90,7 @@ async def send_message(req: ChatRequest):
                     model_name=req.model,
                     tools=get_all_tools(),
                     abort_event=abort_event,
+                    system_prompt=system_prompt,
                 )
                 loop.call_soon_threadsafe(future.set_result, result)
             except Exception as e:
@@ -151,6 +165,7 @@ async def send_message_stream(req: ChatRequest):
                     model_name=req.model,
                     tools=get_all_tools(),
                     abort_event=abort_event,
+                    system_prompt=_load_system_prompt(),
                 ):
                     # Put event into queue for the async generator to pick up
                     asyncio.run_coroutine_threadsafe(queue.put(event), loop).result()

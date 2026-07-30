@@ -764,7 +764,8 @@ def run_agent_loop(
     }
 
 
-def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str = None, tools: list = None, abort_event=None):
+def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str = None, 
+                            tools: list = None, abort_event=None, system_prompt: str = ""):
     """
     流式版 agent_loop — 使用 event_callback 实时 yield 中间事件（思考、工具调用等）。
     
@@ -791,6 +792,7 @@ def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str 
                 task=task, model=model, session_id=session_id,
                 tools=tools, event_callback=_on_event,
                 abort_event=abort_event,
+                system_prompt=system_prompt,
             )
             result_holder["result"] = r
         except Exception as e:

@@ -7,6 +7,7 @@ JWT Token 使用 AES-256-GCM 加密存储在本地文件中。
 
 v2: level 字段加 HMAC-SHA256 防篡改。
     即使攻击者能解密 token.dat，修改 level 字段也会被检测到。
+v3: 旧版 Token 自动修复 — 无 _hmac 字段时不降级，自动补充 HMAC。
 """
 import base64
 import hashlib
@@ -147,10 +148,9 @@ def _compute_hmac(level: str, pro_expires: int, pro_license: str) -> str:
 
 
 def _verify_hmac(payload: dict) -> bool:
-    """验证 HMAC，检测篡改"""
+    """验证 HMAC，检测篡改。调用前确保 payload 中存在 _hmac 字段。"""
     stored_hmac = payload.pop("_hmac", "")
     if not stored_hmac:
-        # 旧版 token 无 HMAC，允许通过但标记为不受信任
         return False
 
     level = payload.get("level", "free")
@@ -221,7 +221,8 @@ def load_token() -> dict | None:
     """
     加载并解密本地 JWT Token。
 
-    如果 HMAC 验证失败（检测到 level 字段被篡改），自动降级为 free。
+    - 新版 Token（含 _hmac）：验证 HMAC，失败则降级为 free
+    - 旧版 Token（无 _hmac）：信任原数据，自动补充 HMAC 后重新保存
 
     Returns:
         {
@@ -252,18 +253,36 @@ def load_token() -> dict | None:
 
         payload = json.loads(plaintext)
 
-        # HMAC 防篡改验证
-        hmac_ok = _verify_hmac(payload)
-        payload["_hmac_ok"] = hmac_ok
+        # ── HMAC 防篡改验证 ──
+        if "_hmac" in payload:
+            # 新版 Token：验证 HMAC
+            hmac_ok = _verify_hmac(payload)
+            payload["_hmac_ok"] = hmac_ok
 
-        if not hmac_ok:
-            logger.warning(
-                "[Token] ⚠️ HMAC 验证失败！level 字段可能被篡改，降级为 free。"
-                f" 原始 level={payload.get('level')}"
-            )
-            payload["level"] = "free"
-            payload["pro_expires"] = 0
-            payload["pro_license"] = ""
+            if not hmac_ok:
+                logger.warning(
+                    "[Token] ⚠️ HMAC 验证失败！level 字段可能被篡改，降级为 free。"
+                    f" 原始 level={payload.get('level')}"
+                )
+                payload["level"] = "free"
+                payload["pro_expires"] = 0
+                payload["pro_license"] = ""
+        else:
+            # 旧版 Token（无 HMAC）→ 信任原数据，自动补充 HMAC
+            logger.info("[Token] 🔧 旧版 Token 无 HMAC 签名，自动修复...")
+            payload["_hmac_ok"] = True
+            try:
+                save_token(
+                    token=payload.get("token", ""),
+                    username=payload.get("username", ""),
+                    level=payload.get("level", "free"),
+                    pro_expires=payload.get("pro_expires", 0),
+                    expires_in=payload.get("expires_in", 0),
+                    trial_ai_count=payload.get("trial_ai_count", 0),
+                    pro_license=payload.get("pro_license", ""),
+                )
+            except Exception:
+                pass  # 自动修复失败不影响加载
 
         return payload
     except Exception as e:
@@ -280,3 +299,17 @@ def clear_token() -> bool:
     except Exception as e:
         logger.error(f"[Token] 清除失败: {e}")
         return False
+
+def is_token_available() -> bool:
+    """
+    检查本地是否有可用的 Token。
+    Token 文件存在、能成功解密、且 token 字段非空即视为可用。
+    用于免登录启动。
+    """
+    data = load_token()
+    if data is None:
+        return False
+    token = data.get("token", "")
+    if not token or not token.strip():
+        return False
+    return True

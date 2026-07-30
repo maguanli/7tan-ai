@@ -8,7 +8,7 @@ class ContextManager:
     """管理 Agent 对话上下文"""
 
     def __init__(self, task: str = "", session_id: str = None,
-                 max_messages: int = 50, max_tokens_estimate: int = 32000):
+                 max_messages: int = 20, max_tokens_estimate: int = 16000):
         self.task = task
         self.session_id = session_id
         self.max_messages = max_messages

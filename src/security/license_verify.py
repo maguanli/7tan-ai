@@ -157,7 +157,7 @@ def get_license_info(token_str: str) -> dict[str, Any]:
     Returns:
         {
             "valid": bool,
-            "level": "basic" | "pro" | "expired" | "invalid",
+            "level": "free" | "pro" | "expired" | "invalid",
             "user_id": int or None,
             "username": str,
             "error": str or None,

@@ -222,3 +222,36 @@ function base64url_decode(string $data): string
     }
     return base64_decode(strtr($data, '-_', '+/'));
 }
+
+// ============================================================
+// RSA Pro License 签发
+// 格式: base64url(RSA-SHA256签名).base64url(JSON payload)
+// 客户端用 RSA 公钥离线验签，无需网络即可确认 PRO 身份
+// ============================================================
+
+/**
+ * 签发 RSA 签名的 Pro License
+ * @param int    $uid          用户 ID
+ * @param int    $pro_expires  PRO 到期时间（Unix 时间戳）
+ * @param string $private_key  RSA 私钥 PEM
+ * @return string Pro License 字符串
+ */
+function sign_pro_license(int $uid, int $pro_expires, string $private_key): string
+{
+    $payload = json_encode([
+        'uid'         => $uid,
+        'level'       => 'pro',
+        'pro_expires' => $pro_expires,
+        'issued_at'   => time(),
+    ]);
+    
+    $payload_b64 = base64url_encode($payload);
+    
+    // RSA-SHA256 签名
+    openssl_sign($payload_b64, $signature, $private_key, 'sha256WithRSAEncryption');
+    if (!$signature) {
+        throw new \RuntimeException('RSA 签名失败: ' . openssl_error_string());
+    }
+    
+    return base64url_encode($signature) . '.' . $payload_b64;
+}

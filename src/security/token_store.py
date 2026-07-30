@@ -4,9 +4,13 @@ JWT Token 使用 AES-256-GCM 加密存储在本地文件中。
 加密密钥 = PBKDF2(机器标识 + 固定盐, 迭代 100000 次)
 
 存储位置: data/auth/token.dat
+
+v2: level 字段加 HMAC-SHA256 防篡改。
+    即使攻击者能解密 token.dat，修改 level 字段也会被检测到。
 """
 import base64
 import hashlib
+import hmac as _hmac_mod
 import json
 import os
 import platform
@@ -39,6 +43,9 @@ _SALT = b'\x8b\x1e\x5f\xc3\x22\xd7\x9a\x40\xee\x61\x3d\xb5\xf9\x04\x7c\xa6'
 _PART1 = b'\x3a\x7f\x2c\x91\xe4\xb8\x55\x0d'
 _PART2 = b'\xc6\xd2\x88\xfe\x17\xa3\x4b\x69'
 
+# HMAC 专用盐（与加密盐不同，增加隔离性）
+_HMAC_SALT = b'\x9d\x4e\x1a\x7f\x33\xc8\xb5\x02\xe6\xf1\x44\xd9\x0b\x56\xa8\xc3'
+
 
 def _get_machine_id() -> str:
     """获取机器标识（多来源组合）"""
@@ -68,6 +75,20 @@ def _derive_key() -> bytes:
     machine_id = _get_machine_id()
     # PBKDF2: 机器标识 + 混淆片段 → 256-bit 密钥
     material = machine_id.encode() + _PART1 + _PART2
+    kdf = PBKDF2(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=_SALT,
+        iterations=100_000,
+        backend=default_backend(),
+    )
+    return kdf.derive(material)
+
+
+def _derive_hmac_key() -> bytes:
+    """派生 HMAC 密钥（独立于加密密钥）"""
+    machine_id = _get_machine_id()
+    material = machine_id.encode() + _HMAC_SALT
     kdf = PBKDF2(
         algorithm=hashes.SHA256(),
         length=32,
@@ -114,10 +135,37 @@ def _decrypt(encrypted_b64: str) -> str:
 
 
 # ============================================================
+# HMAC 防篡改
+# ============================================================
+
+def _compute_hmac(level: str, pro_expires: int, pro_license: str) -> str:
+    """计算敏感字段的 HMAC-SHA256"""
+    hmac_key = _derive_hmac_key()
+    data = f"{level}|{pro_expires}|{pro_license}".encode("utf-8")
+    digest = _hmac_mod.new(hmac_key, data, hashlib.sha256).digest()
+    return base64.b64encode(digest).decode("ascii")
+
+
+def _verify_hmac(payload: dict) -> bool:
+    """验证 HMAC，检测篡改"""
+    stored_hmac = payload.pop("_hmac", "")
+    if not stored_hmac:
+        # 旧版 token 无 HMAC，允许通过但标记为不受信任
+        return False
+
+    level = payload.get("level", "free")
+    pro_expires = payload.get("pro_expires", 0)
+    pro_license = payload.get("pro_license", "")
+
+    expected = _compute_hmac(level, pro_expires, pro_license)
+    return _hmac_mod.compare_digest(expected.encode(), stored_hmac.encode())
+
+
+# ============================================================
 # 公开 API
 # ============================================================
 
-def save_token(token: str, username: str = "", level: str = "basic",
+def save_token(token: str, username: str = "", level: str = "free",
                pro_expires: int = 0, expires_in: int = 0,
                trial_ai_count: int = 0, pro_license: str = "") -> bool:
     """
@@ -130,6 +178,7 @@ def save_token(token: str, username: str = "", level: str = "basic",
         pro_expires: 专业版到期时间（Unix 时间戳）
         expires_in: Token 有效期（秒，0=使用默认30天）
         trial_ai_count: AI 试用剩余次数（0=已用完，来自服务端 JWT）
+        pro_license: RSA 签名的 PRO 凭证
 
     Returns:
         是否保存成功
@@ -156,6 +205,9 @@ def save_token(token: str, username: str = "", level: str = "basic",
             "pro_license": pro_license or "",
         }
 
+        # HMAC 防篡改：签名敏感字段
+        payload["_hmac"] = _compute_hmac(level, pro_expires, pro_license or "")
+
         encrypted = _encrypt(json.dumps(payload, ensure_ascii=False))
         _TOKEN_FILE.write_text(encrypted, encoding="utf-8")
         logger.info(f"[Token] 已保存 (用户: {username}, 等级: {level})")
@@ -169,6 +221,8 @@ def load_token() -> dict | None:
     """
     加载并解密本地 JWT Token。
 
+    如果 HMAC 验证失败（检测到 level 字段被篡改），自动降级为 free。
+
     Returns:
         {
             "token": "eyJhbGci...",
@@ -177,6 +231,8 @@ def load_token() -> dict | None:
             "pro_expires": 1735689600,
             "saved_at": 1700000000,
             "expires_in": 2592000,
+            "pro_license": "...",
+            "_hmac_ok": True,         # HMAC 验证通过
         }
         如果文件不存在或解密失败返回 None
     """
@@ -193,14 +249,30 @@ def load_token() -> dict | None:
             logger.warning("[Token] 解密失败，可能已更换设备，清除旧 Token")
             _TOKEN_FILE.unlink(missing_ok=True)
             return None
-        return json.loads(plaintext)
+
+        payload = json.loads(plaintext)
+
+        # HMAC 防篡改验证
+        hmac_ok = _verify_hmac(payload)
+        payload["_hmac_ok"] = hmac_ok
+
+        if not hmac_ok:
+            logger.warning(
+                "[Token] ⚠️ HMAC 验证失败！level 字段可能被篡改，降级为 free。"
+                f" 原始 level={payload.get('level')}"
+            )
+            payload["level"] = "free"
+            payload["pro_expires"] = 0
+            payload["pro_license"] = ""
+
+        return payload
     except Exception as e:
         logger.error(f"[Token] 加载失败: {e}")
         return None
 
 
 def clear_token() -> bool:
-    """删除本地 Token（退出登录）"""
+    """删除本地 Token"""
     try:
         _TOKEN_FILE.unlink(missing_ok=True)
         logger.info("[Token] 已清除")
@@ -208,20 +280,3 @@ def clear_token() -> bool:
     except Exception as e:
         logger.error(f"[Token] 清除失败: {e}")
         return False
-
-
-def is_token_available() -> bool:
-    """检查是否有可用的本地 Token"""
-    data = load_token()
-    if not data:
-        return False
-    token = data.get("token", "")
-    if not token:
-        return False
-    # 检查是否在有效期内
-    saved_at = data.get("saved_at", 0)
-    expires_in = data.get("expires_in", 2592000)
-    now = int(__import__("time").time())
-    if now - saved_at > expires_in:
-        return False
-    return True

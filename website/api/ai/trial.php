@@ -62,7 +62,8 @@ if (empty($messages) || !is_array($messages)) {
 // ============================================================
 // 验证 JWT
 // ============================================================
-$JWT_SECRET = defined('JWT_SECRET') ? JWT_SECRET : 'change-me-to-a-random-64-char-string';
+if (!defined('JWT_SECRET')) { http_response_code(500); echo json_encode(['code'=>-1,'message'=>'Server config error: JWT_SECRET']); exit; }
+$JWT_SECRET = JWT_SECRET;
 
 try {
     $payload = jwt_decode_auto($token, $JWT_SECRET);

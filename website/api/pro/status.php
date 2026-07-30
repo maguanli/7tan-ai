@@ -19,7 +19,8 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../lib/jwt_helper.php';
 require_once __DIR__ . '/../../lib/auth_middleware.php';
 
-$JWT_SECRET = defined('JWT_SECRET') ? JWT_SECRET : 'change-me-to-a-random-64-char-string';
+if (!defined('JWT_SECRET')) { http_response_code(500); echo json_encode(['code'=>-1,'message'=>'Server config error: JWT_SECRET']); exit; }
+$JWT_SECRET = JWT_SECRET;
 
 $user = require_login($JWT_SECRET);
 $uid  = (int)$user['uid'];

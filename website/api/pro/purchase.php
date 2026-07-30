@@ -25,13 +25,32 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../lib/jwt_helper.php';
 require_once __DIR__ . '/../../lib/auth_middleware.php';
 
-$JWT_SECRET = defined('JWT_SECRET') ? JWT_SECRET : 'change-me-to-a-random-64-char-string';
+if (!defined('JWT_SECRET')) { http_response_code(500); echo json_encode(['code'=>-1,'message'=>'Server config error: JWT_SECRET']); exit; }
+$JWT_SECRET = JWT_SECRET;
 
 // ============================================================
 // 验证登录
 // ============================================================
 $user = require_login($JWT_SECRET);
 $uid  = (int)$user['uid'];
+
+// ============================================================
+// 管理员验证 — 仅允许管理员直接激活，普通用户需走支付流程
+// ============================================================
+$ADMIN_UIDS = defined('ADMIN_UIDS') ? explode(',', ADMIN_UIDS) : [1];
+if (!in_array($uid, $ADMIN_UIDS)) {
+    // 非管理员必须提供支付凭证
+    $payment_ref = $input['payment_ref'] ?? '';
+    if (empty($payment_ref)) {
+        http_response_code(403);
+        echo json_encode([
+            'code' => -1,
+            'message' => '请先完成支付，提供 payment_ref 参数。管理员可直接激活。'
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    // TODO: 验证 payment_ref 与支付平台回调
+}
 
 // ============================================================
 // 定价配置

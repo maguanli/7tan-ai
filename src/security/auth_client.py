@@ -68,7 +68,7 @@ def login(username: str, password: str, remember_me: bool = False) -> dict:
             "token": "eyJhbGci...",       # JWT Token
             "user_id": 123,
             "username": "player1",
-            "level": "basic",             # basic / pro
+            "level": "free",             # free / pro
             "pro_expires": 1735689600,    # 专业版到期时间（0=未开通）
             "expires_in": 2592000,        # Token 有效期（秒）
         }
@@ -133,7 +133,7 @@ def online_verify(token: str) -> dict:
     Returns:
         {
             "valid": True/False,
-            "level": "basic" / "pro" / "expired",
+            "level": "free" / "pro" / "expired",
             "pro_expires": 1735689600,
             "error": None / "错误信息",
         }
@@ -158,7 +158,7 @@ def online_verify(token: str) -> dict:
 
     return {
         "valid": data.get("success", False),
-        "level": data.get("level", "basic"),
+        "level": data.get("level", "free"),
         "pro_expires": data.get("pro_expires", 0),
         "error": data.get("message") if not data.get("code") == 0 else None,
     }
@@ -217,8 +217,9 @@ def refresh_token(token: str) -> dict:
         return {
             "success": True,
             "token": data.get("token", ""),
-            "level": data.get("level", "basic"),
+            "level": data.get("level", "free"),
             "pro_expires": data.get("pro_expires", 0),
+            "pro_license": data.get("pro_license", ""),
         }
 
     # 先尝试 GET
@@ -491,7 +492,7 @@ def api_login_for_admin(username: str, password: str) -> dict:
                 "success": True,
                 "message": "登录成功，Token 已加密存储",
                 "token": token,
-                "level": result.get("level", "basic"),
+                "level": result.get("level", "free"),
             }
         else:
             return {"success": False, "message": "登录成功但未获取到 Token"}

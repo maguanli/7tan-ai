@@ -20,7 +20,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../lib/jwt_helper.php';
 
-$JWT_SECRET = defined('JWT_SECRET') ? JWT_SECRET : 'change-me-to-a-random-64-char-string';
+if (!defined('JWT_SECRET')) { http_response_code(500); echo json_encode(['code'=>-1,'message'=>'Server config error: JWT_SECRET']); exit; }
+$JWT_SECRET = JWT_SECRET;
 
 // ============================================================
 // 提取 Token（5 种来源）
@@ -271,6 +272,18 @@ if ($sub) {
     $is_pro        = false;
 }
 
+
+// ============================================================
+// 签发 Pro License（RSA 签名，客户端离线验签）
+// ============================================================
+$pro_license = '';
+if ($is_pro && defined('RSA_PRIVATE_KEY') && RSA_PRIVATE_KEY) {
+    try {
+        $pro_license = sign_pro_license($uid, $pro_expires, RSA_PRIVATE_KEY);
+    } catch (\Exception $e) {
+        error_log('Pro License sign failed (verify): ' . $e->getMessage());
+    }
+}
 // ============================================================
 // 返回
 // ============================================================
@@ -284,6 +297,7 @@ echo json_encode([
         'pro_activated'  => $pro_activated,
         'pro_expires'    => $pro_expires,
         'pro_expires_at' => $pro_expires > 0 ? date('Y-m-d H:i:s', $pro_expires) : null,
+        'pro_license'    => $pro_license,
         'server_time'    => $now,
         'token'          => $token,
     ],

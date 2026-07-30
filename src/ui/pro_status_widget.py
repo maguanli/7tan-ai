@@ -1,6 +1,8 @@
 """
 专业版状态组件
 显示在侧边栏底部：当前等级、到期时间、刷新/续费按钮。
+
+安全原则：先验证后信任。RSA 验签优先，HMAC 次之，不信任裸 level 字段。
 """
 import webbrowser
 from datetime import datetime
@@ -17,6 +19,7 @@ from loguru import logger
 from ..security.license_verify import verify_license, LicenseError
 from ..security.auth_client import refresh_token
 from ..security.token_store import load_token, save_token, clear_token
+from ..tools.registry import invalidate_pro_cache
 from .theme import THEME
 
 
@@ -158,44 +161,61 @@ class ProStatusWidget(QFrame):
     # ============================================================
 
     def _update_display(self) -> None:
-        """根据当前状态刷新界面"""
-        level = self._user_info.get("level", "basic")
-        pro_expires = self._user_info.get("pro_expires", 0)
+        """根据当前状态刷新界面。
+        
+        安全原则：先验证后信任。
+        1. RSA 验签 pro_license（最高优先级，不可伪造）
+        2. HMAC 验证通过 + JWT level（次优先级，仅当 RSA 不可用时）
+        3. 都不通过 → free
+        """
+        level = "free"
+        pro_expires = 0
+        rsa_verified = False
 
-        # 从本地 Token 补充状态（load_token 保存了服务器登录响应中的
-        # level/pro_expires，比本地 verify_license 更可靠）
         token_data = load_token()
         if token_data:
-            # 优先使用存储的 level（服务器登录时直接返回）
-            stored_level = token_data.get("level", "")
-            stored_expires = token_data.get("pro_expires", 0)
-            if stored_level == "pro":
-                level = "pro"
-                if stored_expires > pro_expires:
-                    pro_expires = stored_expires
-            elif stored_level == "basic" and level != "pro":
-                level = "basic"
-            # 本地 RSA 验签（用服务器的 pro_license，不再信任 token 文件里的 level）
-            try:
-                pro_license = token_data.get("pro_license", "")
-                if pro_license:
+            # ── 第1层：RSA 验签 pro_license（最高信任级）──
+            pro_license = token_data.get("pro_license", "")
+            if pro_license:
+                try:
                     result = verify_license(pro_license)
                     if result.get("level") == "pro":
                         level = "pro"
-                        pro_expires = result.get("pro_expires", pro_expires)
+                        pro_expires = result.get("pro_expires", 0)
+                        rsa_verified = True
+                        logger.debug("[ProStatus] ✅ RSA 验签通过")
+                except LicenseError as e:
+                    err_str = str(e).lower()
+                    if "公钥缺失" in err_str or "公钥未配置" in err_str:
+                        logger.warning("[ProStatus] RSA 公钥缺失，无法验证授权")
+                    elif "过期" in err_str:
+                        logger.info(f"[ProStatus] PRO 已过期: {e}")
+                    else:
+                        logger.warning(f"[ProStatus] 授权验证失败: {e}")
+
+            # ── 第2层：HMAC + stored level（仅当 RSA 未通过时使用）──
+            if not rsa_verified:
+                hmac_ok = token_data.get("_hmac_ok", False)
+                stored_level = token_data.get("level", "free")
+                stored_expires = token_data.get("pro_expires", 0)
+
+                if hmac_ok and stored_level == "pro" and stored_expires > 0:
+                    # HMAC 通过 + level=pro，但无 RSA 验证
+                    # 可能是旧版登录（无 pro_license），信任但降级标记
+                    level = "pro"
+                    pro_expires = stored_expires
+                    logger.debug("[ProStatus] ⚠️ HMAC 通过但无 RSA 验证，使用存储值")
                 else:
-                    # 非 PRO 用户，无 pro_license
                     level = "free"
                     pro_expires = 0
-            except LicenseError as e:
-                err_str = str(e).lower()
-                if "公钥缺失" in err_str or "公钥未配置" in err_str:
-                    logger.warning("[ProStatus] RSA 公钥缺失，无法验证授权 — 请在设置中配置公钥")
-                else:
-                    logger.warning(f"[ProStatus] 授权验证失败: {e}")
-                # 验签失败时降级为 free（不信任 token 文件的 level 字段）
-                level = "free"
-                pro_expires = 0
+
+        # 同时检查 _user_info（外部传入的 info）
+        if not rsa_verified and self._user_info.get("level") == "pro":
+            ui_pro_expires = self._user_info.get("pro_expires", 0)
+            if ui_pro_expires > pro_expires:
+                pro_expires = ui_pro_expires
+            level = "pro"
+
         is_pro = (level == "pro" and pro_expires > 0)
 
         if is_pro:
@@ -210,11 +230,9 @@ class ProStatusWidget(QFrame):
                     font-weight: bold;
                 }
             """)
-            # 从 token_data 获取用户名（比 _user_info 更可靠）
             username = token_data.get("username", "") if token_data else self._user_info.get("username", "")
             self._level_text.setText(f"专业版 {username}" if username else "专业版")
 
-            # 到期时间
             if pro_expires:
                 dt = datetime.fromtimestamp(pro_expires)
                 days_left = (dt - datetime.now()).days
@@ -230,7 +248,7 @@ class ProStatusWidget(QFrame):
             self._expiry_label.setVisible(True)
             self._upgrade_btn.setText("⭐ 续费")
         else:
-            self._level_badge.setText("[基础]")
+            self._level_badge.setText("[免费]")
             self._level_badge.setStyleSheet(f"""
                 QLabel {{
                     background-color: {THEME['hover']};
@@ -242,7 +260,7 @@ class ProStatusWidget(QFrame):
                 }}
             """)
             username = token_data.get("username", "") if token_data else self._user_info.get("username", "")
-            self._level_text.setText(f"基础版 {username}" if username else "基础版")
+            self._level_text.setText(f"免费版 {username}" if username else "免费版")
             self._expiry_label.setVisible(False)
             self._upgrade_btn.setText("⭐ 升级专业版")
 
@@ -260,21 +278,24 @@ class ProStatusWidget(QFrame):
             return
 
         if result.get("success"):
-            # 更新本地 Token
             new_token = result.get("token", token_data["token"])
             new_info = {
                 **token_data,
                 "token": new_token,
-                "level": result.get("level", token_data.get("level", "basic")),
-                "pro_expires": result.get("pro_expires", token_data.get("pro_expires", 0)),
+                "level": result.get("level", "free"),
+                "pro_expires": result.get("pro_expires", 0),
+                "pro_license": result.get("pro_license", ""),
             }
             save_token(
                 token=new_info["token"],
                 username=new_info.get("username", ""),
-                level=new_info.get("level", "basic"),
+                level=new_info.get("level", "free"),
                 pro_expires=new_info.get("pro_expires", 0),
                 expires_in=new_info.get("expires_in", 2592000),
+                pro_license=new_info.get("pro_license", ""),
             )
+            # 刷新后清除 Pro 门控缓存
+            invalidate_pro_cache()
             self._user_info.update(new_info)
             self._update_display()
             self.status_updated.emit(new_info)
@@ -291,6 +312,7 @@ class ProStatusWidget(QFrame):
                 )
                 if reply == QMessageBox.StandardButton.Yes:
                     clear_token()
+                    invalidate_pro_cache()
                     self._user_info = {}
                     self._update_display()
                     self.logout_requested.emit()
@@ -302,7 +324,6 @@ class ProStatusWidget(QFrame):
         from src.config.loader import load_config as _load_cfg3
         _cfg3 = _load_cfg3()
         _base = _cfg3.get("site_7tan", {}).get("base_url", "")
-        # 从 API base_url 推导网站根 URL（去掉 /api 后缀）
         _site_root = _base.replace("/api", "") if _base else ""
         url = _site_root + "/pro.php" if _site_root else "https://www.7tan.com/pro.php"
         webbrowser.open(url)
@@ -319,6 +340,7 @@ class ProStatusWidget(QFrame):
             return
 
         clear_token()
+        invalidate_pro_cache()
         self._user_info = {}
         self._update_display()
         self.logout_requested.emit()

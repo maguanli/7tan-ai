@@ -24,7 +24,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../lib/jwt_helper.php';
 
-$JWT_SECRET = defined('JWT_SECRET') ? JWT_SECRET : 'change-me-to-a-random-64-char-string';
+if (!defined('JWT_SECRET')) { http_response_code(500); echo json_encode(['code'=>-1,'message'=>'Server config error: JWT_SECRET']); exit; }
+$JWT_SECRET = JWT_SECRET;
 
 // ============================================================
 // 解析请求
@@ -139,6 +140,19 @@ $token = jwt_encode_auto([
 ], $JWT_SECRET);
 
 // ============================================================
+// 签发 Pro License（RSA 签名，客户端离线验签）
+// ============================================================
+$pro_license = '';
+if ($is_pro && defined('RSA_PRIVATE_KEY') && RSA_PRIVATE_KEY) {
+    try {
+        $pro_license = sign_pro_license((int)$user['id'], $pro_expires, RSA_PRIVATE_KEY);
+    } catch (\Exception $e) {
+        // 签名失败不影响登录，pro_license 留空
+        error_log('Pro License sign failed: ' . $e->getMessage());
+    }
+}
+
+// ============================================================
 // 设置 auth_token Cookie（供 pro.php 等页面读取）
 // ============================================================
 setcookie('auth_token', $token, [
@@ -168,6 +182,8 @@ echo json_encode([
             'pro_expires'    => $pro_expires,
             'pro_expires_at' => $pro_expires > 0 ? date('Y-m-d H:i:s', $pro_expires) : null,
             'trial_ai_count' => $trial_ai_count,   // AI 试用剩余次数
+            'pro_license'    => $pro_license,           // RSA 签名的 PRO 凭证（客户端离线验签）
         ],
+        'pro_license'    => $pro_license,
     ],
 ], JSON_UNESCAPED_UNICODE);

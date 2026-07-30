@@ -1961,7 +1961,7 @@ class BrowserPage(QWidget):
             self._current_view.forward()
 
 
-from .console_panel import ConsoleViewer
+#from .console_panel import ConsoleViewer
 from .code_viewer import CodeViewer
 from .video_editor.editor_window import VideoEditorPage
 

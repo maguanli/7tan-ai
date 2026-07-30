@@ -53,15 +53,35 @@ class ChatResponse(BaseModel):
 
 
 def _load_system_prompt() -> str:
-    """加载系统提示词，fallback 到内置默认"""
+    """加载系统提示词：数据库优先 → 文件回退 → 内置默认"""
+    # 1. 数据库（管理员在设置页面修改的）
+    try:
+        from ...database.db import get_prompt_from_db
+        db_prompt = get_prompt_from_db("system")
+        if db_prompt and db_prompt.get("content", "").strip():
+            return db_prompt["content"].strip()
+    except Exception:
+        pass
+
+    # 2. 本地文件（开发者直接编辑的）
     try:
         from pathlib import Path
         prompt_path = Path("data/prompts/system.txt")
         if prompt_path.exists():
-            return prompt_path.read_text(encoding="utf-8").strip()
+            content = prompt_path.read_text(encoding="utf-8").strip()
+            if content:
+                return content
     except Exception:
         pass
-    return ""  # 空字符串表示无系统提示词，agent_loop 会跳过
+
+    # 3. 内置默认
+    try:
+        from ...agent.prompts import DEFAULT_PROMPTS
+        return DEFAULT_PROMPTS.get("system", "")
+    except Exception:
+        pass
+
+    return ""
 
 
 @router.post("/send")

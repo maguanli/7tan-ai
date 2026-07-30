@@ -39,7 +39,8 @@ _STORE: dict[str, str] = {
     "api_login": "f0oukeI60CyaF4xSQuFAaLx/+/MQy9U9iolB2YZspQAlxBhbJLJ9ZhtdgZRnpLBvXOGXMDbHnJmCI3zT/KU0CL2INA==",
     "api_verify": "f0oukeNPxGFI9rD8A/tDGFwDpb6G7ehmHhh9g4CvjSwxDONCvQQ/JP+CMQ16LqQ+h33z5Kq/yxZQ/ycarpBgJjLzx7Y=",
     "api_refresh": "f0oukYIxG7j3yl5rQOlyGihuq1P1bAzz62D2YburpeQPBpFOfea8SmXTcDa9aQMBt8I+smPbA/ME0pf9xup9B/XuE+to=",
-    "api_trial": "f0oukQ+SglMVIv9Mo7iNRxBuniB5HNZSzzOruUMP+u/iulzhIzy0GPkDtSwV7SUhVi7iPhYrpLpQhyxeSMwGK2Y=",   # AI 试用代理端点 https://img.7tan.cn/api/ai/trial.php
+    "api_trial": "f0oukQ+SglMVIv9Mo7iNRxBuniB5HNZSzzOruUMP+u/iulzhIzy0GPkDtSwV7SUhVi7iPhYrpLpQhyxeSMwGK2Y=",   # AI 试用代理端点 https://www.7tan.com/api/ai/trial.php
+    "api_publish": "PLACEHOLDER",   # 资源发布端点 — 运行 tools/encrypt_strings.py 加密真实 URL
 }
 
 
@@ -85,26 +86,59 @@ def get_public_key() -> str:
     return _decrypt(_STORE.get("public_key", ""))
 
 
-def get_api_url(endpoint: str) -> str:
+def get_api_url(endpoint: str, fallback_base: str = "") -> str:
     """
     获取 API 端点 URL。
 
     Args:
-        endpoint: "login" / "verify" / "refresh" / "trial"
+        endpoint: "login" / "verify" / "refresh" / "trial" / "publish"
+        fallback_base: 回退基础 URL（用户配置的后台地址），
+                       当加密 URL 不可用时拼接 base_url + /api/publish.php
 
     Returns:
         完整的 HTTPS URL，解密失败返回空字符串
     """
+    # 端点 → 端点路径映射（用于回退拼接）
+    _ENDPOINT_PATHS = {
+        "login": "/api/auth/login.php",
+        "verify": "/api/auth/verify.php",
+        "refresh": "/api/auth/refresh.php",
+        "trial": "/api/ai/trial.php",
+        "publish": "/api/publish.php",
+    }
+
     key_map = {
         "login": "api_login",
         "verify": "api_verify",
         "refresh": "api_refresh",
         "trial": "api_trial",
+        "publish": "api_publish",
     }
     store_key = key_map.get(endpoint, "")
     if not store_key:
         return ""
-    return _decrypt(_STORE.get(store_key, ""))
+    
+    # 用户配置的 base_url 优先（不再硬编码域名）
+    if fallback_base:
+        path = _ENDPOINT_PATHS.get(endpoint, "")
+        if path:
+            return fallback_base.rstrip("/") + path
+    
+    # 回退：尝试解密内置的加密 URL（旧版兼容）
+    # 用户配置的 base_url 优先（不再硬编码域名）
+    if fallback_base:
+        path = _ENDPOINT_PATHS.get(endpoint, "")
+        if path:
+            return fallback_base.rstrip("/") + path
+    
+    # 回退：尝试解密内置的加密 URL（旧版兼容）
+    encrypted = _STORE.get(store_key, "")
+    if encrypted and encrypted != "PLACEHOLDER":
+        decrypted = _decrypt(encrypted)
+        if decrypted:
+            return decrypted
+    
+    return ""
 
 
 def set_encrypted_value(key: str, encrypted_b64: str) -> None:

@@ -10,6 +10,87 @@ from .registry import register_tool
 
 
 @register_tool(
+    name="api_publish_to_7tan",
+    description="通过API发布资源到7坛（替代浏览器自动化）。需要先配置管理员Token。如API不可用则自动回退到浏览器发布。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "发布标题"},
+            "intro": {"type": "string", "description": "简介/正文内容"},
+            "category": {"type": "string", "description": "分类"},
+            "tags": {"type": "string", "description": "标签（逗号分隔）"},
+            "download_url": {"type": "string", "description": "下载链接（OSS 外链）"},
+            "logo_path": {"type": "string", "description": "本地 LOGO 路径"},
+            "screenshot_paths": {"type": "string", "description": "本地截图路径（JSON 数组）"},
+            "resource_type": {"type": "string", "description": "'game' 或 'software'", "default": "game"},
+        },
+        "required": ["title", "intro", "download_url"]
+    },
+    category="publish",
+    requires_browser=False,
+)
+def api_publish_to_7tan(title: str, intro: str, download_url: str, category: str = "",
+                        tags: str = "", logo_path: str = "", screenshot_paths: str = "",
+                        resource_type: str = "game") -> str:
+    """
+    优先通过 API 发布，失败则回退到浏览器发布。
+    """
+    from ..security.auth_client import api_publish_resource
+    from ..database.db import get_admin_token, get_admin_password, get_admin_username
+    import json as _json
+
+    steps = []
+
+    # 步骤 1: 获取 Token
+    token = get_admin_token()
+    if not token:
+        steps.append("WARN: No valid API Token, falling back to browser publish...")
+        return publish_to_7tan(title, intro, download_url, category, tags,
+                               logo_path, screenshot_paths, resource_type)
+
+    steps.append("KEY: Token valid, using API publish")
+
+    # 步骤 2: Parse screenshot paths
+    shot_list = []
+    if screenshot_paths and screenshot_paths not in ("[]", '[""]'):
+        try:
+            shot_list = _json.loads(screenshot_paths) if isinstance(screenshot_paths, str) else screenshot_paths
+        except Exception:
+            pass
+
+    # 步骤 3: API publish
+    result = api_publish_resource(
+        token=token,
+        title=title,
+        intro=intro,
+        download_url=download_url,
+        category=category,
+        tags=tags,
+        resource_type=resource_type,
+        logo_path=logo_path,
+        screenshot_paths=shot_list,
+    )
+
+    if result.get("success"):
+        publish_id = result.get("publish_id", "?")
+        publish_url = result.get("publish_url", "")
+        msg = f"API publish success! ID: {publish_id} URL: {publish_url}"
+        return msg
+
+    # API failed, fallback to browser
+    error_msg = result.get("message", "Unknown error")
+    steps.append(f"WARN: API publish failed: {error_msg}")
+    steps.append("FALLBACK: Using browser automation...")
+
+    try:
+        browser_result = publish_to_7tan(title, intro, download_url, category, tags,
+                                         logo_path, screenshot_paths, resource_type)
+        return "\n".join(steps) + "\n\n" + browser_result
+    except Exception as e:
+        return "\n".join(steps) + f"\n\nFAIL: Browser fallback also failed: {e}"
+
+
+@register_tool(
     name="publish_to_7tan",
     description="在7坛管理后台发布资源。自动填写表单、上传 LOGO/截图、提交发布。",
     parameters={
@@ -47,7 +128,7 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
         return "❌ 浏览器未启动，请先打开浏览器页面"
 
     try:
-        admin_url = config.get("site_7tan", {}).get("base_url", "https://img.7tan.cn")
+        admin_url = config.get("site_7tan", {}).get("base_url", "")
         steps = []
 
         # ⚠️ 硬性检查：LOGO和截图必须存在本地才能发布

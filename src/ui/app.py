@@ -478,8 +478,12 @@ class Sidebar(QFrame):
         version.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 14px; font-weight: bold; padding: 10px;")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         version.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        version.setToolTip("在浏览器中打开 https://www.7tan.com/")
-        version.mousePressEvent = lambda e: self.open_url.emit("https://www.7tan.com/")
+        from src.config.loader import load_config as _load_cfg4
+        _cfg4 = _load_cfg4()
+        _base4 = _cfg4.get("site_7tan", {}).get("base_url", "")
+        _site_root4 = _base4.replace("/api", "") if _base4 else "https://www.7tan.com"
+        version.setToolTip(f"在浏览器中打开 {_site_root4}")
+        version.mousePressEvent = lambda e: self.open_url.emit(_site_root4 + "/")
         layout.addWidget(version)
 
     def _on_click(self, key):
@@ -2051,7 +2055,9 @@ class ChatBrowserSplitPage(QWidget):
 
         layout.addWidget(splitter)
         self._admin_window = None
-        self._admin_url = "https://img.7tan.cn/"
+        from src.config.loader import load_config as _load_cfg2
+        _cfg2 = _load_cfg2()
+        self._admin_url = _cfg2.get("site_7tan", {}).get("base_url", "") + "/"
 
         # 注册 UI 切换回调 — AI 切浏览器时自动切换面板（通过信号确保主线程安全）
         from src.tools import browser_tools as _bt
@@ -2501,7 +2507,7 @@ class SettingsPage(QWidget):
         form.setSpacing(12)
 
         self._site_url = QLineEdit()
-        self._site_url.setPlaceholderText("https://img.7tan.cn")
+        self._site_url.setPlaceholderText("https://你的域名/api")
         self._site_user = QLineEdit()
         self._site_pass = QLineEdit()
         self._site_pass.setEchoMode(QLineEdit.EchoMode.Password)

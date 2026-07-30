@@ -21,7 +21,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .model_manager import track_cost_internal
+from .model_manager import track_cost_internal, _fix_surrogates
 from .tool_executor import execute_tools_parallel, _execute_tool_optimized
 from .context_manager import (
     compress_context,
@@ -187,7 +187,7 @@ def _call_llm(model, messages, tools, config, timeout=API_TIMEOUT):
             logger.warning(f"⏰ API 超时 (attempt {attempt}/{MAX_RETRIES})")
         except Exception as e:
             last_error = e
-            logger.warning(f"⚠️ API 错误 (attempt {attempt}/{MAX_RETRIES}): {e}")
+            logger.warning(f"⚠️ API 错误 (attempt {attempt}/{MAX_RETRIES}): {_fix_surrogates(str(e))}")
         
         if attempt < MAX_RETRIES:
             delay = BASE_DELAY * (2 ** (attempt - 1))
@@ -554,7 +554,7 @@ def run_agent_loop(
         try:
             response = _call_llm(model, messages, tools, config)
         except Exception as e:
-            logger.error(f"❌ LLM 调用失败: {e}")
+            logger.error(f"❌ LLM 调用失败: {_fix_surrogates(str(e))}")
             return {
                 "success": False,
                 "result": f"AI 调用失败: {e}",

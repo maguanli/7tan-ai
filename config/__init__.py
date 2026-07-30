@@ -25,8 +25,8 @@ class DeepSeekConfig(BaseModel):
 
 
 class Site7tanConfig(BaseModel):
-    base_url: str = "https://img.7tan.cn"
-    login_url: str = "https://img.7tan.cn/login.php"
+    base_url: str = ""
+    login_url: str = ""
     username: str = ""
     password: str = ""
     publish_delay_min: int = 30

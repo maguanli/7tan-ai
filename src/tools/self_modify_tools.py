@@ -206,10 +206,10 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
     code_hash = hashlib.sha256(code.encode()).hexdigest()[:12]
     script_path = SANDBOX_ROOT / f"test_{code_hash}_{int(time.time())}.py"
 
-    try:
-        # 写入脚本
-        script_path.write_text(code, encoding="utf-8")
+    # 写入脚本
+    script_path.write_text(code, encoding="utf-8")
 
+    try:
         # 找到真正的 Python 解释器
         python_exe = _find_real_python()
         is_frozen = getattr(sys, 'frozen', False)
@@ -242,20 +242,38 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
         stderr = (result.stderr or "")[:MAX_OUTPUT_SIZE]
 
         if result.returncode == 0:
+            # 成功：清理脚本文件
+            try:
+                if script_path.exists():
+                    script_path.unlink()
+            except Exception:
+                pass
             return f"✅ 执行成功\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
         else:
-            return f"❌ 执行失败 (退出码 {result.returncode})\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
+            # 失败：保留脚本文件以便调试，并记录到日志
+            logger.error(f"❌ 沙盒执行失败 (退出码 {result.returncode})")
+            logger.error(f"   脚本: {script_path}")
+            logger.error(f"   命令: {' '.join(cmd)}")
+            if stdout:
+                logger.error(f"   stdout: {stdout[:500]}")
+            if stderr:
+                logger.error(f"   stderr: {stderr[:500]}")
+            return (
+                f"❌ 执行失败 (退出码 {result.returncode})\n"
+                f"--- 脚本 ---\n{script_path}\n"
+                f"--- stdout ---\n{stdout}\n"
+                f"--- stderr ---\n{stderr}"
+            )
 
     except subprocess.TimeoutExpired:
-        return "⏰ 沙盒执行超时"
+        logger.error(f"⏰ 沙盒执行超时 ({timeout}s): {script_path}")
+        return f"⏰ 沙盒执行超时 ({timeout}s)\n--- 脚本 ---\n{script_path}"
     except FileNotFoundError:
-        return "❌ 找不到 Python 解释器，请检查系统是否安装了 Python 3"
+        logger.error("❌ 找不到 Python 解释器")
+        return "❌ 找不到 Python 解释器，请检查系统是否安装了 Python 3\n--- 脚本 ---\n" + str(script_path)
     except Exception as e:
-        return f"❌ 沙盒执行异常: {e}"
-    finally:
-        # 清理
-        if script_path.exists():
-            script_path.unlink()
+        logger.error(f"❌ 沙盒执行异常: {e}")
+        return f"❌ 沙盒执行异常: {e}\n--- 脚本 ---\n{script_path}"
 
 
 @register_tool(

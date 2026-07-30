@@ -187,8 +187,8 @@ def _generate_default_config(answers: dict) -> dict:
             },
         },
         "site_7tan": {
-            "base_url": answers.get("tantan_url", "https://img.7tan.cn"),
-            "login_url": answers.get("tantan_url", "https://img.7tan.cn") + "/login.php",
+            "base_url": answers.get("tantan_url", ""),
+            "login_url": answers.get("tantan_url", "") + ("/login.php" if answers.get("tantan_url") else ""),
             "username": _env_var_ref("TANTAN_USERNAME"),
             "password": _env_var_ref("TANTAN_PASSWORD"),
             "publish_delay_min": 30,
@@ -341,8 +341,8 @@ def cli_first_time_setup() -> dict:
 
     # [3/5] 7坛后台
     print("\n[3/5] 7坛管理后台信息:")
-    tantan_url = input("  网址 [https://img.7tan.cn]: ").strip()
-    answers["tantan_url"] = tantan_url or "https://img.7tan.cn"
+    tantan_url = input("  7tan 后台网址 (如 https://你的域名/api): ").strip()
+    answers["tantan_url"] = tantan_url
     tantan_user = input("  用户名: ").strip()
     tantan_pass = input("  密码: ").strip()
     answers["tantan_user"] = tantan_user

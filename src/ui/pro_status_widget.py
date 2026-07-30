@@ -299,7 +299,12 @@ class ProStatusWidget(QFrame):
 
     def _on_upgrade(self) -> None:
         """打开 7tan.com 升级专业版页面"""
-        url = "https://www.7tan.com/pro.php"
+        from src.config.loader import load_config as _load_cfg3
+        _cfg3 = _load_cfg3()
+        _base = _cfg3.get("site_7tan", {}).get("base_url", "")
+        # 从 API base_url 推导网站根 URL（去掉 /api 后缀）
+        _site_root = _base.replace("/api", "") if _base else ""
+        url = _site_root + "/pro.php" if _site_root else "https://www.7tan.com/pro.php"
         webbrowser.open(url)
         logger.info("[ProStatus] 打开升级页面: www.7tan.com/pro.php")
 

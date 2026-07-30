@@ -88,7 +88,7 @@ def use_admin_browser() -> str:
     try:
         from ..config.loader import load_config
         config = load_config()
-        admin_url = config.get("site_7tan", {}).get("base_url", "https://img.7tan.cn")
+        admin_url = config.get("site_7tan", {}).get("base_url", "")
         bridge = _get_bridge()
         bridge.navigate(f"{admin_url}/", wait_seconds=5.0)
         return f"✅ 已切换到管理后台，当前页面: {admin_url}/"
@@ -360,11 +360,36 @@ def get_page_images(max_images: int = 50) -> str:
     category="browser",
     requires_browser=True,
 )
-def login_7tan(username: str, password: str) -> str:
-    """自动登录 7坛 管理后台（线程安全）"""
+def login_7tan(username: str = "", password: str = "") -> str:
+    """自动登录 7坛 管理后台（线程安全）。
+    
+    优先从加密数据库获取凭据，.env 明文密码作为回退。
+    如果数据库有有效 Token，则跳过浏览器登录。
+    """
+    # 尝试从加密数据库获取凭据
+    if not username or not password:
+        try:
+            from ..database.db import get_admin_username, get_admin_password, get_admin_token
+            if not username:
+                username = get_admin_username()
+            if not password:
+                # Token 有效则不需要密码
+                token = get_admin_token()
+                if token:
+                    logger.info("🔑 使用 JWT Token 认证（跳过浏览器登录）")
+                    return f"✅ Token 认证有效（用户: {username}），无需浏览器登录"
+                password = get_admin_password()
+        except Exception as e:
+            logger.warning(f"获取加密凭据失败: {e}")
+    
+    if not password:
+        return "⚠️ 未配置管理员密码。请在设置中配置密码或 API Token。"
+    
     if _source_view is not None:
         bridge = _get_bridge()
-        login_url = "https://img.7tan.cn/"
+        from ..config.loader import load_config as _load_cfg
+        _cfg = _load_cfg()
+        login_url = _cfg.get("site_7tan", {}).get("base_url", "") + "/"
 
         # 安全转义 JS 字符串
         _u = json.dumps(username)
@@ -460,7 +485,12 @@ def login_7tan(username: str, password: str) -> str:
     else:
         try:
             session = requests.Session()
-            resp = session.post("https://img.7tan.cn/login.php", data={
+            from ..config.loader import load_config as _load_cfg
+            _cfg = _load_cfg()
+            _login_url = _cfg.get("site_7tan", {}).get("login_url", "") or (
+                _cfg.get("site_7tan", {}).get("base_url", "") + "/login.php"
+            )
+            resp = session.post(_login_url, data={
                 "username": username, "password": password
             }, timeout=10)
             return "✅ 登录请求已发送" if resp.status_code == 200 else f"⚠️ 返回 {resp.status_code}"

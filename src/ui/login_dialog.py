@@ -246,7 +246,11 @@ class LoginDialog(QDialog):
         footer.setObjectName("btnLink")
         footer.setFont(QFont("Microsoft YaHei", 10))
         footer.setCursor(Qt.CursorShape.PointingHandCursor)
-        footer.clicked.connect(lambda: self._open_url("https://www.7tan.com/bbs/register.php"))
+        from src.config.loader import load_config as _load_cfg5
+        _cfg5 = _load_cfg5()
+        _base5 = _cfg5.get("site_7tan", {}).get("base_url", "")
+        _site_root5 = _base5.replace("/api", "") if _base5 else "https://www.7tan.com"
+        footer.clicked.connect(lambda: self._open_url(_site_root5 + "/bbs/register.php"))
         footer.setStyleSheet(f"""
             QPushButton#btnLink {{
                 background: transparent;
@@ -395,7 +399,9 @@ class LoginDialog(QDialog):
 
     def _on_forgot_password(self):
         """忘记密码 → 打开 7tan.com"""
-        self._open_url("https://www.7tan.com/bbs/77562/")
+        _base6 = _cfg5.get("site_7tan", {}).get("base_url", "")
+        _site_root6 = _base6.replace("/api", "") if _base6 else "https://www.7tan.com"
+        self._open_url(_site_root6 + "/bbs/77562/")
         self._show_error("")  # 清除错误
 
     def _on_login(self):

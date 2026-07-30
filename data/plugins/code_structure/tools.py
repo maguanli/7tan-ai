@@ -165,7 +165,8 @@ def scan_project(path: str = ".") -> str:
     total_lines = 0
 
     skip_dirs = {"node_modules", "__pycache__", ".git", "venv", ".venv",
-                 "dist", "build", ".tox", ".eggs", "logs", "recordings"}
+                 "dist", "build", ".tox", ".eggs", "logs", "recordings",
+                 "_internal", "__pycache__"}
 
     for root, dirs, files in os.walk(path):
         dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith(".")]

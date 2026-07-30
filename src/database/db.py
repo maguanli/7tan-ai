@@ -1111,6 +1111,249 @@ def delete_memory(section: str, key: str) -> bool:
         session.close()
 
 
+# ===== Site Credential =====
+
+class SiteCredential(Base):
+    """站点凭据表 — 加密存储各网站登录凭据，替代 .env 明文密码
+    
+    支持两种认证方式：
+    1. token: JWT Token（优先，通过 API 登录获取，可自动续期）
+    2. password: 传统密码（回退方案，加密存储）
+    """
+    __tablename__ = "site_credentials"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    site = Column(String, nullable=False, unique=True, index=True)  # '7tan_admin' / '7tan_api' 等
+    username = Column(String, default="")
+    password_encrypted = Column(String, default="")   # 加密存储的密码（回退方案）
+    jwt_token = Column(Text, default="")               # JWT Token（优先使用）
+    token_expires_at = Column(DateTime)                 # Token 过期时间
+    cookies_json = Column(Text, default="")            # 浏览器 cookies（回退方案）
+    api_base_url = Column(String, default="")          # API 基础 URL
+    notes = Column(String, default="")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def set_password(self, plaintext: str):
+        """加密存储密码"""
+        self.password_encrypted = encrypt_password(plaintext) if plaintext else ""
+
+    def get_password(self) -> str:
+        """解密获取密码"""
+        return decrypt_password(self.password_encrypted or "")
+
+    def set_token(self, token: str, expires_in: int = 2592000):
+        """设置 JWT Token 及过期时间"""
+        import time as _time
+        self.jwt_token = token
+        self.token_expires_at = datetime.fromtimestamp(_time.time() + expires_in)
+
+    def is_token_valid(self) -> bool:
+        """检查 Token 是否有效（未过期）"""
+        import time as _time
+        if not self.jwt_token:
+            return False
+        if not self.token_expires_at:
+            return False
+        return _time.time() < self.token_expires_at.timestamp()
+
+    def to_dict(self, mask_secrets: bool = True) -> dict:
+        d = {
+            "id": self.id, "site": self.site, "username": self.username,
+            "has_password": bool(self.password_encrypted),
+            "has_token": bool(self.jwt_token),
+            "token_valid": self.is_token_valid(),
+            "token_expires_at": self.token_expires_at.isoformat() if self.token_expires_at else None,
+            "api_base_url": self.api_base_url,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if not mask_secrets:
+            d["password"] = self.get_password()
+            d["jwt_token"] = self.jwt_token
+        return d
+
+
+# ----- SiteCredential CRUD -----
+
+def get_site_credential(site: str, unmask: bool = False) -> dict | None:
+    """获取站点凭据"""
+    session = get_session()
+    try:
+        cred = session.query(SiteCredential).filter(SiteCredential.site == site).first()
+        if cred:
+            return cred.to_dict(mask_secrets=not unmask)
+        return None
+    finally:
+        session.close()
+
+
+def save_site_credential(site: str, username: str = "", password: str = "",
+                         jwt_token: str = "", expires_in: int = 0,
+                         api_base_url: str = "", cookies_json: str = "",
+                         notes: str = "") -> dict:
+    """保存或更新站点凭据。password 和 jwt_token 均会自动加密。
+    
+    Returns:
+        {"success": True/False, "message": "...", "cred": {...}}
+    """
+    session = get_session()
+    try:
+        cred = session.query(SiteCredential).filter(SiteCredential.site == site).first()
+        if cred is None:
+            cred = SiteCredential(site=site)
+            session.add(cred)
+
+        if username:
+            cred.username = username
+        if password:
+            cred.set_password(password)
+        if jwt_token:
+            cred.set_token(jwt_token, expires_in or 2592000)
+        if api_base_url:
+            cred.api_base_url = api_base_url
+        if cookies_json:
+            cred.cookies_json = cookies_json
+        if notes:
+            cred.notes = notes
+
+        session.commit()
+        logger.info(f"💾 站点凭据已保存: {site}")
+        return {"success": True, "message": f"凭据 {site} 已保存",
+                "cred": cred.to_dict(mask_secrets=True)}
+    except Exception as e:
+        session.rollback()
+        logger.error(f"保存站点凭据失败: {e}")
+        return {"success": False, "message": str(e)}
+    finally:
+        session.close()
+
+
+def delete_site_credential(site: str) -> bool:
+    """删除站点凭据"""
+    session = get_session()
+    try:
+        result = session.query(SiteCredential).filter(SiteCredential.site == site).delete()
+        session.commit()
+        return result > 0
+    except Exception as e:
+        session.rollback()
+        logger.error(f"删除站点凭据失败: {e}")
+        return False
+    finally:
+        session.close()
+
+
+def get_all_site_credentials() -> list:
+    """获取所有站点凭据（脱敏）"""
+    session = get_session()
+    try:
+        creds = session.query(SiteCredential).order_by(SiteCredential.id).all()
+        return [c.to_dict(mask_secrets=True) for c in creds]
+    finally:
+        session.close()
+
+
+def get_admin_password() -> str:
+    """
+    获取 7tan 管理后台密码（优先从加密数据库，回退到 .env 环境变量）。
+    
+    迁移逻辑：如果数据库无记录但 .env 有明文密码，自动加密迁移到数据库。
+    """
+    import os as _os
+
+    # 1. 优先从加密数据库获取
+    session = get_session()
+    try:
+        cred = session.query(SiteCredential).filter(
+            SiteCredential.site == "7tan_admin"
+        ).first()
+        if cred:
+            pwd = cred.get_password()
+            if pwd:
+                return pwd
+    finally:
+        session.close()
+
+    # 2. 回退：从 .env 读取明文密码（旧版兼容）
+    env_pwd = _os.getenv("TANTAN_PASSWORD", "")
+    if env_pwd:
+        # 自动迁移：将明文密码加密存入数据库
+        logger.info("🔐 检测到 .env 明文密码，正在加密迁移到数据库...")
+        # 从配置读取 base_url，不再硬编码
+        try:
+            from ..config.loader import load_config
+            _cfg = load_config()
+            _base_url = _cfg.get("site_7tan", {}).get("base_url", "")
+        except Exception:
+            _base_url = ""
+        result = save_site_credential(
+            site="7tan_admin",
+            username=_os.getenv("TANTAN_USERNAME", "admin"),
+            password=env_pwd,
+            api_base_url=_base_url,
+            notes="从 .env 自动迁移"
+        )
+        if result["success"]:
+            logger.info("✅ 密码已加密迁移到数据库，建议从 .env 中删除 TANTAN_PASSWORD")
+        return env_pwd
+
+    return ""
+
+
+
+def get_admin_username() -> str:
+    """获取 7tan 管理后台用户名"""
+    import os as _os
+    session = get_session()
+    try:
+        cred = session.query(SiteCredential).filter(
+            SiteCredential.site == "7tan_admin"
+        ).first()
+        if cred and cred.username:
+            return cred.username
+    finally:
+        session.close()
+    return _os.getenv("TANTAN_USERNAME", "admin")
+
+
+def store_admin_token(jwt_token: str, expires_in: int = 2592000) -> bool:
+    """存储管理员 JWT Token（从 API 登录获取后调用）"""
+    result = save_site_credential(
+        site="7tan_admin",
+        jwt_token=jwt_token,
+        expires_in=expires_in,
+    )
+    return result["success"]
+
+
+def refresh_admin_token_via_api() -> bool:
+    """通过 API 刷新管理员 Token"""
+    from ..security.auth_client import refresh_token as api_refresh_token
+    token = get_admin_token()
+    if not token:
+        return False
+    result = api_refresh_token(token)
+    if result.get("success") and result.get("token"):
+        return store_admin_token(result["token"])
+    return False
+
+def get_admin_token() -> str | None:
+    """获取 7tan 管理后台的有效 JWT Token（用于 API 认证）"""
+    session = get_session()
+    try:
+        cred = session.query(SiteCredential).filter(
+            SiteCredential.site == "7tan_admin"
+        ).first()
+        if cred and cred.is_token_valid():
+            return cred.jwt_token
+        return None
+    finally:
+        session.close()
+
+
+
 # ===== Prompt =====
 
 class Prompt(Base):

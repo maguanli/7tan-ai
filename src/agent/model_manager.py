@@ -8,6 +8,43 @@ from typing import Any
 from loguru import logger
 
 from ..utils.retry import retry, is_retryable_error, classify_policy, RETRY_POLICIES
+
+
+def _fix_surrogates(s: str) -> str:
+    """清理字符串中的代理字符（surrogates）。
+    
+    有效代理对（如 \ud83d\ude00）→ 实际 Unicode 字符，
+    孤立代理（如 \ud83d）→ '?'。
+    结果可安全编码为 UTF-8。
+    """
+    # Fast path: check if string contains any surrogates at all
+    if not any(0xD800 <= ord(ch) <= 0xDFFF for ch in s):
+        return s
+
+    result = []
+    i = 0
+    n = len(s)
+    while i < n:
+        code = ord(s[i])
+        if 0xD800 <= code <= 0xDBFF:  # High surrogate
+            if i + 1 < n and 0xDC00 <= ord(s[i+1]) <= 0xDFFF:
+                try:
+                    pair = s[i:i+2]
+                    actual = pair.encode('utf-16', 'surrogatepass').decode('utf-16')
+                    result.append(actual)
+                except Exception:
+                    result.append('?')
+                i += 2
+            else:
+                result.append('?')
+                i += 1
+        elif 0xDC00 <= code <= 0xDFFF:  # Lone low surrogate
+            result.append('?')
+            i += 1
+        else:
+            result.append(chr(code))
+            i += 1
+    return ''.join(result)
 # ===== 各模型价格（每百万 token，人民币，参考各厂商公开定价）=====
 
 MODEL_PRICES = {
@@ -194,6 +231,37 @@ class ModelManager:
         except Exception as e:
             logger.warning(f"同步试用次数失败: {e}")
 
+    def _sanitize_surrogates(self, obj):
+        """递归清理对象中的所有字符串，处理代理字符（surrogates）
+
+        Python UTF-8 编码器不允许代理对字符（如 \ud83d）。
+        这些通常来自损坏的 emoji 或不当的 UTF-16→UTF-8 转换。
+        在发送给 API 前必须清理，否则 openai 库序列化 JSON 时会崩溃。
+
+        有效代理对 → 实际 Unicode 字符，孤立代理 → '?'。
+        支持 dict/list/tuple/set 等嵌套类型。
+        """
+        if isinstance(obj, str):
+            return _fix_surrogates(obj)
+        elif isinstance(obj, dict):
+            return {self._sanitize_surrogates(k): self._sanitize_surrogates(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._sanitize_surrogates(item) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(self._sanitize_surrogates(item) for item in obj)
+        elif isinstance(obj, set):
+            return {self._sanitize_surrogates(item) for item in obj}
+        return obj
+
+    @staticmethod
+    def _safe_str(obj) -> str:
+        """安全转为字符串，移除代理字符，防止日志崩溃"""
+        try:
+            s = str(obj)
+            return _fix_surrogates(s)
+        except Exception:
+            return "<无法序列化的错误对象>"
+
     def _chat_with_retry(self, client, **kwargs):
         """带智能重试的 chat 调用"""
         import time
@@ -202,6 +270,9 @@ class ModelManager:
             APIError, APITimeoutError, APIConnectionError,
             RateLimitError, InternalServerError, BadRequestError
         )
+
+        # Clean surrogate chars before API call
+        kwargs = self._sanitize_surrogates(kwargs)
 
         last_error = None
 
@@ -213,7 +284,7 @@ class ModelManager:
                 return client.chat.completions.create(**kwargs)
             except BadRequestError as e:
                 # 400 错误不重试（参数/格式问题）
-                logger.error(f"❌ API 请求参数错误 (400): {e}")
+                logger.error(f"❌ API 请求参数错误 (400): {_fix_surrogates(str(e))}")
                 raise
             except RateLimitError as e:
                 last_error = e
@@ -277,7 +348,7 @@ class ModelManager:
                         break
                     delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
                     logger.warning(
-                        f"⚠️ API 错误 (尝试 {attempt+1}/{max_retries+1}): {e} — {delay:.1f}s 后重试"
+                        f"⚠️ API 错误 (尝试 {attempt+1}/{max_retries+1}): {self._safe_str(e)} — {delay:.1f}s 后重试"
                     )
                     time.sleep(delay)
             except Exception as e:
@@ -288,12 +359,12 @@ class ModelManager:
                     break
                 delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
                 logger.warning(
-                    f"⚠️ 未知错误 (尝试 {attempt+1}/{max_retries+1}): {e} — {delay:.1f}s 后重试"
+                    f"⚠️ 未知错误 (尝试 {attempt+1}/{max_retries+1}): {self._safe_str(e)} — {delay:.1f}s 后重试"
                 )
                 time.sleep(delay)
 
         # 所有重试都失败
-        raise RuntimeError(f"LLM 调用失败（已重试 {max_retries} 次），最后错误: {last_error}")
+        raise RuntimeError(f"LLM 调用失败（已重试 {max_retries} 次），最后错误: {self._safe_str(last_error)}")
 
     def _get_client(self):
         """懒加载创建 OpenAI 客户端（优先用数据库配置，回退 YAML）"""

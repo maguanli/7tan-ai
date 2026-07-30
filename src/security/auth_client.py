@@ -10,6 +10,16 @@ from loguru import logger
 
 from .strings import get_api_url
 
+
+def _get_site_base_url() -> str:
+    """从配置获取 7tan 后台基础 URL"""
+    try:
+        from ..config.loader import load_config
+        config = load_config()
+        return config.get("site_7tan", {}).get("base_url", "")
+    except Exception:
+        return ""
+
 # ============================================================
 # 超时配置
 # ============================================================
@@ -68,7 +78,7 @@ def login(username: str, password: str, remember_me: bool = False) -> dict:
         NetworkError: 网络连接失败
         ServerError: 服务器错误
     """
-    url = get_api_url("login")
+    url = get_api_url("login", fallback_base=_get_site_base_url())
     if not url:
         raise ServerError("API 端点未配置")
 
@@ -128,7 +138,7 @@ def online_verify(token: str) -> dict:
             "error": None / "错误信息",
         }
     """
-    url = get_api_url("verify")
+    url = get_api_url("verify", fallback_base=_get_site_base_url())
     if not url:
         return {"valid": False, "level": "unknown", "error": "API 端点未配置"}
 
@@ -165,7 +175,7 @@ def refresh_token(token: str) -> dict:
     Returns:
         {"success": True, "token": "new_token", "level": "pro", ...}
     """
-    url = get_api_url("refresh")
+    url = get_api_url("refresh", fallback_base=_get_site_base_url())
     if not url:
         return {"success": False, "message": "API 端点未配置"}
 
@@ -244,7 +254,17 @@ def trial_call(token: str, model: str, messages: list) -> dict:
         }
     """
     from .strings import get_api_url
-    url = get_api_url("trial")
+
+
+def _get_site_base_url() -> str:
+    """从配置获取 7tan 后台基础 URL"""
+    try:
+        from ..config.loader import load_config
+        config = load_config()
+        return config.get("site_7tan", {}).get("base_url", "")
+    except Exception:
+        return ""
+    url = get_api_url("trial", fallback_base=_get_site_base_url())
     if not url:
         return {"success": False, "error": "试用 API 端点未配置", "trials_left": 0}
 
@@ -286,3 +306,201 @@ def trial_call(token: str, model: str, messages: list) -> dict:
         "trials_left": result.get("trials_left", -1),
         "error": None,
     }
+
+
+# ============================================================
+# 资源发布 API（替代浏览器自动化发布）
+# ============================================================
+
+def api_publish_resource(
+    token: str,
+    title: str,
+    intro: str,
+    download_url: str,
+    category: str = "",
+    tags: str = "",
+    resource_type: str = "game",
+    logo_path: str = "",
+    screenshot_paths: list = None,
+    platform: str = "Android",
+    system_version: str = "5.0",
+    developer: str = "官方",
+) -> dict:
+    """
+    通过 API 发布资源到 7tan 网站（替代浏览器自动化）。
+
+    Args:
+        token: JWT Token（管理员认证）
+        title: 资源标题
+        intro: 简介/正文（HTML）
+        download_url: 下载链接（OSS 外链）
+        category: 分类名称
+        tags: 标签（逗号分隔）
+        resource_type: 'game' 或 'software'
+        logo_path: 本地 LOGO 文件路径
+        screenshot_paths: 本地截图文件路径列表
+        platform: 平台（Android/iOS/PC）
+        system_version: 系统版本要求
+        developer: 开发商
+
+    Returns:
+        {
+            "success": True/False,
+            "message": "...",
+            "publish_id": 123,
+            "publish_url": "https://...",
+        }
+    """
+    from .strings import get_api_url
+
+
+def _get_site_base_url() -> str:
+    """从配置获取 7tan 后台基础 URL"""
+    try:
+        from ..config.loader import load_config
+        config = load_config()
+        return config.get("site_7tan", {}).get("base_url", "")
+    except Exception:
+        return ""
+    import os as _os
+
+    url = get_api_url("publish", fallback_base=_get_site_base_url())
+    if not url:
+        return {
+            "success": False,
+            "message": "发布 API 端点未配置，请在服务端部署 api/publish.php",
+            "fallback": "browser",
+        }
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    try:
+        # 使用 multipart/form-data 上传
+        import requests as _requests
+
+        # 准备表单数据
+        form_data = {
+            "title": title,
+            "intro": intro,
+            "download_url": download_url,
+            "category": category,
+            "tags": tags,
+            "resource_type": resource_type,
+            "platform": platform,
+            "system_version": system_version,
+            "developer": developer,
+        }
+
+        # 准备文件
+        files = []
+        if logo_path and _os.path.exists(logo_path):
+            files.append(("logo", (_os.path.basename(logo_path),
+                                   open(logo_path, "rb"),
+                                   "image/png" if logo_path.endswith(".png") else "image/jpeg")))
+
+        if screenshot_paths:
+            for i, sp in enumerate(screenshot_paths):
+                if _os.path.exists(sp):
+                    files.append(
+                        (f"screenshot_{i}",
+                         (_os.path.basename(sp),
+                          open(sp, "rb"),
+                          "image/png" if sp.endswith(".png") else "image/jpeg"))
+                    )
+
+        try:
+            resp = _requests.post(
+                url,
+                data=form_data,
+                files=files,
+                headers=headers,
+                timeout=120,  # 上传大文件需要较长时间
+            )
+        finally:
+            # 关闭所有打开的文件
+            for _, (_, fh, _) in files:
+                fh.close()
+
+        if resp.status_code != 200:
+            return {
+                "success": False,
+                "message": f"服务器返回 {resp.status_code}: {resp.text[:200]}",
+            }
+
+        try:
+            data = resp.json()
+        except Exception:
+            return {
+                "success": False,
+                "message": f"服务器返回数据格式异常: {resp.text[:200]}",
+            }
+
+        if data.get("code") == 0:
+            result_data = data.get("data", {})
+            return {
+                "success": True,
+                "message": data.get("message", "发布成功"),
+                "publish_id": result_data.get("id", 0),
+                "publish_url": result_data.get("url", ""),
+            }
+        else:
+            return {
+                "success": False,
+                "message": data.get("message", "发布失败"),
+                "error_code": data.get("code", -1),
+            }
+
+    except Exception as e:
+        logger.error(f"[API Publish] 请求失败: {e}")
+        return {
+            "success": False,
+            "message": f"网络异常: {e}",
+            "fallback": "browser",
+        }
+
+
+def api_login_for_admin(username: str, password: str) -> dict:
+    """
+    管理员 API 登录 — 获取 Token 并自动加密存储到数据库。
+
+    这是 login_7tan 的 API 替代方案。
+    登录成功后 Token 自动持久化，后续 publish_to_7tan 可免密码运行。
+
+    Args:
+        username: 管理员用户名
+        password: 管理员密码（HTTPS 传输，不落盘）
+
+    Returns:
+        {"success": True/False, "message": "...", "token": "..."}
+    """
+    try:
+        result = login(username, password)
+        token = result.get("token", "")
+
+        if token:
+            # 加密存储 Token 到数据库
+            from ..database.db import store_admin_token, save_site_credential
+            store_admin_token(token, result.get("expires_in", 2592000))
+            save_site_credential(
+                site="7tan_admin",
+                username=username,
+                api_base_url=_get_site_base_url(),
+            )
+            logger.info(f"[Auth] 管理员 Token 已存储（有效期 {result.get('expires_in', 2592000)} 秒）")
+            return {
+                "success": True,
+                "message": "登录成功，Token 已加密存储",
+                "token": token,
+                "level": result.get("level", "basic"),
+            }
+        else:
+            return {"success": False, "message": "登录成功但未获取到 Token"}
+
+    except LoginFailed as e:
+        return {"success": False, "message": f"登录失败: {e}"}
+    except NetworkError as e:
+        return {"success": False, "message": f"网络错误: {e}"}
+    except Exception as e:
+        return {"success": False, "message": f"未知错误: {e}"}
+
+

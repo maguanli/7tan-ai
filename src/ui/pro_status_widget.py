@@ -5,6 +5,7 @@
 安全原则：先验证后信任。RSA 验签优先，HMAC 次之，不信任裸 level 字段。
 """
 import webbrowser
+import time
 from datetime import datetime
 
 from PyQt6.QtWidgets import (

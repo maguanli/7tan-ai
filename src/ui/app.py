@@ -4130,5 +4130,15 @@ def launch_app():
         app.exec()
         logger.info("👋 应用已关闭")
     except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
         logger.exception(f"❌ 启动失败: {e}")
+        # 弹窗显示错误，让用户能看到
+        try:
+            QMessageBox.critical(
+                None, "7Tan 启动失败",
+                f"主界面启动时遇到错误：\n\n{e}\n\n详细信息已写入日志文件。"
+            )
+        except Exception:
+            pass
         raise

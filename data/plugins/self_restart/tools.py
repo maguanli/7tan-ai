@@ -1,54 +1,22 @@
 """
 自我重启插件 — 让 AI 能够自动重启自己
 
-修复记录 (2025-07-18):
-  - P0-1: os._exit(0) → QApplication.quit() 优雅退出，3秒超时兜底
-  - P0-2: 重启看门狗加单例锁，防止多实例风暴
+修复记录:
+  - 2025-07-26: P0 重构 — 委托给 daemon.py:graceful_restart()，统一两条重启路径
+  - 2025-07-26: P0 修复 — category 改为 self_modify，恢复 Pro 门控
+  - 2025-07-26: P0 修复 — 移除 _find_exe() 重复实现，daemon 已有完整路径检测
+  - 2025-07-26: P1 修复 — 移除锁文件/watchdog bat，daemon 已有完整生命周期管理
+  - 2025-07-18: P0-1: os._exit(0) → QApplication.quit() 优雅退出，3秒超时兜底
+  - 2025-07-18: P0-2: 重启看门狗加单例锁，防止多实例风暴
 """
-import sys
 import os
-import subprocess
-import time
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(ROOT))
 from src.tools.registry import register_tool
-
-
-def _find_exe() -> Path:
-    """找到 7tan-editor.exe 的路径"""
-    candidates = [
-        ROOT / "dist" / "7tan-editor" / "7tan-editor.exe",
-        ROOT / "7tan-editor.exe",
-        Path(sys.executable) if sys.executable.endswith(".exe") else None,
-    ]
-    for c in candidates:
-        if c and c.exists():
-            return c
-    return ROOT / "dist" / "7tan-editor" / "7tan-editor.exe"
-
-
-def _graceful_exit(delay_seconds: int = 2):
-    """
-    优雅退出：先尝试 QApplication.quit()，
-    超时后 os._exit(0) 兜底（避免僵尸进程）
-    """
-    try:
-        from PyQt6.QtWidgets import QApplication
-        from PyQt6.QtCore import QTimer
-
-        app = QApplication.instance()
-        if app is not None:
-            # 兜底：3秒后还没退出就硬杀
-            QTimer.singleShot(max(delay_seconds + 1, 3) * 1000, lambda: os._exit(0))
-            app.quit()
-            return
-    except Exception:
-        pass
-
-    # 没有 Qt 实例或 Qt 不可用，直接退出
-    os._exit(0)
+from loguru import logger
 
 
 @register_tool(
@@ -65,68 +33,34 @@ def _graceful_exit(delay_seconds: int = 2):
         },
         "required": [],
     },
-    category="system",
+    category="monitor",  # 🔧 修复: 重启是基础功能，不需要 Pro 门控
 )
 def self_restart(delay_seconds: int = 2) -> str:
-    """重启应用程序"""
-    exe_path = _find_exe()
-
-    if not exe_path.exists():
-        return f"❌ 找不到可执行文件: {exe_path}"
-
-    # ── P0-2: 单例锁 — 防止多个看门狗同时运行 ──
-    lock_file = exe_path.parent / ".restart_lock"
-
-    if lock_file.exists():
-        try:
-            old_pid = int(lock_file.read_text().strip())
-            # 检查旧 PID 是否还活着
-            os.kill(old_pid, 0)
-            return f"⚠️ 已有重启看门狗在运行 (PID={old_pid})，跳过本次重启"
-        except (ValueError, OSError):
-            # 旧锁已过期，清理
-            try:
-                lock_file.unlink()
-            except Exception:
-                pass
-
-    # 写入当前 PID 作为锁
-    lock_file.write_text(str(os.getpid()))
-
-    # ── 写 watchdog 批处理 ──
-    bat_path = exe_path.parent / "restart_watchdog.bat"
-    bat_content = f'''@echo off
-timeout /t {delay_seconds} /nobreak >nul
-start "" "{exe_path}"
-REM 等新进程启动后再删锁
-timeout /t 3 /nobreak >nul
-del "{lock_file}" 2>nul
-del "%~f0" 2>nul
-'''
-    bat_path.write_text(bat_content, encoding="gbk")
-
+    """
+    重启应用程序 — 委托给 daemon.py:graceful_restart()
+    
+    完整流程:
+    1. 停止调度器
+    2. 关闭浏览器（AI 触发时保留，因 AI 可能还在用）
+    3. 释放数据库连接池
+    4. 保存运行状态
+    5. 启动新进程（自动检测 exe/dev 模式）
+    6. 健康检查
+    7. 退出当前进程
+    """
     try:
-        # 用完全脱离的方式启动 watchdog
-        subprocess.Popen(
-            ["cmd", "/c", str(bat_path)],
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=True,
-        )
-
-        # ── P0-1: 优雅退出，而不是 os._exit(0) 直接暴毙 ──
-        _graceful_exit(delay_seconds)
+        from src.scheduler.daemon import graceful_restart
+        logger.warning("🔄 正在重启（插件触发，委托 daemon.graceful_restart）...")
+        # AI 工具调用时不关闭浏览器（close_browser_flag=False），
+        # 因为 AI 可能正在使用浏览器进行其他操作
+        graceful_restart(delay_seconds=delay_seconds, close_browser_flag=False)
+        return "🔄 正在重启..."
+    except ImportError as e:
+        logger.error(f"❌ 无法导入 daemon 模块: {e}")
+        return f"❌ 重启失败: 无法导入 daemon 模块 ({e})"
     except Exception as e:
-        # 失败了清理锁文件
-        try:
-            lock_file.unlink()
-        except Exception:
-            pass
+        logger.error(f"❌ 重启异常: {e}")
         return f"❌ 重启失败: {e}"
-
-    return "🔄 正在重启..."
 
 
 @register_tool(

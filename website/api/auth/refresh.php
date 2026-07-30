@@ -18,8 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../lib/jwt_helper.php';
 
-if (!defined('JWT_SECRET')) { http_response_code(500); echo json_encode(['code'=>-1,'message'=>'Server config error: JWT_SECRET']); exit; }
-$JWT_SECRET = JWT_SECRET;
+$JWT_SECRET = defined('JWT_SECRET') ? JWT_SECRET : 'change-me-to-a-random-64-char-string';
 
 // ============================================================
 // Extract Token (4 sources)
@@ -77,41 +76,51 @@ try {
 $uid = (int)($payload['uid'] ?? 0);
 $db = get_db_connection();
 
-// ============================================================
-// Query user info (ll_useregs)
-// ============================================================
-$stmt = $db->prepare('SELECT id, ll_name, ll_pwd, ll_date, email FROM ll_useregs WHERE id = :uid LIMIT 1');
-$stmt->execute([':uid' => $uid]);
-$user = $stmt->fetch(PDO::FETCH_ASSOC);
+try {
+    // ============================================================
+    // Query user info (ll_useregs)
+    // ============================================================
+    $stmt = $db->prepare('SELECT id, ll_name FROM ll_useregs WHERE id = :uid LIMIT 1');
+    $stmt->execute([':uid' => $uid]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if (!$user) {
-    http_response_code(401);
-    echo json_encode(['code' => -1, 'message' => 'User not found']);
+    if (!$user) {
+        http_response_code(401);
+        echo json_encode(['code' => -1, 'message' => 'User not found']);
+        exit;
+    }
+
+    // ============================================================
+    // Query latest pro subscription status
+    // ============================================================
+    $now = time();
+    $stmt = $db->prepare(
+        'SELECT id, plan, months, amount, activated_at, expires_at
+         FROM user_pro_subscriptions
+         WHERE user_id = :uid AND status = 1 AND expires_at > :now
+         ORDER BY expires_at DESC
+         LIMIT 1'
+    );
+    $stmt->execute([':uid' => $uid, ':now' => $now]);
+    $sub = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($sub) {
+        $pro_activated = 1;
+        $pro_expires   = (int)$sub['expires_at'];
+        $is_pro        = ($pro_expires > $now);
+    } else {
+        $pro_activated = 0;
+        $pro_expires   = 0;
+        $is_pro        = false;
+    }
+} catch (\PDOException $e) {
+    http_response_code(500);
+    echo json_encode(['code' => -1, 'message' => 'Database error'], JSON_UNESCAPED_UNICODE);
     exit;
-}
-
-// ============================================================
-// Query latest pro subscription status
-// ============================================================
-$now = time();
-$stmt = $db->prepare(
-    'SELECT id, plan, months, amount, activated_at, expires_at
-     FROM user_pro_subscriptions
-     WHERE user_id = :uid AND status = 1 AND expires_at > :now
-     ORDER BY expires_at DESC
-     LIMIT 1'
-);
-$stmt->execute([':uid' => $uid, ':now' => $now]);
-$sub = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if ($sub) {
-    $pro_activated = 1;
-    $pro_expires   = (int)$sub['expires_at'];
-    $is_pro        = ($pro_expires > $now);
-} else {
-    $pro_activated = 0;
-    $pro_expires   = 0;
-    $is_pro        = false;
+} catch (\Throwable $e) {
+    http_response_code(500);
+    echo json_encode(['code' => -1, 'message' => 'Server error: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
 // ============================================================
@@ -128,18 +137,6 @@ $new_token = jwt_encode_auto([
 ], $JWT_SECRET);
 
 // ============================================================
-// 签发 Pro License
-// ============================================================
-$pro_license = '';
-if ($is_pro && defined('RSA_PRIVATE_KEY') && RSA_PRIVATE_KEY) {
-    try {
-        $pro_license = sign_pro_license((int)$user['id'], $pro_expires, RSA_PRIVATE_KEY);
-    } catch (\Exception $e) {
-        error_log('Pro License sign failed: ' . $e->getMessage());
-    }
-}
-
-// ============================================================
 // Response
 // ============================================================
 echo json_encode([
@@ -151,6 +148,5 @@ echo json_encode([
         'pro_activated' => $pro_activated,
         'pro_expires'   => $pro_expires,
         'pro_expires_at'=> $pro_expires > 0 ? date('Y-m-d H:i:s', $pro_expires) : null,
-        'pro_license'   => $pro_license,
     ],
 ], JSON_UNESCAPED_UNICODE);

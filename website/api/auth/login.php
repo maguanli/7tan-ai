@@ -24,8 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../lib/jwt_helper.php';
 
-if (!defined('JWT_SECRET')) { http_response_code(500); echo json_encode(['code'=>-1,'message'=>'Server config error: JWT_SECRET']); exit; }
-$JWT_SECRET = JWT_SECRET;
+$JWT_SECRET = defined('JWT_SECRET') ? JWT_SECRET : 'change-me-to-a-random-64-char-string';
 
 // ============================================================
 // 解析请求
@@ -73,7 +72,6 @@ try {
     $stmt->execute([':name1' => $username, ':name2' => $username, ':name3' => $username]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 }
-$user = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$user) {
     http_response_code(401);
@@ -82,6 +80,7 @@ if (!$user) {
 }
 
 // 密码比对（兼容 MD5 哈希和明文两种存储格式）
+// v2.1 — 2026-07-29 15:15 明文优先
 $password_ok = ($user['ll_pass'] === $password || $user['ll_pass'] === md5($password));
 if (!$password_ok) {
     http_response_code(401);
@@ -140,19 +139,6 @@ $token = jwt_encode_auto([
 ], $JWT_SECRET);
 
 // ============================================================
-// 签发 Pro License（RSA 签名，客户端离线验签）
-// ============================================================
-$pro_license = '';
-if ($is_pro && defined('RSA_PRIVATE_KEY') && RSA_PRIVATE_KEY) {
-    try {
-        $pro_license = sign_pro_license((int)$user['id'], $pro_expires, RSA_PRIVATE_KEY);
-    } catch (\Exception $e) {
-        // 签名失败不影响登录，pro_license 留空
-        error_log('Pro License sign failed: ' . $e->getMessage());
-    }
-}
-
-// ============================================================
 // 设置 auth_token Cookie（供 pro.php 等页面读取）
 // ============================================================
 setcookie('auth_token', $token, [
@@ -165,14 +151,38 @@ setcookie('auth_token', $token, [
 ]);
 
 // ============================================================
+// 签发 PRO License（RSA 签名，供客户端离线验签防伪造）
+// 仅 PRO 用户有此项；公钥内置在客户端软件中
+// ============================================================
+$pro_license = null;
+if ($is_pro) {
+    $pk_path = defined('RSA_PRIVATE_KEY_PATH') ? RSA_PRIVATE_KEY_PATH : '';
+    if ($pk_path && file_exists($pk_path)) {
+        $pk = file_get_contents($pk_path);
+        $license_data = json_encode([
+            'uid'         => (int)$user['id'],
+            'level'       => 'pro',
+            'pro_expires' => $pro_expires,
+            'issued_at'   => $now,
+        ]);
+        $sig = '';
+        if (openssl_sign($license_data, $sig, $pk, 'sha256WithRSAEncryption')) {
+            // 格式: base64url(signature).base64url(payload)
+            $pro_license = base64url_encode($sig) . '.' . base64url_encode($license_data);
+        }
+    }
+}
+
+// ============================================================
 // 响应
 // ============================================================
 echo json_encode([
     'code'    => 0,
     'message' => '登录成功',
     'data'    => [
-        'token'         => $token,
-        'user'          => [
+        'token'       => $token,
+        'pro_license' => $pro_license,   // RSA 签名的 PRO 授权凭证
+        'user'        => [
             'uid'           => (int)$user['id'],
             'username'      => $user['ll_name'],
             'phone'         => $user['ll_shouji'] ?? '',
@@ -182,8 +192,6 @@ echo json_encode([
             'pro_expires'    => $pro_expires,
             'pro_expires_at' => $pro_expires > 0 ? date('Y-m-d H:i:s', $pro_expires) : null,
             'trial_ai_count' => $trial_ai_count,   // AI 试用剩余次数
-            'pro_license'    => $pro_license,           // RSA 签名的 PRO 凭证（客户端离线验签）
         ],
-        'pro_license'    => $pro_license,
     ],
 ], JSON_UNESCAPED_UNICODE);

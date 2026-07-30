@@ -100,11 +100,11 @@ def get_api_url(endpoint: str, fallback_base: str = "") -> str:
     """
     # 端点 → 端点路径映射（用于回退拼接）
     _ENDPOINT_PATHS = {
-        "login": "/api/auth/login.php",
-        "verify": "/api/auth/verify.php",
-        "refresh": "/api/auth/refresh.php",
-        "trial": "/api/ai/trial.php",
-        "publish": "/api/publish.php",
+        "login": "/auth/login.php",
+        "verify": "/auth/verify.php",
+        "refresh": "/auth/refresh.php",
+        "trial": "/ai/trial.php",
+        "publish": "/publish.php",
     }
 
     key_map = {
@@ -118,13 +118,6 @@ def get_api_url(endpoint: str, fallback_base: str = "") -> str:
     if not store_key:
         return ""
     
-    # 用户配置的 base_url 优先（不再硬编码域名）
-    if fallback_base:
-        path = _ENDPOINT_PATHS.get(endpoint, "")
-        if path:
-            return fallback_base.rstrip("/") + path
-    
-    # 回退：尝试解密内置的加密 URL（旧版兼容）
     # 用户配置的 base_url 优先（不再硬编码域名）
     if fallback_base:
         path = _ENDPOINT_PATHS.get(endpoint, "")

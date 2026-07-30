@@ -199,12 +199,18 @@ class ProStatusWidget(QFrame):
                 stored_level = token_data.get("level", "free")
                 stored_expires = token_data.get("pro_expires", 0)
 
-                if hmac_ok and stored_level == "pro" and stored_expires > 0:
-                    # HMAC 通过 + level=pro，但无 RSA 验证
+                now = int(time.time())
+                if hmac_ok and stored_level == "pro" and stored_expires > now:
+                    # HMAC 通过 + level=pro + 未过期，但无 RSA 验证
                     # 可能是旧版登录（无 pro_license），信任但降级标记
                     level = "pro"
                     pro_expires = stored_expires
                     logger.debug("[ProStatus] ⚠️ HMAC 通过但无 RSA 验证，使用存储值")
+                elif hmac_ok and stored_level == "pro" and stored_expires > 0:
+                    # HMAC 通过但 pro 已过期 → 降级为免费
+                    logger.info(f"[ProStatus] PRO 已过期 ({datetime.fromtimestamp(stored_expires).strftime('%Y-%m-%d')})，降级为免费版")
+                    level = "free"
+                    pro_expires = 0
                 else:
                     level = "free"
                     pro_expires = 0
@@ -216,7 +222,8 @@ class ProStatusWidget(QFrame):
                 pro_expires = ui_pro_expires
             level = "pro"
 
-        is_pro = (level == "pro" and pro_expires > 0)
+        now_ts = int(time.time())
+        is_pro = (level == "pro" and pro_expires > now_ts)
 
         if is_pro:
             self._level_badge.setText("[PRO]")
@@ -230,8 +237,7 @@ class ProStatusWidget(QFrame):
                     font-weight: bold;
                 }
             """)
-            username = token_data.get("username", "") if token_data else self._user_info.get("username", "")
-            self._level_text.setText(f"专业版 {username}" if username else "专业版")
+            self._level_text.setText("专业版")
 
             if pro_expires:
                 dt = datetime.fromtimestamp(pro_expires)
@@ -259,8 +265,7 @@ class ProStatusWidget(QFrame):
                     font-weight: bold;
                 }}
             """)
-            username = token_data.get("username", "") if token_data else self._user_info.get("username", "")
-            self._level_text.setText(f"免费版 {username}" if username else "免费版")
+            self._level_text.setText("免费版")
             self._expiry_label.setVisible(False)
             self._upgrade_btn.setText("⭐ 升级专业版")
 

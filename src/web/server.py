@@ -227,7 +227,25 @@ def start_server(host: str = "0.0.0.0", port: int = 9800):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-    sock.bind((host, port))
+
+    # 🔧 修复: 重启时旧进程可能仍占用端口（SO_REUSEADDR 在 Windows 上不
+    # 允许绑定已被活跃使用的端口）。重试最多 30 秒，等待旧进程退出释放端口。
+    import time as _time
+    bind_retry_max = 30
+    bind_retry_delay = 0.5
+    for _bind_attempt in range(bind_retry_max):
+        try:
+            sock.bind((host, port))
+            break
+        except OSError:
+            if _bind_attempt < bind_retry_max - 1:
+                if _bind_attempt == 0:
+                    logger.info(f"⏳ 端口 {port} 被占用，等待旧进程退出...")
+                _time.sleep(bind_retry_delay)
+                bind_retry_delay = min(bind_retry_delay * 1.3, 3.0)
+            else:
+                logger.error(f"❌ 端口 {port} 绑定失败，已重试 {bind_retry_max} 次")
+                raise
 
     config = uvicorn.Config(app, log_level="info", log_config=None)
     server = uvicorn.Server(config)

@@ -37,6 +37,22 @@ def graceful_restart(delay_seconds: int = 2, close_browser_flag: bool = True):
     """
     logger.info("🔄 正在优雅重启...")
 
+    # ===== 阶段 0: 防重复重启锁 =====
+    lock_file = _get_project_root() / "data" / ".restart_lock"
+    if lock_file.exists():
+        try:
+            old_pid = int(lock_file.read_text().strip())
+            os.kill(old_pid, 0)
+            logger.warning(f"⚠️ 已有重启进行中 (PID={old_pid})，跳过")
+            return
+        except (ValueError, OSError):
+            try:
+                lock_file.unlink()
+            except Exception:
+                pass
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+    lock_file.write_text(str(os.getpid()))
+
     # ===== 阶段 1: 停止调度器 =====
     try:
         from src.scheduler.scheduler import stop_scheduler
@@ -85,14 +101,25 @@ def graceful_restart(delay_seconds: int = 2, close_browser_flag: bool = True):
         if os.name == 'nt':
             subprocess.Popen(
                 cmd,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
             )
         else:
-            subprocess.Popen(cmd, start_new_session=True)
+            subprocess.Popen(
+                cmd,
+                start_new_session=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
+            )
         logger.info("✅ 新进程已启动")
     except Exception as e:
         logger.error(f"❌ 启动新进程失败: {e}")
-        # 新进程启动失败，不退出当前进程，让用户知道出了问题
+        _cleanup_lock(lock_file)
         return
 
     # ===== 阶段 6: 验证新进程健康 =====
@@ -104,7 +131,8 @@ def graceful_restart(delay_seconds: int = 2, close_browser_flag: bool = True):
     else:
         logger.warning("⚠️ 新进程健康检查超时（可能端口未就绪），继续退出")
 
-    # ===== 阶段 7: 退出 =====
+    # ===== 阶段 7: 清理锁并退出 =====
+    _cleanup_lock(lock_file)
     os._exit(0)
 
 
@@ -116,6 +144,33 @@ def restart_self():
     关闭浏览器后重启（前端用户可见操作）。
     """
     graceful_restart(delay_seconds=2, close_browser_flag=True)
+
+
+def _cleanup_lock(lock_file: Path):
+    """安全删除重启锁文件"""
+    try:
+        if lock_file.exists():
+            lock_file.unlink()
+    except Exception:
+        pass
+
+
+def cleanup_stale_restart_locks():
+    """
+    启动时清理残留的重启锁文件。
+    如果锁中的 PID 已不存在，则安全删除。
+    """
+    lock_file = _get_project_root() / "data" / ".restart_lock"
+    if not lock_file.exists():
+        return
+    try:
+        old_pid = int(lock_file.read_text().strip())
+        os.kill(old_pid, 0)  # 检查是否存活
+        logger.debug(f"重启锁有效 (PID={old_pid})，保留")
+    except (ValueError, OSError):
+        # PID 无效或进程已死，清理
+        _cleanup_lock(lock_file)
+        logger.info("🧹 已清理残留的重启锁文件")
 
 
 def _save_state():
@@ -155,6 +210,8 @@ def _verify_new_process(port: int, timeout: int = 10) -> bool:
     轮询验证新进程是否成功启动
     
     通过 GET /api/health 检查，每秒一次，直到超时。
+    不仅检查 200 状态码，还验证响应体包含 "ok" 状态，
+    防止端口被非 7Tan 进程占用时误判。
     返回 True 表示新进程已就绪。
     """
     deadline = time.time() + timeout
@@ -166,7 +223,11 @@ def _verify_new_process(port: int, timeout: int = 10) -> bool:
             )
             resp = urllib.request.urlopen(req, timeout=2)
             if resp.status == 200:
-                return True
+                body = resp.read().decode("utf-8", errors="replace")
+                # 验证响应确实是 7Tan 的 /api/health（返回 {"status":"ok",...}）
+                if '"status"' in body or '"ok"' in body.lower():
+                    return True
+                logger.debug(f"健康检查响应异常: {body[:100]}")
         except Exception:
             pass
         time.sleep(1)

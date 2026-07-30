@@ -225,6 +225,13 @@ def run_desktop(args):
     if os.environ.get("SANDBOX_MODE") == "1":
         return
 
+    # ===== 清理残留重启锁 =====
+    try:
+        from src.scheduler.daemon import cleanup_stale_restart_locks
+        cleanup_stale_restart_locks()
+    except Exception:
+        pass
+
     # ===== 安全模式处理 =====
     if is_safe_mode():
         logger.warning("🛟 检测到安全模式启动信号")
@@ -261,10 +268,26 @@ def run_desktop(args):
                 )
             except Exception:
                 pass
-            # 重启
+            # 重启（启动恢复场景，调度器/浏览器/DB 尚未初始化，无需清理）
             import subprocess as _sp
-            _sp.Popen([sys.executable] + sys.argv,
-                      creationflags=_sp.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
+            if sys.platform == "win32":
+                _sp.Popen(
+                    [sys.executable] + sys.argv,
+                    creationflags=_sp.CREATE_NEW_PROCESS_GROUP | _sp.DETACHED_PROCESS,
+                    stdin=_sp.DEVNULL,
+                    stdout=_sp.DEVNULL,
+                    stderr=_sp.DEVNULL,
+                    close_fds=True,
+                )
+            else:
+                _sp.Popen(
+                    [sys.executable] + sys.argv,
+                    start_new_session=True,
+                    stdin=_sp.DEVNULL,
+                    stdout=_sp.DEVNULL,
+                    stderr=_sp.DEVNULL,
+                    close_fds=True,
+                )
             sys.exit(0)
         else:
             try:

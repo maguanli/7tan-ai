@@ -383,7 +383,7 @@ def verify_integrity() -> str:
         },
         "required": []
     },
-    category="self_modify",
+    category="monitor",
 )
 def self_restart(delay_seconds: int = 2) -> str:
     """重启应用程序 — AI 工具调用入口，委托给 daemon.py:graceful_restart()"""

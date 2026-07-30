@@ -303,13 +303,19 @@ def clear_token() -> bool:
 def is_token_available() -> bool:
     """
     检查本地是否有可用的 Token。
-    Token 文件存在、能成功解密、且 token 字段非空即视为可用。
-    用于免登录启动。
+    - 文件存在、能解密、token 非空
+    - 且未超过 saves_at + expires_in 有效期
     """
     data = load_token()
     if data is None:
         return False
     token = data.get("token", "")
     if not token or not token.strip():
+        return False
+    # 检查过期
+    import time
+    saved_at = data.get("saved_at", 0)
+    expires_in = data.get("expires_in", 2592000)
+    if saved_at + expires_in < int(time.time()):
         return False
     return True

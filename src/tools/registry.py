@@ -227,7 +227,7 @@ def execute_tool(name: str, args: dict) -> str:
         return (
             f"🔒 权限不足：`{name}` 是专业版专属功能。\n\n"
             "基础版（free）用户无法使用自修改类工具（self_modify_config / sandbox_execute / "
-            "self_rebuild / self_update_prompt / self_restart 等）。\n\n"
+            "self_rebuild / self_update_prompt 等）。\n\n"
             "💡 **升级到专业版**即可解锁：https://www.7tan.com/pro.php\n"
             "专业版权益：自我修改、自定义提示词、自动重建、优先支持。"
         )

@@ -31,8 +31,9 @@ def graceful_restart(delay_seconds: int = 2, close_browser_flag: bool = True):
     2. 关闭浏览器（可选，由调用方决定）
     3. 释放数据库连接池（避免 SQLite 损坏）
     4. 保存运行状态到磁盘
+    4.5 关闭服务器 socket（释放端口，让新进程能立即绑定）
     5. 启动新进程
-    6. 轮询验证新进程健康（最多 10 秒）
+    6. 轮询验证新进程健康（最多 35 秒）
     7. 退出当前进程
     """
     logger.info("🔄 正在优雅重启...")
@@ -86,6 +87,14 @@ def graceful_restart(delay_seconds: int = 2, close_browser_flag: bool = True):
     except Exception as e:
         logger.warning(f"状态保存失败（继续重启）: {e}")
 
+    # ===== 阶段 4.5: 关闭服务器 socket，释放端口 =====
+    try:
+        from src.web.server import shutdown_server
+        shutdown_server()
+        logger.info("🔌 服务器端口已释放")
+    except Exception as e:
+        logger.warning(f"关闭服务器失败（继续重启）: {e}")
+
     # ===== 阶段 5: 启动新进程 =====
     if getattr(sys, 'frozen', False):
         cmd = [sys.executable, *sys.argv[1:]]
@@ -126,7 +135,7 @@ def graceful_restart(delay_seconds: int = 2, close_browser_flag: bool = True):
     port = _get_server_port()
     time.sleep(delay_seconds)
 
-    if _verify_new_process(port, timeout=10):
+    if _verify_new_process(port):  # 默认 timeout=35，端口已释放通常几秒内就绪
         logger.info("✅ 新进程健康检查通过")
     else:
         logger.warning("⚠️ 新进程健康检查超时（可能端口未就绪），继续退出")
@@ -174,7 +183,7 @@ def cleanup_stale_restart_locks():
 
 
 def _save_state():
-    """保存关键运行状态到 data/state.json"""
+    """保存关键运行状态到 data/state.json（使用项目根绝对路径）"""
     from datetime import datetime
     import json
 
@@ -183,7 +192,7 @@ def _save_state():
         "pid": os.getpid(),
     }
 
-    state_path = Path("data/state.json")
+    state_path = _get_project_root() / "data" / "state.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2))
 
@@ -196,16 +205,28 @@ def _get_project_root() -> Path:
 
 
 def _get_server_port() -> int:
-    """从配置文件读取服务器端口，默认 9800"""
+    """从配置文件读取服务器端口，默认 9800
+    
+    优先读取 web.port（config.yaml 标准键），
+    同时兼容 server.port（旧版配置）。
+    """
     try:
         from src.config.loader import load_config
         config = load_config()
-        return config.get("server", {}).get("port", 9800)
+        # 优先 web.port（当前 config.yaml 实际键名）
+        web_port = config.get("web", {}).get("port")
+        if web_port is not None:
+            return int(web_port)
+        # 兼容旧版 server.port
+        server_port = config.get("server", {}).get("port")
+        if server_port is not None:
+            return int(server_port)
+        return 9800
     except Exception:
         return 9800
 
 
-def _verify_new_process(port: int, timeout: int = 10) -> bool:
+def _verify_new_process(port: int, timeout: int = 35) -> bool:
     """
     轮询验证新进程是否成功启动
     

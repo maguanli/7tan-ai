@@ -259,6 +259,12 @@ def _generate_default_config(answers: dict) -> dict:
             "retention": "30 days",
             "rotation": "100 MB",
         },
+        "score": {
+            "ai_model": 0.25,
+            "account_level": 0.20,
+            "plugins_tools": 0.45,
+            "system_health": 0.10,
+        },
     }
 
 

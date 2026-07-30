@@ -278,14 +278,14 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
 
 @register_tool(
     name="self_rebuild",
-    description="重新构建打包整个项目。修改源码后调用此工具，自动运行 build.bat 生成新的 exe。构建完成后需要调用 self_restart 重启。",
+    description="重新构建打包整个项目。修改源码后调用此工具，自动运行 rebuild.bat 生成新的 exe。构建完成后需要调用 self_restart 重启。",
     parameters={
         "type": "object",
         "properties": {
             "build_script": {
                 "type": "string",
-                "description": "构建脚本路径，默认为项目根目录下的 build.bat",
-                "default": "build.bat"
+                "description": "构建脚本路径，默认为项目根目录下的 rebuild.bat",
+                "default": "rebuild.bat"
             },
             "timeout": {
                 "type": "integer",
@@ -297,7 +297,7 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
     },
     category="self_modify",
 )
-def self_rebuild(build_script: str = "build.bat", timeout: int = 900) -> str:
+def self_rebuild(build_script: str = "rebuild.bat", timeout: int = 900) -> str:
     """重新构建打包项目"""
     build_path = PROJECT_ROOT / build_script
     if not build_path.exists():

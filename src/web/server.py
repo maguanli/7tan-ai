@@ -14,6 +14,9 @@ from loguru import logger
 import os
 API_TOKEN = os.environ.get("7TAN_API_TOKEN", "")
 
+# 全局服务器 socket 引用，供 shutdown_server() 使用
+_server_socket = None
+
 
 def _get_project_root():
     """获取项目根目录 — 兼容开发模式和 PyInstaller 打包"""
@@ -210,6 +213,23 @@ async def _handle_get_sessions(ws: WebSocket):
         await ws.send_json({"type": "error", "data": {"message": str(e)}})
 
 
+def shutdown_server():
+    """
+    优雅关闭服务器 socket，释放端口。
+    在重启流程中，旧进程调用此函数后，新进程可立即绑定端口，
+    无需等待重试。此函数幂等，可安全重复调用。
+    """
+    global _server_socket
+    if _server_socket is not None:
+        try:
+            _server_socket.close()
+            logger.info("🔌 服务器 socket 已关闭，端口已释放")
+        except Exception as e:
+            logger.warning(f"关闭服务器 socket 时出错: {e}")
+        finally:
+            _server_socket = None
+
+
 def start_server(host: str = "0.0.0.0", port: int = 9800):
     """
     启动 FastAPI 服务器
@@ -217,6 +237,7 @@ def start_server(host: str = "0.0.0.0", port: int = 9800):
     使用预创建的 socket（设置 SO_REUSEADDR），避免重启时
     Windows TIME_WAIT（最长 120 秒）导致端口被占用，新进程无法 bind。
     """
+    global _server_socket
     import uvicorn
     import socket
 
@@ -227,11 +248,14 @@ def start_server(host: str = "0.0.0.0", port: int = 9800):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    _server_socket = sock
 
     # 🔧 修复: 重启时旧进程可能仍占用端口（SO_REUSEADDR 在 Windows 上不
-    # 允许绑定已被活跃使用的端口）。重试最多 30 秒，等待旧进程退出释放端口。
+    # 允许绑定已被活跃使用的端口）。重试最多 50 秒，等待旧进程退出释放端口。
+    # 旧进程的验证周期最长 37 秒（2s 延迟 + 35s 超时），50 秒留有充足余量。
+    # 如果旧进程调用了 shutdown_server()，则端口立即可用，无需重试。
     import time as _time
-    bind_retry_max = 30
+    bind_retry_max = 50
     bind_retry_delay = 0.5
     for _bind_attempt in range(bind_retry_max):
         try:
@@ -260,3 +284,4 @@ def start_server(host: str = "0.0.0.0", port: int = 9800):
             sock.close()
         except Exception:
             pass
+        _server_socket = None

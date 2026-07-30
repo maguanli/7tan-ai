@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QMessageBox,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QCursor
 
 from loguru import logger
@@ -21,6 +21,7 @@ from ..security.license_verify import verify_license, LicenseError
 from ..security.auth_client import refresh_token
 from ..security.token_store import load_token, save_token, clear_token
 from ..tools.registry import invalidate_pro_cache
+from ..core.score import auto_evaluate, format_score_brief
 from .theme import THEME
 
 
@@ -76,7 +77,14 @@ class ProStatusWidget(QFrame):
         self._expiry_label = QLabel()
         self._expiry_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px;")
         self._expiry_label.setVisible(False)
+
         layout.addWidget(self._expiry_label)
+
+        # --- 评分行 ---
+        self._score_label = QLabel()
+        self._score_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px;")
+        self._score_label.setVisible(False)
+        layout.addWidget(self._score_label)
 
         # --- 第三行：按钮 ---
         btn_layout = QHBoxLayout()
@@ -275,6 +283,29 @@ class ProStatusWidget(QFrame):
             self._level_text.setText(f"免费版  {username}" if username else "免费版")
             self._expiry_label.setVisible(False)
             self._upgrade_btn.setText("⭐ 升级专业版")
+
+        # 更新评分
+        self._update_score()
+
+    def _update_score(self) -> None:
+        """延迟异步更新评分（避免阻塞 UI）"""
+        QTimer.singleShot(500, self._do_update_score)
+
+    def _do_update_score(self) -> None:
+        """实际执行评分计算并更新显示"""
+        try:
+            result = auto_evaluate()
+            brief = format_score_brief(result)
+            grade = result.get("grade", "?")
+            color = result.get("grade_color", "#888")
+            self._score_label.setText(f"⚔️ 战力值: {brief}")
+            self._score_label.setStyleSheet(
+                f"color: {color}; font-size: 12px; font-weight: bold; padding: 2px 0;"
+            )
+            self._score_label.setVisible(True)
+        except Exception as e:
+            logger.debug(f"[ProStatus] 评分计算失败: {e}")
+            self._score_label.setVisible(False)
 
     def _on_refresh(self) -> None:
         """刷新 Token 状态"""

@@ -524,7 +524,10 @@ def run_agent_loop(
 
     # 构建初始消息
     timeout_note = ""
-    messages = [{"role": "system", "content": system_prompt + timeout_note}]
+    messages = []
+    system_content = system_prompt + timeout_note
+    if system_content.strip():
+        messages.append({"role": "system", "content": system_content})
     if ctx and ctx.get_messages():
         messages.extend(ctx.get_messages())
     messages.append({"role": "user", "content": task})
@@ -664,7 +667,10 @@ def run_agent_loop(
             logger.info("🗜️ 上下文过大，执行压缩...")
             summary = compress_context(ctx, model=model)
             if summary:
-                messages = [{"role": "system", "content": system_prompt + timeout_note}]
+                messages = []
+                system_content = system_prompt + timeout_note
+                if system_content.strip():
+                    messages.append({"role": "system", "content": system_content})
                 messages.extend(ctx.get_messages())
                 logger.info(f"🗜️ 上下文压缩完成，摘要长度: {len(summary)}")
         

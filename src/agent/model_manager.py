@@ -150,8 +150,13 @@ class ModelManager:
         # 注入默认参数（允许调用方覆盖）
         kwargs.setdefault("model", self.model_name)
         kwargs.setdefault("max_tokens", self.max_tokens)
-        # Kimi/Moonshot & DeepSeek: temperature 是固定值，不应显式传入
-        if self.provider not in ("moonshot", "deepseek"):
+        # Kimi/Moonshot: temperature 必须显式设为 1（Kimi K3 要求）
+        # DeepSeek: temperature 不应传入
+        if self.provider == "moonshot":
+            kwargs["temperature"] = 1
+        elif self.provider == "deepseek":
+            kwargs.pop("temperature", None)
+        else:
             kwargs.setdefault("temperature", self.temperature)
         # 注入 extra_config（如 reasoning_effort 等扩展参数）
         for key, value in self.extra_config.items():
@@ -160,6 +165,13 @@ class ModelManager:
         # 🔒 安全校验：确保所有 tools 的 schema 合法（防止 type: null 等 400 错误）
         if "tools" in kwargs:
             kwargs["tools"] = self._sanitize_tools(kwargs["tools"])
+
+        # 🔒 过滤空 system 消息（Kimi/Moonshot 不允许空 system message）
+        if "messages" in kwargs:
+            kwargs["messages"] = [
+                m for m in kwargs["messages"]
+                if not (m.get("role") == "system" and not (m.get("content", "") or "").strip())
+            ]
 
         return self._chat_with_retry(client, **kwargs)
 

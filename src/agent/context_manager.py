@@ -119,7 +119,6 @@ class ContextManager:
                     },
                 ],
                 max_tokens=300,
-                temperature=0.3,
             )
 
             summary = response.choices[0].message.content.strip()

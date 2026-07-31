@@ -67,7 +67,8 @@ def _estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> fl
     # 价格参考（每百万 token，人民币）
     prices = {
         # DeepSeek
-        "deepseek-v4-pro": (1.0, 2.0),
+        "deepseek-v4-pro": (3.0, 6.0),
+        "deepseek-v4-flash": (1.0, 2.0),
         "deepseek-reasoner": (4.0, 16.0),
         # OpenAI
         "gpt-4o": (18.5, 55.5),

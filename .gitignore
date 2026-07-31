@@ -65,3 +65,6 @@ logs/*.txt
 
 # 视频编辑器缩略图缓存
 data/video_editor/thumbs/
+
+# 输出产物
+output/

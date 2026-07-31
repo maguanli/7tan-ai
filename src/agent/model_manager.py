@@ -49,6 +49,7 @@ def _fix_surrogates(s: str) -> str:
 
 MODEL_PRICES = {
     "deepseek-v4-pro":     {"prompt": 1.0,  "completion": 4.0},
+    "deepseek-v4-flash":   {"prompt": 1.0,  "completion": 2.0},
     "deepseek-reasoner": {"prompt": 4.0,  "completion": 16.0},
     "GLM-5.2":           {"prompt": 1.5,  "completion": 6.0},
     "kimi-k3":           {"prompt": 2.0,  "completion": 8.0},
@@ -83,11 +84,22 @@ class ModelManager:
 
     def __init__(self, model_name: str):
         self.model_name = model_name
+        if model_name == "DeepSeek-V4-Flash-0731":
+            model_name = "deepseek-v4-flash"
+            self.model_name = model_name
         self._client = None
         self._api_name = model_name  # API 实际调用的名称
-        self.context_window = 128000
-        self.max_tokens = 16384
-        self.temperature = 0.25
+        # V4-Flash-0731 专属默认值（1M 上下文 / 384K 输出 / temp=1.0 / reasoning_effort=max）
+        if model_name == "deepseek-v4-flash":
+            self.context_window = 1_000_000
+            self.max_tokens = 384_000
+            self.temperature = 1.0
+            self.extra_config = {"reasoning_effort": "max"}
+        else:
+            self.context_window = 128000
+            self.max_tokens = 16384
+            self.temperature = 0.25
+            self.extra_config = {}
         self._load_config_defaults()
 
     def _load_config_defaults(self):
@@ -98,16 +110,19 @@ class ModelManager:
             if not cfg:
                 cfg = get_active_ai_config_raw()
             if cfg:
-                self.context_window = cfg.get("context_window", 128000)
-                self.max_tokens = cfg.get("max_tokens", 4096)
-                self.temperature = cfg.get("temperature", 0.25)
-                self.extra_config = cfg.get("extra_config") or {}
+                self.context_window = cfg.get("context_window", self.context_window)
+                self.max_tokens = cfg.get("max_tokens", self.max_tokens)
+                self.temperature = cfg.get("temperature", self.temperature)
+                db_extra = cfg.get("extra_config")
+                if db_extra:
+                    self.extra_config = db_extra
+                # 否则保留 __init__ 中的默认值（如 V4-Flash 的 reasoning_effort）
                 self.provider = cfg.get("provider", "")
                 self._db_api_key = cfg.get("api_key", "")  # 缓存 DB 中的 api_key
                 self._db_base_url = cfg.get("base_url", "")
             else:
                 logger.warning("未找到 AI 配置，使用默认值")
-                self.extra_config = {}
+                # 不覆盖 __init__ 中的 extra_config 默认值
                 self.provider = ""
                 self._db_api_key = ""
                 self._db_base_url = ""

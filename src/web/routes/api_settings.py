@@ -114,6 +114,7 @@ async def update_settings(updates: dict):
                     max_tokens=cfg.get("max_tokens", 16384),
                     temperature=cfg.get("temperature", 0.25),
                     is_active=is_active,
+                    extra_config=cfg.get("extra_config"),
                 )
             # 确保 active 正确
             if active_key:

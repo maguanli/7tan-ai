@@ -57,6 +57,8 @@ def _model_to_display(model: str) -> str:
         return "deepseek-V4-Pro"
     if model == "deepseek-chat":
         return "deepseek-V4-Flash"
+    if model == "deepseek-v4-flash":
+        return "DeepSeek-V4-Flash-0731"
     return model
 
 
@@ -66,6 +68,8 @@ def _display_to_model(display: str) -> str:
         return "deepseek-reasoner"
     if display == "deepseek-V4-Flash":
         return "deepseek-chat"
+    if display == "DeepSeek-V4-Flash-0731":
+        return "deepseek-v4-flash"
     return display
 
 
@@ -755,15 +759,29 @@ class WelcomeWizard(QDialog):
         # 2. 保存到数据库 (AI 系统实际读取的地方)
         try:
             from ..database.db import save_ai_config, set_active_ai_config
-            save_ai_config(
-                config_key="deepseek",
-                provider="deepseek",
-                model=model,
-                api_key=key,
-                base_url="https://api.deepseek.com/v1",
-                is_active=1,
-            )
-            set_active_ai_config("deepseek")
+            if model == "deepseek-v4-flash":
+                save_ai_config(
+                    config_key=model,
+                    provider="deepseek",
+                    model=model,
+                    api_key=key,
+                    base_url="https://api.deepseek.com/v1",
+                    is_active=1,
+                    context_window=1_000_000,
+                    max_tokens=384_000,
+                    temperature=1.0,
+                    extra_config={"reasoning_effort": "max"},
+                )
+            else:
+                save_ai_config(
+                    config_key=model,
+                    provider="deepseek",
+                    model=model,
+                    api_key=key,
+                    base_url="https://api.deepseek.com/v1",
+                    is_active=1,
+                )
+            set_active_ai_config(model)
             logger.info(f"[Wizard] API Key + 模型({model}) 已保存到数据库并激活")
         except Exception as e:
             logger.warning(f"[Wizard] 保存到数据库失败: {e}")

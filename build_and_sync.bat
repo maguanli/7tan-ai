@@ -84,6 +84,16 @@ if exist "dist\_build\src\security\_source_backup" (
 if exist "dist\_build\src\security\__pycache__" (
     rmdir /S /Q "dist\_build\src\security\__pycache__"
 )
+
+REM 校验 base_library.zip 完整性（损坏会导致 exe 启动即崩溃 exit 1）
+"%ROOT%.venv\Scripts\python.exe" -c "import zipfile,sys;z=zipfile.ZipFile(r'dist\7tan-editor\_internal\base_library.zip');sys.exit(0 if z.testzip() is None else 1)"
+if %ERRORLEVEL% neq 0 (
+    echo [错误] base_library.zip 损坏！exe 将无法启动，请重新构建
+    pause
+    exit /b 1
+) else (
+    echo [OK] base_library.zip 完整性校验通过
+)
 echo [4/4] 校验完成
 echo.
 

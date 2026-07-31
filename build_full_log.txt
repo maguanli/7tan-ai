@@ -1,0 +1,34 @@
+==========================================
+  7Tan 一键构建 + 同步到 dist
+==========================================
+
+[0/4] Git 自动备份...
+  [OK] 已提交（或无变更）
+[1/4] 构建 exe...
+205 INFO: PyInstaller: 6.21.0, contrib hooks: 2026.6
+205 INFO: Python: 3.12.5
+243 INFO: Platform: Windows-10-10.0.19045-SP0
+243 INFO: Python environment: D:\7tan\7tanAI\.venv
+247 INFO: Removing temporary files and cleaning cache in C:\Users\Administrator\AppData\Local\pyinstaller
+787 INFO: Module search paths (PYTHONPATH):
+['D:\\7tan\\7tanAI',
+ 'C:\\Program Files\\Python312\\python312.zip',
+ 'C:\\Program Files\\Python312\\DLLs',
+ 'C:\\Program Files\\Python312\\Lib',
+ 'C:\\Program Files\\Python312',
+ 'D:\\7tan\\7tanAI\\.venv',
+ 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages',
+ 'D:\\7tan\\7tanAI',
+ 'D:\\7tan\\7tanAI\\src']
+1452 INFO: Appending 'datas' from .spec
+1472 INFO: checking Analysis
+1472 INFO: Building Analysis because Analysis-00.toc is non existent
+1472 INFO: Looking for Python shared library...
+1472 INFO: Using Python shared library: C:\Program Files\Python312\python312.dll
+1472 INFO: Running Analysis Analysis-00.toc
+1473 INFO: Target bytecode optimization level: 0
+1473 INFO: Initializing module dependency graph...
+1474 INFO: Initializing module graph hook caches...
+1510 INFO: Analyzing modules for base_library.zip ...
+3351 INFO: Processing standard module hook 'hook-encodings.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+4587 INFO: Processing standard module hook 'hook-math.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'

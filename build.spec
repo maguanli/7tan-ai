@@ -1,15 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 import sys
 from pathlib import Path
 
 block_cipher = None
 
 a = Analysis(
-    ['main.py'],
-    pathex=[str(Path('D:\7tan\7tanAI')), str(Path('D:\7tan\7tanAI/src'))],
+    [os.path.join(SPECPATH, 'main.py')],
+    pathex=[SPECPATH, os.path.join(SPECPATH, 'src')],
     binaries=[],
-    datas=[('config', 'config'), ('data/prompts', 'data/prompts'), ('data/plugins', 'data/plugins'), ('data/logo', 'data/logo')],
-    hiddenimports=['sqlalchemy', 'sqlalchemy.pool', 'sqlalchemy.ext.declarative', 'fastapi', 'uvicorn', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.websockets', 'websockets', 'websockets.legacy', 'playwright', 'playwright.async_api', 'openai', 'httpx', 'yaml', 'apscheduler', 'loguru', 'watchfiles', 'pydantic', 'cryptography', 'aiofiles', 'PyQt6', 'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebEngineCore', 'PyQt6.QtWebChannel', 'PyQt6.QtCharts', 'unidecode', 'slugify', 'mss', 'numpy', 'src.security', 'src.security.rsa_verify', 'src.security.license_verify', 'src.security.safe_modify', 'src.security.strings', 'src.security.auth_client', 'src.security.token_store', 'src.security.trial_store', 'src.security.integrity'],
+    datas=[(os.path.join(SPECPATH, 'config'), 'config'), (os.path.join(SPECPATH, 'data/prompts'), 'data/prompts'), (os.path.join(SPECPATH, 'data/plugins'), 'data/plugins'), (os.path.join(SPECPATH, 'data/logo'), 'data/logo')],
+    hiddenimports=['sqlalchemy', 'sqlalchemy.pool', 'sqlalchemy.ext.declarative', 'fastapi', 'uvicorn', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.websockets', 'websockets', 'websockets.legacy', 'playwright', 'playwright.async_api', 'openai', 'httpx', 'yaml', 'apscheduler', 'loguru', 'pydantic', 'cryptography', 'PyQt6', 'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebEngineCore', 'PyQt6.QtWebChannel', 'PyQt6.QtCharts', 'unidecode', 'slugify', 'mss', 'numpy', 'src.security', 'src.security.rsa_verify', 'src.security.license_verify', 'src.security.safe_modify', 'src.security.strings', 'src.security.auth_client', 'src.security.token_store', 'src.security.trial_store', 'src.security.integrity'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -47,7 +48,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=r'D:\7tan\7tanAI\data\logo\app_single.ico',
+    icon=os.path.join(SPECPATH, 'data', 'logo', 'app_single.ico'),
 )
 
 coll = COLLECT(

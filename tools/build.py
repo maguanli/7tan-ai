@@ -37,28 +37,33 @@ def generate_spec():
         "playwright", "playwright.async_api",
         "openai", "httpx",
         "yaml", "apscheduler", "loguru",
-        "watchfiles", "pydantic",
-        "cryptography", "aiofiles",
+        "pydantic",
+        "cryptography",
         "PyQt6", "PyQt6.QtWebEngineWidgets", "PyQt6.QtWebEngineCore",
         "PyQt6.QtWebChannel", "PyQt6.QtCharts",
+        "unidecode", "slugify", "mss", "numpy",
+        "src.security", "src.security.rsa_verify", "src.security.license_verify",
+        "src.security.safe_modify", "src.security.strings", "src.security.auth_client",
+        "src.security.token_store", "src.security.trial_store", "src.security.integrity",
     ]
 
     datas = [
-        ("config", "config"),
-        ("data/prompts", "data/prompts"),
-        ("data/plugins", "data/plugins"),
-        ("data/logo", "data/logo"),
+        ("os.path.join(SPECPATH, 'config')", "'config'"),
+        ("os.path.join(SPECPATH, 'data/prompts')", "'data/prompts'"),
+        ("os.path.join(SPECPATH, 'data/plugins')", "'data/plugins'"),
+        ("os.path.join(SPECPATH, 'data/logo')", "'data/logo'"),
     ]
 
     spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
+import os
 import sys
 from pathlib import Path
 
 block_cipher = None
 
 a = Analysis(
-    ['main.py'],
-    pathex=[str(Path('{ROOT}')), str(Path('{ROOT}/src'))],
+    [os.path.join(SPECPATH, 'main.py')],
+    pathex=[SPECPATH, os.path.join(SPECPATH, 'src')],
     binaries=[],
     datas={datas},
     hiddenimports={hidden_imports},
@@ -69,6 +74,11 @@ a = Analysis(
         'tkinter', 'unittest', 'test', 'pdb',
         'IPython', 'jupyter', 'notebook',
         'matplotlib', 'pandas',
+        # --- 排除 ML/AI 包（项目不使用，torch c10.dll 损坏导致构建失败）---
+        'torch', 'torchvision', 'torchaudio', 'torchtext',
+        'onnxruntime', 'onnx', 'onnxconverter_common',
+        'huggingface_hub', 'transformers', 'sentencepiece', 'tokenizers',
+        'safetensors',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -94,7 +104,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(Path('{ROOT}') / 'data' / 'logo' / 'app_single.ico'),
+    icon=os.path.join(SPECPATH, 'data', 'logo', 'app_single.ico'),
 )
 
 coll = COLLECT(

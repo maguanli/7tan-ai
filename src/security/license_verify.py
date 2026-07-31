@@ -127,6 +127,7 @@ def verify_license(pro_license: str) -> dict[str, Any]:
         "level": "pro",
         "pro_expires": pro_expires,
         "issued_at": payload.get("issued_at", 0),
+        "username": payload.get("username", ""),
     }
 
 
@@ -169,7 +170,7 @@ def get_license_info(token_str: str) -> dict[str, Any]:
             "valid": True,
             "level": result["level"],
             "user_id": result["user_id"],
-            "username": result["username"],
+            "username": result.get("username", ""),
             "error": None,
         }
     except LicenseExpired:

@@ -1,0 +1,215 @@
+277 INFO: PyInstaller: 6.21.0, contrib hooks: 2026.6
+279 INFO: Python: 3.12.5
+321 INFO: Platform: Windows-10-10.0.19045-SP0
+321 INFO: Python environment: D:\7tan\7tanAI\.venv
+326 INFO: Removing temporary files and cleaning cache in C:\Users\Administrator\AppData\Local\pyinstaller
+356 INFO: Module search paths (PYTHONPATH):
+['D:\\7tan\\7tanAI',
+ 'C:\\Program Files\\Python312\\python312.zip',
+ 'C:\\Program Files\\Python312\\DLLs',
+ 'C:\\Program Files\\Python312\\Lib',
+ 'C:\\Program Files\\Python312',
+ 'D:\\7tan\\7tanAI\\.venv',
+ 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages',
+ 'D:\\7tan\\7tanAI',
+ 'D:\\7tan\\7tanAI\\\x07tan\x07tanAI',
+ 'D:\\7tan\\7tanAI\\\x07tan\x07tanAI\\src']
+2781 INFO: Appending 'datas' from .spec
+2801 INFO: checking Analysis
+2801 INFO: Building Analysis because Analysis-00.toc is non existent
+2801 INFO: Looking for Python shared library...
+2801 INFO: Using Python shared library: C:\Program Files\Python312\python312.dll
+2801 INFO: Running Analysis Analysis-00.toc
+2801 INFO: Target bytecode optimization level: 0
+2801 INFO: Initializing module dependency graph...
+2803 INFO: Initializing module graph hook caches...
+2970 INFO: Analyzing modules for base_library.zip ...
+5031 INFO: Processing standard module hook 'hook-heapq.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+5247 INFO: Processing standard module hook 'hook-encodings.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+8604 INFO: Processing standard module hook 'hook-math.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+9120 INFO: Processing standard module hook 'hook-pickle.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+14338 INFO: Caching module dependency graph...
+14405 INFO: Analyzing D:\7tan\7tanAI\main.py
+14677 INFO: Processing standard module hook 'hook-PyQt6.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+15997 INFO: Processing standard module hook 'hook-PyQt6.QtWidgets.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+20613 INFO: Processing standard module hook 'hook-PyQt6.QtCore.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+25614 INFO: Processing standard module hook 'hook-PyQt6.QtGui.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+45587 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+45949 INFO: Processing standard module hook 'hook-xml.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+46527 INFO: Processing standard module hook 'hook-_ctypes.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+48055 INFO: Processing standard module hook 'hook-sysconfig.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+48616 INFO: Processing standard module hook 'hook-cryptography.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+50098 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.
+51374 INFO: Processing standard module hook 'hook-sqlalchemy.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+52772 INFO: Processing standard module hook 'hook-platform.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+52882 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+52884 INFO: SetuptoolsInfo: initializing cached setuptools info...
+53929 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+53930 INFO: Setuptools: 'importlib_metadata' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.importlib_metadata'!
+53952 INFO: Processing standard module hook 'hook-setuptools.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+54023 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+54127 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+54129 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco'!
+54156 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+54664 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+55160 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+55162 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+55593 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+55594 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+56581 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+56583 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+57785 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+57785 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+57961 INFO: Processing standard module hook 'hook-setuptools._vendor.importlib_metadata.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+58109 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+58110 INFO: Setuptools: 'zipp' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.zipp'!
+64616 INFO: Processing standard module hook 'hook-urllib3.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+66073 INFO: Processing standard module hook 'hook-certifi.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+66243 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+67391 INFO: Processing standard module hook 'hook-apscheduler.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+68064 INFO: Processing standard module hook 'hook-zoneinfo.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+68776 INFO: Processing standard module hook 'hook-pydantic.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+75076 INFO: Processing standard module hook 'hook-pygments.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+77640 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+78496 INFO: Processing standard module hook 'hook-difflib.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+79049 INFO: Processing standard module hook 'hook-lxml.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+79662 INFO: Processing standard module hook 'hook-lxml.etree.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+80346 INFO: Processing standard module hook 'hook-webbrowser.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+80438 INFO: Processing standard module hook 'hook-clr.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\pythonnet\\_pyinstaller'
+80579 INFO: Processing standard module hook 'hook-clr_loader.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+80850 INFO: Processing standard module hook 'hook-pycparser.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+82820 INFO: Processing standard module hook 'hook-numpy.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+88985 INFO: Processing standard module hook 'hook-anyio.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+103931 INFO: Processing standard module hook 'hook-websockets.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+111361 INFO: Processing standard module hook 'hook-sounddevice.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+116829 INFO: Processing standard module hook 'hook-unidecode.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+117267 INFO: Processing standard module hook 'hook-text_unidecode.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+117670 INFO: Processing standard module hook 'hook-Crypto.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+D:\7tan\7tanAI\.venv\Lib\site-packages\oss2\api.py:698: SyntaxWarning: invalid escape sequence '\&'
+  """����ǩ��URL��
+120344 INFO: Processing standard module hook 'hook-aliyunsdkcore.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+124226 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+124453 INFO: Processing pre-safe-import-module hook 'hook-six.moves.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+126231 INFO: Processing standard module hook 'hook-PIL.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+126437 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+127427 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+130294 INFO: Processing standard module hook 'hook-uvicorn.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+133142 INFO: Processing standard module hook 'hook-PyQt6.QtWebSockets.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+134453 INFO: Processing standard module hook 'hook-PyQt6.QtNetwork.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+140293 INFO: Processing standard module hook 'hook-PyQt6.QtCharts.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+142779 INFO: Processing standard module hook 'hook-markdown.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+143827 INFO: Processing standard module hook 'hook-regex.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+144454 INFO: Processing standard module hook 'hook-sqlite3.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+144938 INFO: Processing standard module hook 'hook-PyQt6.QtWebEngineWidgets.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+147204 INFO: Processing standard module hook 'hook-PyQt6.QtPrintSupport.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+148865 INFO: Processing standard module hook 'hook-PyQt6.QtWebChannel.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+150291 INFO: Processing standard module hook 'hook-PyQt6.QtWebEngineCore.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+156244 INFO: Processing standard module hook 'hook-imageio_ffmpeg.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+157086 INFO: Analyzing hidden import 'sqlalchemy.ext.declarative'
+157127 INFO: Analyzing hidden import 'uvicorn.loops'
+157128 INFO: Analyzing hidden import 'uvicorn.loops.auto'
+157164 INFO: Analyzing hidden import 'playwright'
+157176 INFO: Analyzing hidden import 'playwright.async_api'
+157198 INFO: Processing standard module hook 'hook-playwright.async_api.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\playwright\\_impl\\__pyinstaller'
+159381 INFO: Analyzing hidden import 'aiofiles'
+159382 ERROR: Hidden import 'aiofiles' not found
+159383 INFO: Analyzing hidden import 'src.security.trial_store'
+159395 INFO: Processing module hooks (post-graph stage)...
+160633 INFO: Processing standard module hook 'hook-lxml.isoschematron.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+161109 WARNING: Hidden import "pycparser.lextab" not found!
+161110 WARNING: Hidden import "pycparser.yacctab" not found!
+165412 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+173019 INFO: Processing standard module hook 'hook-PyQt6.QtOpenGLWidgets.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+174524 INFO: Processing standard module hook 'hook-PyQt6.QtOpenGL.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+175937 INFO: Processing standard module hook 'hook-PyQt6.QtQuick.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+178025 INFO: Processing standard module hook 'hook-PyQt6.QtQml.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+221586 INFO: Processing standard module hook 'hook-PyQt6.QtPositioning.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+224838 INFO: Processing standard module hook 'hook-PyQt6.QtQuickWidgets.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+226423 INFO: Processing standard module hook 'hook-sqlalchemy.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+227171 WARNING: Hidden import "pysqlite2" not found!
+227172 WARNING: Hidden import "MySQLdb" not found!
+227173 WARNING: Hidden import "psycopg2" not found!
+229448 INFO: Processing standard module hook 'hook-lxml.objectify.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+229450 INFO: Processing standard module hook 'hook-tzdata.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+230544 INFO: Performing binary vs. data reclassification (2682 entries)
+267785 INFO: Looking for ctypes DLLs
+267979 INFO: Analyzing run-time hooks ...
+268003 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+268020 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+268038 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+268055 INFO: Including run-time hook 'pyi_rth_pyqt6.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+268071 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+268087 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+268113 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+268126 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+268397 INFO: Creating base_library.zip...
+268437 INFO: Looking for dynamic libraries
+2026-07-31 18:44:09.716 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: use_source_browser (browser) 
+2026-07-31 18:44:09.716 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: use_admin_browser (browser) 
+2026-07-31 18:44:09.717 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: scroll_down (browser) 
+2026-07-31 18:44:09.717 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: browse_page (browser) 
+2026-07-31 18:44:09.717 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: find_download_links (browser) 
+2026-07-31 18:44:09.717 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: click_element (browser) 
+2026-07-31 18:44:09.717 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: screenshot (browser) 
+2026-07-31 18:44:09.717 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: get_page_images (browser) 
+2026-07-31 18:44:09.717 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: login_7tan (browser) 
+2026-07-31 18:44:09.787 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: download_file (file) 
+2026-07-31 18:44:09.787 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: check_disk (monitor) 
+2026-07-31 18:44:09.839 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: db_check_duplicate (db) 
+2026-07-31 18:44:09.839 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: db_save_resource (db) 
+2026-07-31 18:44:09.839 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: db_query_resources (db) 
+2026-07-31 18:44:09.839 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: db_check_version (db) 
+2026-07-31 18:44:09.839 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: db_add_task_log (db) 
+2026-07-31 18:44:09.839 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: db_delete_resource (db) 
+2026-07-31 18:44:09.841 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: check_sensitive_words (content) 
+2026-07-31 18:44:09.841 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: check_content_quality (content) 
+2026-07-31 18:44:09.842 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: oss_upload (oss) 
+2026-07-31 18:44:09.842 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: oss_delete (oss) 
+2026-07-31 18:44:09.843 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: compress_image (image) 
+2026-07-31 18:44:09.844 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: list_files (file) 
+2026-07-31 18:44:09.844 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: read_file_content (file) 
+2026-07-31 18:44:09.844 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: write_file (file) 
+2026-07-31 18:44:09.844 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: delete_file (file) 
+2026-07-31 18:44:09.847 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: api_publish_to_7tan (publish) 
+2026-07-31 18:44:09.847 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: publish_to_7tan (publish) 
+2026-07-31 18:44:09.852 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: self_modify_config (self_modify) 🔒PRO
+2026-07-31 18:44:09.852 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: sandbox_execute (self_modify) 🔒PRO
+2026-07-31 18:44:09.852 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: self_rebuild (self_modify) 🔒PRO
+2026-07-31 18:44:09.852 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: self_update_prompt (self_modify) 🔒PRO
+2026-07-31 18:44:09.852 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: verify_integrity (self_modify) 🔒PRO
+2026-07-31 18:44:09.852 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: self_restart (monitor) 
+2026-07-31 18:44:09.853 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: track_cost (monitor) 
+2026-07-31 18:44:09.853 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: get_cost_report (monitor) 
+2026-07-31 18:44:09.854 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: health_check (monitor) 
+2026-07-31 18:44:09.854 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: get_system_status (monitor) 
+2026-07-31 18:44:09.855 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: web_search (search) 
+2026-07-31 18:44:09.855 | DEBUG    | src.tools.registry:decorator:133 - 🔧 注册工具: fetch_news (search) 
+278602 INFO: Extra DLL search directories (AddDllDirectory): ['D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyQt6\\Qt6\\bin', 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\numpy.libs']
+278602 INFO: Extra DLL search directories (PATH): []
+286706 INFO: Warnings written to D:\7tan\7tanAI\build\build\warn-build.txt
+287277 INFO: Graph cross-reference written to D:\7tan\7tanAI\build\build\xref-build.html
+287560 INFO: checking PYZ
+287560 INFO: Building PYZ because PYZ-00.toc is non existent
+287560 INFO: Building PYZ (ZlibArchive) D:\7tan\7tanAI\build\build\PYZ-00.pyz
+290752 INFO: Building PYZ (ZlibArchive) D:\7tan\7tanAI\build\build\PYZ-00.pyz completed successfully.
+290860 INFO: checking PKG
+290861 INFO: Building PKG because PKG-00.toc is non existent
+290861 INFO: Building PKG (CArchive) 7tan-editor.pkg
+290944 INFO: Building PKG (CArchive) 7tan-editor.pkg completed successfully.
+290946 INFO: Bootloader D:\7tan\7tanAI\.venv\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+290946 INFO: checking EXE
+290946 INFO: Building EXE because EXE-00.toc is non existent
+290946 INFO: Building EXE from EXE-00.toc
+290946 INFO: Copying bootloader EXE to D:\7tan\7tanAI\build\build\7tan-editor.exe
+291089 INFO: Copying icon to EXE
+291157 INFO: Copying 0 resources to EXE
+291157 INFO: Embedding manifest in EXE
+291224 INFO: Appending PKG archive to EXE
+291407 INFO: Fixing EXE headers
+291889 INFO: Building EXE from EXE-00.toc completed successfully.
+292038 INFO: checking COLLECT
+292039 INFO: Building COLLECT because COLLECT-00.toc is non existent
+292039 INFO: Removing dir D:\7tan\7tanAI\dist\7tan-editor
+292952 INFO: Building COLLECT COLLECT-00.toc
+302694 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+302777 INFO: Build complete! The results are available in: D:\7tan\7tanAI\dist

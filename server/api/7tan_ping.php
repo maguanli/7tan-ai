@@ -6,8 +6,8 @@
  * 不收集任何个人信息，仅用于日活/留存/版本分布统计。
  * 
  * 请求参数:
- *   id  - 16位匿名设备标识 (必填)
- *   ver - 客户端版本号 (可选)
+ *   id   - 16位匿名设备标识 (必填)
+ *   ver  - 客户端版本号 (可选)
  *   user - 用户名 (可选，用于关联)
  * 
  * 返回:
@@ -31,28 +31,36 @@ if (strlen($id) < 16) {
     exit;
 }
 
-// 版本号默认值
 if ($ver === '') {
     $ver = 'unknown';
 }
 
-// ── 数据库连接（只加载 7tan 自己的 config.php）──
+// ── 加载管理后台配置（使用 getDB() PDO 连接）──
 $config_file = __DIR__ . '/../config.php';
 if (!file_exists($config_file)) {
     http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'config.php not found at ' . $config_file], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok' => false, 'error' => 'config.php not found'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 require_once $config_file;
 
-if (!isset($conn) || !($conn instanceof mysqli)) {
+// 使用 config.php 提供的 getDB() 获取 PDO 连接
+if (!function_exists('getDB')) {
     http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'db connection not configured in config.php'], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok' => false, 'error' => 'getDB() not found in config.php'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+try {
+    $db = getDB();
+} catch (Exception $e) {
+    http_response_code(500);
+    echo json_encode(['ok' => false, 'error' => 'db connection failed'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 // ── 确保表存在 ──
-$conn->query("
+$db->exec("
     CREATE TABLE IF NOT EXISTS `7tan_client_sessions` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `device_id` VARCHAR(32) NOT NULL,
@@ -72,7 +80,6 @@ $conn->query("
 
 // ── 获取客户端 IP ──
 $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? '';
-// 取第一个 IP（穿透代理时可能是逗号分隔的列表）
 $ip = explode(',', $ip)[0];
 $ip = trim($ip);
 
@@ -81,49 +88,46 @@ $today = date('Y-m-d');
 $now   = date('Y-m-d H:i:s');
 
 // ── 检查设备是否已存在 ──
-$stmt = $conn->prepare("SELECT id, first_date FROM 7tan_client_sessions WHERE device_id = ? LIMIT 1");
-if (!$stmt) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'db error'], JSON_UNESCAPED_UNICODE);
-    exit;
-}
+$stmt = $db->prepare("SELECT id, first_date FROM 7tan_client_sessions WHERE device_id = ? LIMIT 1");
+$stmt->execute([$id]);
+$row = $stmt->fetch();
 
-$stmt->bind_param('s', $id);
-$stmt->execute();
-$result = $stmt->get_result();
-
-if ($row = $result->fetch_assoc()) {
+if ($row) {
     // ── 回头客：更新最后活跃时间 ──
-    $stmt->close();
-
-    // 如果 first_date < 今天，标记为"回头客"
-    $stmt = $conn->prepare("
+    $stmt = $db->prepare("
         UPDATE 7tan_client_sessions 
-        SET version = ?, 
-            last_active = ?, 
-            ip_address = ?,
-            username = IF(? != '', ?, username),
-            type = IF(first_date < ?, '回头客', type)
-        WHERE device_id = ?
+        SET version = :ver, 
+            last_active = :now, 
+            ip_address = :ip,
+            username = IF(:user != '', :user2, username),
+            type = IF(first_date < :today, '回头客', type)
+        WHERE device_id = :id
     ");
-    $stmt->bind_param('sssssss', $ver, $now, $ip, $user, $user, $today, $id);
-    $stmt->execute();
+    $stmt->execute([
+        ':ver' => $ver,
+        ':now' => $now,
+        ':ip' => $ip,
+        ':user' => $user,
+        ':user2' => $user,
+        ':today' => $today,
+        ':id' => $id,
+    ]);
 } else {
     // ── 新设备 ──
-    $stmt->close();
-
-    $type = '新设备';
-    $stmt = $conn->prepare("
+    $stmt = $db->prepare("
         INSERT INTO 7tan_client_sessions 
             (device_id, version, username, first_date, last_active, type, ip_address) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (:id, :ver, :user, :today, :now, '新设备', :ip)
     ");
-    $stmt->bind_param('sssssss', $id, $ver, $user, $today, $now, $type, $ip);
-    $stmt->execute();
+    $stmt->execute([
+        ':id' => $id,
+        ':ver' => $ver,
+        ':user' => $user,
+        ':today' => $today,
+        ':now' => $now,
+        ':ip' => $ip,
+    ]);
 }
-
-$stmt->close();
-$conn->close();
 
 // ── 返回成功 ──
 echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);

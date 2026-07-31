@@ -1,10 +1,13 @@
 @echo off
+chcp 65001 >nul
+title 7Tan 一键构建工具
 echo ============================================
-echo   7Tan 构建脚本 v17
+echo   7Tan 构建脚本 v18（统一入口）
+echo   功能: Git 备份 -> PyInstaller 打包 -> 同步源码
 echo ============================================
-cd /d D:\7tan\7tanAI
+cd /d "%~dp0"
 
-REM ========== 步骤 1: Git 备份 ==========
+REM ========== 步骤 1: Git 自动备份 ==========
 echo.
 echo [1/3] Git 自动备份...
 if not exist ".git" (
@@ -14,39 +17,24 @@ if not exist ".git" (
     git commit -m "初始提交: 7Tan 源码"
 ) else (
     git add -A
-    git commit -m "auto-save: %date% %time%"
+    git commit -m "auto-save: %date% %time%" >nul 2>&1
 )
 if %errorlevel% neq 0 (
     echo   (git 提交跳过或无变更)
+) else (
+    echo   [OK] 已提交
 )
 
-REM ========== 步骤 2: 构建 ==========
+REM ========== 步骤 2: 构建 + 同步 ==========
 echo.
-echo [2/3] PyInstaller 打包...
-
-REM 备份已有的 dist config（放到 dist 外面防止被清掉）
-if exist "dist\7tan-updater\config\config.yaml" (
-    echo   [备份] 保留已有配置...
-    copy /Y "dist\7tan-updater\config\config.yaml" "%TEMP%\7tan-config.yaml.bak" >nul
-)
-
-call .venv\Scripts\python.exe -m PyInstaller 7tan-updater.spec --noconfirm
-
-REM 恢复备份的配置
-if exist "%TEMP%\7tan-config.yaml.bak" (
-    echo   [恢复] 还原用户配置...
-    if not exist "dist\7tan-updater\config" mkdir "dist\7tan-updater\config"
-    copy /Y "%TEMP%\7tan-config.yaml.bak" "dist\7tan-updater\config\config.yaml" >nul
-    del "%TEMP%\7tan-config.yaml.bak"
-)
-if not exist "dist\7tan-updater\data\prompts" mkdir "dist\7tan-updater\data\prompts"
-if exist "data\prompts\system.txt" copy /Y "data\prompts\system.txt" "dist\7tan-updater\data\prompts\system.txt" >nul
+echo [2/3] PyInstaller 构建 + 同步 dist...
+call "%~dp0build_and_sync.bat"
 
 REM ========== 步骤 3: 完成 ==========
 echo.
 echo [3/3] 完成!
-dir dist\7tan-updater\7tan-updater.exe 2>&1
 echo ============================================
 echo === EXE Info ===
-dir dist\7tan-updater\7tan-updater.exe 2>&1
+dir "%~dp0dist\7tan-editor\7tan-editor.exe" 2>&1
 echo === DONE ===
+pause

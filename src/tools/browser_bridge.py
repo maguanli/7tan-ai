@@ -99,7 +99,15 @@ class BrowserBridge(QObject):
             self._pending_js_result = str(val) if val is not None else ""
             self._js_done.set()
 
-        self._web_view.page().runJavaScript(js, _on_js_done)
+        # 防护：WebView 可能已被销毁（窗口关闭后），避免 RuntimeError 崩溃
+        try:
+            if not self._web_view or not self._web_view.page():
+                raise RuntimeError("web_view deleted")
+            self._web_view.page().runJavaScript(js, _on_js_done)
+        except RuntimeError:
+            logger.warning("⚠️ [Bridge] WebView 已销毁，跳过 JS 执行")
+            self._pending_js_result = ""
+            self._js_done.set()
         # 超时保护：30 秒后强制释放等待线程
         QTimer.singleShot(30000, lambda: self._js_done.is_set() or self._js_done.set())
 

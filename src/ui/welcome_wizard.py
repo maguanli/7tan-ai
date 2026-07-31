@@ -15,7 +15,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QFrame, QWidget, QStackedWidget, QGraphicsDropShadowEffect,
-    QSizePolicy,
+    QSizePolicy, QCheckBox,
 )
 from PyQt6.QtGui import (
     QFont, QColor, QPainter, QPixmap, QLinearGradient,
@@ -107,16 +107,16 @@ class WelcomePage(WizardPage):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.set_title("👋 欢迎使用 7Tan")
-        self.add_text("7Tan 是你的 AI 全能助手 — 聊天、写代码、分析游戏、发布资源，全搞定。", size=14, color=TEXT_PRIMARY)
+        self.add_text("7Tan 是你的 AI 全能助手 — 开发软件、写代码、建网站、分析游戏、发布资源、聊天，全搞定。", size=14, color=TEXT_PRIMARY)
         self.add_spacer(8)
         self.add_text("⚠️ 重要提示：7Tan 不提供免费 AI 服务", size=14, color=ORANGE, bold=True)
         self.add_text(
             "你需要自备 API Key（推荐 DeepSeek，国内直连、便宜好用）。\n"
-            "Key 只存储在你本地，我们不会上传。",
+            "Key 只存储在你本地，我们不收集不上传。",
             size=13, color=TEXT_SECONDARY
         )
         self.add_spacer(14)
-        self.add_text("💡 没有 Key 也能试用 3 次（免登录、免 Key）", size=13, color=GREEN)
+        self.add_text("💡 没有 Key 也能试用 3 次（免 Key）", size=13, color=GREEN)
         self.add_text("下一步将帮你了解如何获取 API Key →", size=13, color=TEXT_SECONDARY)
 
 
@@ -176,8 +176,8 @@ class RecommendPage(WizardPage):
 
         # 行数据
         rows = [
-            ("v4-pro ⭐", "¥1/百万", "¥4/百万", "最强推荐，写代码首选"),
-            ("v4-flash", "¥0.4/百万", "¥1.6/百万", "日常对话，性价比高"),
+            ("V4-Pro ⭐", "¥3/百万", "¥6/百万", "最强推荐，写代码首选"),
+            ("V4-Flash", "¥1/百万", "¥2/百万", "日常对话，性价比高"),
         ]
         for model, inp, out, desc in rows:
             row = QHBoxLayout()
@@ -195,7 +195,7 @@ class RecommendPage(WizardPage):
 
         # 充值参考
         self.add_spacer(10)
-        self.add_text("💰 DeepSeek 充值参考：最低 ¥10 起充，日常使用 1-3 个月绰绰有余", size=12, color=TEXT_SECONDARY)
+        self.add_text("💰 DeepSeek 充值参考：最低 ¥1 起充，日常使用每天 10-30 元绰绰有余", size=12, color=TEXT_SECONDARY)
 
 
 # ============================================================
@@ -315,7 +315,7 @@ class FinishPage(WizardPage):
         self.add_text(
             "• 在左侧「AI 工作台」可以开始对话\n"
             "• 输入框支持拖入文件、图片识别\n"
-            "• 设置页可以随时更换 API Key",
+            "• 设置页可以随时更换 API Key\n• 辅助软件安装的越齐全能力值越高",
             size=13, color=TEXT_SECONDARY
         )
         self.add_spacer(14)
@@ -468,6 +468,46 @@ class WelcomeWizard(QDialog):
 
         layout.addStretch()
 
+        # 打勾 — 不再提示复选框
+        self._chk_disable = QCheckBox()
+        self._chk_disable.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._chk_disable.setStyleSheet(f"""
+            QCheckBox {{
+                background: transparent;
+                spacing: 0px;
+            }}
+            QCheckBox::indicator {{
+                width: 16px;
+                height: 16px;
+                border: 2px solid {BORDER};
+                border-radius: 3px;
+                background-color: {BG_INPUT};
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {ACCENT};
+                border-color: {ACCENT};
+            }}
+        """)
+        layout.addWidget(self._chk_disable)
+
+        # 不再提示
+        self._btn_disable = QPushButton("不再提示")
+        self._btn_disable.setFont(QFont("Microsoft YaHei", 11))
+        self._btn_disable.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_disable.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {TEXT_SECONDARY};
+                border: none;
+                padding: 8px 12px;
+            }}
+            QPushButton:hover {{
+                color: {ORANGE};
+            }}
+        """)
+        self._btn_disable.clicked.connect(self._disable_wizard)
+        layout.addWidget(self._btn_disable)
+
         # 跳过
         self._btn_skip = QPushButton("跳过")
         self._btn_skip.setFont(QFont("Microsoft YaHei", 12))
@@ -533,6 +573,9 @@ class WelcomeWizard(QDialog):
 
         self._btn_prev.setVisible(not is_first)
         self._btn_skip.setVisible(not is_last)
+        # 打勾 + 不再提示 仅在第一页显示
+        self._chk_disable.setVisible(is_first)
+        self._btn_disable.setVisible(is_first)
 
         if is_last:
             self._btn_next.setText("🎉 开始使用")
@@ -555,6 +598,21 @@ class WelcomeWizard(QDialog):
 
     def _skip(self):
         """跳过引导"""
+        self._save_key()
+        self.accept()
+
+    def _disable_wizard(self):
+        """不再提示 — 永久禁用新手引导"""
+        try:
+            from ..config.loader import load_config, save_config
+            config = load_config()
+            if "app" not in config:
+                config["app"] = {}
+            config["app"]["wizard_disabled"] = True
+            save_config(config)
+            logger.info("[Wizard] 用户选择不再提示，已永久禁用")
+        except Exception as e:
+            logger.warning(f"[Wizard] 保存禁用设置失败: {e}")
         self._save_key()
         self.accept()
 
@@ -605,6 +663,9 @@ def should_show_wizard() -> bool:
     try:
         from ..config.loader import load_config
         config = load_config()
+        # 用户选择了不再提示
+        if config.get("app", {}).get("wizard_disabled", False):
+            return False
         # 检查 ai configs 中是否有 api_key
         ai_configs = config.get("ai", {}).get("configs", {})
         for provider_cfg in ai_configs.values():

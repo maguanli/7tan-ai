@@ -362,6 +362,7 @@ class Sidebar(QFrame):
 
     def __init__(self, user_info: dict | None = None):
         super().__init__()
+        self.setObjectName("sidebar_frame")
         self.setFixedWidth(220)
         self.setStyleSheet(f"background-color: {THEME['bg_sidebar']};")
         self._buttons = {}
@@ -1978,6 +1979,7 @@ class ChatBrowserSplitPage(QWidget):
 
     def __init__(self, user_info: dict | None = None):
         super().__init__()
+        self.setObjectName("workspace_chat")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -4010,6 +4012,7 @@ class MainWindow(QMainWindow):
 
         # 状态栏
         self._status = QStatusBar()
+        self._status.setObjectName("status_bar_info")
         self._status.showMessage(f"🟢 就绪  |  {self._user_info.get('username', '未登录')}")
         self.setStatusBar(self._status)
 
@@ -4123,10 +4126,25 @@ def launch_app():
             logger.info("[Login] 用户取消登录，退出")
             return
 
+        # ===== 新人引导：欢迎向导（API Key 设置） =====
+        from .welcome_wizard import should_show_wizard, show_welcome_wizard
+        if should_show_wizard():
+            logger.info("[Onboarding] 显示欢迎向导...")
+            api_key = show_welcome_wizard()
+            if api_key:
+                logger.info("[Onboarding] 用户已填写 API Key")
+
         logger.info("🏗️ 创建主窗口...")
         window = MainWindow(user_info=user_info)
         window.show()
         logger.info("🖥️ 原生 PyQt6 桌面应用已启动")
+
+        # ===== 新人引导：主界面交互式引导遮罩 =====
+        from .onboarding import show_onboarding
+        _overlay = show_onboarding(window)
+        if _overlay is not None:
+            logger.info("[Onboarding] 主界面引导遮罩已显示")
+
         app.exec()
         logger.info("👋 应用已关闭")
     except Exception as e:

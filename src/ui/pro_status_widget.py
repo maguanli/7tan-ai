@@ -298,7 +298,7 @@ class ProStatusWidget(QFrame):
             brief = format_score_brief(result)
             grade = result.get("grade", "?")
             color = result.get("grade_color", "#888")
-            self._score_label.setText(f"⚔️ 战力值: {brief}")
+            self._score_label.setText(f"⚡ 能力值: {brief}")
             self._score_label.setStyleSheet(
                 f"color: {color}; font-size: 12px; font-weight: bold; padding: 2px 0;"
             )

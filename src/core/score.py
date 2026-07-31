@@ -1,11 +1,11 @@
 """
-评分系统 — 战力值计算模块
+评分系统 — 能力值计算模块
 根据配置权重计算各维度加权得分，支持自动评估。
 
 维度：
   - AI 模型 (25%): 根据当前配置的模型提供商、模型等级评估
   - 账号等级 (20%): free/pro/enterprise 对应的得分
-    - 专业版（pro）对战力值影响固定 ±20 分：
+    - 专业版（pro）对能力值影响固定 ±20 分：
       基础版→升级专业版 = +20，专业版过期 = -20
   - 插件/工具 (45%): 已安装插件数量、工具注册数量、品类覆盖度
   - 系统健康 (10%): 磁盘、数据库、网络等
@@ -172,7 +172,7 @@ def evaluate_account_level() -> float:
     评估账号等级维度 (0-100)
 
     free=0, pro=100, enterprise=100
-    差异 100 分 × 权重 0.20 = 战力值 ±20 分。
+    差异 100 分 × 权重 0.20 = 能力值 ±20 分。
     即：基础版→升级专业版 = +20，专业版过期 = -20。
     RSA 验签用于安全验证（防伪造），过期/验签失败则降为 free。
     HMAC 验证加分保留（防篡改奖励）。
@@ -209,7 +209,7 @@ def evaluate_account_level() -> float:
                     logger.warning("[Score] 声称 pro 但无 license 且 HMAC 失败，降级为 free")
                     level = "free"
 
-        # 专业版对战力值影响固定 ±20 分（权重 0.20 × raw_score 差值 100 = 20）
+        # 专业版对能力值影响固定 ±20 分（权重 0.20 × raw_score 差值 100 = 20）
         # free=0, pro/enterprise=100，差异正好 100，加权后 = 20 分
         base_scores = {
             "enterprise": 100,
@@ -362,7 +362,7 @@ def evaluate_system_health() -> float:
 
 
 # ============================================================
-# 战力值计算
+# 能力值计算
 # ============================================================
 
 def calculate_composite_score(
@@ -372,7 +372,7 @@ def calculate_composite_score(
     system_health_score: float = 0,
 ) -> dict:
     """
-    计算加权战力值
+    计算加权能力值
 
     Args:
         ai_model_score:      AI 模型得分 (0-100)
@@ -381,7 +381,7 @@ def calculate_composite_score(
         system_health_score: 系统健康得分 (0-100)
 
     Returns:
-        dict 包含各维度得分、权重和加权战力值
+        dict 包含各维度得分、权重和加权能力值
     """
     weights = get_score_weights()
 
@@ -423,7 +423,7 @@ def calculate_composite_score(
 
 def auto_evaluate() -> dict:
     """
-    一站式自动评估所有维度并返回战力值。
+    一站式自动评估所有维度并返回能力值。
 
     Returns:
         dict: 同 calculate_composite_score() 的返回格式
@@ -443,14 +443,14 @@ def format_score_report(scores: dict) -> str:
     emoji = scores.get("grade_emoji", "❓")
 
     lines = [
-        f"⚔️ 战力值报告  {emoji} {grade}",
+        f"⚡ 能力值报告  {emoji} {grade}",
         "=" * 40,
         f"  AI 模型:      {scores['ai_model']['raw_score']:>6.1f} × {scores['ai_model']['weight']:.0%} = {scores['ai_model']['weighted_score']:>6.2f}",
         f"  账号等级:     {scores['account_level']['raw_score']:>6.1f} × {scores['account_level']['weight']:.0%} = {scores['account_level']['weighted_score']:>6.2f}",
         f"  插件/工具:    {scores['plugins_tools']['raw_score']:>6.1f} × {scores['plugins_tools']['weight']:.0%} = {scores['plugins_tools']['weighted_score']:>6.2f}",
         f"  系统健康:     {scores['system_health']['raw_score']:>6.1f} × {scores['system_health']['weight']:.0%} = {scores['system_health']['weighted_score']:>6.2f}",
         "-" * 40,
-        f"  战力值:     {scores['composite_score']:>6.2f} / 100  ({emoji} {grade})",
+        f"  能力值:     {scores['composite_score']:>6.2f} / 100  ({emoji} {grade})",
     ]
     return "\n".join(lines)
 

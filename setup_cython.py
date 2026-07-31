@@ -203,8 +203,8 @@ def _fallback_compile(py_path: Path, build_dir: Path) -> Path | None:
     # Windows: 需要找到 Python 的库和头文件路径
     import sysconfig
 
-    python_include = sysconfig.get_config_var("INCLUDEPY")
-    python_lib = sysconfig.get_config_var("LIBDIR")
+    python_include = sysconfig.get_paths()["include"]
+    python_lib = os.path.join(sys.base_prefix, "libs")
 
     pyd_ext = ".pyd" if sys.platform == "win32" else ".so"
     # .pyd 文件命名: {name}.cp{version}-{platform}.pyd
@@ -213,27 +213,27 @@ def _fallback_compile(py_path: Path, build_dir: Path) -> Path | None:
     pyd_path = build_dir / pyd_name
 
     if sys.platform == "win32":
-        # 尝试 MSVC
+        # 优先尝试 gcc (MinGW-w64)
+        gcc = os.environ.get("CC", "gcc")
         result = subprocess.run(
             [
-                "cl", "/nologo", "/O2", "/LD",
-                f"/I{python_include}",
+                gcc, "-shared", "-O2", "-fPIC",
+                f"-I{python_include}",
                 str(c_file),
-                "/link",
-                "/DLL",
-                f"/OUT:{pyd_path}",
+                "-o", str(pyd_path),
+                f"-L{python_lib}", f"-lpython{sys.version_info.major}{sys.version_info.minor}",
             ],
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=180,
         )
         if result.returncode != 0:
-            print(f"  ❌ MSVC 编译失败: {result.stderr[:500]}")
+            print(f"  ❌ GCC 编译失败: {result.stderr[:500]}")
 
-            # 尝试 clang-cl
+            # 回退尝试 MSVC
             result2 = subprocess.run(
                 [
-                    "clang-cl", "/nologo", "/O2",
+                    "cl", "/nologo", "/O2", "/LD",
                     f"/I{python_include}",
                     str(c_file),
                     "/link",
@@ -245,7 +245,7 @@ def _fallback_compile(py_path: Path, build_dir: Path) -> Path | None:
                 timeout=120,
             )
             if result2.returncode != 0:
-                print(f"  ❌ clang-cl 也失败。请安装 MSVC 或 clang-cl。")
+                print(f"  ❌ MSVC 也失败。请安装 MSVC 或 clang-cl。")
                 return None
     else:
         # Linux/macOS: gcc

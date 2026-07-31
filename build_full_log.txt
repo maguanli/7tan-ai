@@ -32,3 +32,11 @@
 1510 INFO: Analyzing modules for base_library.zip ...
 3351 INFO: Processing standard module hook 'hook-encodings.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
 4587 INFO: Processing standard module hook 'hook-math.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+6602 INFO: Processing standard module hook 'hook-pickle.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+8652 INFO: Processing standard module hook 'hook-heapq.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+9277 INFO: Caching module dependency graph...
+9348 INFO: Analyzing D:\7tan\7tanAI\main.py
+9503 INFO: Processing standard module hook 'hook-PyQt6.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+10551 INFO: Processing standard module hook 'hook-PyQt6.QtWidgets.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+15588 INFO: Processing standard module hook 'hook-PyQt6.QtCore.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+21143 INFO: Processing standard module hook 'hook-PyQt6.QtGui.py' from 'D:\\7tan\\7tanAI\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'

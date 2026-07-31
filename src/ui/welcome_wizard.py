@@ -203,7 +203,7 @@ class RecommendPage(WizardPage):
 # ============================================================
 
 class FillKeyPage(WizardPage):
-    """填写 DeepSeek API Key"""
+    """填写 DeepSeek API Key 和模型名称"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -255,6 +255,37 @@ class FillKeyPage(WizardPage):
         self._btn_toggle.clicked.connect(self._toggle_visibility)
         self._body.addWidget(self._btn_toggle)
 
+        self.add_spacer(14)
+
+        # 模型名称输入框
+        self.add_text("AI 模型名称（默认推荐）：", size=14, color=TEXT_PRIMARY)
+        self.add_spacer(4)
+
+        self._model_input = QLineEdit()
+        self._model_input.setPlaceholderText("deepseek-chat")
+        self._model_input.setFont(QFont("Consolas", 13))
+        self._model_input.setMinimumHeight(44)
+        self._model_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {BG_INPUT};
+                color: {TEXT_PRIMARY};
+                border: 2px solid {BORDER};
+                border-radius: 8px;
+                padding: 10px 16px;
+                font-family: "Consolas", "Courier New", monospace;
+            }}
+            QLineEdit:focus {{
+                border-color: {ACCENT};
+            }}
+        """)
+        self._body.addWidget(self._model_input)
+
+        self.add_spacer(4)
+        self.add_text(
+            "常用模型：deepseek-chat（V4-Flash，快且便宜）/ deepseek-reasoner（V4-Pro，推理强）",
+            size=11, color=TEXT_SECONDARY
+        )
+
         self.add_spacer(8)
 
         # 获取教程链接
@@ -296,6 +327,10 @@ class FillKeyPage(WizardPage):
 
     def get_key(self) -> str:
         return self._input.text().strip()
+
+    def get_model(self) -> str:
+        model = self._model_input.text().strip()
+        return model if model else "deepseek-chat"
 
 
 # ============================================================
@@ -617,29 +652,50 @@ class WelcomeWizard(QDialog):
         self.accept()
 
     def _save_key(self):
-        """保存用户输入的 API Key"""
+        """保存用户输入的 API Key 和模型名称到 config.yaml 和数据库"""
         key = self._pages[2].get_key()
+        model = self._pages[2].get_model()
         self._api_key = key  # 供外部获取
 
-        if key:
-            try:
-                from ..config.loader import load_config, save_config
-                config = load_config()
-                # 更新 ai config
-                if "ai" not in config:
-                    config["ai"] = {"active": "from_database", "configs": {}}
-                if "configs" not in config["ai"]:
-                    config["ai"]["configs"] = {}
-                if "deepseek" not in config["ai"]["configs"]:
-                    config["ai"]["configs"]["deepseek"] = {}
+        if not key:
+            return
 
-                config["ai"]["configs"]["deepseek"]["api_key"] = key
-                config["ai"]["configs"]["deepseek"]["provider"] = "deepseek"
-                config["ai"]["configs"]["deepseek"]["base_url"] = "https://api.deepseek.com/v1"
-                save_config(config)
-                logger.info("[Wizard] API Key 已保存到 config.yaml")
-            except Exception as e:
-                logger.warning(f"[Wizard] 保存 API Key 失败: {e}")
+        # 1. 保存到 config.yaml
+        try:
+            from ..config.loader import load_config, save_config
+            config = load_config()
+            # 更新 ai config
+            if "ai" not in config:
+                config["ai"] = {"active": "from_database", "configs": {}}
+            if "configs" not in config["ai"]:
+                config["ai"]["configs"] = {}
+            if "deepseek" not in config["ai"]["configs"]:
+                config["ai"]["configs"]["deepseek"] = {}
+
+            config["ai"]["configs"]["deepseek"]["api_key"] = key
+            config["ai"]["configs"]["deepseek"]["model"] = model
+            config["ai"]["configs"]["deepseek"]["provider"] = "deepseek"
+            config["ai"]["configs"]["deepseek"]["base_url"] = "https://api.deepseek.com/v1"
+            save_config(config)
+            logger.info(f"[Wizard] API Key + 模型({model}) 已保存到 config.yaml")
+        except Exception as e:
+            logger.warning(f"[Wizard] 保存到 config.yaml 失败: {e}")
+
+        # 2. 保存到数据库 (AI 系统实际读取的地方)
+        try:
+            from ..database.db import save_ai_config, set_active_ai_config
+            save_ai_config(
+                config_key="deepseek",
+                provider="deepseek",
+                model=model,
+                api_key=key,
+                base_url="https://api.deepseek.com/v1",
+                is_active=1,
+            )
+            set_active_ai_config("deepseek")
+            logger.info(f"[Wizard] API Key + 模型({model}) 已保存到数据库并激活")
+        except Exception as e:
+            logger.warning(f"[Wizard] 保存到数据库失败: {e}")
 
     def get_api_key(self) -> str:
         return getattr(self, '_api_key', '')

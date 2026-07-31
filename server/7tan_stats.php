@@ -15,27 +15,15 @@ session_start();
 $is_logged_in = isset($_SESSION['admin_id']) || isset($_SESSION['user_id']);
 
 // ── 数据库连接 ──
-$config_paths = [
-    __DIR__ . '/config.php',
-    __DIR__ . '/include/config.php',
-];
-
-$conn = null;
-foreach ($config_paths as $cfg) {
-    if (file_exists($cfg)) {
-        require_once $cfg;
-        break;
-    }
+$config_file = __DIR__ . '/config.php';
+if (!file_exists($config_file)) {
+    die('config.php not found. Please upload config.php to the same directory as 7tan_stats.php.');
 }
+require_once $config_file;
 
 if (!isset($conn) || !($conn instanceof mysqli)) {
-    $db_host = 'localhost';
-    $db_user = '7tan';
-    $db_pass = '';
-    $db_name = '7tan';
-    $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+    die('db connection not configured in config.php');
 }
-$conn->set_charset('utf8mb4');
 
 // ── 统计查询 ──
 $today = date('Y-m-d');

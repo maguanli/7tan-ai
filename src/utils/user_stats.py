@@ -11,12 +11,15 @@
   - 新增设备统计
   - 版本分布
   - 留存分析
+
+A+B 方案:
+  A. 独立配置项 — analytics.primary / analytics.fallback，与 site_7tan.base_url 解耦
+  B. 主备 fallback — primary 失败自动切 fallback，域名迁移零中断
 """
 import uuid
 import hashlib
 import platform
 import asyncio
-from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -27,9 +30,6 @@ from ..config.loader import load_config
 # ── 本地标识文件 ──
 ANALYTICS_DIR = Path.home() / "AppData" / "Local" / "7tan"
 ANALYTICS_FILE = ANALYTICS_DIR / "analytics_id.txt"
-
-# ── 上报端点 ──
-PING_ENDPOINT = "/api/7tan_ping.php"
 
 # ── 当前版本（与 app.py 保持一致）──
 APP_VERSION = "5.1.0"
@@ -73,28 +73,41 @@ def _get_username() -> str:
     return ""
 
 
-def ping_analytics() -> bool:
+def _get_ping_urls() -> list:
     """
-    启动时静默发送统计 ping（参考泼猴 PC 版 PingAnalyticsAsync）。
-    
-    上报内容:
-      - id:   匿名设备 GUID（16位 hex）
-      - ver:  客户端版本号
-      - user: 用户名（可选，用于关联）
-      
-    Returns:
-        True 如果上报成功
-    """
-    analytics_id = _get_or_create_analytics_id()
-    username = _get_username()
+    从配置读取统计上报 URL 列表（主 + 备）。
 
+    独立于 site_7tan.base_url，域名迁移不受影响。
+    配置示例:
+      analytics:
+        primary: https://img.7tan.cn/api/7tan_ping.php
+        fallback: https://img.7tan.com/api/7tan_ping.php
+    """
     config = load_config()
-    base_url = config.get("site_7tan", {}).get("base_url", "https://img.7tan.cn")
-    # base_url 可能是 https://img.7tan.cn/api，需要提取根域名
-    if "/api" in base_url:
-        base_url = base_url.split("/api")[0]
+    analytics_cfg = config.get("analytics", {})
 
-    ping_url = f"{base_url}{PING_ENDPOINT}?id={analytics_id}&ver={APP_VERSION}"
+    primary = analytics_cfg.get("primary", "")
+    fallback = analytics_cfg.get("fallback", "")
+
+    urls = []
+    if primary:
+        urls.append(primary)
+    if fallback:
+        urls.append(fallback)
+
+    # 兼容旧配置：如果 analytics 段不存在，回退到 site_7tan.base_url
+    if not urls:
+        base_url = config.get("site_7tan", {}).get("base_url", "https://img.7tan.cn")
+        if "/api" in base_url:
+            base_url = base_url.split("/api")[0]
+        urls.append(f"{base_url}/api/7tan_ping.php")
+
+    return urls
+
+
+def _try_ping(url: str, analytics_id: str, username: str) -> bool:
+    """向单个 URL 发送 ping，返回是否成功。"""
+    ping_url = f"{url}?id={analytics_id}&ver={APP_VERSION}"
     if username:
         ping_url += f"&user={username}"
 
@@ -102,20 +115,46 @@ def ping_analytics() -> bool:
         with httpx.Client(timeout=10) as client:
             resp = client.get(ping_url)
             if resp.status_code == 200:
-                logger.info(f"[UserStats] ✅ 统计 ping 成功 (id={analytics_id[:8]}...)")
                 return True
             else:
-                logger.warning(f"[UserStats] ⚠️ ping 返回 {resp.status_code}")
+                logger.debug(f"[UserStats] {url} 返回 {resp.status_code}")
                 return False
-    except httpx.ConnectTimeout:
-        logger.debug("[UserStats] ping 超时（网络不可达）")
-        return False
-    except httpx.ConnectError:
-        logger.debug("[UserStats] ping 连接失败")
+    except (httpx.ConnectTimeout, httpx.ConnectError):
+        logger.debug(f"[UserStats] {url} 连接失败")
         return False
     except Exception as e:
-        logger.debug(f"[UserStats] ping 异常: {e}")
+        logger.debug(f"[UserStats] {url} 异常: {e}")
         return False
+
+
+def ping_analytics() -> bool:
+    """
+    启动时静默发送统计 ping（A+B 方案：独立配置 + 主备 fallback）。
+
+    依次尝试 primary → fallback，任一成功即停止。
+
+    上报内容:
+      - id:   匿名设备 GUID（16位 hex）
+      - ver:  客户端版本号
+      - user: 用户名（可选，用于关联）
+
+    Returns:
+        True 如果至少一个端点上报成功
+    """
+    analytics_id = _get_or_create_analytics_id()
+    username = _get_username()
+    urls = _get_ping_urls()
+
+    for i, url in enumerate(urls):
+        label = "主" if i == 0 else "备"
+        if _try_ping(url, analytics_id, username):
+            logger.info(f"[UserStats] ✅ {label}端点 ping 成功 (id={analytics_id[:8]}...)")
+            return True
+        else:
+            logger.debug(f"[UserStats] ⚠️ {label}端点 ping 失败: {url}")
+
+    logger.warning("[UserStats] ❌ 所有端点 ping 均失败（网络不可达或服务端未部署）")
+    return False
 
 
 def ping_analytics_async():

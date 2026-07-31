@@ -36,39 +36,20 @@ if ($ver === '') {
     $ver = 'unknown';
 }
 
-// ── 数据库连接 ──
-// 尝试加载现有系统配置
-$config_paths = [
-    __DIR__ . '/../config.php',
-    __DIR__ . '/../include/config.php',
-    __DIR__ . '/../db.php',
-];
-
-$conn = null;
-foreach ($config_paths as $cfg) {
-    if (file_exists($cfg)) {
-        require_once $cfg;
-        break;
-    }
+// ── 数据库连接（只加载 7tan 自己的 config.php）──
+$config_file = __DIR__ . '/../config.php';
+if (!file_exists($config_file)) {
+    http_response_code(500);
+    echo json_encode(['ok' => false, 'error' => 'config.php not found at ' . $config_file], JSON_UNESCAPED_UNICODE);
+    exit;
 }
+require_once $config_file;
 
-// 如果系统配置中没有 $conn，尝试独立连接
 if (!isset($conn) || !($conn instanceof mysqli)) {
-    // ★ 部署时请修改为实际数据库信息
-    $db_host = 'localhost';
-    $db_user = '7tan';
-    $db_pass = '';
-    $db_name = '7tan';
-
-    $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-    if ($conn->connect_error) {
-        http_response_code(500);
-        echo json_encode(['ok' => false, 'error' => 'db connection failed'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
+    http_response_code(500);
+    echo json_encode(['ok' => false, 'error' => 'db connection not configured in config.php'], JSON_UNESCAPED_UNICODE);
+    exit;
 }
-
-$conn->set_charset('utf8mb4');
 
 // ── 确保表存在 ──
 $conn->query("

@@ -1,0 +1,23 @@
+465 INFO: PyInstaller: 6.21.0, contrib hooks: 2026.6
+466 INFO: Python: 3.12.5
+508 INFO: Platform: Windows-10-10.0.19045-SP0
+508 INFO: Python environment: D:\7tan\7tanAI\dist\_python
+513 INFO: Removing temporary files and cleaning cache in C:\Users\Administrator\AppData\Local\pyinstaller
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "D:\7tan\7tanAI\dist\_python\Lib\site-packages\PyInstaller\__main__.py", line 321, in <module>
+    run()
+  File "D:\7tan\7tanAI\dist\_python\Lib\site-packages\PyInstaller\__main__.py", line 215, in run
+    run_build(pyi_config, spec_file, **vars(args))
+  File "D:\7tan\7tanAI\dist\_python\Lib\site-packages\PyInstaller\__main__.py", line 70, in run_build
+    PyInstaller.building.build_main.main(pyi_config, spec_file, **kwargs)
+  File "D:\7tan\7tanAI\dist\_python\Lib\site-packages\PyInstaller\building\build_main.py", line 1275, in main
+    build(specfile, distpath, workpath, clean_build)
+  File "D:\7tan\7tanAI\dist\_python\Lib\site-packages\PyInstaller\building\build_main.py", line 1174, in build
+    os.makedirs(pth, exist_ok=True)
+  File "<frozen os>", line 215, in makedirs
+  File "<frozen os>", line 215, in makedirs
+  File "<frozen os>", line 215, in makedirs
+  File "<frozen os>", line 225, in makedirs
+OSError: [WinError 123] �ļ�����Ŀ¼��������﷨����ȷ��: 'D:\\7tan\\7tanAI\\dist\\"D:'

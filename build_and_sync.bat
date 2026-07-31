@@ -55,6 +55,13 @@ echo.
 REM ========== 步骤 4: 校验产物 ==========
 echo [4/4] 校验产物...
 set PYD_OK=1
+if not exist "dist\7tan-editor\_internal\PYZ.pyz" (
+    echo [错误] 产物缺少 PYZ.pyz，构建不完整！可能被杀毒软件拦截
+    echo 请将 dist 目录加入杀毒白名单后重新构建
+    pause
+    exit /b 1
+)
+echo [OK] PYZ.pyz 已生成
 if not exist "dist\7tan-editor\_internal\src\security\rsa_verify.pyd" set PYD_OK=0
 if not exist "dist\7tan-editor\_internal\src\security\license_verify.pyd" set PYD_OK=0
 if not exist "dist\7tan-editor\_internal\src\security\safe_modify.pyd" set PYD_OK=0

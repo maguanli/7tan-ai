@@ -1,0 +1,9 @@
+lines: 97
+--- last 6 ---
+125625 INFO: Processing standard module hook 'hook-PyQt6.QtNetwork.py' from 'D:\\7tan\\7tanAI\\dist\\_python\\Lib\\site-packages\\PyInstaller\\hooks'
+133470 INFO: Processing standard module hook 'hook-PyQt6.QtCharts.py' from 'D:\\7tan\\7tanAI\\dist\\_python\\Lib\\site-packages\\PyInstaller\\hooks'
+136396 INFO: Processing standard module hook 'hook-markdown.py' from 'D:\\7tan\\7tanAI\\dist\\_python\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+137496 INFO: Processing standard module hook 'hook-regex.py' from 'D:\\7tan\\7tanAI\\dist\\_python\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+137854 INFO: Processing standard module hook 'hook-sqlite3.py' from 'D:\\7tan\\7tanAI\\dist\\_python\\Lib\\site-packages\\PyInstaller\\hooks'
+138426 INFO: Processing standard module hook 'hook-PyQt6.QtWebEngineWidgets.py' from 'D:\\7tan\\7tanAI\\dist\\_python\\Lib\\site-packages\\PyInstaller\\hooks'
+pyinstaller ½ø³Ì´æ»î: True

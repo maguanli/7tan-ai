@@ -1,0 +1,10 @@
+add rc: 1
+add out: (empty)
+add err: Add-MpPreference : �޷�����Add-MpPreference����ʶ��Ϊ cmdlet���������ű��ļ�������г�������ơ��������Ƶ�ƴд���������·
+������ȷ��·����ȷ��Ȼ������һ�Ρ�
+����λ�� ��:1 �ַ�: 1
++ Add-MpPreference -ExclusionPath @('D:\7tan\7tanAI\dist','D:\7tan\7tan ...
++ ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Add-MpPreference:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+exclusions: (none)

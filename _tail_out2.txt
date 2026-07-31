@@ -1,0 +1,12 @@
+lines: 226
+--- last 8 ---
+287389 INFO: Fixing EXE headers
+288035 INFO: Building EXE from EXE-00.toc completed successfully.
+288076 INFO: checking COLLECT
+288076 INFO: Building COLLECT because COLLECT-00.toc is non existent
+288076 INFO: Removing dir D:\7tan\7tanAI\dist\7tan-editor
+289032 INFO: Building COLLECT COLLECT-00.toc
+312677 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+312755 INFO: Build complete! The results are available in: D:\7tan\7tanAI\dist
+pyinstaller alive: False
+PYZ.pyz exists: False

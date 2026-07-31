@@ -4139,21 +4139,30 @@ def launch_app():
         logger.info("🏗️ 创建主窗口...")
         window = MainWindow(user_info=user_info)
         window.show()
+        # 立即处理绘制事件，防止白屏
+        QApplication.processEvents()
         logger.info("🖥️ 原生 PyQt6 桌面应用已启动")
 
-        # ===== 流量统计：启动时上报设备信息（参考泼猴PC版）=====
-        try:
-            from ..utils.user_stats import ping_analytics
-            success = ping_analytics()
-            logger.info(f"[Traffic] 统计 ping 结果: {'成功' if success else '失败'}")
-        except Exception as _ping_err:
-            logger.debug(f"[Traffic] ping 异常: {_ping_err}")
+        # ===== 流量统计：后台线程发送 ping，绝不阻塞主线程 =====
+        import threading as _thr
+        def _bg_ping():
+            try:
+                from ..utils.user_stats import ping_analytics
+                success = ping_analytics()
+                logger.info(f"[Traffic] 统计 ping 结果: {'成功' if success else '失败'}")
+            except Exception as _ping_err:
+                logger.debug(f"[Traffic] ping 异常: {_ping_err}")
+        _thr.Thread(target=_bg_ping, daemon=True, name="stats-ping").start()
 
-        # ===== 新人引导：主界面交互式引导遮罩 =====
+        # ===== 新人引导：主界面交互式引导遮罩（延迟 500ms，确保窗口绘制完毕）=====
         from .onboarding import show_onboarding
-        _overlay = show_onboarding(window)
-        if _overlay is not None:
-            logger.info("[Onboarding] 主界面引导遮罩已显示")
+        def _show_ob():
+            try:
+                show_onboarding(window)
+            except Exception as _ob_err:
+                logger.debug(f"[Onboarding] 引导遮罩异常: {_ob_err}")
+        QTimer.singleShot(500, _show_ob)
+        logger.info("[Onboarding] 主界面引导遮罩将在 500ms 后显示")
 
         app.exec()
         logger.info("👋 应用已关闭")

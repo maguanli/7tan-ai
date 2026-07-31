@@ -48,6 +48,28 @@ GRADIENT_START = "#1a1f35"
 GRADIENT_END = "#0d1117"
 
 # ============================================================
+# 模型名称映射
+# ============================================================
+
+def _model_to_display(model: str) -> str:
+    """数据库中的模型名 → 用户友好的显示名称"""
+    if model == "deepseek-reasoner":
+        return "deepseek-V4-Pro"
+    if model == "deepseek-chat":
+        return "deepseek-V4-Flash"
+    return model
+
+
+def _display_to_model(display: str) -> str:
+    """用户友好的显示名称 → API 有效的模型名"""
+    if not display or display == "deepseek-V4-Pro":
+        return "deepseek-reasoner"
+    if display == "deepseek-V4-Flash":
+        return "deepseek-chat"
+    return display
+
+
+# ============================================================
 # 步骤页面基类
 # ============================================================
 
@@ -262,7 +284,7 @@ class FillKeyPage(WizardPage):
         self.add_spacer(4)
 
         self._model_input = QLineEdit()
-        self._model_input.setPlaceholderText("deepseek-chat")
+        self._model_input.setPlaceholderText("deepseek-V4-Pro")
         self._model_input.setFont(QFont("Consolas", 13))
         self._model_input.setMinimumHeight(44)
         self._model_input.setStyleSheet(f"""
@@ -282,7 +304,7 @@ class FillKeyPage(WizardPage):
 
         self.add_spacer(4)
         self.add_text(
-            "常用模型：deepseek-chat（V4-Flash，快且便宜）/ deepseek-reasoner（V4-Pro，推理强）",
+            "常用模型：deepseek-V4-Pro（推理能力最强）/ deepseek-chat（V4-Flash，快且便宜）",
             size=11, color=TEXT_SECONDARY
         )
 
@@ -317,6 +339,54 @@ class FillKeyPage(WizardPage):
         self.add_spacer(10)
         self.add_text("🔒 Key 只保存在你的电脑上，通过 AES 加密存储，不会上传", size=12, color=TEXT_SECONDARY)
 
+        # 尝试从数据库/配置文件加载已有配置，预填到输入框
+        self._load_existing_config()
+
+    # ------------------------------------------------------------------
+    # 从数据库 / config.yaml 加载已有配置
+    # ------------------------------------------------------------------
+
+    def _load_existing_config(self):
+        """从数据库优先、配置其次，加载已有的 Key 和模型名，预填到输入框"""
+        key = ""
+        model_db = ""
+
+        # 1) 优先数据库（AI 系统实际读取的地方）
+        try:
+            from ..database.db import get_active_ai_config_raw
+            cfg = get_active_ai_config_raw()
+            if cfg and cfg.get("api_key", "").strip():
+                key = cfg["api_key"].strip()
+                model_db = cfg.get("model", "")
+                logger.info(f"[Wizard] 从数据库加载已有配置, model={model_db}")
+        except Exception as e:
+            logger.debug(f"[Wizard] 数据库加载跳过: {e}")
+
+        # 2) 数据库没 Key → 回退到 config.yaml
+        if not key:
+            try:
+                from ..config.loader import load_config
+                config = load_config()
+                ds = config.get("ai", {}).get("configs", {}).get("deepseek", {})
+                key = ds.get("api_key", "").strip()
+                model_db = ds.get("model", "")
+                if key:
+                    logger.info(f"[Wizard] 从 config.yaml 加载已有配置, model={model_db}")
+            except Exception as e:
+                logger.debug(f"[Wizard] config.yaml 加载跳过: {e}")
+
+        # 3) 预填
+        if key:
+            self._input.setText(key)
+        if model_db:
+            display_name = _model_to_display(model_db)
+            self._model_input.setText(display_name)
+            logger.info(f"[Wizard] 预填模型名: {model_db} → {display_name}")
+
+    # ------------------------------------------------------------------
+    # 公共方法
+    # ------------------------------------------------------------------
+
     def _toggle_visibility(self):
         if self._input.echoMode() == QLineEdit.EchoMode.Password:
             self._input.setEchoMode(QLineEdit.EchoMode.Normal)
@@ -329,8 +399,9 @@ class FillKeyPage(WizardPage):
         return self._input.text().strip()
 
     def get_model(self) -> str:
+        """返回 API 有效的模型名（自动映射）"""
         model = self._model_input.text().strip()
-        return model if model else "deepseek-chat"
+        return _display_to_model(model)
 
 
 # ============================================================
@@ -715,19 +786,21 @@ class WelcomeWizard(QDialog):
 # ============================================================
 
 def should_show_wizard() -> bool:
-    """判断是否需要显示新手引导"""
+    """判断是否需要显示新手引导
+    
+    只有用户勾选「不再提示」才跳过。
+    即使已有 Key，仍然显示引导（预填已有值，用户可修改）。
+    """
     try:
         from ..config.loader import load_config
         config = load_config()
+
         # 用户选择了不再提示
         if config.get("app", {}).get("wizard_disabled", False):
             return False
-        # 检查 ai configs 中是否有 api_key
-        ai_configs = config.get("ai", {}).get("configs", {})
-        for provider_cfg in ai_configs.values():
-            if isinstance(provider_cfg, dict) and provider_cfg.get("api_key", "").strip():
-                return False  # 已有 Key
-        return True  # 没有 Key，需要引导
+
+        # 始终显示引导（已有 Key 时会通过 _load_existing_config 预填）
+        return True
     except Exception:
         return True
 

@@ -128,6 +128,13 @@ def main():
     from src.config.loader import ensure_initialized
     ensure_initialized(interactive=(args.command not in ("desktop", "scheduler")))
 
+    # 🔄 清理残留的重启锁（上次异常退出可能残留 .restart_lock，阻塞后续重启）
+    try:
+        from src.scheduler.daemon import cleanup_stale_restart_locks
+        cleanup_stale_restart_locks()
+    except Exception:
+        pass
+
     # 初始化数据库
     from src.database.db import init_db
     init_db()

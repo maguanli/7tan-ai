@@ -461,6 +461,12 @@ class Sidebar(QFrame):
 
         # 不再需要单独的 stretch，scroll_area 的 stretch factor 1 已处理
 
+        # --- 流量统计组件 ---
+        from .traffic_widget import TrafficWidget
+        self._traffic_widget = TrafficWidget()
+        layout.addWidget(self._traffic_widget)
+        layout.addSpacing(4)
+
         # --- 专业版状态组件 ---
         from .pro_status_widget import ProStatusWidget
         self._pro_widget = ProStatusWidget(user_info=self._user_info)
@@ -4138,6 +4144,16 @@ def launch_app():
         window = MainWindow(user_info=user_info)
         window.show()
         logger.info("🖥️ 原生 PyQt6 桌面应用已启动")
+
+        # ===== 流量统计：启动时上报设备信息（参考泼猴PC版）=====
+        try:
+            from ..utils.user_stats import ping_analytics
+            success = ping_analytics()
+            if hasattr(window, '_sidebar'):
+                window._sidebar._traffic_widget.set_reported(success)
+            logger.info(f"[Traffic] 统计 ping 结果: {'成功' if success else '失败'}")
+        except Exception as _ping_err:
+            logger.debug(f"[Traffic] ping 异常: {_ping_err}")
 
         # ===== 新人引导：主界面交互式引导遮罩 =====
         from .onboarding import show_onboarding

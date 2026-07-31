@@ -2849,12 +2849,18 @@ class SettingsPage(QWidget):
             QMessageBox.warning(self, "提示", "请先在左侧选择一个配置。")
             return
         key = item.data(Qt.ItemDataRole.UserRole)
+        old = self._ai_configs.get(key, {})
         self._ai_configs[key] = {
             "provider": self._ai_provider.currentText(),
             "model": self._ai_model.currentText(),
             "base_url": self._ai_base.text(),
             "api_key": self._ai_key.text() if self._ai_key.text() and self._ai_key.text() != "••••••••"
-                      else self._ai_configs.get(key, {}).get("api_key", ""),
+                      else old.get("api_key", ""),
+            # 保留高级参数，防止保存时被默认值覆盖
+            "context_window": old.get("context_window", 128000),
+            "max_tokens": old.get("max_tokens", 16384),
+            "temperature": old.get("temperature", 0.25),
+            "extra_config": old.get("extra_config"),
         }
         # 只发送当前编辑的配置，避免其他模型的配置被覆盖
         payload = {

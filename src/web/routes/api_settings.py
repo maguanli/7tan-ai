@@ -104,17 +104,20 @@ async def update_settings(updates: dict):
                 if "••••" in str(api_key):
                     api_key = ""  # 不覆盖已有 key
                 is_active = 1 if key == active_key else 0
+                # 读取数据库现有值：前端未传的字段用现有值兜底，防止默认值覆盖
+                from ...database.db import get_ai_config_by_key
+                existing = get_ai_config_by_key(key, mask_secrets=True) or {}
                 save_ai_config(
                     config_key=key,
-                    provider=cfg.get("provider", "deepseek"),
-                    model=cfg.get("model", ""),
-                    base_url=cfg.get("base_url", ""),
+                    provider=cfg.get("provider", existing.get("provider", "deepseek")),
+                    model=cfg.get("model", existing.get("model", "")),
+                    base_url=cfg.get("base_url", existing.get("base_url", "")),
                     api_key=api_key,
-                    context_window=cfg.get("context_window", 128000),
-                    max_tokens=cfg.get("max_tokens", 16384),
-                    temperature=cfg.get("temperature", 0.25),
+                    context_window=cfg.get("context_window", existing.get("context_window", 128000)),
+                    max_tokens=cfg.get("max_tokens", existing.get("max_tokens", 16384)),
+                    temperature=cfg.get("temperature", existing.get("temperature", 0.25)),
                     is_active=is_active,
-                    extra_config=cfg.get("extra_config"),
+                    extra_config=cfg.get("extra_config") if cfg.get("extra_config") is not None else existing.get("extra_config"),
                 )
             # 确保 active 正确
             if active_key:

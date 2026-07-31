@@ -1,0 +1,9 @@
+EXE: D:\7tan\7tanAI\dist\7tan-editor\7tan-editor.exe
+SIZE: 19609025 bytes
+
+LAUNCHED pid=11260
+STATUS: RUNNING after 20s (pid=11260)
+
+error.log: NOT FOUND
+
+CLEANUP: process terminated

@@ -1,0 +1,35 @@
+=== BUILD WATCH RESULT ===
+status: SUCCESS
+duration: 51 s
+final log size: 25196 bytes
+
+--- FINAL TAIL 25 ---
+| 152145 INFO: checking PYZ
+| 152146 INFO: Building PYZ because PYZ-00.toc is non existent
+| 152146 INFO: Building PYZ (ZlibArchive) D:\7tan\7tanAI\dist\_build\temp\build\PYZ-00.pyz
+| 154848 INFO: Building PYZ (ZlibArchive) D:\7tan\7tanAI\dist\_build\temp\build\PYZ-00.pyz completed successfully.
+| 154949 INFO: checking PKG
+| 154949 INFO: Building PKG because PKG-00.toc is non existent
+| 154949 INFO: Building PKG (CArchive) 7tan-editor.pkg
+| 155007 INFO: Building PKG (CArchive) 7tan-editor.pkg completed successfully.
+| 155009 INFO: Bootloader D:\7tan\7tanAI\dist\_python\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+| 155009 INFO: checking EXE
+| 155009 INFO: Building EXE because EXE-00.toc is non existent
+| 155009 INFO: Building EXE from EXE-00.toc
+| 155009 INFO: Copying bootloader EXE to D:\7tan\7tanAI\dist\_build\temp\build\7tan-editor.exe
+| 155018 INFO: Copying icon to EXE
+| 155025 INFO: Copying 0 resources to EXE
+| 155026 INFO: Embedding manifest in EXE
+| 155095 INFO: Appending PKG archive to EXE
+| 155256 INFO: Fixing EXE headers
+| 155755 INFO: Building EXE from EXE-00.toc completed successfully.
+| 155790 INFO: checking COLLECT
+| 155791 INFO: Building COLLECT because COLLECT-00.toc is non existent
+| 155791 INFO: Removing dir D:\7tan\7tanAI\dist\7tan-editor
+| 156567 INFO: Building COLLECT COLLECT-00.toc
+| 163627 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+| 163700 INFO: Build complete! The results are available in: D:\7tan\7tanAI\dist
+
+--- "Build complete" in log: True
+--- "ERROR" in log: False
+--- "Traceback" in log: False

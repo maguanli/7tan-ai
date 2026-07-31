@@ -1,6 +1,0 @@
-DEV _internal: None
-CUR _internal: D:\7tan\7tanAI\dist\7tan-editor\_internal
-
-  DIR: D:\7tan\7tanAI\build
-  DIR: D:\7tan\7tanAI\build\build
-  DIR: D:\7tan\7tanAI\build\build\localpycs

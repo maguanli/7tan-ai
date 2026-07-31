@@ -1,8 +1,0 @@
-DEV PYZ: D:\7tan\7tanAI\build\build\PYZ-00.pyz (21206978 bytes)
-CUR PYZ: D:\7tan\7tanAI\dist\_build\temp\build\PYZ-00.pyz (19252712 bytes)
-
-  open fail D:\7tan\7tanAI\build\build\PYZ-00.pyz: File is not a zip file
-  open fail D:\7tan\7tanAI\dist\_build\temp\build\PYZ-00.pyz: File is not a zip file
-DEV modules: 0, CUR modules: 0
-
-=== DEV ONLY (0) ===

@@ -1,4 +1,0 @@
-FOUND exe: D:\7tan\7tanAI\build\build\7tan-editor.exe (21563290 bytes)
-DEV EXE (>20MB): D:\7tan\7tanAI\build\build\7tan-editor.exe
-
-CURRENT EXE: D:\7tan\7tanAI\dist\7tan-editor\7tan-editor.exe (19609025 bytes)

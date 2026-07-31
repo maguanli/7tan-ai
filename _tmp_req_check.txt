@@ -1,5 +1,0 @@
-requirements 条目数: 40
-_python 已装包数: 102
-
-=== 缺失/未满足 ===
-  MISSING: cos-python-sdk-v5>=1.9.0

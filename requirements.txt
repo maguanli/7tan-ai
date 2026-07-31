@@ -64,3 +64,13 @@ numpy>=1.24
 
 # === Build (PyInstaller) ===
 pyinstaller>=6.0
+
+# === UI 渲染（硬依赖，chat_page/message_bubble 顶层导入）===
+pygments>=2.0.0
+
+# === 可选功能增强（源码 try/except 导入，缺失时功能降级）===
+sounddevice>=0.4.0
+markdown>=3.0.0
+edge-tts>=6.0.0
+tiktoken>=0.5.0
+imageio>=2.0.0

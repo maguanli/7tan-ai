@@ -19,6 +19,25 @@ if (!function_exists('getDB')) {
 }
 $db = getDB();
 
+// ── 确保表存在（首次访问自动建表）──
+$db->exec("
+    CREATE TABLE IF NOT EXISTS `7tan_client_sessions` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `device_id` VARCHAR(32) NOT NULL,
+        `version` VARCHAR(16) DEFAULT 'unknown',
+        `username` VARCHAR(64) DEFAULT '',
+        `first_date` DATE NOT NULL,
+        `last_active` DATETIME NOT NULL,
+        `type` VARCHAR(10) DEFAULT '新设备',
+        `ip_address` VARCHAR(45) DEFAULT '',
+        `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX `idx_device` (`device_id`),
+        INDEX `idx_last_active` (`last_active`),
+        INDEX `idx_first_date` (`first_date`),
+        INDEX `idx_type` (`type`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
+
 // ── 统计查询 ──
 $today = date('Y-m-d');
 $week_ago  = date('Y-m-d', strtotime('-7 days'));

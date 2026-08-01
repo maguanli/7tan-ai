@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title 7Tan Build & Sync Tool
+title 7Tan Build-Sync Tool
 
 set ROOT=%~dp0
 cd /d "%ROOT%"

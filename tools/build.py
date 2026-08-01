@@ -45,6 +45,7 @@ def generate_spec():
         "src.security", "src.security.rsa_verify", "src.security.license_verify",
         "src.security.safe_modify", "src.security.strings", "src.security.auth_client",
         "src.security.token_store", "src.security.trial_store", "src.security.integrity",
+        "src.security.device_fingerprint",
     ]
 
     datas = [

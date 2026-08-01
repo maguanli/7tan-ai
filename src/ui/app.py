@@ -4223,6 +4223,13 @@ def launch_app():
             logger.info("[Login] 用户取消登录，退出")
             return
 
+        # ===== 设备指纹：本地烙印记 + 服务器多设备检测（静默，不阻塞） =====
+        try:
+            from ..security.device_fingerprint import on_login as _fp_on_login
+            _fp_on_login(user_info)
+        except Exception:
+            pass
+
         # ===== 新人引导：欢迎向导（API Key 设置） =====
         from .welcome_wizard import should_show_wizard, show_welcome_wizard
         if should_show_wizard():

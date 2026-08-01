@@ -174,6 +174,22 @@ if ($is_pro) {
 }
 
 // ============================================================
+// 设备统计（登录时附带回传，供客户端多设备提醒）
+// ============================================================
+$device_count = 0;
+$device_suspicious = 0;
+if (!defined('DEVICE_LIMIT')) { define('DEVICE_LIMIT', 3); }
+try {
+    $stmt = $db->prepare('SELECT COUNT(*) AS cnt, MAX(suspicious) AS sus FROM user_devices WHERE user_id = :uid');
+    $stmt->execute([':uid' => $user['id']]);
+    $drow = $stmt->fetch(PDO::FETCH_ASSOC);
+    $device_count = (int)($drow['cnt'] ?? 0);
+    $device_suspicious = (int)($drow['sus'] ?? 0);
+} catch (PDOException $e) {
+    // user_devices 表不存在（设备指纹功能未启用）→ 忽略
+}
+
+// ============================================================
 // 响应
 // ============================================================
 echo json_encode([
@@ -192,6 +208,9 @@ echo json_encode([
             'pro_expires'    => $pro_expires,
             'pro_expires_at' => $pro_expires > 0 ? date('Y-m-d H:i:s', $pro_expires) : null,
             'trial_ai_count' => $trial_ai_count,   // AI 试用剩余次数
+            'device_count'    => $device_count,        // 该账号已登录过的设备数
+            'device_limit'    => DEVICE_LIMIT,         // 允许的最大设备数
+            'device_suspicious' => $device_suspicious, // 是否已被标记可疑（转卖/共享）
         ],
     ],
 ], JSON_UNESCAPED_UNICODE);

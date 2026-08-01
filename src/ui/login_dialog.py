@@ -30,6 +30,7 @@ from loguru import logger
 
 from ..security.auth_client import login, LoginFailed, NetworkError, ServerError
 from ..security.token_store import save_token, is_token_available
+from ..security.device_fingerprint import on_login as device_fp_on_login
 
 # ============================================================
 # 颜色方案
@@ -446,6 +447,12 @@ class LoginDialog(QDialog):
             self._user_info = result
             logger.info(f"[Login] 登录成功: {result['username']} (等级: {result['level']})")
 
+            # 设备指纹：本地烙印记 + 服务器多设备检测（静默，不阻塞）
+            try:
+                device_fp_on_login(result)
+            except Exception as _fp_err:
+                logger.debug(f"[Login] 设备指纹处理异常: {_fp_err}")
+
             # 短暂延迟后关闭对话框
             QTimer.singleShot(400, self._accept)
 
@@ -538,12 +545,18 @@ def check_and_login(parent=None) -> dict | None:
         data = __import__("src.security.token_store", fromlist=["load_token"]).load_token()
         if data:
             logger.info(f"[Login] 使用本地 Token (用户: {data.get('username')})")
-            return {
+            _info = {
                 "token": data.get("token", ""),
                 "username": data.get("username", ""),
                 "level": data.get("level", "free"),
                 "pro_expires": data.get("pro_expires", 0),
             }
+            # 设备指纹：本地烙印记 + 服务器多设备检测（静默）
+            try:
+                device_fp_on_login(_info)
+            except Exception as _fp_err:
+                logger.debug(f"[Login] 设备指纹处理异常: {_fp_err}")
+            return _info
 
     # Token 无效，显示登录对话框
     return show_login_dialog(parent)

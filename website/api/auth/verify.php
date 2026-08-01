@@ -233,7 +233,7 @@ if (!empty($token)) {
 // ============================================================
 $db = $db ?? get_db_connection();
 
-$stmt = $db->prepare('SELECT id, ll_name, ll_pwd, ll_date, email FROM ll_useregs WHERE id = :uid LIMIT 1');
+$stmt = $db->prepare('SELECT id, ll_name FROM ll_useregs WHERE id = :uid LIMIT 1');
 $stmt->execute([':uid' => $uid]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 

@@ -45,6 +45,21 @@ if (!$input) {
 
 $token    = $input['token']    ?? '';
 $model    = $input['model']    ?? TRIAL_MODEL;
+
+// ============================================================
+// 模型名映射：客户端可能传 "DeepSeek-V4-Flash-0731" 等产品名，
+// DeepSeek 官方 API 只认 deepseek-v4-flash / deepseek-v4-pro，
+// 统一映射为官方 ID，避免 400 Model Not Exist
+// ============================================================
+$MODEL_ALIASES = [
+    'deepseek-v4-flash-0731' => 'deepseek-v4-flash',
+    'deepseek-v4-flash'      => 'deepseek-v4-flash',
+    'deepseek-chat'          => 'deepseek-v4-flash',
+    'deepseek-v4-pro'        => 'deepseek-v4-pro',
+    'deepseek-reasoner'      => 'deepseek-v4-pro',
+];
+$model_key = strtolower(trim((string)$model));
+$model     = $MODEL_ALIASES[$model_key] ?? 'deepseek-v4-flash';
 $messages = $input['messages'] ?? [];
 
 if (empty($token)) {

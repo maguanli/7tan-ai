@@ -6,7 +6,7 @@ from PyInstaller.utils.hooks import collect_submodules
 
 block_cipher = None
 
-# cryptography 使用延迟导入子模块（如 ciphers.aead），静态分析常漏抓，全量收集
+# cryptography 浣跨敤寤惰繜瀵煎叆瀛愭ā鍧楋紙濡?ciphers.aead锛夛紝闈欐€佸垎鏋愬父婕忔姄锛屽叏閲忔敹闆?
 _crypto_submods = collect_submodules('cryptography')
 
 a = Analysis(
@@ -22,7 +22,7 @@ a = Analysis(
         'tkinter', 'unittest', 'test', 'pdb',
         'IPython', 'jupyter', 'notebook',
         'matplotlib', 'pandas',
-        # --- 排除 ML/AI 包（项目不使用，torch c10.dll 损坏导致构建失败）---
+        # --- 鎺掗櫎 ML/AI 鍖咃紙椤圭洰涓嶄娇鐢紝torch c10.dll 鎹熷潖瀵艰嚧鏋勫缓澶辫触锛?--
         'torch', 'torchvision', 'torchaudio', 'torchtext',
         'onnxruntime', 'onnx', 'onnxconverter_common',
         'huggingface_hub', 'transformers', 'sentencepiece', 'tokenizers',
@@ -45,7 +45,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -61,7 +61,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name='7tan-editor',
 )

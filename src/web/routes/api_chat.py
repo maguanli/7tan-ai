@@ -112,9 +112,9 @@ async def send_message(req: ChatRequest):
                     abort_event=abort_event,
                     system_prompt=system_prompt,
                 )
-                loop.call_soon_threadsafe(future.set_result, result)
+                _safe_loop_call(loop, future.set_result, result)
             except Exception as e:
-                loop.call_soon_threadsafe(future.set_exception, e)
+                _safe_loop_call(loop, future.set_exception, e)
 
         threading.Thread(target=_run_agent, daemon=True).start()
 
@@ -188,13 +188,13 @@ async def send_message_stream(req: ChatRequest):
                     system_prompt=_load_system_prompt(),
                 ):
                     # Put event into queue for the async generator to pick up
-                    asyncio.run_coroutine_threadsafe(queue.put(event), loop).result()
+                    _safe_coro_call(loop, queue, event)
                 # Signal done
-                asyncio.run_coroutine_threadsafe(queue.put(None), loop).result()
+                _safe_coro_call(loop, queue, None)
             except Exception as e:
                 logger.error(f"Streaming agent failed: {e}")
-                asyncio.run_coroutine_threadsafe(queue.put({"type": "error", "message": str(e)}), loop).result()
-                asyncio.run_coroutine_threadsafe(queue.put(None), loop).result()
+                _safe_coro_call(loop, queue, {"type": "error", "message": str(e)})
+                _safe_coro_call(loop, queue, None)
         
         # Start runner in thread pool
         loop.run_in_executor(_get_executor(), runner)
@@ -269,3 +269,24 @@ async def abort_chat(session_id: str):
         logger.info(f"⏹ [API] 用户中止会话 {session_id}")
         return {"success": True, "message": "已发送中止信号"}
     return {"success": False, "message": "没有正在执行的任务"}
+
+
+def _safe_loop_call(loop, fn, *args):
+    """在线程中安全回调事件循环：循环已关闭时静默忽略（防止 cannot schedule new futures）"""
+    try:
+        if loop is None or loop.is_closed():
+            return
+        loop.call_soon_threadsafe(fn, *args)
+    except Exception:
+        pass
+
+
+def _safe_coro_call(loop, queue, event):
+    """线程中安全投递事件到异步队列：循环已关闭时静默忽略"""
+    try:
+        if loop is None or loop.is_closed():
+            return
+        asyncio.run_coroutine_threadsafe(queue.put(event), loop).result(timeout=5)
+    except Exception:
+        pass
+

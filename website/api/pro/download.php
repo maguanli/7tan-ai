@@ -1,15 +1,17 @@
 <?php
 // ============================================================
-// B5c: 专业版源码包下载 API（鉴权发放）
+// B5c: 专业版源码包下载 API（鉴权发放 - 公共单包模式）
 // POST /api/pro/download.php
 // body: {"token":"...", "package":"full"|"update"}
 //
-// 文件存放: D:\workspace\pro_packages\<uid>\  （web 根之外，不可直接访问）
-//   full   → 7tan-pro-src-*.zip      专业完整包（源码+_python+水印）
-//   update → 7tan-pro-update-*.zip   专业增量包（仅源码+水印）
+// 文件存放: D:\workspace\pro_packages\   （web 根之外，不可直接访问）
+//   full   → 7tan-pro-src-*.zip       专业完整包（源码+_python）
+//   update → 7tan-pro-update-*.zip    专业增量包（仅源码）
+//   ★ 所有订阅用户下载同一个包（无每人水印；防转卖靠客户端
+//     登录烙印记 + 设备指纹多设备检测，无需每用户单独打水印）
 //
-// 校验链路: JWT 登录 → 有效专业版订阅(或管理员) → 用户目录存在包 → 流式下载
-// 安全: uid 强制 int（无目录穿越）、glob 固定前缀、订阅过期拒绝
+// 校验链路: JWT 登录 → 有效专业版订阅(或管理员) → 包存在 → 流式下载
+// 安全: glob 固定前缀、订阅过期拒绝
 // ============================================================
 
 header('Content-Type: application/json; charset=utf-8');
@@ -35,6 +37,22 @@ require_once __DIR__ . '/../../lib/auth_middleware.php';
 if (!defined('JWT_SECRET')) { http_response_code(500); echo json_encode(['code'=>-1,'message'=>'Server config error: JWT_SECRET']); exit; }
 $JWT_SECRET = JWT_SECRET;
 
+// ========== 0. Token 兼容：Authorization header 优先，也支持 body 里的 token ==========
+$input_raw = json_decode(file_get_contents('php://input'), true);
+if ($input_raw === null) {
+    // body 不是合法 JSON：无 Authorization 时让鉴权返回 401；有则提示请求体错误
+    if (empty($_SERVER['HTTP_AUTHORIZATION'])) {
+        $input_raw = [];
+    } else {
+        http_response_code(400);
+        echo json_encode(['code' => -1, 'message' => '无效的请求体（JSON 解析失败）'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+if (empty($_SERVER['HTTP_AUTHORIZATION']) && !empty($input_raw['token'])) {
+    $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $input_raw['token'];
+}
+
 // ========== 1. 登录校验 ==========
 $user = require_login($JWT_SECRET);
 $uid  = (int)$user['uid'];
@@ -45,7 +63,7 @@ if ($uid <= 0) {
 }
 
 // ========== 2. 输入校验 ==========
-$input   = json_decode(file_get_contents('php://input'), true);
+$input   = $input_raw ?? [];
 $package = $input['package'] ?? 'full';
 if (!in_array($package, ['full', 'update'], true)) {
     http_response_code(400);
@@ -77,12 +95,11 @@ if (!$is_admin) {
     }
 }
 
-// ========== 4. 定位文件（web 根之外的 pro_packages\<uid>\） ==========
+// ========== 4. 定位文件（web 根之外 pro_packages\ 根目录，公共单包） ==========
 $pkgs_root = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'pro_packages'; // __DIR__=.../7tan/api/pro，向上3级=workspace
-$user_dir  = $pkgs_root . DIRECTORY_SEPARATOR . $uid;
 $pattern   = $package === 'full'
-    ? $user_dir . DIRECTORY_SEPARATOR . '7tan-pro-src-*.zip'
-    : $user_dir . DIRECTORY_SEPARATOR . '7tan-pro-update-*.zip';
+    ? $pkgs_root . DIRECTORY_SEPARATOR . '7tan-pro-src-*.zip'
+    : $pkgs_root . DIRECTORY_SEPARATOR . '7tan-pro-update-*.zip';
 
 $files = glob($pattern);
 if (!$files) {

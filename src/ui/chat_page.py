@@ -801,7 +801,7 @@ class ChatPage(QWidget):
 
         """添加消息气泡（延迟渲染：仅可见范围创建重量 Widget）"""
         # 存储原始数据（即使不渲染也保存）
-        ts = timestamp or datetime.now().strftime("%H:%M:%S")
+        ts = timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._message_data.append({
             "role": role, "content": content, "timestamp": ts,
             "cost": cost, "iterations": iterations, "tool_calls": tool_calls,
@@ -853,7 +853,7 @@ class ChatPage(QWidget):
 
             role=role, content=content,
 
-            timestamp=timestamp or datetime.now().strftime("%H:%M:%S"),
+            timestamp=timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
 
             cost=cost, iterations=iterations,
 

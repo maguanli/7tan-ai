@@ -462,6 +462,30 @@ class Sidebar(QFrame):
 
         # 不再需要单独的 stretch，scroll_area 的 stretch factor 1 已处理
 
+        # --- 帮助链接：问题求助 | 投诉建议（并排，用户信息上方） ---
+        links_row = QWidget()
+        links_row.setObjectName("sidebar_links")
+        links_layout = QHBoxLayout(links_row)
+        links_layout.setContentsMargins(0, 0, 0, 0)
+        links_layout.setSpacing(4)
+
+        def _make_side_link(text, url):
+            lbl = QLabel(text)
+            lbl.setStyleSheet(
+                f"color: {THEME['text_secondary']}; font-size: 12px; "
+                f"padding: 6px 4px; border-radius: 4px;"
+            )
+            lbl.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setToolTip(f"在浏览器中打开 {url}")
+            lbl.mousePressEvent = lambda e, u=url: self.open_url.emit(u)
+            return lbl
+
+        links_layout.addWidget(_make_side_link("🙋 问题求助", "https://www.7tan.com/bbs/board/25/"), 1)
+        links_layout.addWidget(_make_side_link("📮 投诉建议", "https://www.7tan.com/bbs/board/26/"), 1)
+        layout.addWidget(links_row)
+        layout.addSpacing(4)
+
         # --- 专业版状态组件 ---
         from .pro_status_widget import ProStatusWidget
         self._pro_widget = ProStatusWidget(user_info=self._user_info)

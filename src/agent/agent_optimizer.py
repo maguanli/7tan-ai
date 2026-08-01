@@ -132,7 +132,7 @@ def execute_tools_parallel(tool_calls: list[dict], execute_fn) -> list[dict]:
             name = _extract_tool_name(tc)
             args = _parse_tool_args(tc)
             try:
-                content = execute_fn(name, args)
+                content = _execute_with_watchdog(execute_fn, name, args)
             except Exception as e:
                 content = f"❌ 工具执行失败: {e}"
             results.append({"tool_call_id": tc.get("id", ""), "content": content})
@@ -158,19 +158,28 @@ def execute_tools_parallel(tool_calls: list[dict], execute_fn) -> list[dict]:
                 args = _parse_tool_args(tc)
                 future = pool.submit(_safe_execute, execute_fn, name, args)
                 future_to_tc[future] = tc
-            for future in concurrent.futures.as_completed(future_to_tc):
-                tc = future_to_tc[future]
-                try:
-                    results_map[tc.get("id", "")] = future.result()
-                except Exception as e:
-                    results_map[tc.get("id", "")] = f"❌ 工具执行失败: {e}"
+            try:
+                for future in concurrent.futures.as_completed(future_to_tc, timeout=TOOL_WATCHDOG_TIMEOUT):
+                    tc = future_to_tc[future]
+                    try:
+                        results_map[tc.get("id", "")] = future.result()
+                    except Exception as e:
+                        results_map[tc.get("id", "")] = f"❌ 工具执行失败: {e}"
+            except concurrent.futures.TimeoutError:
+                logger.warning(f"⏱ 并行工具执行超过 {TOOL_WATCHDOG_TIMEOUT}s，看门狗中断")
+                for future, tc in future_to_tc.items():
+                    if tc.get("id", "") not in results_map:
+                        results_map[tc.get("id", "")] = (
+                            f"❌ 工具执行超时（>{TOOL_WATCHDOG_TIMEOUT}s），已强制中断。"
+                            f"请检查卡死命令（SSH/网络/构建），拆解步骤后重试。"
+                        )
     elif independent:
         # 不值得并行（快工具/冷启动敏感）→ 串行，省线程池开销
         for tc in independent:
             name = _extract_tool_name(tc)
             args = _parse_tool_args(tc)
             try:
-                results_map[tc.get("id", "")] = execute_fn(name, args)
+                results_map[tc.get("id", "")] = _execute_with_watchdog(execute_fn, name, args)
             except Exception as e:
                 results_map[tc.get("id", "")] = f"❌ 工具执行失败: {e}"
 
@@ -209,6 +218,31 @@ def _safe_execute(execute_fn, name: str, args: dict) -> str:
         return execute_fn(name, args)
     except Exception as e:
         logger.warning(f"工具 {name} 执行异常: {e}")
+        return f"❌ 工具执行失败: {e}"
+
+
+# ⭐ 看门狗：单工具执行超时保护（默认 10 分钟）
+# 防止某个工具（如 SSH/网络/构建脚本）卡死时，整个 agent 循环挂起数十分钟
+TOOL_WATCHDOG_TIMEOUT = 600
+
+
+def _execute_with_watchdog(execute_fn, name: str, args: dict, timeout: int = TOOL_WATCHDOG_TIMEOUT) -> str:
+    """带看门狗的单工具执行：超时立即返回提示，不阻塞 agent 循环。
+
+    说明：Python 无法强制终止线程，超时后底层线程仍在后台运行（daemon 线程，
+    进程退出不阻塞），但主流程立刻返回，agent 循环继续，杜绝"工具卡死 15 分钟"。
+    """
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="tool_watchdog")
+    future = pool.submit(_safe_execute, execute_fn, name, args)
+    try:
+        return future.result(timeout=timeout)
+    except concurrent.futures.TimeoutError:
+        logger.warning(f"⏱ 工具 {name} 执行超过 {timeout}s，看门狗中断（后台线程已脱离，不再阻塞）")
+        pool.shutdown(wait=False)
+        return (f"❌ 工具执行超时（>{timeout}s），已强制中断该调用。"
+                f"请检查是否存在卡死命令（SSH/网络/构建/等待输入），拆解步骤或缩短操作后重试。")
+    except Exception as e:
+        pool.shutdown(wait=False)
         return f"❌ 工具执行失败: {e}"
 
 

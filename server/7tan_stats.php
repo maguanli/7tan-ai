@@ -19,6 +19,20 @@ if (!function_exists('getDB')) {
 }
 $db = getDB();
 
+// ── 免登录查看模式 ──
+// 用法:
+//   7tan_stats.php?public=1          → 免登录公开查看（仅汇总，不含设备明细/用户名）
+//   7tan_stats.php?public=1&key=xxx  → 免登录 + 令牌校验（推荐，key 在 config.php 定义 STATS_PUBLIC_KEY）
+$public_mode = isset($_GET['public']) && $_GET['public'] === '1';
+if ($public_mode) {
+    $public_key = defined('STATS_PUBLIC_KEY') ? STATS_PUBLIC_KEY : '';
+    if ($public_key !== '' && (!isset($_GET['key']) || !hash_equals($public_key, (string)$_GET['key']))) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        die(json_encode(['error' => 'invalid key']));
+    }
+}
+
 // ── 确保表存在（首次访问自动建表）──
 $db->exec("
     CREATE TABLE IF NOT EXISTS `7tan_client_sessions` (
@@ -233,7 +247,13 @@ function mask_id($id) {
 </head>
 <body>
     <div class="header">
-        <div class="subtitle"><b><a href="index.php">后台首页</a> / 7Tan-PC端流量统计</b></div>
+        <div class="subtitle">
+            <?php if ($public_mode): ?>
+                <b>🔓 公开视图（免登录）</b> · <a href="7tan_stats.php">登录查看完整数据</a>
+            <?php else: ?>
+                <b><a href="index.php">后台首页</a> / 7Tan-PC端流量统计</b>
+            <?php endif; ?>
+        </div>
         <h1>📊 7Tan 客户端流量统计</h1>
         <div class="subtitle">统计 7Tan 桌面软件的日活/新增/回流/版本分布</div>
     </div>
@@ -317,6 +337,7 @@ function mask_id($id) {
         <?php endif; ?>
     </div>
 
+    <?php if (!$public_mode): ?>
     <!-- 最近活动 -->
     <div class="section">
         <h2>📋 最近活动记录</h2>
@@ -342,5 +363,6 @@ function mask_id($id) {
             </table>
         <?php endif; ?>
     </div>
+    <?php endif; ?>
 </body>
 </html>

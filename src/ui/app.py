@@ -4146,6 +4146,15 @@ class MainWindow(QMainWindow):
         self.close()
         launch_app()
 
+    def showEvent(self, event):
+        """主界面显示时：事件上报（带节流，不影响启动时的强制上报）"""
+        try:
+            from ..utils.user_stats import ping_analytics_async
+            ping_analytics_async(force=False)
+        except Exception:
+            pass
+        super().showEvent(event)
+
     def closeEvent(self, event):
         """关闭窗口时清理：停止录屏 + 等待线程结束"""
         import time
@@ -4178,6 +4187,13 @@ class MainWindow(QMainWindow):
                 chat._save_voice_gender()
         except Exception as e:
             logger.warning(f"[Voice] 主窗口closeEvent保存语音失败: {e}")
+
+        # ===== 流量统计：关闭前上报（短超时，记录今日活跃） =====
+        try:
+            from ..utils.user_stats import ping_on_close
+            ping_on_close()
+        except Exception:
+            pass
 
         super().closeEvent(event)
 

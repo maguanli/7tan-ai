@@ -23,7 +23,7 @@ echo.
 
 REM ===== Step 1: Build exe =====
 echo [1/4] Building exe with PyInstaller...
-call "%ROOT%.venv\Scripts\python.exe" -m PyInstaller build.spec --clean
+call "%ROOT%.venv\Scripts\python.exe" -m PyInstaller build.spec --clean -y
 if %ERRORLEVEL% neq 0 (
     echo.
     echo [ERROR] Build failed. Check output above.

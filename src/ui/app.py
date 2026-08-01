@@ -40,6 +40,7 @@ import requests
 from loguru import logger
 
 from .theme import THEME
+from .update_dialog import UpdateDialog
 
 DARK_STYLESHEET = f"""
 QMainWindow, QWidget {{
@@ -3756,7 +3757,18 @@ class SettingsPage(QWidget):
         name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(name_label)
 
-        version_label = QLabel("v5.1.0 · 内部构建")
+        try:
+            from src.config.version import APP_VERSION as _APP_VERSION
+        except Exception:
+            _APP_VERSION = "1.0.0"
+        try:
+            from src.config.build_info import BUILD_ID as _BUILD_ID
+        except Exception:
+            _BUILD_ID = "FREE"
+        _ver_txt = f"v{_APP_VERSION}"
+        if _BUILD_ID and not str(_BUILD_ID).startswith("FREE"):
+            _ver_txt += f" · {_BUILD_ID}"
+        version_label = QLabel(_ver_txt)
         version_label.setStyleSheet(f"font-size: 13px; color: {THEME['text_secondary']};")
         version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(version_label)
@@ -3791,6 +3803,55 @@ class SettingsPage(QWidget):
             "【出品】7Tan 团队"
         )
         layout.addWidget(intro_text)
+
+        # ===== 软件更新 =====
+        upd_row = QHBoxLayout()
+        upd_row.addStretch()
+        self._update_btn = QPushButton("🔄 检查更新")
+        self._update_btn.setStyleSheet(f"background: {THEME['accent']}; color: #000; padding: 8px 28px;")
+        self._update_btn.clicked.connect(self._check_update)
+        upd_row.addWidget(self._update_btn)
+        upd_row.addStretch()
+        layout.addLayout(upd_row)
+
+        self._update_status = QLabel("")
+        self._update_status.setStyleSheet(f"font-size: 12px; color: {THEME['text_secondary']};")
+        self._update_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._update_status)
+
+    # =================== 软件更新 ===================
+    def _check_update(self):
+        """手动检查更新（关于页按钮）"""
+        self._update_status.setText("⏳ 正在检查更新…")
+        self._update_btn.setEnabled(False)
+
+        worker = ApiWorker("GET", f"{API_BASE}/api/update/check")
+
+        def on_ok(data):
+            self._update_btn.setEnabled(True)
+            self._update_status.setText("")
+            if data.get("error"):
+                QMessageBox.warning(self, "检查更新", f"检查失败：{data['error']}")
+                return
+            if not data.get("has_update"):
+                QMessageBox.information(
+                    self, "检查更新", f"✅ 当前已是最新版本 v{data.get('current', '')}"
+                )
+                return
+            info = dict(data.get("latest") or {})
+            info["_current"] = data.get("current", "")
+            dlg = UpdateDialog(info, parent=self)
+            dlg.exec()
+
+        def on_err(msg):
+            self._update_btn.setEnabled(True)
+            self._update_status.setText("")
+            QMessageBox.warning(self, "检查更新", f"检查失败：{msg}")
+
+        worker.finished.connect(on_ok)
+        worker.error.connect(on_err)
+        self._keep_worker(worker)
+        worker.start()
 
     def _on_plugin_selected(self, row):
         """选中插件时显示详情"""
@@ -4025,6 +4086,36 @@ class MainWindow(QMainWindow):
         # 默认显示仪表盘
         self._sidebar.set_active("dashboard")
         self._stack.setCurrentWidget(self._pages["dashboard"])
+
+        # 🔄 启动后静默检查更新（延迟 8 秒，不阻塞启动）
+        QTimer.singleShot(8000, self._auto_check_update)
+
+    def _auto_check_update(self):
+        """启动后后台静默检查更新，发现新版本弹出提示（可配置关闭）"""
+        try:
+            from src.core import updater as _updater
+            if not _updater.auto_check_enabled():
+                return
+        except Exception:
+            return
+
+        def _on_ok(data):
+            if not data or not data.get("has_update"):
+                return
+            info = dict(data.get("latest") or {})
+            info["_current"] = data.get("current", "")
+            dlg = UpdateDialog(info, parent=self)
+            dlg.exec()
+
+        def _on_err(msg):
+            logger.debug(f"auto update check skipped: {msg}")
+
+        worker = ApiWorker("GET", f"{API_BASE}/api/update/check")
+        worker.finished.connect(_on_ok)
+        worker.error.connect(_on_err)
+        self._workers = getattr(self, "_workers", [])
+        self._workers.append(worker)
+        worker.start()
 
     def _apply_window_icon(self):
         """设置窗口图标 — 使用 data/logo/logo_v4_256.png（7Tan LOGO）"""

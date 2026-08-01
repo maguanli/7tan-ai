@@ -30,7 +30,12 @@ PROJECT_ROOT = _get_project_root()
 # 确保 src 目录在 path 中
 sys.path.insert(0, str(PROJECT_ROOT))
 
-app = FastAPI(title="7Tan", version="5.1.0", docs_url=None, redoc_url=None)
+try:
+    from src.config.version import APP_VERSION as _APP_VERSION
+except Exception:
+    _APP_VERSION = "1.0.0"
+
+app = FastAPI(title="7Tan", version=_APP_VERSION, docs_url=None, redoc_url=None)
 
 
 # ===== API 安全中间件 =====
@@ -65,7 +70,7 @@ ws_manager = get_ws_manager()
 from .routes import (
     resources_router, tasks_router, sources_router,
     stats_router, settings_router, chat_router,
-    project_router, terminal_router,
+    project_router, terminal_router, update_router,
 )
 
 app.include_router(resources_router)
@@ -76,12 +81,13 @@ app.include_router(settings_router)
 app.include_router(chat_router)
 app.include_router(project_router)
 app.include_router(terminal_router)
+app.include_router(update_router)
 
 
 # ===== 健康检查 =====
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "version": "5.1.0"}
+    return {"status": "ok", "version": _APP_VERSION}
 
 
 # ===== WebSocket 端点 =====

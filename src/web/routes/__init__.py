@@ -9,6 +9,7 @@ from .api_settings import router as settings_router
 from .api_chat import router as chat_router
 from .api_project import router as project_router
 from .api_terminal import router as terminal_router
+from .api_update import router as update_router
 
 __all__ = [
     "resources_router",
@@ -19,4 +20,5 @@ __all__ = [
     "chat_router",
     "project_router",
     "terminal_router",
+    "update_router",
 ]

@@ -1,0 +1,14 @@
+{
+  "versions": [
+    {
+      "version": "1.0.0",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.0.zip",
+      "md5": "REPLACE_WITH_REAL_MD5",
+      "size": 0,
+      "notes": "首版发布：AI 工作台、游戏内容工厂、全栈开发助手、自我进化系统。",
+      "release_date": "2026-08-01"
+    }
+  ]
+}

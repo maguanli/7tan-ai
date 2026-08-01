@@ -4,6 +4,9 @@
  * 深圳市柒贰叁叁网络科技有限公司版权所有
  */
 
+// ── 时区统一为北京时间（防止 PHP 默认 UTC 导致统计口径偏移 8 小时）──
+date_default_timezone_set('Asia/Shanghai');
+
 // Session配置（只在未启动时配置）
 if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_httponly', 1);

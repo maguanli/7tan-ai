@@ -1,69 +1,68 @@
 @echo off
-chcp 65001 >nul
-title 7Tan 构建+同步工具
-echo ==========================================
-echo   7Tan 一键构建 + 同步到 dist
-echo ==========================================
-echo.
+setlocal enabledelayedexpansion
+title 7Tan Build & Sync Tool
 
 set ROOT=%~dp0
 cd /d "%ROOT%"
 
-REM ========== 步骤 0: Git 自动备份 ==========
-echo [0/4] Git 自动备份...
+echo ==========================================
+echo   7Tan Build + Sync Tool (ASCII-safe v9)
+echo ==========================================
+echo.
+
+REM ===== Step 0: Git auto backup =====
+echo [0/4] Git auto backup...
 if exist ".git" (
     git add -A
     git commit -m "auto-save: %date% %time%" >nul 2>&1
-    echo   [OK] 已提交（或无变更）
+    echo   [OK] committed (or nothing to commit)
 ) else (
-    echo   [跳过] 未初始化 git
+    echo   [SKIP] no git repo found
 )
+echo.
 
-echo [1/4] 构建 exe...
+REM ===== Step 1: Build exe =====
+echo [1/4] Building exe with PyInstaller...
 call "%ROOT%.venv\Scripts\python.exe" -m PyInstaller build.spec --clean
 if %ERRORLEVEL% neq 0 (
     echo.
-    echo [错误] 构建失败，请检查上方输出
-    pause
+    echo [ERROR] Build failed. Check output above.
+    if /i not "%1"=="-y" pause
     exit /b 1
 )
-echo [1/4] 构建成功
+echo [1/4] Build OK
 echo.
 
-REM ========== 步骤 2: 同步源码到 dist\_build\src\ ==========
-REM 用 robocopy 替代 xcopy，排除敏感目录：
-REM   _source_backup  = 安全模块明文 .py 备份（绝不能给专业版用户）
-REM   __pycache__     = 字节码缓存
-echo [2/4] 同步源码到 dist\_build\src\...
+REM ===== Step 2: Sync source to dist\_build\src =====
+REM Exclude: _source_backup (plaintext security src), __pycache__, .pytest_cache, *.pyc
+echo [2/4] Syncing source to dist\_build\src...
 if not exist "dist\_build\src" mkdir "dist\_build\src"
 robocopy "src" "dist\_build\src" /E /XD _source_backup __pycache__ .pytest_cache /XF *.pyc /NFL /NDL /NJH /NJS /NP
 if %ERRORLEVEL% GEQ 8 (
-    echo [错误] 源码同步失败 (robocopy 错误码 %ERRORLEVEL%)
-    pause
+    echo [ERROR] Source sync failed (robocopy code %ERRORLEVEL%)
+    if /i not "%1"=="-y" pause
     exit /b 1
 )
-echo [2/4] 源码已同步（已排除 _source_backup / __pycache__ / *.pyc）
+echo [2/4] Source synced (excluded _source_backup / __pycache__ / *.pyc)
 echo.
 
-REM ========== 步骤 3: 同步构建配置文件 ==========
-echo [3/4] 同步构建配置...
+REM ===== Step 3: Sync build config files =====
+echo [3/4] Syncing build config...
 copy /Y build.spec dist\_build\build.spec >nul
 copy /Y requirements.txt dist\_build\requirements.txt >nul
-echo [3/4] 配置已同步
+echo [3/4] Config synced
 echo.
 
-REM ========== 步骤 4: 校验产物 ==========
-echo [4/4] 校验产物...
+REM ===== Step 4: Verify artifacts =====
+echo [4/4] Verifying artifacts...
 set PYD_OK=1
-REM onedir 模式: PYZ 模块归档嵌入 exe 内部，用 exe 大小判断完整性
 for %%A in ("dist\7tan-editor\7tan-editor.exe") do set EXE_SIZE=%%~zA
 if !EXE_SIZE! LSS 15000000 (
-    echo [错误] exe 大小异常 (!EXE_SIZE! 字节)，构建不完整！可能被杀毒软件拦截
-    echo 请将 dist 目录加入杀毒白名单后重新构建
-    pause
+    echo [ERROR] exe size abnormal (!EXE_SIZE! bytes), build incomplete!
+    if /i not "%1"=="-y" pause
     exit /b 1
 )
-echo [OK] exe 完整性校验通过 (!EXE_SIZE! 字节)
+echo [OK] exe size check passed (!EXE_SIZE! bytes)
 if not exist "dist\7tan-editor\_internal\src\security\rsa_verify.pyd" set PYD_OK=0
 if not exist "dist\7tan-editor\_internal\src\security\license_verify.pyd" set PYD_OK=0
 if not exist "dist\7tan-editor\_internal\src\security\safe_modify.pyd" set PYD_OK=0
@@ -73,37 +72,37 @@ if not exist "dist\7tan-editor\_internal\src\security\token_store.pyd" set PYD_O
 if not exist "dist\7tan-editor\_internal\src\security\strings.pyd" set PYD_OK=0
 if not exist "dist\7tan-editor\_internal\src\security\trial_store.pyd" set PYD_OK=0
 if "!PYD_OK!"=="0" (
-    echo [警告] 产物中缺少部分防破解 .pyd，请检查 build.spec hiddenimports
+    echo [WARN] Missing some security .pyd in output, check build.spec hiddenimports
 ) else (
-    echo [OK] 防破解模块 8/8 已打包进产物
+    echo [OK] Security modules 8/8 packaged
 )
 
-REM 检查 _build 是否混入明文备份
+REM Remove plaintext backups accidentally synced into _build
 if exist "dist\_build\src\security\_source_backup" (
-    echo [警告] _build 中发现明文安全源码备份，正在清除...
+    echo [WARN] Plaintext security source found in _build, removing...
     rmdir /S /Q "dist\_build\src\security\_source_backup"
 )
 if exist "dist\_build\src\security\__pycache__" (
     rmdir /S /Q "dist\_build\src\security\__pycache__"
 )
 
-REM 校验 base_library.zip 完整性（损坏会导致 exe 启动即崩溃 exit 1）
+REM Verify base_library.zip integrity
 "%ROOT%.venv\Scripts\python.exe" -c "import zipfile,sys;z=zipfile.ZipFile(r'dist\7tan-editor\_internal\base_library.zip');sys.exit(0 if z.testzip() is None else 1)"
 if %ERRORLEVEL% neq 0 (
-    echo [错误] base_library.zip 损坏！exe 将无法启动，请重新构建
-    pause
+    echo [ERROR] base_library.zip corrupted! exe will not start.
+    if /i not "%1"=="-y" pause
     exit /b 1
 ) else (
-    echo [OK] base_library.zip 完整性校验通过
+    echo [OK] base_library.zip integrity passed
 )
-echo [4/4] 校验完成
+echo [4/4] Verification done
 echo.
 
 echo ==========================================
-echo   完成！
-echo   新 exe: dist\7tan-editor\7tan-editor.exe
-echo   源码:   dist\_build\src\
+echo   DONE!
+echo   exe:   dist\7tan-editor\7tan-editor.exe
+echo   src:   dist\_build\src\
+echo   spec:  dist\_build\build.spec
+echo   reqs:  dist\_build\requirements.txt
 echo ==========================================
-echo   免费版/专业版共用 dist，专业版内置构建环境
-echo ==========================================
-pause
+if /i not "%1"=="-y" pause

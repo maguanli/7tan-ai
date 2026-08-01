@@ -150,6 +150,7 @@ class ChatPage(QWidget):
     """全新 AI 对话页面 — 左侧会话列表 + 右侧聊天区"""
 
     session_loaded_signal = pyqtSignal(str, dict)  # (session_id, data)
+    delete_done_signal = pyqtSignal(bool, str, str)  # (success, session_id, detail)
     error_signal = pyqtSignal(str)  # error message
     messages_parsed_signal = pyqtSignal(str, list, int, int)  # session_id, parsed_msgs, start_idx, total
 
@@ -167,6 +168,7 @@ class ChatPage(QWidget):
 
         # 线程安全的信号连接
         self.session_loaded_signal.connect(self._on_session_loaded)
+        self.delete_done_signal.connect(self._on_delete_done)
         self.messages_parsed_signal.connect(self._on_messages_parsed)
         self.error_signal.connect(self._on_load_error)
 
@@ -1029,7 +1031,7 @@ class ChatPage(QWidget):
     # 模块级防抖时间戳（与 SessionSidebar 共享防抖逻辑）
     _last_auto_load_time = 0
 
-    def _auto_load_sessions(self, retry=0):
+    def _auto_load_sessions(self, retry=0, force=False):
 
         """自动加载对话列表（后台线程，不阻塞UI，带双重防抖）"""
 
@@ -1042,7 +1044,7 @@ class ChatPage(QWidget):
 
         # 防抖2：1秒内不重复请求（showEvent 与 Sidebar.showEvent 同时触发时）
         now = time.time()
-        if retry == 0 and now - ChatPage._last_auto_load_time < 1.0:
+        if not force and retry == 0 and now - ChatPage._last_auto_load_time < 1.0:
             logger.debug("[ChatPage] 防抖：跳过重复请求（1秒内已加载过）")
             return
         ChatPage._last_auto_load_time = now
@@ -1408,40 +1410,50 @@ class ChatPage(QWidget):
 
 
     def _delete_session(self, session_id: str):
-
         """删除对话"""
-
-        reply = QMessageBox.question(self, "确认删除",
-
+        reply = QMessageBox.question(
+            self, "确认删除",
             "确定要删除此对话吗？\n此操作不可撤销。",
-
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
         if reply != QMessageBox.StandardButton.Yes:
-
             return
         if self._session_loading:
+            logger.warning("[ChatPage] 删除被拒：会话加载中")
             return
         self._session_loading = True
         import threading
 
         def _do_delete():
-
             try:
-
-                requests.delete(f"{API_BASE}/api/chat/session/{session_id}", timeout=5)
-
-                QTimer.singleShot(0, lambda: self._new_session())
-
-                QTimer.singleShot(300, self._auto_load_sessions)
-
+                resp = requests.delete(
+                    f"{API_BASE}/api/chat/session/{session_id}", timeout=5
+                )
+                ok = resp.status_code in (200, 204)
+                detail = "" if ok else f"服务器返回 {resp.status_code}: {resp.text[:200]}"
             except Exception as e:
-
-                QTimer.singleShot(0, lambda: self._add_message("error", f"❌ 删除失败: {e}"))
+                ok, detail = False, str(e)
+            # 通过信号回到主线程更新 UI（QTimer 跨线程不可靠）
+            self.delete_done_signal.emit(ok, session_id, detail)
 
         threading.Thread(target=_do_delete, daemon=True).start()
 
-
+    def _on_delete_done(self, success: bool, session_id: str, detail: str):
+        """主线程处理删除结果 — 实时刷新列表"""
+        self._session_loading = False
+        if not success:
+            self._add_message("error", f"❌ 删除失败: {detail}")
+            return
+        logger.info(f"[ChatPage] 删除成功: {session_id[:8] if session_id else ''}...")
+        # 1) 删除的是当前会话 → 先清空聊天区
+        if session_id and session_id == self._current_session_id:
+            self._new_session()
+        # 2) 立即从侧边栏移除该项（实时反馈，不等 API 重载）
+        sidebar = self._sidebar_ref()
+        if sidebar is not None:
+            sidebar.remove_session(session_id)
+        # 3) 强制刷新列表（绕过防抖，与服务器保持一致）
+        self._auto_load_sessions(force=True)
 
     # ==================== 消息收发 ====================
 

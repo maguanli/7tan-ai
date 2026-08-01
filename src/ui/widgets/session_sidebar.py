@@ -144,6 +144,17 @@ class SessionSidebar(QFrame):
         self._list.setCurrentItem(item)
         self._count_label.setText(f"{self._list.count()} 条对话")
 
+
+    def remove_session(self, session_id: str):
+        """删除后立即从列表移除指定会话"""
+        for i in range(self._list.count()):
+            item = self._list.item(i)
+            if item and item.data(Qt.ItemDataRole.UserRole) == session_id:
+                self._list.takeItem(i)
+                break
+        self._sessions = [s for s in self._sessions if s.get("session_id") != session_id]
+        self._count_label.setText(f"{self._list.count()} 条对话")
+
     def _on_selection_changed(self, current, previous):
         if current:
             sid = current.data(Qt.ItemDataRole.UserRole)

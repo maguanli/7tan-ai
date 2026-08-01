@@ -78,7 +78,7 @@ if (!$is_admin) {
 }
 
 // ========== 4. 定位文件（web 根之外的 pro_packages\<uid>\） ==========
-$pkgs_root = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'pro_packages';
+$pkgs_root = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'pro_packages'; // __DIR__=.../7tan/api/pro，向上3级=workspace
 $user_dir  = $pkgs_root . DIRECTORY_SEPARATOR . $uid;
 $pattern   = $package === 'full'
     ? $user_dir . DIRECTORY_SEPARATOR . '7tan-pro-src-*.zip'
@@ -86,8 +86,9 @@ $pattern   = $package === 'full'
 
 $files = glob($pattern);
 if (!$files) {
-    http_response_code(404);
-    echo json_encode(['code' => -1, 'message' => '未找到可下载的包，请联系管理员'], JSON_UNESCAPED_UNICODE);
+    // 注意：IIS 会劫持 404 状态返回自定义错误页（HTML），故用 200 + code=404 表达"包不存在"
+    http_response_code(200);
+    echo json_encode(['code' => 404, 'message' => '未找到可下载的包，请联系管理员'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 

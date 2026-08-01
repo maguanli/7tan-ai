@@ -184,7 +184,7 @@ class ProStatusWidget(QFrame):
         token_data = load_token()
         if token_data:
             # ── 第1层：RSA 验签 pro_license（最高信任级）──
-            pro_license = token_data.get("pro_license", "")
+            pro_license = token_data.get("pro_license") or ""
             if pro_license:
                 try:
                     result = verify_license(pro_license)
@@ -327,15 +327,15 @@ class ProStatusWidget(QFrame):
                 "token": new_token,
                 "level": result.get("level", "free"),
                 "pro_expires": result.get("pro_expires", 0),
-                "pro_license": result.get("pro_license", ""),
+                "pro_license": result.get("pro_license") or "",
             }
             save_token(
                 token=new_info["token"],
                 username=new_info.get("username", ""),
-                level=new_info.get("level", "free"),
+                level=new_info.get("level") or "free",
                 pro_expires=new_info.get("pro_expires", 0),
                 expires_in=new_info.get("expires_in", 2592000),
-                pro_license=new_info.get("pro_license", ""),
+                pro_license=new_info.get("pro_license") or "",
             )
             # 刷新后清除 Pro 门控缓存
             invalidate_pro_cache()

@@ -434,13 +434,13 @@ class LoginDialog(QDialog):
 
             # 保存 Token（含试用次数）
             save_token(
-                token=result["token"],
-                username=result["username"],
-                level=result["level"],
+                token=result.get("token") or "",
+                username=result.get("username") or "",
+                level=result.get("level") or "free",
                 pro_expires=result.get("pro_expires", 0),
                 expires_in=result.get("expires_in", 2592000),
                 trial_ai_count=result.get("trial_ai_count", 0),
-                pro_license=result.get("pro_license", ""),
+                pro_license=result.get("pro_license") or "",
             )
 
             self._user_info = result

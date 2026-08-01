@@ -54,6 +54,13 @@ if %ROBO_CODE% GEQ 8 (
 )
 echo.
 
+REM ===== Step 2.5: Sync main.py + config + data to _build =====
+copy /Y main.py dist\_build\main.py >nul
+robocopy "config" "dist\_build\config" /E /XD __pycache__ /XF *.pyc /NFL /NDL /NJH /NJS /NP /R:2 /W:2 >nul
+robocopy "data" "dist\_build\data" /E /XD __pycache__ /XF *.pyc /NFL /NDL /NJH /NJS /NP /R:2 /W:2 >nul
+echo [2.5/6] main.py + config + data synced
+echo.
+
 REM ===== Step 3: Sync build config files =====
 echo [3/6] Syncing build config...
 copy /Y build.spec dist\_build\build.spec >nul

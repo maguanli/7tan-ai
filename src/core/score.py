@@ -191,7 +191,7 @@ def evaluate_account_level() -> float:
         # ── 安全验证：RSA 验签优先，防伪造 level ──
         # 如果 level 声称是 pro/enterprise，必须有有效的 pro_license（RSA 验签通过）
         # 如果声称 pro 但验签失败 → 降级为 free（防篡改）
-        pro_license = token_data.get("pro_license", "")
+        pro_license = token_data.get("pro_license") or ""
         rsa_verified = False
         if level in ("pro", "enterprise"):
             if pro_license:

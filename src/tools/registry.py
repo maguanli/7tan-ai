@@ -49,7 +49,7 @@ def _check_pro_status() -> bool:
         from ..security.license_verify import verify_license, LicenseError
 
         token_data = load_token()
-        pro_license = token_data.get("pro_license", "") if token_data else ""
+        pro_license = (token_data.get("pro_license") or "") if token_data else ""
 
         if pro_license:
             try:

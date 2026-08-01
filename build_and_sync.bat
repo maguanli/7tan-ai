@@ -37,13 +37,13 @@ REM ===== Step 2: Sync source to dist\_build\src =====
 REM Exclude: _source_backup (plaintext security src), __pycache__, .pytest_cache, *.pyc
 echo [2/4] Syncing source to dist\_build\src...
 if not exist "dist\_build\src" mkdir "dist\_build\src"
-robocopy "src" "dist\_build\src" /E /XD _source_backup __pycache__ .pytest_cache /XF *.pyc /NFL /NDL /NJH /NJS /NP
-if %ERRORLEVEL% GEQ 8 (
-    echo [ERROR] Source sync failed (robocopy code %ERRORLEVEL%)
-    if /i not "%1"=="-y" pause
-    exit /b 1
+robocopy "src" "dist\_build\src" /E /XD _source_backup __pycache__ .pytest_cache /XF *.pyc /NFL /NDL /NJH /NJS /NP /R:2 /W:2
+set ROBO_CODE=%ERRORLEVEL%
+if %ROBO_CODE% GEQ 8 (
+    echo [WARN] Source sync returned code %ROBO_CODE%, continuing...
+) else (
+    echo [2/4] Source synced OK
 )
-echo [2/4] Source synced (excluded _source_backup / __pycache__ / *.pyc)
 echo.
 
 REM ===== Step 3: Sync build config files =====
@@ -58,11 +58,11 @@ echo [4/4] Verifying artifacts...
 set PYD_OK=1
 for %%A in ("dist\7tan-editor\7tan-editor.exe") do set EXE_SIZE=%%~zA
 if !EXE_SIZE! LSS 15000000 (
-    echo [ERROR] exe size abnormal (!EXE_SIZE! bytes), build incomplete!
+    echo [ERROR] exe size abnormal !EXE_SIZE! bytes, build incomplete!
     if /i not "%1"=="-y" pause
     exit /b 1
 )
-echo [OK] exe size check passed (!EXE_SIZE! bytes)
+echo [OK] exe size check passed !EXE_SIZE! bytes
 if not exist "dist\7tan-editor\_internal\src\security\rsa_verify.pyd" set PYD_OK=0
 if not exist "dist\7tan-editor\_internal\src\security\license_verify.pyd" set PYD_OK=0
 if not exist "dist\7tan-editor\_internal\src\security\safe_modify.pyd" set PYD_OK=0

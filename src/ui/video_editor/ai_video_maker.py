@@ -49,7 +49,7 @@ class AIVideoMaker:
             from src.agent.model_manager import ModelManager
             from src.database.db import get_active_ai_config_raw
             cfg = get_active_ai_config_raw()
-            model_name = cfg.get("model_name", "deepseek-v4-pro") if cfg else "deepseek-v4-pro"
+            model_name = cfg.get("model", "deepseek-v4-pro") if cfg else "deepseek-v4-pro"
             mm = ModelManager(model_name)
             resp = mm.chat(messages=[{"role": "user", "content": prompt}])
             content = resp["choices"][0]["message"]["content"]

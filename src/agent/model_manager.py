@@ -490,7 +490,7 @@ def get_model(model_name: str) -> ModelManager:
         try:
             from ..database.db import get_active_ai_config_raw
             cfg = get_active_ai_config_raw()
-            model_name = cfg.get("model_name", "deepseek-v4-pro") if cfg else "deepseek-v4-pro"
+            model_name = cfg.get("model", "deepseek-v4-pro") if cfg else "deepseek-v4-pro"
         except Exception:
             model_name = "deepseek-v4-pro"
 

@@ -20,7 +20,7 @@ echo [0/6] Git auto backup...
 if exist ".git" (
     git add -A
     git commit -m "auto-save: %date% %time%" >nul 2>&1
-    echo   [OK] committed (or nothing to commit)
+    echo   [OK] committed or nothing to commit
 ) else (
     echo   [SKIP] no git repo found
 )
@@ -28,7 +28,7 @@ echo.
 
 REM ===== Step 1: Build exe =====
 if /i "%1"=="--no-build" (
-    echo [1/6] SKIP build (--no-build mode)
+    echo [1/6] SKIP build --no-build mode
 ) else (
     echo [1/6] Building exe with PyInstaller...
     call "%ROOT%.venv\Scripts\python.exe" -m PyInstaller build.spec --clean -y
@@ -65,7 +65,7 @@ REM ===== Step 4: Sync / create portable python (dist\_python) =====
 echo [4/6] Syncing portable python to dist\_python...
 set "BASE_PY=C:\Program Files\Python312"
 if exist "dist\_python\python.exe" (
-    echo   _python exists - incremental sync (site-packages + Scripts)...
+    echo   _python exists - incremental sync site-packages + Scripts...
     robocopy ".venv\Lib\site-packages" "dist\_python\Lib\site-packages" /MIR /XD __pycache__ /XF *.pyc /NFL /NDL /NJH /NJS /NP /R:2 /W:2 >nul
     robocopy ".venv\Scripts" "dist\_python\Scripts" /MIR /XD __pycache__ /NFL /NDL /NJH /NJS /NP /R:2 /W:2 >nul
     echo   [OK] _python updated
@@ -187,10 +187,10 @@ echo.
 
 echo ==========================================
 echo   DONE! dist is now fully self-contained:
-echo   - 7tan-editor\7tan-editor.exe   (built)
-echo   - _build\                       (source + spec + reqs)
-echo   - _python\                      (portable python + deps)
-echo   - rebuild.bat                   (self-build entry)
+echo   - 7tan-editor\7tan-editor.exe
+echo   - _build\
+echo   - _python\
+echo   - rebuild.bat
 echo.
 echo   Copy the whole dist folder to any
 echo   Win10/11 x64 PC and double-click

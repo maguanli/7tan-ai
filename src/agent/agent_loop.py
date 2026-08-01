@@ -492,7 +492,8 @@ def run_agent_loop(
         }
     """
     # 兼容旧调用：从 model_name / session_id 自动构建 model / config / ctx
-    if model_name and not model:
+    # model_name 为 None/"auto" 时 get_model 自动解析数据库激活模型，防止 model=None 崩溃
+    if not model:
         from .model_manager import get_model
         model = get_model(model_name)
     if not config:

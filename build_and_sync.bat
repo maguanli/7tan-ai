@@ -6,11 +6,22 @@ set ROOT=%~dp0
 cd /d "%ROOT%"
 
 set "SKIP_PAUSE="
-if /i "%1"=="-y" set "SKIP_PAUSE=1"
-if /i "%1"=="--no-build" set "SKIP_PAUSE=1"
+set "SKIP_BUILD="
+set "WM_UID="
+set "WM_VER=1.0.0"
+
+:parse_args
+if "%~1"=="" goto args_done
+if /i "%~1"=="-y" ( set "SKIP_PAUSE=1" & shift & goto parse_args )
+if /i "%~1"=="--no-build" ( set "SKIP_BUILD=1" & shift & goto parse_args )
+if /i "%~1"=="-w" ( set "WM_UID=%~2" & shift & shift & goto parse_args )
+if /i "%~1"=="-v" ( set "WM_VER=%~2" & shift & shift & goto parse_args )
+shift
+goto parse_args
+:args_done
 
 echo ==========================================
-echo   7Tan Build + Sync Tool (v10)
+echo   7Tan Build + Sync Tool (v11)
 echo   Full pipeline: build + sync portable dist
 echo ==========================================
 echo.
@@ -27,7 +38,7 @@ if exist ".git" (
 echo.
 
 REM ===== Step 1: Build exe =====
-if /i "%1"=="--no-build" (
+if defined SKIP_BUILD (
     echo [1/6] SKIP build --no-build mode
 ) else (
     echo [1/6] Building exe with PyInstaller...
@@ -190,6 +201,18 @@ if "!MISSING!"=="1" (
 )
 echo [OK] dist is fully self-contained
 echo [6/6] Verification done
+echo.
+
+REM ===== Step 7: Package release zips (free + pro + update) =====
+echo [7/7] Packaging release zips (free + pro + update)...
+"%ROOT%.venv\Scripts\python.exe" "templates\package_release.py" --uid "%WM_UID%" --version "%WM_VER%" --out "dist\release" --free-dir "dist\7tan-editor" --pro-build "dist\_build" --pro-python "dist\_python" --rebuild "dist\rebuild.bat" --license "templates\LICENSE.txt"
+if errorlevel 1 (
+    echo.
+    echo [ERROR] Release packaging failed.
+    if not defined SKIP_PAUSE pause
+    exit /b 1
+)
+echo [7/7] Release zips generated in dist\release
 echo.
 
 echo ==========================================

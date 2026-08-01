@@ -239,6 +239,13 @@ def run_desktop(args):
     except Exception:
         pass
 
+    # ===== 遥测上报（专业版水印回传，静默不阻塞）=====
+    try:
+        from src.core.telemetry import report_async
+        report_async()
+    except Exception:
+        pass
+
     # ===== 安全模式处理 =====
     if is_safe_mode():
         logger.warning("🛟 检测到安全模式启动信号")

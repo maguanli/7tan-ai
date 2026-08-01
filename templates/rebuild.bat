@@ -36,6 +36,20 @@ if not exist "%ROOT%\_build\main.py" (
   exit /b 1
 )
 
+REM ===== Step 0.5: Verify Pro watermark =====
+set "BI=%ROOT%\_build\src\config\build_info.py"
+if not exist "%BI%" (
+  echo [ERROR] build_info.py not found. Not a valid Pro source package.
+  exit /b 1
+)
+findstr /C:"PRO-" "%BI%" >nul
+if errorlevel 1 (
+  echo [ERROR] Watermark missing or invalid. This is a FREE package, Pro license required.
+  exit /b 1
+)
+echo   [OK] Pro watermark verified
+echo.
+
 echo [1/5] Backup current build...
 if exist "%OUT%" (
   if exist "%BACKUP%" rmdir /s /q "%BACKUP%"

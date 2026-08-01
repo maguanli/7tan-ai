@@ -8,17 +8,49 @@ cd /d "%ROOT%"
 set "SKIP_PAUSE="
 set "SKIP_BUILD="
 set "WM_UID="
-set "WM_VER=1.0.0"
+set "WM_VER="
+
+set "WM_VER_SET="
 
 :parse_args
 if "%~1"=="" goto args_done
 if /i "%~1"=="-y" ( set "SKIP_PAUSE=1" & shift & goto parse_args )
 if /i "%~1"=="--no-build" ( set "SKIP_BUILD=1" & shift & goto parse_args )
 if /i "%~1"=="-w" ( set "WM_UID=%~2" & shift & shift & goto parse_args )
-if /i "%~1"=="-v" ( set "WM_VER=%~2" & shift & shift & goto parse_args )
+if /i "%~1"=="-v" ( set "WM_VER=%~2" & set "WM_VER_SET=1" & shift & shift & goto parse_args )
 shift
 goto parse_args
 :args_done
+
+
+
+REM ===== Auto-detect version from src\config\version.py if -v not given =====
+
+if not defined WM_VER_SET (
+
+    if exist "src\config\version.py" (
+
+        for /f "tokens=2 delims== " %%V in ('findstr /b /c:"APP_VERSION" "src\config\version.py"') do set "WM_VER=%%~V"
+
+        set "WM_VER=!WM_VER: =!"
+
+        echo [INFO] Version auto-detected from version.py: !WM_VER!
+
+    )
+
+)
+
+if not defined WM_VER (
+
+    echo [ERROR] Cannot determine version. Pass -v x.y.z or fix src\config\version.py
+
+    if not defined SKIP_PAUSE pause
+
+    exit /b 1
+
+)
+
+echo [INFO] Build version: %WM_VER%
 
 echo ==========================================
 echo   7Tan Build + Sync Tool (v11)
@@ -205,6 +237,12 @@ echo.
 
 REM ===== Step 7: Package release zips (free + pro + update) =====
 echo [7/7] Packaging release zips (free + pro + update)...
+
+if not exist "dist\release" mkdir "dist\release"
+
+echo   [CLEAN] Removing old zips from dist\release...
+
+del /Q "dist\release\*.zip" 2>nul
 "%ROOT%.venv\Scripts\python.exe" "templates\package_release.py" --uid "%WM_UID%" --version "%WM_VER%" --out "dist\release" --free-dir "dist\7tan-editor" --pro-build "dist\_build" --pro-python "dist\_python" --rebuild "dist\rebuild.bat" --license "templates\LICENSE.txt"
 if errorlevel 1 (
     echo.

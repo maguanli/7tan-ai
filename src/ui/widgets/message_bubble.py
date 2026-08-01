@@ -25,7 +25,7 @@ class MessageBubble(QFrame):
     retry_requested = pyqtSignal(str)  # 触发重试
 
     def __init__(self, role: str, content: str, timestamp: str = "",
-                 cost: float = 0, iterations: int = 0,
+                 cost: float = 0, iterations: int = 0, tokens: int = 0,
                  tool_calls: list = None, is_streaming: bool = False,
                  session_id: str = None, pre_parsed_html: str = None,
                  parent=None):
@@ -45,6 +45,7 @@ class MessageBubble(QFrame):
         # ---- 头部：角色 + 时间戳 ----
         header = QHBoxLayout()
         header.setSpacing(8)
+        self._header = header
 
         role_icon = {"user": "🧑", "assistant": "🤖", "system": "⚙️", "error": "❌",
                      "tool_call": "🔧", "tool_result": "📎"}.get(role, "💬")
@@ -68,8 +69,22 @@ class MessageBubble(QFrame):
 
         header.addStretch()
 
-        # 费用徽章
-        if cost > 0 and role == "assistant":
+        # Token / 费用徽章（优先显示 Token 数）
+        if tokens > 0 and role == "assistant":
+            cost_badge = QLabel(f"🪙 {tokens:,} tokens")
+            cost_badge.setStyleSheet(f"""
+                QLabel {{
+                    background: {THEME['accent2']}44;
+                    color: {THEME['accent2']};
+                    border: 1px solid {THEME['accent2']}66;
+                    border-radius: 8px;
+                    padding: 1px 8px;
+                    font-size: 10px;
+                    font-weight: bold;
+                }}
+            """)
+            header.addWidget(cost_badge)
+        elif cost > 0 and role == "assistant":
             cost_badge = QLabel(f"💰 ¥{cost:.4f}")
             cost_badge.setStyleSheet(f"""
                 QLabel {{
@@ -368,6 +383,38 @@ class MessageBubble(QFrame):
         if reply == QMessageBox.StandardButton.Yes:
             self.setVisible(False)
             self.deleteLater()
+
+    def set_tokens(self, tokens: int):
+        """动态设置 Token 徽章（流式完成后调用，更新右上角显示）"""
+        if tokens <= 0 or self._role != "assistant":
+            return
+        badge_style = f"""
+            QLabel {{
+                background: {THEME['accent2']}44;
+                color: {THEME['accent2']};
+                border: 1px solid {THEME['accent2']}66;
+                border-radius: 8px;
+                padding: 1px 8px;
+                font-size: 10px;
+                font-weight: bold;
+            }}
+        """
+        # 已有 Token 徽章 → 只更新文本
+        for i in range(self._header.count()):
+            w = self._header.itemAt(i).widget()
+            if isinstance(w, QLabel) and "tokens" in w.text():
+                w.setText(f"🪙 {tokens:,} tokens")
+                return
+        # 没有 → 新建徽章（放在迭代徽章之前）
+        badge = QLabel(f"🪙 {tokens:,} tokens")
+        badge.setStyleSheet(badge_style)
+        insert_pos = self._header.count()
+        for i in range(self._header.count()):
+            w = self._header.itemAt(i).widget()
+            if isinstance(w, QLabel) and w.text().startswith("🔄"):
+                insert_pos = i
+                break
+        self._header.insertWidget(insert_pos, badge)
 
     def update_content(self, new_content: str, is_streaming: bool = False):
         """更新消息内容（流式模式会自动节流）"""

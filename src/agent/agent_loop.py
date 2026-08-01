@@ -513,6 +513,7 @@ def run_agent_loop(
         except Exception as e:
             logger.warning(f"⚠️ 自动加载工具失败: {e}")
     total_cost = 0.0
+    total_tokens = 0
     all_logs = []
     iteration = 0
     
@@ -543,6 +544,7 @@ def run_agent_loop(
                 "result": "⏹ 用户已终止任务",
                 "iterations": iteration,
                 "cost": total_cost,
+                "total_tokens": total_tokens,
                 "reason": "user_aborted",
             }
         iteration += 1
@@ -564,6 +566,7 @@ def run_agent_loop(
                 "result": f"AI 调用失败: {e}",
                 "iterations": iteration,
                 "cost": total_cost,
+                "total_tokens": total_tokens,
                 "logs": all_logs,
             }
         
@@ -575,6 +578,7 @@ def run_agent_loop(
                 response.usage.completion_tokens or 0,
             )
             total_cost += cost_val if isinstance(cost_val, (int, float)) else 0.0
+            total_tokens += (response.usage.prompt_tokens or 0) + (response.usage.completion_tokens or 0)
         
         if not response.choices:
             logger.warning("⚠️ 空响应，重试...")
@@ -660,6 +664,7 @@ def run_agent_loop(
                 "result": final_result,
                 "iterations": iteration,
                 "cost": total_cost,
+                "total_tokens": total_tokens,
                 "logs": all_logs,
             }
         
@@ -761,6 +766,7 @@ def run_agent_loop(
         "result": f"达到最大迭代次数 {max_iterations}，任务未完成",
         "iterations": max_iterations,
         "cost": total_cost,
+        "total_tokens": total_tokens,
         "logs": all_logs,
     }
 
@@ -819,7 +825,7 @@ def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str 
     if result is None:
         error_msg = result_holder.get("error", "任务失败")
         logger.error(f"💬 Agent: {error_msg}")
-        yield {"type": "done", "success": False, "result": error_msg}
+        yield {"type": "done", "success": False, "result": error_msg, "tokens": result.get("total_tokens", 0)}
     elif result.get("success"):
         content = result.get("result", "")
         if content:
@@ -831,11 +837,12 @@ def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str 
             "result": content or "任务完成",
             "iterations": result.get("iterations", 0),
             "cost": result.get("cost", 0),
+            "tokens": result.get("total_tokens", 0),
         }
     else:
         error_msg = result.get("result", result.get("error", "任务失败"))
         logger.error(f"💬 Agent: {error_msg}")
-        yield {"type": "done", "success": False, "result": error_msg}
+        yield {"type": "done", "success": False, "result": error_msg, "tokens": result.get("total_tokens", 0)}
 
 
 def _repair_messages(messages: list) -> list:

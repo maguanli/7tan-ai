@@ -50,6 +50,7 @@ class ChatResponse(BaseModel):
     result: str
     cost: float = 0
     iterations: int = 0
+    tokens: int = 0
 
 
 def _load_system_prompt() -> str:
@@ -139,6 +140,7 @@ async def send_message(req: ChatRequest):
             result=result["result"],
             cost=result.get("cost", 0),
             iterations=result.get("iterations", 0),
+            tokens=result.get("total_tokens", 0),
         )
     except HTTPException:
         raise

@@ -794,7 +794,7 @@ class ChatPage(QWidget):
 
     def _add_message(self, role: str, content: str, timestamp: str = "",
 
-                     cost: float = 0, iterations: int = 0,
+                     cost: float = 0, iterations: int = 0, tokens: int = 0,
 
                      tool_calls: list = None, is_streaming: bool = False,
                      pre_parsed_html: str = None) -> MessageBubble:
@@ -804,8 +804,8 @@ class ChatPage(QWidget):
         ts = timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._message_data.append({
             "role": role, "content": content, "timestamp": ts,
-            "cost": cost, "iterations": iterations, "tool_calls": tool_calls,
-            "html": pre_parsed_html,
+            "cost": cost, "iterations": iterations, "tokens": tokens,
+            "tool_calls": tool_calls, "html": pre_parsed_html,
         })
         logger.info(f"[ChatPage] _add_message role={role} data_idx={len(self._message_data)-1}")
         # 新消息始终在末尾渲染，更新范围
@@ -855,7 +855,7 @@ class ChatPage(QWidget):
 
             timestamp=timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
 
-            cost=cost, iterations=iterations,
+            cost=cost, iterations=iterations, tokens=tokens,
 
             tool_calls=tool_calls, is_streaming=is_streaming,
 
@@ -1378,6 +1378,7 @@ class ChatPage(QWidget):
             role=md["role"], content=md["content"],
             timestamp=md.get("timestamp", ""),
             cost=md.get("cost", 0), iterations=md.get("iterations", 0),
+            tokens=md.get("tokens", 0),
             tool_calls=md.get("tool_calls"), is_streaming=False,
             session_id=self._current_session_id,
             pre_parsed_html=md.get("html")
@@ -2122,15 +2123,18 @@ class ChatPage(QWidget):
 
         if not success:
 
-            self._add_message("error", result, cost=cost, iterations=iterations)
+            self._add_message("error", result, cost=cost, iterations=iterations,
+                              tokens=data.get("tokens", 0))
 
         elif self._streaming_assistant_bubble:
 
-            # 更新最终状态（去掉流式标记、更新费用）
+            # 更新最终状态（去掉流式标记、更新 Token 徽章）
 
             self._streaming_assistant_bubble._is_streaming = False
 
             self._streaming_assistant_bubble.update_content(result, is_streaming=False)
+
+            self._streaming_assistant_bubble.set_tokens(data.get("tokens", 0))
 
             # 更新 tool_calls 最终状态
 
@@ -2207,13 +2211,15 @@ class ChatPage(QWidget):
 
         if not success:
 
-            self._add_message("error", f"\u274c {result}", cost=cost, iterations=iterations)
+            self._add_message("error", f"\u274c {result}", cost=cost, iterations=iterations,
+                              tokens=data.get("tokens", 0))
 
         else:
 
             logger.info("[ChatPage] calling _add_message assistant")
 
-            self._add_message("assistant", result, cost=cost, iterations=iterations)
+            self._add_message("assistant", result, cost=cost, iterations=iterations,
+                              tokens=data.get("tokens", 0))
             self._update_context_indicator()
 
             logger.info("[ChatPage] full render ok")

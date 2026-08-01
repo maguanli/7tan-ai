@@ -1,12 +1,22 @@
 {
   "versions": [
     {
+      "version": "1.0.1",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.1.zip",
+      "md5": "5f7559901d5c60fd5413dbab19f8c077",
+      "size": 354133511,
+      "notes": "1.0.1 更新：新增防转卖设备指纹系统、AI试用修复(DeepSeek-V4-Flash)、更新系统上线、流量统计增强、多项稳定性修复。",
+      "release_date": "2026-08-02"
+    },
+    {
       "version": "1.0.0",
       "channel": "stable",
       "platform": "windows",
       "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.0.zip",
-      "md5": "REPLACE_WITH_REAL_MD5",
-      "size": 0,
+      "md5": "257d069788b8ef85f78e212dffec90dc",
+      "size": 354124641,
       "notes": "首版发布：AI 工作台、游戏内容工厂、全栈开发助手、自我进化系统。",
       "release_date": "2026-08-01"
     }

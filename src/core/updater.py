@@ -205,8 +205,10 @@ def apply_update(zip_path: str | Path) -> tuple[bool, str]:
     if not (root / exe_name).exists():
         return False, f"更新包内未找到 {exe_name}"
 
-    # 生成 update.bat
-    bat = upd_dir / "update.bat"
+    # 生成 update.bat —— 必须放在 exe_dir 的【父目录】！
+    # 关键: bat 若位于 exe_dir 内部, ren exe_dir 时 cmd 正在执行的 bat 被移动,
+    #       cmd 后续读取中止("The batch file cannot be found")导致更新卡死。
+    bat = exe_dir.parent / "update.bat"
     try:
         bat.write_text(_bat_script(exe_dir, upd_dir, root, exe_name), encoding="utf-8")
     except Exception as exc:
@@ -215,7 +217,7 @@ def apply_update(zip_path: str | Path) -> tuple[bool, str]:
     try:
         subprocess.Popen(
             [str(bat)],
-            cwd=str(upd_dir),
+            cwd=str(exe_dir.parent),
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except Exception as exc:
@@ -226,27 +228,44 @@ def apply_update(zip_path: str | Path) -> tuple[bool, str]:
 
 
 def _bat_script(exe_dir: Path, upd_dir: Path, new_root: Path, exe_name: str) -> str:
-    """生成 update.bat（全英文注释，兼容 chcp 65001 UTF-8）"""
+    """生成 update.bat（放在 exe_dir 的父目录, 全英文注释, 兼容 chcp 65001 UTF-8）
+
+    换名策略(关键):
+      1. 先把新包 move 到旁路临时名 {exe_dir}.new
+      2. ren 旧目录为 _old
+      3. ren .new 为正式目录
+      全程路径稳定; bat 在父目录, ren 不会移动正在执行的 bat。
+    """
     old_dir = exe_dir.parent / f"{exe_dir.name}_old"
     new_dir = new_root.parent
     return f"""@echo off
 chcp 65001 >nul
 setlocal
+cd /d "%~dp0"
 echo [7Tan Updater] waiting for main process exit...
 timeout /t 5 /nobreak >nul
 taskkill /IM {exe_name} /F >nul 2>&1
 timeout /t 2 /nobreak >nul
 
+rem 1) stage new app beside current app (stable path)
+move /y "{new_root}" "{exe_dir}.new" >nul
+if errorlevel 1 goto :failed
+if not exist "{exe_dir}.new\\{exe_name}" goto :failed
+
+rem 2) retire old app
 if exist "{old_dir}" rmdir /s /q "{old_dir}"
 if exist "{exe_dir}" ren "{exe_dir}" 7tan-editor_old
+if not exist "{old_dir}" goto :failed
 
-move /y "{new_root}" "{exe_dir}" >nul
-if errorlevel 1 goto :failed
+rem 3) promote new app
+ren "{exe_dir}.new" {exe_dir.name}
+if not exist "{exe_dir}\\{exe_name}" goto :failed
 
+rem 4) cleanup (exe_dir 已被改名, _update 现在位于 old_dir 下)
 rmdir /s /q "{old_dir}" >nul 2>&1
-rmdir /s /q "{new_dir}" >nul 2>&1
-del /q "{upd_dir}\\*.zip" >nul 2>&1
-del /q "{upd_dir}\\*.part" >nul 2>&1
+rmdir /s /q "{old_dir}\\{UPDATE_DIR_NAME}\\new" >nul 2>&1
+del /q "{old_dir}\\{UPDATE_DIR_NAME}\\*.zip" >nul 2>&1
+del /q "{old_dir}\\{UPDATE_DIR_NAME}\\*.part" >nul 2>&1
 
 start "" "{exe_dir}\\{exe_name}"
 del "%~f0" >nul 2>&1
@@ -254,9 +273,12 @@ exit /b 0
 
 :failed
 echo [7Tan Updater] failed, rolling back...
-if exist "{old_dir}" (
+if exist "{exe_dir}.new" (
     if exist "{exe_dir}" rmdir /s /q "{exe_dir}"
-    ren "{old_dir}" {exe_dir.name}
+    ren "{exe_dir}.new" {exe_dir.name}
+)
+if not exist "{exe_dir}\\{exe_name}" (
+    if exist "{old_dir}" ren "{old_dir}" {exe_dir.name}
 )
 del "%~f0" >nul 2>&1
 exit /b 1

@@ -500,7 +500,11 @@ class Sidebar(QFrame):
         layout.addWidget(line2)
 
         # 底部信息
-        version = QLabel("7tan.com v5.1.0")
+        try:
+            from src.config.version import APP_VERSION as _APP_VERSION
+        except Exception:
+            _APP_VERSION = "1.0.0"
+        version = QLabel(f"7tan.com v{_APP_VERSION}")
         version.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 14px; font-weight: bold; padding: 10px;")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         version.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))

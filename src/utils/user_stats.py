@@ -39,8 +39,13 @@ from ..config.loader import load_config
 ANALYTICS_DIR = Path.home() / "AppData" / "Local" / "7tan"
 ANALYTICS_FILE = ANALYTICS_DIR / "analytics_id.txt"
 
-# ── 当前版本（与 app.py 保持一致）──
-APP_VERSION = "5.1.0"
+# ── 当前版本（与 src/config/version.py 保持一致，避免硬编码不同步）──
+try:
+    from ..config.version import APP_VERSION
+    _APP_VERSION = APP_VERSION
+except Exception:
+    _APP_VERSION = "1.0.0"
+APP_VERSION = _APP_VERSION
 
 # ── 事件上报节流（秒）：主界面打开/关闭等事件，距上次事件上报不足此间隔则跳过 ──
 PING_MIN_INTERVAL = 60.0

@@ -55,6 +55,8 @@ htmlcov/
 
 # 构建产物
 dist/
+dist*.zip
+dist - */
 build/
 *.spec
 

@@ -67,7 +67,7 @@ $today_new = $stmt->fetch()['cnt'] ?? 0;
 $stmt = $db->query("SELECT COUNT(*) AS cnt FROM 7tan_client_sessions");
 $total_devices = $stmt->fetch()['cnt'] ?? 0;
 
-// 7日留存率
+// 次日回流率：7天前首现的设备中，首现次日之后仍活跃过的比例（表结构仅存每设备最后活跃时间，无法计算标准留存）
 $seven_days_ago = date('Y-m-d', strtotime('-7 days'));
 $stmt = $db->prepare("
     SELECT 
@@ -233,8 +233,9 @@ function mask_id($id) {
 </head>
 <body>
     <div class="header">
+        <div class="subtitle"><b><a href="index.php">后台首页</a> / 7Tan-PC端流量统计</b></div>
         <h1>📊 7Tan 客户端流量统计</h1>
-        <div class="subtitle">统计 7Tan 桌面软件的日活/新增/留存/版本分布</div>
+        <div class="subtitle">统计 7Tan 桌面软件的日活/新增/回流/版本分布</div>
     </div>
 
     <!-- 统计卡片 -->
@@ -261,7 +262,7 @@ function mask_id($id) {
         </div>
         <div class="card orange">
             <div class="number"><?= $retention_rate ?>%</div>
-            <div class="label">🔁 7日留存率</div>
+            <div class="label">🔁 次日回流率</div>
         </div>
     </div>
 

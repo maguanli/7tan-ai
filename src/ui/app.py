@@ -375,11 +375,39 @@ class Sidebar(QFrame):
         layout.setContentsMargins(8, 16, 8, 16)
         layout.setSpacing(4)
 
-        # Logo
-        logo = QLabel("🎮 7Tan")
-        logo.setStyleSheet(f"color: {THEME['accent']}; font-size: 16px; font-weight: bold; padding: 8px;")
-        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(logo)
+        # Logo: AI 机器人图标 + 7Tan 文字（图标缺失时回退 emoji）
+        logo_row = QWidget()
+        logo_row.setObjectName("sidebar_logo_row")
+        logo_layout = QHBoxLayout(logo_row)
+        logo_layout.setContentsMargins(8, 8, 8, 8)
+        logo_layout.setSpacing(8)
+        logo_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        icon_lbl = QLabel()
+        icon_lbl.setFixedSize(32, 32)
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if getattr(sys, "_MEIPASS", None):
+            _icon_path = Path(sys._MEIPASS) / "data" / "logo" / "sidebar_icon.png"
+        else:
+            _icon_path = Path(__file__).resolve().parent.parent.parent / "data" / "logo" / "sidebar_icon.png"
+        _icon_pix = QPixmap(str(_icon_path)) if _icon_path.exists() else QPixmap()
+        if not _icon_pix.isNull():
+            icon_lbl.setPixmap(_icon_pix.scaled(
+                28, 28,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            ))
+        else:
+            icon_lbl.setText("🤖")
+
+        text_lbl = QLabel("7Tan")
+        text_lbl.setStyleSheet(
+            f"color: {THEME['accent']}; font-size: 16px; font-weight: bold; background: transparent;"
+        )
+
+        logo_layout.addWidget(icon_lbl)
+        logo_layout.addWidget(text_lbl)
+        layout.addWidget(logo_row)
 
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)

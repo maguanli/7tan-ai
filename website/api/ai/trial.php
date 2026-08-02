@@ -128,8 +128,42 @@ if (!$is_pro) {
 // ============================================================
 // 代理转发 DeepSeek API
 // ============================================================
-$api_key  = defined('DEEPSEEK_API_KEY') ? DEEPSEEK_API_KEY : '';
-$base_url = defined('DEEPSEEK_BASE_URL') ? DEEPSEEK_BASE_URL : 'https://api.deepseek.com/v1';
+// ============================================================
+// 获取 DeepSeek API Key：优先从数据库 ll_api_keys 表读取（api-keys.php 后台管理），
+// 回退到 config/database.php 的 DEEPSEEK_API_KEY 常量。
+// Key 不再写死在代码里，可在 https://img.7tan.cn/api-keys.php 随时更换。
+// ============================================================
+function get_trial_deepseek_config(PDO $db): array {
+    try {
+        $stmt = $db->prepare(
+            "SELECT api_key, api_url FROM ll_api_keys WHERE provider='deepseek' AND is_active=1 ORDER BY id ASC LIMIT 1"
+        );
+        $stmt->execute();
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row && !empty($row['api_key'])) {
+            $url = !empty($row['api_url']) ? rtrim($row['api_url'], '/') : '';
+            // 数据库存的是完整端点（.../chat/completions）或 base_url，统一归一化为完整端点
+            if ($url && substr($url, -17) !== '/chat/completions') {
+                $url .= '/chat/completions';
+            }
+            if (!$url) {
+                $url = 'https://api.deepseek.com/v1/chat/completions';
+            }
+            return ['key' => $row['api_key'], 'endpoint' => $url];
+        }
+    } catch (PDOException $e) {
+        // ll_api_keys 表不存在 → 回退常量
+    }
+    $base = defined('DEEPSEEK_BASE_URL') ? rtrim(DEEPSEEK_BASE_URL, '/') : 'https://api.deepseek.com/v1';
+    return [
+        'key'      => defined('DEEPSEEK_API_KEY') ? DEEPSEEK_API_KEY : '',
+        'endpoint' => $base . '/chat/completions',
+    ];
+}
+
+$ds       = get_trial_deepseek_config($db);
+$api_key  = $ds['key'];
+$endpoint = $ds['endpoint'];
 
 if (empty($api_key) || strpos($api_key, 'your-') === 0) {
     http_response_code(500);
@@ -143,7 +177,7 @@ $request_body = json_encode([
     'stream'   => false,
 ], JSON_UNESCAPED_UNICODE);
 
-$ch = curl_init($base_url . '/chat/completions');
+$ch = curl_init($endpoint);
 curl_setopt_array($ch, [
     CURLOPT_POST           => true,
     CURLOPT_POSTFIELDS     => $request_body,

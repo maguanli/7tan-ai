@@ -72,3 +72,6 @@ data/video_editor/thumbs/
 
 # 输出产物
 output/
+
+# 编译旧版残留（进程占用时临时改名）
+*.pyd.old

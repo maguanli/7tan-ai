@@ -197,11 +197,13 @@ def online_verify(token: str) -> dict:
     except Exception:
         return {"valid": False, "level": "unknown", "error": "数据格式异常"}
 
+    inner = data.get("data") or {}
+    ok = (data.get("code") == 0) and bool(inner)
     return {
-        "valid": data.get("success", False),
-        "level": data.get("level", "free"),
-        "pro_expires": data.get("pro_expires", 0),
-        "error": data.get("message") if not data.get("code") == 0 else None,
+        "valid": ok,
+        "level": inner.get("level", "free"),
+        "pro_expires": inner.get("pro_expires", 0),
+        "error": None if ok else (data.get("message") or "验证失败"),
     }
 
 

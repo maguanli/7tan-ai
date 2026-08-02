@@ -74,7 +74,7 @@ class LoginDialog(QDialog):
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
 
-        self.setFixedSize(420, 490)
+        self.setFixedSize(420, 525)
         self.setWindowFlags(
             Qt.WindowType.Dialog |
             Qt.WindowType.FramelessWindowHint
@@ -102,7 +102,7 @@ class LoginDialog(QDialog):
         # 卡片容器
         self._card = QFrame(self)
         self._card.setObjectName("card")
-        self._card.setFixedSize(420, 490)
+        self._card.setFixedSize(420, 525)
 
         # 阴影效果
         shadow = QGraphicsDropShadowEffect(self)
@@ -218,7 +218,49 @@ class LoginDialog(QDialog):
         bottom_row.addWidget(btn_forgot)
 
         layout.addLayout(bottom_row)
-        layout.addSpacing(20)
+        layout.addSpacing(8)
+
+        # --- 协议同意（用户协议 + 隐私政策） ---
+        agree_row = QHBoxLayout()
+        agree_row.setSpacing(0)
+
+        self._chk_agree = QCheckBox("我已阅读并同意")
+        self._chk_agree.setFont(QFont("Microsoft YaHei", 10))
+        self._chk_agree.setChecked(True)
+        self._chk_agree.setCursor(Qt.CursorShape.PointingHandCursor)
+        agree_row.addWidget(self._chk_agree)
+
+        from src.config.loader import load_config as _load_cfg_agree
+        _cfg_agree = _load_cfg_agree()
+        _base_agree = _cfg_agree.get("site_7tan", {}).get("base_url", "")
+        _site_root_agree = _base_agree.replace("/api", "") if _base_agree else "https://www.7tan.com"
+        _url_agreement = _site_root_agree + "/agreement.php"
+        _url_privacy = _site_root_agree + "/privacy.php"
+
+        btn_agreement = QPushButton("《用户协议》")
+        btn_agreement.setObjectName("btnAgreeLink")
+        btn_agreement.setFont(QFont("Microsoft YaHei", 10))
+        btn_agreement.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_agreement.setToolTip(_url_agreement)
+        btn_agreement.clicked.connect(lambda: self._open_url(_url_agreement))
+        agree_row.addWidget(btn_agreement)
+
+        lbl_and = QLabel("和")
+        lbl_and.setFont(QFont("Microsoft YaHei", 10))
+        lbl_and.setStyleSheet(f"color: {TEXT_SECONDARY}; background: transparent;")
+        agree_row.addWidget(lbl_and)
+
+        btn_privacy = QPushButton("《隐私政策》")
+        btn_privacy.setObjectName("btnAgreeLink")
+        btn_privacy.setFont(QFont("Microsoft YaHei", 10))
+        btn_privacy.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_privacy.setToolTip(_url_privacy)
+        btn_privacy.clicked.connect(lambda: self._open_url(_url_privacy))
+        agree_row.addWidget(btn_privacy)
+
+        agree_row.addStretch()
+        layout.addLayout(agree_row)
+        layout.addSpacing(12)
 
         # --- 错误提示 ---
         self._lbl_error = QLabel("")
@@ -337,6 +379,17 @@ class LoginDialog(QDialog):
             #btnLink:hover {{
                 color: {ACCENT_HOVER};
             }}
+            #btnAgreeLink {{
+                background: transparent;
+                color: {ACCENT};
+                border: none;
+                text-decoration: underline;
+                padding: 0 2px;
+                font-size: 10px;
+            }}
+            #btnAgreeLink:hover {{
+                color: {ACCENT_HOVER};
+            }}
             #btnTogglePwd {{
                 background: transparent;
                 color: {TEXT_SECONDARY};
@@ -418,6 +471,11 @@ class LoginDialog(QDialog):
         if not password:
             self._show_error("请输入密码")
             self._input_pwd.setFocus()
+            return
+
+        # 协议同意校验
+        if not self._chk_agree.isChecked():
+            self._show_error("请先阅读并同意《用户协议》和《隐私政策》")
             return
 
         # 进入加载状态

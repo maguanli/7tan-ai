@@ -3847,6 +3847,40 @@ class SettingsPage(QWidget):
         self._update_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self._update_status)
 
+        # ===== 用户协议 / 隐私政策 =====
+        agree_row = QHBoxLayout()
+        agree_row.addStretch()
+
+        def _make_policy_btn(text: str, url: str):
+            btn = QPushButton(text)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    color: {THEME['text_secondary']};
+                    border: none;
+                    font-size: 12px;
+                    text-decoration: underline;
+                    padding: 4px 8px;
+                }}
+                QPushButton:hover {{ color: {THEME['accent']}; }}
+            """)
+            btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            btn.setToolTip(url)
+            btn.clicked.connect(lambda: self.open_url.emit(url))
+            return btn
+
+        try:
+            from src.config.loader import load_config as _load_cfg_policy
+            _cfg_policy = _load_cfg_policy()
+            _base_policy = _cfg_policy.get("site_7tan", {}).get("base_url", "")
+            _site_root_policy = _base_policy.replace("/api", "") if _base_policy else "https://www.7tan.com"
+        except Exception:
+            _site_root_policy = "https://www.7tan.com"
+        agree_row.addWidget(_make_policy_btn("《用户协议》", _site_root_policy + "/agreement.php"))
+        agree_row.addWidget(_make_policy_btn("《隐私政策》", _site_root_policy + "/privacy.php"))
+        agree_row.addStretch()
+        layout.addLayout(agree_row)
+
     # =================== 软件更新 ===================
     def _check_update(self):
         """手动检查更新（关于页按钮）"""

@@ -19,11 +19,11 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import (
     QFont, QColor, QPalette, QIcon, QPixmap, QLinearGradient,
-    QBrush, QPainter,
+    QBrush, QPainter, QDesktopServices,
 )
 from PyQt6.QtCore import (
     Qt, QTimer, QPropertyAnimation, QEasingCurve, QRect,
-    QPoint, pyqtSignal, QSize,
+    QPoint, pyqtSignal, QSize, QUrl,
 )
 
 from loguru import logger
@@ -447,9 +447,12 @@ class LoginDialog(QDialog):
             self._btn_toggle_pwd.setText("👁")
 
     def _open_url(self, url: str):
-        """在浏览器中打开 URL"""
-        import webbrowser
-        webbrowser.open(url)
+        """在系统默认浏览器中打开 URL（QDesktopServices 优先，失败回退 webbrowser）"""
+        from PyQt6.QtGui import QDesktopServices
+        from PyQt6.QtCore import QUrl
+        if not QDesktopServices.openUrl(QUrl(url)):
+            import webbrowser
+            webbrowser.open(url)
 
     def _on_forgot_password(self):
         """忘记密码 → 打开 7tan.com"""

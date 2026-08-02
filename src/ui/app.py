@@ -24,6 +24,7 @@ from PyQt6.QtGui import (
     QFont, QColor, QPalette, QIcon, QAction, QPixmap, QPainter,
     QBrush, QLinearGradient, QRadialGradient, QCursor, QFontDatabase,
     QStandardItemModel, QStandardItem, QPolygonF, QPen,
+    QDesktopServices,
 )
 from PyQt6.QtCore import (
     Qt, QThread, pyqtSignal, QTimer, QSize, QUrl, QObject,
@@ -3866,7 +3867,7 @@ class SettingsPage(QWidget):
             """)
             btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
             btn.setToolTip(url)
-            btn.clicked.connect(lambda: self.open_url.emit(url))
+            btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
             return btn
 
         try:

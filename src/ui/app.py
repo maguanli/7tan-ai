@@ -384,7 +384,7 @@ class Sidebar(QFrame):
         logo_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         icon_lbl = QLabel()
-        icon_lbl.setFixedSize(32, 32)
+        icon_lbl.setFixedSize(60, 60)
         icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         if getattr(sys, "_MEIPASS", None):
             _icon_path = Path(sys._MEIPASS) / "data" / "logo" / "sidebar_icon.png"
@@ -393,7 +393,7 @@ class Sidebar(QFrame):
         _icon_pix = QPixmap(str(_icon_path)) if _icon_path.exists() else QPixmap()
         if not _icon_pix.isNull():
             icon_lbl.setPixmap(_icon_pix.scaled(
-                28, 28,
+                60, 60,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             ))
@@ -401,6 +401,7 @@ class Sidebar(QFrame):
             icon_lbl.setText("🤖")
 
         text_lbl = QLabel("7Tan")
+        text_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         text_lbl.setStyleSheet(
             f"color: {THEME['accent']}; font-size: 16px; font-weight: bold; background: transparent;"
         )

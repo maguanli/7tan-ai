@@ -11,27 +11,85 @@
 水印格式：BUILD_ID = PRO-YYYYMMDD-HHMMSS-XXXX（每份唯一）
 水印写入：_build/src/config/build_info.py（随源码包分发，并编译进用户自构建的 exe）
 
+P1-7 加固（2026-08-02）：
+  - 专业包/免费包剔除开发者本地敏感数据（.encryption_key、games.db*、auth/、memory/ 等）
+  - 支持通配符文件名黑名单（fnmatch）
+  - 保留 logo/ prompts/ plugins/（build.spec 引用，剔除会导致买家自构建失败）
+
 用法（由 build_and_sync.bat 调用，也可手动执行）:
     python templates/package_release.py \
-        --uid UID-20260801-00042 \\
-        --version 1.0.0 \\
-        --out dist/release \\
-        --free-dir dist/7tan-editor \\
-        --pro-build dist/_build \\
-        --pro-python dist/_python \\
-        --rebuild dist/rebuild.bat \\
+        --uid UID-20260801-00042 \
+        --version 1.0.0 \
+        --out dist/release \
+        --free-dir dist/7tan-editor \
+        --pro-build dist/_build \
+        --pro-python dist/_python \
+        --rebuild dist/rebuild.bat \
         --license templates/LICENSE.txt
 
     --uid 为空时：专业包不带水印（仅内部测试用）
 """
 import argparse
 import datetime
+import fnmatch
 import random
 import sys
 import zipfile
 from pathlib import Path
 
 ZIP_LEVEL = 1  # _python 体量大且多为已压缩数据，用最快压缩级别
+
+# ============================================================
+# P1-7 敏感数据黑名单（开发者本地数据，绝不能进发布包）
+# ============================================================
+
+# 目录名黑名单：路径中任意一级目录名命中即跳过
+#   auth/       — 登录烙印记（用户名+指纹）
+#   memory/     — 本地记忆库
+#   sandbox/    — 沙盒调试文件
+#   screenshots/ video_editor/ web_cache/ — 运行时缓存
+EXCLUDE_DIRS = {
+    "__pycache__",
+    "_source_backup",
+    ".pytest_cache",
+    "auth",
+    "memory",
+    "sandbox",
+    "screenshots",
+    "video_editor",
+    "web_cache",
+}
+
+# 文件名黑名单（支持 fnmatch 通配符）
+#   .encryption_key / .encryption_salt — 本地加密密钥（首次运行自动生成）
+#   *.db* — 开发者本地数据库（games.db / 7tan.db / app.db / -wal / -shm）
+#   test_*.py _fix*.py fix_*.py *.bak — 调试脚本/旧版备份
+#   *_result.txt 等 — 调试输出
+EXCLUDE_FILE_PATTERNS = {
+    ".encryption_key",
+    ".encryption_salt",
+    "*.db",
+    "*.db-wal",
+    "*.db-shm",
+    "*.bak",
+    "*.tmp",
+    "test_*.py",
+    "_check_*.py",
+    "_fix_*.py",
+    "fix_*.py",
+    "stats_models.py",
+    "cap_func.txt",
+    "db_func*.txt",
+    "db_summary.txt",
+    "capabilities_verify.txt",
+    "*_result.txt",
+    "hl_*.txt",
+    "sw_*.txt",
+    "costs.json",
+    "state.json",
+    "url_history.txt",
+    "device_last_report.json",
+}
 
 
 def gen_build_id() -> str:
@@ -60,20 +118,29 @@ def write_build_info(build_id: str, build_user: str, out_path: Path) -> None:
 
 def zip_dir(zf: zipfile.ZipFile, src_dir, arc_root: str,
             exclude_dirs=(), exclude_files=()) -> int:
-    """递归打包目录，返回文件数"""
+    """递归打包目录，返回文件数
+
+    exclude_dirs  : 目录名黑名单（路径任意段命中即跳过）
+    exclude_files : 文件名黑名单（支持 fnmatch 通配符）
+    """
     src = Path(src_dir)
     count = 0
+    skipped = 0
     for p in sorted(src.rglob("*")):
         if not p.is_file():
             continue
         rel = p.relative_to(src)
         if any(part in exclude_dirs for part in rel.parts):
+            skipped += 1
             continue
-        if p.name in exclude_files:
+        if any(fnmatch.fnmatch(p.name, pat) for pat in exclude_files):
+            skipped += 1
             continue
         arc = f"{arc_root}/{rel.as_posix()}"
         zf.write(p, arc)
         count += 1
+    if skipped:
+        print(f"    (已剔除 {skipped} 个敏感/调试文件)")
     return count
 
 
@@ -101,7 +168,9 @@ def main() -> int:
         return 1
     free_zip = out / f"7tan-editor-free-v{ver}.zip"
     with zipfile.ZipFile(free_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=ZIP_LEVEL) as zf:
-        n = zip_dir(zf, free_dir, "7tan-editor", exclude_dirs={"__pycache__", "_source_backup"})
+        n = zip_dir(zf, free_dir, "7tan-editor",
+                    exclude_dirs=EXCLUDE_DIRS,
+                    exclude_files=EXCLUDE_FILE_PATTERNS)
     print(f"[OK] 免费包  : {free_zip}  ({free_zip.stat().st_size / 1048576:.1f} MB, {n} 文件)")
 
     # ---- 2. 专业包水印注入 ----
@@ -121,11 +190,13 @@ def main() -> int:
         pro_zip = out / f"7tan-pro-src-v{ver}{suffix}.zip"
         with zipfile.ZipFile(pro_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=ZIP_LEVEL) as zf:
             n1 = zip_dir(zf, pro_build, "7tan-pro/_build",
-                         exclude_dirs={"__pycache__", "_source_backup", ".pytest_cache"})
+                         exclude_dirs=EXCLUDE_DIRS,
+                         exclude_files=EXCLUDE_FILE_PATTERNS)
             n2 = 0
             if Path(args.pro_python).exists():
                 n2 = zip_dir(zf, args.pro_python, "7tan-pro/_python",
-                             exclude_dirs={"__pycache__", "_source_backup"})
+                             exclude_dirs={"__pycache__", "_source_backup"},
+                             exclude_files=())
             if Path(args.rebuild).exists():
                 zf.write(args.rebuild, "7tan-pro/rebuild.bat")
             if Path(args.license).exists():
@@ -142,7 +213,8 @@ def main() -> int:
         upd_zip = out / f"7tan-pro-update-v{ver}{suffix}.zip"
         with zipfile.ZipFile(upd_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=ZIP_LEVEL) as zf:
             n1 = zip_dir(zf, pro_build, "7tan-pro/_build",
-                         exclude_dirs={"__pycache__", "_source_backup", ".pytest_cache"})
+                         exclude_dirs=EXCLUDE_DIRS,
+                         exclude_files=EXCLUDE_FILE_PATTERNS)
             if Path(args.rebuild).exists():
                 zf.write(args.rebuild, "7tan-pro/rebuild.bat")
             if Path(args.license).exists():

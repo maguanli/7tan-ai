@@ -35,9 +35,10 @@ def _decrypt(encrypted_b64: str) -> str:
 
 
 # 加密值（构建时由 tools/gen_sec_config.py 注入）
-_INTEGRITY_ENC = "'f0oukZftyqeSnWTrKzAJBtZbsP9PUd6fyW2wJXhHeFElqenR7cnWf0txaFF4HDo+LZzNECn2Z7nduLRmMWVW/ooRGNjSftnK8mhps4TitpcH/zmEXoCA5Le1Gdp0Phuve7NvgO8CTNshO+TuXu3e0EsT+nKsXzUQhDFL/JL4t70o2/nuWSLtBYe0tgV4GWEhohSou8GCINIuCW+bn4YpebaKE9FIOUU8XYjK8C8OJnwS2xiUl46Z27hIJEEzDn36pbVDY7kLNBRKOZHhJHIS/iI8SVdG4qzy5jZfqc5sdaCQVKjfGEXjUN6uC4JvhKr0'"
-_UPDATE_ENC = "'f0ouket6PZmOmUlAmx9L5peI7fXksFEIkJv0YtOGLnYN1KGha4bYyBle/zRUmrcI/HwiXnuCEONyPpAB6ObtAKT1kdj7'"
-_TELEMETRY_ENC = "'f0oukTqvuLGmbYoCBZr4yfLTFgd39xtrxQEGoakxgYIX4wQnsTnJ9QX27gGagdPB1qBVDWc60OGwz5ClZHKgno4u3O9y76Ty'"
+_INTEGRITY_ENC = "'f0oukTE0B8fNAaXV4WlkA5vk/nXyLOHnxdi9U4idc13cLuaHP6L502pIlxclQynDbT0fhzf43gzKjeUWyy8kIrLdGUjomiKhQeMDy52dD/RsoIpI/ESftWJUNAzdF46PSzSgTU9x5mcolBSKQ9byEirxPlJCXwbJ9Obo51BLkda51ECUJKTvbYNGHd81xkjZq6ngEaWKjE1hvfflDQ+K82hM9scf7Sk7SYcjloo/ju3sWLXeSKwOeB0BcIpjJLjVx003vgLP7dL+6rWyX4R0uiheNiz1c/x82gNSeaPFINAmvAgQRU7TH7y3wIbi9aLN'"
+_UPDATE_ENC = "'f0oukSUW2+B6r8ycDhzpK/hwUov6toA9XkGuIZ3WyluCHoXjm5UPZmaI4zn+AobtjKB0iHmJa8FwO/1Fmw/KazaCo0WD'"
+_TELEMETRY_ENC = "'f0oukZ3HxKY6jNpAPo2YZZ9DIgIUp2f1NvhIRLqWQRCBY6ZsBB9XLe1ZRdca7owqEG0qZmkgtNNfgj1bKQPezAnx3VxoxSri'"
+_ENC_SEED_ENC = "'f0oukUpk6+cQpk0IJXOnIC7A2Hia336HppC9nf98HkUK40/8AVRA83zu6y0ujr82X8FLdPGRZNhF/KyfNLAcLHi4M+0Qd5AR2r/EPEUv20LscyQoYccK90W3vNs='"
 
 
 def get_integrity_config() -> dict:
@@ -62,6 +63,18 @@ def get_update_endpoint() -> str:
 
 def get_telemetry_endpoint() -> str:
     return _decrypt(_TELEMETRY_ENC) or "https://www.7tan.com/api/telemetry/build.php"
+
+
+def get_encryption_seed() -> bytes:
+    """返回本地密钥派生种子（P1-6b：AES-256-GCM 解密，不落盘）
+
+    用于 db.py 的 Fernet 密钥派生（新安装用户），
+    攻击者仅凭 config.yaml / 源码无法推断出该种子，需逆向 pyd。
+    """
+    s = _decrypt(_ENC_SEED_ENC)
+    if not s:
+        return b"7Tan-Default-Seed-2026"
+    return s.encode("utf-8")
 
 
 def verify_update_signature(file_path: str, sig_b64: str, public_key_pem: str = None) -> bool:

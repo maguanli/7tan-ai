@@ -38,6 +38,8 @@ def build_py() -> str:
     enc_integrity = encrypt(integrity_json)
     enc_update = encrypt("https://www.7tan.com/api/update/check.php")
     enc_telemetry = encrypt("https://www.7tan.com/api/telemetry/build.php")
+    # P1-6b: 随机加密种子（本地密钥派生用，不落盘明文）
+    enc_seed = encrypt(secrets.token_hex(32))
 
     py = '''"""
 安全配置容器 — integrity 开关与敏感端点（AES-256-GCM 加密存储）
@@ -79,6 +81,7 @@ def _decrypt(encrypted_b64: str) -> str:
 _INTEGRITY_ENC = "_INTEGRITY_ENC_"
 _UPDATE_ENC = "_UPDATE_ENC_"
 _TELEMETRY_ENC = "_TELEMETRY_ENC_"
+_ENC_SEED_ENC = "_ENC_SEED_ENC_"
 
 
 def get_integrity_config() -> dict:
@@ -103,6 +106,18 @@ def get_update_endpoint() -> str:
 
 def get_telemetry_endpoint() -> str:
     return _decrypt(_TELEMETRY_ENC) or "https://www.7tan.com/api/telemetry/build.php"
+
+
+def get_encryption_seed() -> bytes:
+    """返回本地密钥派生种子（P1-6b：AES-256-GCM 解密，不落盘）
+
+    用于 db.py 的 Fernet 密钥派生（新安装用户），
+    攻击者仅凭 config.yaml / 源码无法推断出该种子，需逆向 pyd。
+    """
+    s = _decrypt(_ENC_SEED_ENC)
+    if not s:
+        return b"7Tan-Default-Seed-2026"
+    return s.encode("utf-8")
 
 
 def verify_update_signature(file_path: str, sig_b64: str, public_key_pem: str = None) -> bool:
@@ -143,6 +158,7 @@ def verify_update_signature_with_hash(sha256_hex: str, sig_b64: str, public_key_
     py = py.replace("_INTEGRITY_ENC_", repr(enc_integrity))
     py = py.replace("_UPDATE_ENC_", repr(enc_update))
     py = py.replace("_TELEMETRY_ENC_", repr(enc_telemetry))
+    py = py.replace("_ENC_SEED_ENC_", repr(enc_seed))
     return py
 
 
@@ -159,6 +175,9 @@ def main():
     print("  integrity:", cfg)
     print("  update:", sc.get_update_endpoint())
     print("  telemetry:", sc.get_telemetry_endpoint())
+    seed = sc.get_encryption_seed()
+    print("  seed:", seed[:8].decode("utf-8", "replace") + "...(32B)")
+    assert len(seed) >= 32
     assert cfg["enabled"] is True and cfg["mode"] == "core"
     assert "www.7tan.com" in sc.get_update_endpoint()
     print("✅ 自检通过")

@@ -48,6 +48,11 @@ $JWT_SECRET = defined('JWT_SECRET') ? JWT_SECRET : 'change-me-to-a-random-64-cha
 
 // ============================================================
 
+// P1-5: 统一读取请求体（php://input 只能读一次）
+$_RAW_BODY = file_get_contents('php://input');
+$request_body = json_decode($_RAW_BODY ?: '', true);
+if (!is_array($request_body)) { $request_body = []; }
+
 $token = '';
 
 
@@ -76,21 +81,9 @@ if (empty($token) && !empty($_GET['token'])) {
 
 // 3. POST JSON body
 
-if (empty($token)) {
+if (empty($token) && !empty($request_body['token'])) {
 
-    $raw_body = file_get_contents('php://input');
-
-    if (!empty($raw_body)) {
-
-        $body = json_decode($raw_body, true);
-
-        if (!empty($body['token'])) {
-
-            $token = $body['token'];
-
-        }
-
-    }
+    $token = $request_body['token'];
 
 }
 
@@ -250,6 +243,38 @@ try {
 
 // ============================================================
 
+// P1-5: Token 设备绑定校验（分级：专业版强制 / 免费版宽松 / 旧客户端放行）
+
+// ============================================================
+
+$token_device = (string)($payload['device_id'] ?? '');
+
+$cur_device = trim((string)($_SERVER['HTTP_X_DEVICE_ID'] ?? ($_GET['device_id'] ?? ($request_body['device_id'] ?? ''))));
+
+if ($token_device !== '' && $cur_device !== '' && $token_device !== $cur_device) {
+
+    if ($is_pro) {
+
+        // 专业版：设备不匹配 → 拒绝刷新，强制重新登录（防共享/转卖）
+
+        http_response_code(401);
+
+        echo json_encode(['code' => -1, 'message' => '设备已变更，请重新登录'], JSON_UNESCAPED_UNICODE);
+
+        exit;
+
+    }
+
+    // 免费版：宽松放行（记录日志供排查，不阻断使用）
+
+    error_log("[P1-5] 免费用户设备变化 uid={$uid} token_dev={$token_device} cur_dev={$cur_device} ip=" . ($_SERVER['REMOTE_ADDR'] ?? ''));
+
+}
+
+// 旧 token 无 device_id 或客户端未携带 → 放行（向后兼容）
+
+// ============================================================
+
 // Issue new JWT
 
 // ============================================================
@@ -265,6 +290,8 @@ $new_token = jwt_encode_auto([
     'pro_activated' => $pro_activated,
 
     'pro_expires'   => $pro_expires,
+
+    'device_id'     => $token_device,   // P1-5: 保留设备绑定
 
     'iat'           => $now,
 

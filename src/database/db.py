@@ -92,11 +92,18 @@ def _get_fernet() -> Fernet:
         salt = os.urandom(16)
         _SALT_FILE.write_bytes(salt)
 
-    # 读取或生成 key（使用机器标识 + salt 派生）
+    # 读取或生成 key（使用机器标识 + pyd 内置种子 + salt 派生）
     if _KEY_FILE.exists():
         key = _KEY_FILE.read_bytes()
     else:
-        # 使用机器名 + 固定种子派生密钥
+        # P1-6b: 派生种子来自 sec_config.pyd（AES-256-GCM 加密，不落盘明文），
+        #        攻击者仅凭源码/config.yaml 无法推断密钥，需逆向 pyd。
+        #        兼容：已有 .encryption_key 文件的用户（老版本）继续用原密钥，数据不受影响。
+        try:
+            from ..security.sec_config import get_encryption_seed
+            seed = get_encryption_seed().decode("utf-8", "ignore")
+        except Exception:
+            seed = ""
         machine_id = os.environ.get("COMPUTERNAME", "7tan-editor")
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -104,7 +111,7 @@ def _get_fernet() -> Fernet:
             salt=salt,
             iterations=480000,
         )
-        key = base64.urlsafe_b64encode(kdf.derive(machine_id.encode()))
+        key = base64.urlsafe_b64encode(kdf.derive(f"{machine_id}::{seed}".encode()))
         _KEY_FILE.write_bytes(key)
 
     _fernet = Fernet(key)

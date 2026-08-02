@@ -40,6 +40,12 @@ if (!$input) {
 $username = $input['username'] ?? $input['account'] ?? '';
 $password = $input['password'] ?? '';
 
+// P1-5: 设备指纹（客户端登录时同步携带，用于 token 绑定设备）
+$device_id   = trim((string)($input['device_id'] ?? ''));
+$fingerprint = trim((string)($input['fingerprint'] ?? ''));
+$device_name = trim((string)($input['device_name'] ?? ''));
+$os_info     = trim((string)($input['os_info'] ?? ''));
+
 if (empty($username) || empty($password)) {
     http_response_code(400);
     echo json_encode(['code' => -1, 'message' => '用户名和密码不能为空']);
@@ -125,6 +131,48 @@ $_SESSION['user_nickname'] = $user['ll_n_name'] ?? $user['ll_name'];
 $trial_ai_count = (int)($user['trial_ai_count'] ?? 0);
 
 // ============================================================
+// P1-5: 记录登录设备（登录时同步记录，token 绑定设备，向后兼容）
+// ============================================================
+$bind_device_id = '';
+if (!empty($device_id)) {
+    try {
+        $db->exec("CREATE TABLE IF NOT EXISTS user_devices (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            device_id VARCHAR(64) NOT NULL,
+            fingerprint VARCHAR(128) NOT NULL DEFAULT '',
+            device_name VARCHAR(128) NOT NULL DEFAULT '',
+            os_info VARCHAR(128) NOT NULL DEFAULT '',
+            ip VARCHAR(64) NOT NULL DEFAULT '',
+            first_seen INT NOT NULL,
+            last_seen INT NOT NULL,
+            login_count INT NOT NULL DEFAULT 1,
+            suspicious TINYINT NOT NULL DEFAULT 0,
+            UNIQUE KEY uk_user_device (user_id, device_id),
+            KEY idx_user (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $now2 = time();
+        $ip2  = $_SERVER['REMOTE_ADDR'] ?? '';
+        $stmt = $db->prepare(
+            'INSERT INTO user_devices (user_id, device_id, fingerprint, device_name, os_info, ip, first_seen, last_seen, login_count)
+             VALUES (:uid, :did, :fp, :dn, :os, :ip, :ts1, :ts2, 1)
+             ON DUPLICATE KEY UPDATE
+               last_seen = :ts3, login_count = login_count + 1,
+               fingerprint = :fp2, device_name = :dn2, os_info = :os2, ip = :ip2'
+        );
+        $stmt->execute([
+            ':uid' => (int)$user['id'], ':did' => $device_id, ':fp' => $fingerprint,
+            ':dn' => $device_name, ':os' => $os_info, ':ip' => $ip2,
+            ':ts1' => $now2, ':ts2' => $now2, ':ts3' => $now2,
+            ':fp2' => $fingerprint, ':dn2' => $device_name, ':os2' => $os_info, ':ip2' => $ip2,
+        ]);
+        $bind_device_id = $device_id;
+    } catch (PDOException $e) {
+        // 设备表异常不影响登录（静默）
+    }
+}
+
+// ============================================================
 // 签发 JWT
 // ============================================================
 $token = jwt_encode_auto([
@@ -134,6 +182,7 @@ $token = jwt_encode_auto([
     'pro_activated'  => $pro_activated,
     'pro_expires'    => $pro_expires,
     'trial_ai_count' => $trial_ai_count,    // 试用的 AI 次数（0=已用完）
+    'device_id'      => $bind_device_id,    // P1-5: 绑定设备（刷新时校验）
     'iat'            => $now,
     'exp'            => $now + 86400 * 30,  // 30天过期
 ], $JWT_SECRET);

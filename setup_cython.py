@@ -42,6 +42,7 @@ TARGET_FILES = [
     "token_store.py",
     "strings.py",
     "trial_store.py",
+    "sec_config.py",
 ]
 
 # Cython 编译选项
@@ -313,7 +314,7 @@ def verify_compilation() -> bool:
     sys.path.insert(0, str(SECURITY_DIR.parent))
 
     all_ok = True
-    for name in ["rsa_verify", "license_verify", "safe_modify", "auth_client", "integrity", "token_store", "strings", "trial_store"]:
+    for name in ["rsa_verify", "license_verify", "safe_modify", "auth_client", "integrity", "token_store", "strings", "trial_store", "sec_config"]:
         try:
             # 清理缓存
             if name in sys.modules:

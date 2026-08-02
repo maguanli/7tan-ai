@@ -1474,10 +1474,8 @@ def migrate_memory_json_to_db():
 
 
 def migrate_prompts_txt_to_db():
-    """将 data/prompts/*.txt 迁移到数据库"""
+    """将 data/prompts/*.txt 迁移到数据库；txt 不存在时用代码默认模板初始化"""
     prompts_dir = Path(__file__).parent.parent.parent / "data" / "prompts"
-    if not prompts_dir.exists():
-        return
     
     session = get_session()
     try:
@@ -1487,13 +1485,25 @@ def migrate_prompts_txt_to_db():
         session.close()
     
     count = 0
-    for fpath in prompts_dir.glob("*.txt"):
-        prompt_type = fpath.stem
+    if prompts_dir.exists():
+        for fpath in prompts_dir.glob("*.txt"):
+            prompt_type = fpath.stem
+            try:
+                content = fpath.read_text(encoding="utf-8")
+                if content.strip():
+                    upsert_prompt(prompt_type, content, "从文件迁移")
+                    count += 1
+            except Exception:
+                pass
+    
+    # 文件不存在/为空 → 用代码内置默认模板兜底（保证新用户有完整提示词）
+    if count == 0:
         try:
-            content = fpath.read_text(encoding="utf-8")
-            if content.strip():
-                upsert_prompt(prompt_type, content, "从文件迁移")
-                count += 1
+            from ..agent.prompts import DEFAULT_PROMPTS
+            for ptype, content in DEFAULT_PROMPTS.items():
+                if content.strip():
+                    upsert_prompt(ptype, content, "默认模板初始化")
+                    count += 1
         except Exception:
             pass
     logger.info(f"提示词迁移完成: {count} 条 → 数据库")

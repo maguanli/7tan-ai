@@ -28,14 +28,19 @@ except Exception:  # 极端情况：水印文件缺失
 
 
 def _endpoint() -> str:
-    """读取上报端点，config.yaml telemetry.enabled=false 时禁用"""
+    """读取上报端点，config.yaml telemetry.enabled=false 时禁用。
+    端点优先取加密容器（sec_config.pyd），防篡改 config.yaml 指向恶意服务器。"""
     try:
         from src.config.loader import load_config
         cfg = load_config() or {}
         tel = cfg.get("telemetry") or {}
         if tel.get("enabled", True) is False:
             return ""
-        return tel.get("endpoint") or DEFAULT_ENDPOINT
+    except Exception:
+        pass
+    try:
+        from src.security.sec_config import get_telemetry_endpoint
+        return get_telemetry_endpoint()
     except Exception:
         return DEFAULT_ENDPOINT
 

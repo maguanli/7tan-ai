@@ -55,6 +55,43 @@ def _resolve_env_vars(value: Any) -> Any:
     return value
 
 
+def _secure_integrity_config() -> dict:
+    """从加密容器获取 integrity 安全配置（不信任 yaml 明文）"""
+    try:
+        from ..security.sec_config import get_integrity_config
+        return get_integrity_config()
+    except Exception:
+        return {}
+
+
+# integrity 安全键（不允许通过 config.yaml 修改，防止关闭完整性校验）
+_INTEGRITY_SENSITIVE_KEYS = ("enabled", "mode", "auto_repair", "developer_mode", "confirm_phrase")
+
+
+def _repair_integrity_yaml():
+    """检测并修复 config.yaml 中被篡改的 integrity 安全键（防止完整性校验器直接读 yaml）"""
+    try:
+        secure = _secure_integrity_config()
+        if not secure:
+            return
+        if not CONFIG_PATH.exists():
+            return
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+        integ = raw.get("integrity") or {}
+        changed = False
+        for k in _INTEGRITY_SENSITIVE_KEYS:
+            if k in integ and integ[k] != secure.get(k):
+                integ[k] = secure[k]
+                changed = True
+        if changed:
+            raw["integrity"] = integ
+            save_config(raw, CONFIG_PATH)
+            _logger.warning("检测到 config.yaml integrity 配置被篡改，已恢复安全值")
+    except Exception:
+        pass
+
+
 def load_config(config_path: Path = None) -> dict:
     """加载完整配置，解析环境变量"""
     if config_path is None:
@@ -63,10 +100,25 @@ def load_config(config_path: Path = None) -> dict:
     if not config_path.exists():
         return {}
 
+    # 修复可能被篡改的 integrity 安全键（yaml 文件层面）
+    _repair_integrity_yaml()
+
     with open(config_path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
-    return _resolve_env_vars(raw) if raw else {}
+    cfg = _resolve_env_vars(raw) if raw else {}
+
+    # 强制 integrity 安全键使用加密容器值（内存层面）
+    secure = _secure_integrity_config()
+    if secure:
+        current = cfg.get("integrity") or {}
+        merged = dict(current)
+        for k in _INTEGRITY_SENSITIVE_KEYS:
+            if k in secure:
+                merged[k] = secure[k]
+        cfg["integrity"] = merged
+
+    return cfg
 
 
 def get_active_ai_config() -> dict:

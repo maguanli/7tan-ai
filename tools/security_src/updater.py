@@ -45,6 +45,12 @@ def _cfg() -> dict:
 
 
 def endpoint() -> str:
+    # 优先使用加密容器中的端点（防篡改 config.yaml 指向恶意服务器）
+    try:
+        from src.security.sec_config import get_update_endpoint
+        return get_update_endpoint()
+    except Exception:
+        pass
     return _cfg().get("endpoint") or DEFAULT_ENDPOINT
 
 
@@ -122,6 +128,34 @@ def _update_dir() -> Path:
     return base / UPDATE_DIR_NAME
 
 
+def _verify_rsa_signature(url: str, zip_path: Path) -> bool:
+    """
+    下载 <url>.sig 并验证 zip 的 RSA 签名（SHA-256 + PKCS1v15）。
+    使用内置公钥（与服务器 JWT 私钥配对），验签失败返回 False。
+    """
+    try:
+        sig_url = url + ".sig"
+        resp = requests.get(sig_url, timeout=DOWNLOAD_TIMEOUT)
+        if resp.status_code != 200:
+            logger.warning(f"signature file not available: {sig_url} (HTTP {resp.status_code})")
+            return False
+        sig_b64 = resp.text.strip()
+        if not sig_b64:
+            return False
+
+        import hashlib
+        h = hashlib.sha256()
+        with open(zip_path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+
+        from src.security.sec_config import verify_update_signature_with_hash
+        return verify_update_signature_with_hash(h.hexdigest(), sig_b64)
+    except Exception as exc:
+        logger.warning(f"signature verify failed: {exc}")
+        return False
+
+
 def download_update(info: dict, dest_dir: Path | None = None, progress_cb=None) -> str:
     """
     下载更新包并校验 MD5。
@@ -162,6 +196,12 @@ def download_update(info: dict, dest_dir: Path | None = None, progress_cb=None) 
         if h.hexdigest() != md5:
             tmp.unlink(missing_ok=True)
             raise RuntimeError(f"MD5 校验失败: 期望 {md5}，实际 {h.hexdigest()}")
+
+    # RSA 签名验证（P0-4 加固）：下载 <url>.sig 并用内置公钥验签
+    # 验签失败 → 拒绝安装（防中间人 / 自建服务器投毒）
+    if not _verify_rsa_signature(url, tmp):
+        tmp.unlink(missing_ok=True)
+        raise RuntimeError("更新包签名验证失败，已拒绝安装（可能被篡改或来源不可信）")
 
     tmp.replace(local)
     logger.info(f"update downloaded: {local} ({done} bytes)")

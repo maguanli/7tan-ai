@@ -69,6 +69,20 @@ if exist ".git" (
 )
 echo.
 
+REM ===== Step 0.5: Regenerate plugin SHA-256 whitelist =====
+echo [0.5/6] Regenerating plugin whitelist (SHA-256 + HMAC)...
+if exist "tools\gen_plugin_hashes.py" (
+    ".venv\Scripts\python.exe" tools\gen_plugin_hashes.py
+    if errorlevel 1 (
+        echo [WARN] Plugin whitelist regeneration failed, continuing with existing hashes.json
+    ) else (
+        echo [0.5/6] Plugin whitelist OK
+    )
+) else (
+    echo [SKIP] gen_plugin_hashes.py not found
+)
+echo.
+
 REM ===== Step 1: Build exe =====
 if defined SKIP_BUILD (
     echo [1/6] SKIP build --no-build mode

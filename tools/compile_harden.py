@@ -25,6 +25,8 @@ TARGETS = [
     (ROOT / "src" / "security" / "device_fingerprint.py", ROOT / "src" / "security"),
     (ROOT / "src" / "core" / "updater.py", ROOT / "src" / "core"),
     (ROOT / "src" / "agent" / "prompts.py", ROOT / "src" / "agent"),
+    # 插件完整性守卫（P1-1: 插件 SHA-256 白名单 + HMAC 签名）
+    (ROOT / "src" / "security" / "plugin_guard.py", ROOT / "src" / "security"),
 ]
 
 COMPILER_DIRECTIVES = {

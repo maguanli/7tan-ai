@@ -175,8 +175,10 @@ class PluginManager:
     # === 模块加载/卸载 ===
 
     def _load_plugin(self, plugin_id: str, pkg_dir: str):
-        """动态加载插件工具模块
-        
+        """动态加载插件工具模块（带 SHA-256 白名单防篡改校验）
+
+        🔒 安全：加载前校验 tools.py 与官方白名单（data/plugins/hashes.json）
+          匹配；白名单缺失/签名无效/哈希不符 → 拒绝加载（P1-1 防篡改注入）。
         🔴 三重保险确保不加载 .pyc 缓存：
         1. 删除 __pycache__ 目录
         2. importlib.invalidate_caches() 清除内部缓存
@@ -192,27 +194,14 @@ class PluginManager:
         # 🔴 保险2: 清除 importlib 内部缓存
         importlib.invalidate_caches()
 
-        module_name = f"plugin_{plugin_id}"
-
-        # 🔴 保险3: 从 sys.modules 彻底移除旧模块
-        if module_name in sys.modules:
-            del sys.modules[module_name]
-
         # 如果之前已加载，先卸载旧版本（清理 TOOL_REGISTRY）
         if plugin_id in self._loaded_modules:
             self._unload_plugin(plugin_id)
 
-        # 添加插件目录到 sys.path
-        if pkg_dir not in sys.path:
-            sys.path.insert(0, pkg_dir)
-
-        spec = importlib.util.spec_from_file_location(module_name, str(tools_path))
-        if spec is None or spec.loader is None:
-            raise ImportError(f"无法加载模块: {tools_path}")
-
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
+        # 🔒 防篡改校验 + 加载（安全模块 plugin_guard 内完成：
+        #    SHA-256 白名单校验 + sys.modules 清理 + 模块加载）
+        from ..security.plugin_guard import verify_and_load
+        module = verify_and_load(plugin_id, pkg_dir, str(PLUGIN_DIR / "hashes.json"))
         self._loaded_modules[plugin_id] = module
         logger.info(f"📦 插件已加载: {plugin_id}")
 

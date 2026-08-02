@@ -43,6 +43,7 @@ TARGET_FILES = [
     "strings.py",
     "trial_store.py",
     "sec_config.py",
+    "plugin_guard.py",
 ]
 
 # Cython 编译选项

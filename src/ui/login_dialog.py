@@ -226,7 +226,7 @@ class LoginDialog(QDialog):
 
         self._chk_agree = QCheckBox("我已阅读并同意")
         self._chk_agree.setFont(QFont("Microsoft YaHei", 10))
-        self._chk_agree.setChecked(True)
+        self._chk_agree.setChecked(False)  # 必须主动勾选才可登录（合规）
         self._chk_agree.setCursor(Qt.CursorShape.PointingHandCursor)
         agree_row.addWidget(self._chk_agree)
 
@@ -405,6 +405,20 @@ class LoginDialog(QDialog):
             QCheckBox {{
                 color: {TEXT_SECONDARY};
                 spacing: 8px;
+            }}
+            QCheckBox::indicator {{
+                width: 18px;
+                height: 18px;
+                border: 2px solid {BORDER};
+                border-radius: 4px;
+                background: transparent;
+            }}
+            QCheckBox::indicator:hover {{
+                border-color: {ACCENT};
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {ACCENT};
+                border-color: {ACCENT};
             }}
             QCheckBox:checked {{
                 color: {TEXT_PRIMARY};

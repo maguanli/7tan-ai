@@ -1,6 +1,10 @@
 """
 7tan.com API 客户端
-负责与网站后端通信：登录、验证 Token、刷新 Token。
+负责与网站后端通信：登录、验证 Token、刷新 Token、试用代理、资源发布。
+
+安全特性:
+  - P1-5: 登录携带设备指纹（device_id/fingerprint/device_name/os_info），token 绑定设备
+  - P2-10: 所有请求使用 TLS 证书固定（get_pinned_session），防中间人/自建服务器劫持
 """
 import time
 from typing import Optional
@@ -19,6 +23,7 @@ def _get_site_base_url() -> str:
         return config.get("site_7tan", {}).get("base_url", "")
     except Exception:
         return ""
+
 
 # ============================================================
 # 超时配置
@@ -51,10 +56,35 @@ class ServerError(AuthError):
 
 
 # ============================================================
+# 设备指纹采集（P1-5）
+# ============================================================
+
+def _collect_device_info() -> dict:
+    """采集设备指纹，用于登录时绑定 token 到设备。
+
+    失败时返回空 dict（不影响登录，向后兼容）。
+    返回: {"device_id", "fingerprint", "device_name", "os_info"}
+    """
+    try:
+        from .device_fingerprint import collect_fingerprint
+        info = collect_fingerprint()
+        if isinstance(info, dict) and info.get("device_id"):
+            return {
+                "device_id": str(info.get("device_id", "")),
+                "fingerprint": str(info.get("fingerprint", "")),
+                "device_name": str(info.get("device_name", "")),
+                "os_info": str(info.get("os_info", "")),
+            }
+    except Exception:
+        logger.debug("[Auth] 设备指纹采集失败（忽略，不阻断登录）", exc_info=True)
+    return {}
+
+
+# ============================================================
 # 公开 API
 # ============================================================
 
-def login(username: str, password: str, remember_me: bool = False) -> dict:
+def login(username: str, password: str, remember_me: bool = False, device_info: dict = None) -> dict:
     """
     登录 7tan.com，获取 JWT Token。
 
@@ -62,6 +92,7 @@ def login(username: str, password: str, remember_me: bool = False) -> dict:
         username: 用户名或手机号
         password: 密码（明文，HTTPS 传输）
         remember_me: 是否记住登录（30天有效期）
+        device_info: 设备指纹 dict（可选，默认自动采集）
 
     Returns:
         {
@@ -87,6 +118,14 @@ def login(username: str, password: str, remember_me: bool = False) -> dict:
         "password": password,
         "remember": 1 if remember_me else 0,
     }
+
+    # P1-5: 携带设备指纹（token 绑定设备，防共享/转卖）
+    dev = device_info if isinstance(device_info, dict) else _collect_device_info()
+    if dev:
+        payload["device_id"] = dev.get("device_id", "")
+        payload["fingerprint"] = dev.get("fingerprint", "")
+        payload["device_name"] = dev.get("device_name", "")
+        payload["os_info"] = dev.get("os_info", "")
 
     try:
         from .sec_config import get_pinned_session
@@ -166,13 +205,15 @@ def online_verify(token: str) -> dict:
     }
 
 
-def refresh_token(token: str) -> dict:
+def refresh_token(token: str, device_id: str = "") -> dict:
     """
     刷新 Token（续费/升级后使用）。
     先尝试 GET + Authorization header，失败则尝试 POST body。
+    携带 device_id（P1-5：刷新时校验设备，专业版换设备将被服务器拒绝）。
 
     Args:
         token: 当前 JWT Token
+        device_id: 当前设备 ID（可选；不传则向后兼容，服务器放行）
 
     Returns:
         {"success": True, "token": "new_token", "level": "pro", ...}
@@ -186,18 +227,21 @@ def refresh_token(token: str) -> dict:
         try:
             from .sec_config import get_pinned_session
             _sess = get_pinned_session(url)
+            _headers = {"Authorization": f"Bearer {token}"}
+            if device_id:
+                _headers["X-Device-Id"] = device_id
             if method == "GET":
                 resp = _sess.get(
                     url,
-                    params={"token": token},
-                    headers={"Authorization": f"Bearer {token}"},
+                    params={"token": token, "device_id": device_id},
+                    headers=_headers,
                     timeout=_TIMEOUT,
                 )
             else:
                 resp = _sess.post(
                     url,
-                    json={"token": token},
-                    headers={"Authorization": f"Bearer {token}"},
+                    json={"token": token, "device_id": device_id},
+                    headers=_headers,
                     timeout=_TIMEOUT,
                 )
         except requests.exceptions.RequestException as e:
@@ -258,17 +302,6 @@ def trial_call(token: str, model: str, messages: list) -> dict:
             "error": str or None,      # 错误信息
         }
     """
-    from .strings import get_api_url
-
-
-def _get_site_base_url() -> str:
-    """从配置获取 7tan 后台基础 URL"""
-    try:
-        from ..config.loader import load_config
-        config = load_config()
-        return config.get("site_7tan", {}).get("base_url", "")
-    except Exception:
-        return ""
     url = get_api_url("trial", fallback_base=_get_site_base_url())
     if not url:
         return {"success": False, "error": "试用 API 端点未配置", "trials_left": 0}
@@ -357,19 +390,6 @@ def api_publish_resource(
             "publish_url": "https://...",
         }
     """
-    from .strings import get_api_url
-
-
-def _get_site_base_url() -> str:
-    """从配置获取 7tan 后台基础 URL"""
-    try:
-        from ..config.loader import load_config
-        config = load_config()
-        return config.get("site_7tan", {}).get("base_url", "")
-    except Exception:
-        return ""
-    import os as _os
-
     url = get_api_url("publish", fallback_base=_get_site_base_url())
     if not url:
         return {
@@ -382,7 +402,7 @@ def _get_site_base_url() -> str:
 
     try:
         # 使用 multipart/form-data 上传
-        import requests as _requests
+        import os as _os
 
         # 准备表单数据
         form_data = {
@@ -415,7 +435,8 @@ def _get_site_base_url() -> str:
                     )
 
         try:
-            resp = _requests.post(
+            from .sec_config import get_pinned_session
+            resp = get_pinned_session(url).post(
                 url,
                 data=form_data,
                 files=files,
@@ -508,5 +529,3 @@ def api_login_for_admin(username: str, password: str) -> dict:
         return {"success": False, "message": f"网络错误: {e}"}
     except Exception as e:
         return {"success": False, "message": f"未知错误: {e}"}
-
-

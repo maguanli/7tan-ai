@@ -129,36 +129,34 @@ if (!$is_pro) {
 // 代理转发 DeepSeek API
 // ============================================================
 // ============================================================
-// 获取 DeepSeek API Key：优先从数据库 ll_api_keys 表读取（api-keys.php 后台管理），
-// 回退到 config/database.php 的 DEEPSEEK_API_KEY 常量。
-// Key 不再写死在代码里，可在 https://img.7tan.cn/api-keys.php 随时更换。
+// 获取 DeepSeek API Key：唯一来源为数据库 ll_api_keys 表（api-keys.php 后台管理）。
+// 不允许任何配置文件常量回退——Key 只能通过后台更换，防止绕过。
 // ============================================================
 function get_trial_deepseek_config(PDO $db): array {
+    // 唯一来源：数据库 ll_api_keys 表（api-keys.php 后台管理）
+    // 不允许回退到配置文件常量——取不到直接返回空，由调用方报错
     try {
         $stmt = $db->prepare(
             "SELECT api_key, api_url FROM ll_api_keys WHERE provider='deepseek' AND is_active=1 ORDER BY id ASC LIMIT 1"
         );
         $stmt->execute();
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($row && !empty($row['api_key'])) {
-            $url = !empty($row['api_url']) ? rtrim($row['api_url'], '/') : '';
-            // 数据库存的是完整端点（.../chat/completions）或 base_url，统一归一化为完整端点
-            if ($url && substr($url, -17) !== '/chat/completions') {
-                $url .= '/chat/completions';
-            }
-            if (!$url) {
-                $url = 'https://api.deepseek.com/v1/chat/completions';
-            }
-            return ['key' => $row['api_key'], 'endpoint' => $url];
-        }
     } catch (PDOException $e) {
-        // ll_api_keys 表不存在 → 回退常量
+        // ll_api_keys 表不可用 → 返回空，调用方报错（不允许回退）
+        return ['key' => '', 'endpoint' => ''];
     }
-    $base = defined('DEEPSEEK_BASE_URL') ? rtrim(DEEPSEEK_BASE_URL, '/') : 'https://api.deepseek.com/v1';
-    return [
-        'key'      => defined('DEEPSEEK_API_KEY') ? DEEPSEEK_API_KEY : '',
-        'endpoint' => $base . '/chat/completions',
-    ];
+    if (!$row || empty($row['api_key']) || strpos($row['api_key'], 'your-') === 0) {
+        return ['key' => '', 'endpoint' => ''];
+    }
+    $url = !empty($row['api_url']) ? rtrim($row['api_url'], '/') : '';
+    // 数据库存的是完整端点（.../chat/completions）或 base_url，统一归一化为完整端点
+    if ($url && substr($url, -17) !== '/chat/completions') {
+        $url .= '/chat/completions';
+    }
+    if (!$url) {
+        $url = 'https://api.deepseek.com/v1/chat/completions';
+    }
+    return ['key' => $row['api_key'], 'endpoint' => $url];
 }
 
 $ds       = get_trial_deepseek_config($db);
@@ -167,7 +165,7 @@ $endpoint = $ds['endpoint'];
 
 if (empty($api_key) || strpos($api_key, 'your-') === 0) {
     http_response_code(500);
-    echo json_encode(['code' => -1, 'message' => '服务端 DeepSeek API Key 未配置，请联系站长']);
+    echo json_encode(['code' => -1, 'message' => '服务端 DeepSeek API Key 未配置（ll_api_keys 表无可用记录），请在 https://img.7tan.cn/api-keys.php 后台配置']);
     exit;
 }
 

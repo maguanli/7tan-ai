@@ -11,7 +11,6 @@ import logging
 import platform
 import threading
 import time
-import urllib.request
 from pathlib import Path
 
 _logger = logging.getLogger("telemetry")
@@ -81,14 +80,14 @@ def _report() -> None:
         "ts": int(time.time()),
     }
     try:
-        req = urllib.request.Request(
+        from src.security.sec_config import get_pinned_session
+        resp = get_pinned_session(url).post(
             url,
-            data=json.dumps(payload).encode("utf-8"),
+            json=payload,
             headers={"Content-Type": "application/json"},
-            method="POST",
+            timeout=5,
         )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            resp.read()
+        resp.raise_for_status()
         p = _last_report_path()
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps({"ts": payload["ts"]}), encoding="utf-8")

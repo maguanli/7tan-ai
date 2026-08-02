@@ -89,7 +89,8 @@ def login(username: str, password: str, remember_me: bool = False) -> dict:
     }
 
     try:
-        resp = requests.post(url, json=payload, timeout=_TIMEOUT)
+        from .sec_config import get_pinned_session
+        resp = get_pinned_session(url).post(url, json=payload, timeout=_TIMEOUT)
     except requests.exceptions.RequestException as e:
         raise NetworkError(f"网络连接失败: {e}")
 
@@ -143,7 +144,8 @@ def online_verify(token: str) -> dict:
         return {"valid": False, "level": "unknown", "error": "API 端点未配置"}
 
     try:
-        resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=_TIMEOUT)
+        from .sec_config import get_pinned_session
+        resp = get_pinned_session(url).get(url, headers={"Authorization": f"Bearer {token}"}, timeout=_TIMEOUT)
     except requests.exceptions.RequestException as e:
         logger.warning(f"[Auth] 在线验证失败: {e}")
         return {"valid": False, "level": "unknown", "error": f"网络异常: {e}"}
@@ -182,15 +184,17 @@ def refresh_token(token: str) -> dict:
     def _do_request(method: str) -> dict:
         """执行单次请求并解析结果"""
         try:
+            from .sec_config import get_pinned_session
+            _sess = get_pinned_session(url)
             if method == "GET":
-                resp = requests.get(
+                resp = _sess.get(
                     url,
                     params={"token": token},
                     headers={"Authorization": f"Bearer {token}"},
                     timeout=_TIMEOUT,
                 )
             else:
-                resp = requests.post(
+                resp = _sess.post(
                     url,
                     json={"token": token},
                     headers={"Authorization": f"Bearer {token}"},
@@ -270,7 +274,8 @@ def _get_site_base_url() -> str:
         return {"success": False, "error": "试用 API 端点未配置", "trials_left": 0}
 
     try:
-        resp = requests.post(
+        from .sec_config import get_pinned_session
+        resp = get_pinned_session(url).post(
             url,
             json={"token": token, "model": model, "messages": messages},
             timeout=120,  # AI 调用较慢

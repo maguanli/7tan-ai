@@ -7,6 +7,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
+from requests.adapters import HTTPAdapter
 
 _KEY_PART1 = b':\x7f,\x91\xe4\xb8U\r\xc6\xd2\x88\xfe\x17\xa3Ki'
 _KEY_PART2 = b'\x8b\x1e_\xc3"\xd7\x9a@\xeea=\xb5\xf9\x04|\xa6'
@@ -39,6 +40,7 @@ _INTEGRITY_ENC = "'f0oukTE0B8fNAaXV4WlkA5vk/nXyLOHnxdi9U4idc13cLuaHP6L502pIlxclQ
 _UPDATE_ENC = "'f0oukSUW2+B6r8ycDhzpK/hwUov6toA9XkGuIZ3WyluCHoXjm5UPZmaI4zn+AobtjKB0iHmJa8FwO/1Fmw/KazaCo0WD'"
 _TELEMETRY_ENC = "'f0oukZ3HxKY6jNpAPo2YZZ9DIgIUp2f1NvhIRLqWQRCBY6ZsBB9XLe1ZRdca7owqEG0qZmkgtNNfgj1bKQPezAnx3VxoxSri'"
 _ENC_SEED_ENC = "'f0oukUpk6+cQpk0IJXOnIC7A2Hia336HppC9nf98HkUK40/8AVRA83zu6y0ujr82X8FLdPGRZNhF/KyfNLAcLHi4M+0Qd5AR2r/EPEUv20LscyQoYccK90W3vNs='"
+_TLS_PINS_ENC = "'f0oukTLS_PLACEHOLDER_REGEN_BY_GEN_SEC_CONFIG'"
 
 
 def get_integrity_config() -> dict:
@@ -66,15 +68,88 @@ def get_telemetry_endpoint() -> str:
 
 
 def get_encryption_seed() -> bytes:
-    """返回本地密钥派生种子（P1-6b：AES-256-GCM 解密，不落盘）
-
-    用于 db.py 的 Fernet 密钥派生（新安装用户），
-    攻击者仅凭 config.yaml / 源码无法推断出该种子，需逆向 pyd。
-    """
+    """返回本地密钥派生种子（P1-6b：AES-256-GCM 解密，不落盘）"""
     s = _decrypt(_ENC_SEED_ENC)
     if not s:
         return b"7Tan-Default-Seed-2026"
     return s.encode("utf-8")
+
+
+def get_tls_pins() -> dict:
+    """返回 TLS 证书固定指纹表 {host: [sha256_spki_hex, ...]}（P2-10）"""
+    import json
+    try:
+        data = json.loads(_decrypt(_TLS_PINS_ENC) or "{}")
+    except Exception:
+        data = {}
+    return data if isinstance(data, dict) else {}
+
+
+class PinnedAdapter(HTTPAdapter):
+    """校验服务端证书 SPKI 指纹是否在白名单内（TLS 证书固定）。
+
+    继承 requests.adapters.HTTPAdapter：正常 HTTPS 链路完全不变；
+    请求完成后从响应底层连接取服务端证书，SPKI 不在白名单内
+    → 抛 SSLError 拒绝（调用方按网络错误处理，不使用响应内容）。
+    注：requests 新版的 cert_verify 收到的是连接池对象（无 sock），
+    因此在校验在 send() 完成后基于 resp.raw._connection 执行。
+    """
+    def __init__(self, pins, *args, **kwargs):
+        from requests.adapters import HTTPAdapter
+        self._pins = set(pins or [])
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, *args, **kwargs):
+        resp = super().send(request, *args, **kwargs)
+        if not self._pins:
+            return resp
+        try:
+            import hashlib
+            import requests
+            from cryptography import x509
+            from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+            raw = resp.raw
+            conn = getattr(raw, "_connection", None)
+            sock = getattr(conn, "sock", None)
+            if sock is None:
+                return resp
+            peer_der = sock.getpeercert(binary_form=True)
+            if not peer_der:
+                return resp
+            cert_obj = x509.load_der_x509_certificate(peer_der)
+            spki = cert_obj.public_key().public_bytes(
+                Encoding.DER, PublicFormat.SubjectPublicKeyInfo
+            )
+            digest = hashlib.sha256(spki).hexdigest()
+            if digest not in self._pins:
+                raise requests.exceptions.SSLError(
+                    "TLS 证书固定校验失败 (SPKI=%s...)" % digest[:16]
+                )
+        except requests.exceptions.SSLError:
+            raise
+        except Exception:
+            pass
+        return resp
+
+
+def get_pinned_session(url: str = None):
+    """创建带证书固定的 requests.Session（P2-10）。
+
+    按 URL 的 host 查找 pin 表；无 pin 配置时回退普通 Session（不影响功能）。
+    """
+    import requests
+    s = requests.Session()
+    try:
+        pins = get_tls_pins()
+        host = ""
+        if url and "//" in url:
+            host = url.split("//", 1)[1].split("/")[0].split(":")[0]
+        pin_list = pins.get(host, []) if host else []
+        if pin_list:
+            s.mount("https://", PinnedAdapter(pin_list))
+    except Exception:
+        pass
+    return s
 
 
 def verify_update_signature(file_path: str, sig_b64: str, public_key_pem: str = None) -> bool:

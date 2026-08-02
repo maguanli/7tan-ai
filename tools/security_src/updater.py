@@ -103,7 +103,8 @@ def check_for_update(timeout: int = 10) -> dict | None:
     if not is_enabled():
         return None
     try:
-        resp = requests.get(
+        from src.security.sec_config import get_pinned_session
+        resp = get_pinned_session(endpoint()).get(
             endpoint(),
             params={"ver": APP_VERSION, "platform": _platform_tag(), "channel": channel()},
             timeout=timeout,
@@ -135,7 +136,8 @@ def _verify_rsa_signature(url: str, zip_path: Path) -> bool:
     """
     try:
         sig_url = url + ".sig"
-        resp = requests.get(sig_url, timeout=DOWNLOAD_TIMEOUT)
+        from src.security.sec_config import get_pinned_session
+        resp = get_pinned_session(sig_url).get(sig_url, timeout=DOWNLOAD_TIMEOUT)
         if resp.status_code != 200:
             logger.warning(f"signature file not available: {sig_url} (HTTP {resp.status_code})")
             return False
@@ -172,7 +174,8 @@ def download_update(info: dict, dest_dir: Path | None = None, progress_cb=None) 
     tmp = local.with_suffix(local.suffix + ".part")
 
     try:
-        with requests.get(url, stream=True, timeout=DOWNLOAD_TIMEOUT) as r:
+        from src.security.sec_config import get_pinned_session
+        with get_pinned_session(url).get(url, stream=True, timeout=DOWNLOAD_TIMEOUT) as r:
             r.raise_for_status()
             total = int(r.headers.get("Content-Length") or 0)
             done = 0

@@ -4273,41 +4273,13 @@ def launch_app():
         app.setStyleSheet(DARK_STYLESHEET)
         app.setApplicationName("7Tan")
 
-        # ===== 登录检查（必须登录，无试用跳过） =====
-        from ..security.token_store import is_token_available, load_token
-        from .login_dialog import show_login_dialog
-
-        user_info = None
-
-        if is_token_available():
-            # 本地 Token 有效，直接使用
-            data = load_token()
-            if data:
-                user_info = {
-                    "token": data.get("token", ""),
-                    "username": data.get("username", ""),
-                    "level": data.get("level", "free"),
-                    "pro_expires": data.get("pro_expires", 0),
-                    "pro_license": data.get("pro_license") or "",
-                }
-                logger.info(f"[Login] 使用本地 Token (用户: {user_info['username']})")
-
-        if user_info is None:
-            # 需要登录
-            logger.info("[Login] 显示登录对话框...")
-            user_info = show_login_dialog()
-
+        # ===== 登录门卫（P2-8：核心逻辑已编译进 entry_auth.pyd，防 patch 跳过登录） =====
+        from ..security.entry_auth import perform_login_gate
+        user_info = perform_login_gate()
         if user_info is None:
             # 用户关闭登录窗口，退出应用
             logger.info("[Login] 用户取消登录，退出")
             return
-
-        # ===== 设备指纹：本地烙印记 + 服务器多设备检测（静默，不阻塞） =====
-        try:
-            from ..security.device_fingerprint import on_login as _fp_on_login
-            _fp_on_login(user_info)
-        except Exception:
-            pass
 
         # ===== 新人引导：欢迎向导（API Key 设置） =====
         from .welcome_wizard import should_show_wizard, show_welcome_wizard

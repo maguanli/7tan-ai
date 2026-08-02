@@ -1,6 +1,26 @@
 {
   "versions": [
     {
+      "version": "1.0.3",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.3.zip",
+      "md5": "76a97f6b504f7de3bfe78ddc3338db6e",
+      "size": 324073390,
+      "notes": "1.0.3 更新：登录协议勾选默认不勾选强制同意(修复未勾选不可见)、侧边栏AI机器人图标、修复登录在线验证失效、安全加固P0-P2(设备指纹绑定/TLS证书固定/更新包RSA签名验证/源码pyd化)、更新包签名机制。",
+      "release_date": "2026-08-03"
+    },
+    {
+      "version": "1.0.2",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.2.zip",
+      "md5": "173f424697309ec1d6affe9e9795f2fa",
+      "size": 354140370,
+      "notes": "1.0.2 更新：修复协议链接点击无反应、侧边栏版本号不同步、删除对话不实时刷新；新增用户协议/隐私政策(登录勾选+关于页入口)；侧边栏新增问题求助/投诉建议入口；对话右上角显示Token；构建脚本自动同步版本号。",
+      "release_date": "2026-08-02"
+    },
+    {
       "version": "1.0.1",
       "channel": "stable",
       "platform": "windows",

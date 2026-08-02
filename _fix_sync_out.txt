@@ -1,0 +1,14 @@
+[1] 备份旧版 -> D:\7tan\7tanAI\backups\auth_client_p1v5.bak.pyd
+[1] auth_client.pyd 已替换, 大小=262151 (应为262151)
+[2] src 已同步到 dist/_build/src
+[3] main.py 已同步
+[3] build.spec 已同步
+[3] requirements.txt 已同步
+[3] config 已同步
+[3] data 已同步
+Traceback (most recent call last):
+  File "D:\7tan\7tanAI\_fix_sync.py", line 55, in <module>
+    log(f"[4] {k}: {'\u2705' if v else '\u274c FAIL'}")
+  File "D:\7tan\7tanAI\_fix_sync.py", line 10, in log
+    print(msg, flush=True)
+UnicodeEncodeError: 'gbk' codec can't encode character '\u274c' in position 19: illegal multibyte sequence

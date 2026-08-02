@@ -36,18 +36,28 @@ if not exist "%ROOT%\_build\main.py" (
   exit /b 1
 )
 
-REM ===== Step 0.5: Verify Pro watermark =====
+REM ===== Step 0.5: Verify Pro watermark (dev mode allows FREE build) =====
 set "BI=%ROOT%\_build\src\config\build_info.py"
 if not exist "%BI%" (
   echo [ERROR] build_info.py not found. Not a valid Pro source package.
   exit /b 1
 )
+set "DEV_ALLOW=0"
+if /i "%~1"=="--dev" set "DEV_ALLOW=1"
+if exist "%ROOT%\_build\.DEV_BUILD" set "DEV_ALLOW=1"
 findstr /C:"PRO-" "%BI%" >nul
 if errorlevel 1 (
-  echo [ERROR] Watermark missing or invalid. This is a FREE package, Pro license required.
-  exit /b 1
+  if "!DEV_ALLOW!"=="1" (
+    echo [WARN] FREE watermark detected. Dev mode ON - building FREE version.
+  ) else (
+    echo [ERROR] Watermark missing or invalid. This is a FREE package, Pro license required.
+    echo         Developer? Run:  rebuild.bat --dev
+    echo         Or create file: _build\.DEV_BUILD
+    exit /b 1
+  )
+) else (
+  echo   [OK] Pro watermark verified
 )
-echo   [OK] Pro watermark verified
 echo.
 
 echo [1/5] Backup current build...

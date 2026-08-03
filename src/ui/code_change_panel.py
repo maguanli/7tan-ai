@@ -16,11 +16,12 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QTextEdit, QListWidget, QListWidgetItem, QSplitter,
+    QTextEdit, QListWidget, QListWidgetItem, QSplitter, QApplication,
 )
 from PyQt6.QtCore import Qt, QTimer, QByteArray
 
-_GEOMETRY_FILE = Path("data/panel_geometry.json")
+# 绝对路径锚定项目 data 目录（与 code_change_bus 一致，不依赖启动 CWD）
+_GEOMETRY_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "panel_geometry.json"
 
 from ..utils.code_change_bus import drain_changes, load_history
 
@@ -97,6 +98,20 @@ class CodeChangePanel(QWidget):
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll)
         self._timer.start(60)
+
+        # 几何防抖保存：拖动/缩放 300ms 后落盘，任何退出方式都不丢
+        self._geometry_timer = QTimer(self)
+        self._geometry_timer.setSingleShot(True)
+        self._geometry_timer.setInterval(300)
+        self._geometry_timer.timeout.connect(self._save_geometry)
+        # 应用退出兜底：主窗口关闭时子窗口不触发 closeEvent/hideEvent，
+        # 必须靠 aboutToQuit 保证关闭软件前保存窗口位置与大小
+        _app = QApplication.instance()
+        if _app is not None:
+            try:
+                _app.aboutToQuit.connect(self._save_geometry)
+            except Exception as _qe:
+                print(f"[面板] 注册退出保存失败: {_qe}")
 
     # ── UI ──
     def _build_ui(self):
@@ -341,6 +356,16 @@ class CodeChangePanel(QWidget):
         except Exception as e:
             print(f"[面板] 恢复窗口几何失败: {e}")
             self.resize(880, 580)
+
+    def moveEvent(self, event):
+        """移动窗口 → 防抖保存位置"""
+        super().moveEvent(event)
+        self._geometry_timer.start()
+
+    def resizeEvent(self, event):
+        """缩放窗口 → 防抖保存大小"""
+        super().resizeEvent(event)
+        self._geometry_timer.start()
 
     def showEvent(self, event):
         """每次显示时恢复位置（防止被主窗口居中覆盖）"""

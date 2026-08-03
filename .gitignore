@@ -84,3 +84,6 @@ output/
 # 编译旧版残留（进程占用时临时改名）
 *.pyd.old
 \"tracked_list.txt\"  
+
+# 运行时状态：代码修改实时面板窗口几何
+data/panel_geometry.json

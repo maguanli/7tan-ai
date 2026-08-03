@@ -64,7 +64,7 @@ class MessageBubble(QFrame):
 
         # 🤖 模型徽章：标明这条 AI 回复是哪个模型说的
         if role == "assistant" and model_name:
-            model_badge = QLabel(f"🤖 {model_name}")
+            model_badge = QLabel(model_name)
             model_badge.setStyleSheet(f"""
                 QLabel {{
                     background: {THEME['accent']}22;

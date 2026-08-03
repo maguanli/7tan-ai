@@ -37,8 +37,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QTextCursor, QFont
 
 import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 # ===== ANSI =====
 _ANSI_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
@@ -195,15 +194,15 @@ def _speak_console_async(text: str):
             r = tts_speak(text, play=True, strip_code=True)
             if r.get("status") == "ok" and not r.get("skipped"):
                 logger.info(
-                    "[TTS-Console] 控制台朗读完成: engine=%s size=%sKB",
+                    "[TTS-Console] 控制台朗读完成: engine={} size={}KB",
                     r.get("engine", "?"), r.get("size_kb", "?"),
                 )
             else:
                 # ❌ 失败回滚：允许其他通道重试（不锁死）
                 tts_clear_spoken(text)
-                logger.warning("[TTS-Console] 控制台朗读失败，已回滚: %s", r.get("message", "?"))
+                logger.warning("[TTS-Console] 控制台朗读失败，已回滚: {}", r.get("message", "?"))
         except Exception as e:
-            logger.warning("[TTS-Console] 朗读异常: %s: %s", type(e).__name__, e)
+            logger.warning("[TTS-Console] 朗读异常: {}: {}", type(e).__name__, e)
 
     threading.Thread(target=_do, daemon=True).start()
 
@@ -225,7 +224,7 @@ def init_console_tts():
         register_agent_speak_callback(_console_tts_callback)
         logger.info("[TTS-Console] 控制台朗读已注册（agent 最终回复回调）")
     except Exception as e:
-        logger.warning("[TTS-Console] 注册失败: %s: %s", type(e).__name__, e)
+        logger.warning("[TTS-Console] 注册失败: {}: {}", type(e).__name__, e)
 
 
 def _maybe_speak_agent_line(line: str):
@@ -605,3 +604,10 @@ class ConsoleViewer(QWidget):
     def closeEvent(self, event):
         self._timer.stop()
         super().closeEvent(event)
+
+
+# 🎤 模块级显式注册控制台朗读（不依赖 install_all 的锁检查，防静默漏注册）
+try:
+    init_console_tts()
+except Exception as e:
+    logger.warning("[TTS-Console] 模块级注册失败: {}: {}", type(e).__name__, e)

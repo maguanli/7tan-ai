@@ -74,6 +74,19 @@ def file_replace(filepath: str, replacements: str) -> str:
         path.write_text(content, encoding="utf-8")
     except Exception as e:
         return f"❌ 写入文件失败: {e}"
+
+    # 发布变更事件 → 实时变更面板（不影响主流程）
+    try:
+        from src.utils.code_change_bus import publish_file_change
+        publish_file_change(
+            action="replace",
+            path=str(path),
+            old_text=original,
+            new_text=content,
+            summary=f"替换 {len(reps)} 组字符串",
+        )
+    except Exception:
+        pass
     
     changes = []
     for old, new in reps.items():

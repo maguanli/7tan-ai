@@ -4138,6 +4138,14 @@ class ChatBrowserSplitPage(QWidget):
 
         self._browser_stack.addWidget(self.console_viewer)  # 索引 3
 
+        # 🔧 代码修改实时面板 — 绑定控制台按钮，AI 修改代码时自动打开
+        try:
+            from .code_change_panel import CodeChangePanel
+            self.code_change_panel = CodeChangePanel(self)
+            self.console_viewer.attach_diff_panel(self.code_change_panel)
+        except Exception as _panel_err:
+            print(f"[console] 实时变更面板初始化失败: {_panel_err}")
+
 
 
         self.chat = ChatPage()

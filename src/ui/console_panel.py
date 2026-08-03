@@ -348,8 +348,25 @@ class ConsoleViewer(QWidget):
         title.setStyleSheet(
             f"font-size: 14px; font-weight: bold; color: {T['text_primary']};")
         bar.addWidget(title)
+
+        # ── 代码修改实时按钮（打开实时变更面板，AI 修改代码时自动弹出）──
+        self._diff_btn = QPushButton("🔧 代码修改实时")
+        self._diff_btn.setFixedHeight(26)
+        self._diff_btn.setToolTip("打开代码修改实时面板，实时查看 AI 修改代码的 diff")
+        self._diff_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {T['accent2']}33; color: {T['accent2']};
+                border: 1px solid {T['accent2']}66; border-radius: 4px;
+                padding: 2px 8px; font-size: 11px;
+            }}
+            QPushButton:hover {{ background: {T['accent2']}55; }}
+        """)
+        self._diff_btn.clicked.connect(self._open_diff_panel)
+        bar.addWidget(self._diff_btn)
+
         bar.addStretch()
 
+        self._diff_panel = None
         self._auto_scroll = True
         self._auto_btn = QPushButton("🔽 自动滚动")
         self._auto_btn.setCheckable(True)
@@ -420,6 +437,16 @@ class ConsoleViewer(QWidget):
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._drain_queue)
         self._timer.start(50)
+
+    def attach_diff_panel(self, panel):
+        """绑定代码修改实时面板（由主窗口创建后调用）"""
+        self._diff_panel = panel
+
+    def _open_diff_panel(self):
+        """打开代码修改实时面板"""
+        panel = getattr(self, '_diff_panel', None)
+        if panel is not None:
+            panel.show_panel()
 
     def _drain_queue(self):
         """批量收集 → 一次性 insertHtml（含二次去重安全网）"""

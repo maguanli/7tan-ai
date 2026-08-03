@@ -17,7 +17,7 @@
     "diff_tools": "a26f0d7d05f36fc6a432b58f341c72edde90c89334b2ab0aece51eaa81344e4e",
     "doc_generator": "37986f03872742255ac369ee15a2fe0a8049ac19fccd804835b25f3f60bcc16e",
     "docker_k8s": "2631f02dfa302732a5414fdc2e3ecba406e3e987a9327d9006c0248dae4d01fe",
-    "file_replacer": "c98aed5cc744f522ef6189b5ae940e557935ab4fa905248891b74cb303389062",
+    "file_replacer": "edc9199cac862a9d59bd2ec2634ece77d89f837ec34b51a756ddb8f168bd2c34",
     "form_enhance": "b8483e69a1da5d238ef8238b7f5f1543b6b575612da40f0e96dde6a53ab867b3",
     "git_advanced": "1dc0ef38dd76b2eacf9e5ba0252e8d05e6c01cabc96b517ef41deb5c6dd03f6b",
     "git_ops": "370e912bc20e981dc1e24f9a4acd5cfc47bad0023392b55fcbd876c0608dbdb6",
@@ -41,5 +41,5 @@
     "whisper_stt": "ba7805bce1a90b50d2d5557f5820e56cbc043b055a1417bb14c7fee6bec0d792",
     "zhanlizhi": "d25aca47c566fddb93ff6fc4251e9ec4ea89e4a79495fbc1ab30e9e82f68d0af"
   },
-  "sig": "1312f636b93ad6d1b3af3f5ab6d17918e1488fef9899fc990591ea1efa2d67f9"
+  "sig": "50ca3c27c94e44b39cc680333118bb764233d2465d92b43cb71c4e41c767c3a7"
 }

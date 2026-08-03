@@ -1,5 +1,6 @@
 """
 文件操作工具 — 本地文件读写删查（v2：支持二进制写入）
+v2.1: 写入/删除后发布变更事件 → 代码修改实时面板
 """
 import base64
 import json as _json
@@ -8,6 +9,7 @@ from pathlib import Path
 
 from .registry import register_tool
 from ..utils.helpers import ensure_dir, human_readable_size
+from ..utils.code_change_bus import publish_file_change
 
 
 @register_tool(
@@ -146,10 +148,30 @@ def write_file(path: str, content: str, encoding: str = "utf-8", mode: str = "te
     try:
         if mode == "binary":
             raw = base64.b64decode(content)
+            existed = p.exists()
             p.write_bytes(raw)
+            publish_file_change(
+                action="write" if existed else "create",
+                path=str(p),
+                summary=f"二进制写入 {len(raw)} bytes",
+            )
             return f"✅ 已写入（二进制）: {path} ({len(raw)} bytes)"
         else:
+            existed = p.exists()
+            old_text = None
+            if existed:
+                try:
+                    old_text = p.read_text(encoding=encoding)
+                except Exception:
+                    old_text = None
             p.write_text(content, encoding=encoding)
+            publish_file_change(
+                action="write" if existed else "create",
+                path=str(p),
+                old_text=old_text,
+                new_text=content,
+                summary="创建新文件" if not existed else f"重写 {len(content.splitlines())} 行",
+            )
             return f"✅ 已写入: {path}"
     except Exception as e:
         return f"❌ 写入失败: {e}"
@@ -176,9 +198,11 @@ def delete_file(path: str) -> str:
     try:
         if p.is_dir():
             shutil.rmtree(p)
+            publish_file_change("delete", str(p), summary="删除目录")
             return f"🗑️ 已删除目录: {path}"
         else:
             p.unlink()
+            publish_file_change("delete", str(p), summary="删除文件")
             return f"🗑️ 已删除: {path}"
     except Exception as e:
         return f"❌ 删除失败: {e}"

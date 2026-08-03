@@ -1617,6 +1617,11 @@ class ChatPage(QWidget):
             self._voice_btn.setText("🎤 语音中")
             self._set_send_button("voice")
             self._input.setPlaceholderText("语音模式：点击录音按钮开始说话...")
+            # 🎤 打开语音模式：重置防重状态（防止上一轮残留标记拦截本轮朗读）
+            self._tts_streamed_this_reply = False
+            self._tts_stream_done_ts = 0.0
+            self._last_spoken_full = ""
+            self._last_spoken_ts = 0.0
             # 🎤 设置 Agent 语音回调：让 Agent 中间消息也能朗读
             from ..agent.agent_loop import set_agent_speak_callback
             set_agent_speak_callback(self._speak_response)
@@ -1933,6 +1938,12 @@ class ChatPage(QWidget):
         self._streaming_text = ""  # 累积文本
         self._streaming_session_id = self._current_session_id
 
+        # 🎤 每轮回复开始：无条件重置语音防重状态（防止残留标记拦截本轮朗读）
+        self._tts_streamed_this_reply = False
+        self._tts_stream_done_ts = 0.0
+        self._last_spoken_full = ""
+        self._last_spoken_ts = 0.0
+
         # 🎤 流式 TTS 初始化：先停旧 worker，再新建
         if self._voice_mode and not self._voice_recording:
             old_queue = self._tts_stream_queue
@@ -2217,14 +2228,22 @@ class ChatPage(QWidget):
             if self._tts_stream_queue is not None:
                 # 流式 TTS：推送剩余文本 + 停止信号
                 remaining = self._streaming_text[self._tts_stream_text_pos:].strip()
+                streamed_any = self._tts_stream_text_pos > 0  # 流式是否已推过句子
                 if remaining and len(remaining) >= 2:
                     # 防重：若与最后推送的句子相同（pos 边界异常），跳过，避免最后一句两次
                     if remaining != self._last_tts_sent:
                         self._tts_stream_queue.put(remaining)
+                        streamed_any = True
                     self._last_tts_sent = remaining
                 self._tts_stream_queue.put(None)  # 停止信号
                 self._tts_stream_queue = None
-                self._tts_streamed_this_reply = True  # 本次回复已由流式 TTS 完整朗读（防全文重复）
+                if streamed_any:
+                    # 本次回复已由流式 TTS 完整朗读 → 防全文重复
+                    self._tts_streamed_this_reply = True
+                else:
+                    # 流式实际一句都没读（纯代码/无标点/引擎无输出）→ 全文兜底，保证一定能听到
+                    import threading
+                    threading.Thread(target=self._speak_response, args=(result,), daemon=True).start()
             else:
                 # 传统模式（非流式）：全量朗读
                 import threading
@@ -2403,6 +2422,16 @@ class ChatPage(QWidget):
             self._remove_message(thinking_msg)
 
         self._add_message("error", f"\u274c \u8bf7\u6c42\u5931\u8d25: {error_msg}")
+
+        # 🎤 清理残留流式 TTS（失败时队列可能挂着，防止拦截下一轮全文朗读）
+        if getattr(self, "_tts_stream_queue", None) is not None:
+            try:
+                self._tts_stream_queue.put(None)
+            except Exception:
+                pass
+            self._tts_stream_queue = None
+            self._tts_streamed_this_reply = False
+            self._tts_stream_done_ts = 0.0
 
         # 重置发送按钮
         self._is_processing = False

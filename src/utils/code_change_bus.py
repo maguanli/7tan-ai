@@ -110,7 +110,7 @@ def _append_history(rec: dict):
 
 
 def publish_file_change(action: str, path: str, old_text=None, new_text=None,
-                        diff_text=None, summary: str = "") -> dict:
+                        diff_text=None, summary: str = "", status: str = "ok") -> dict:
     """发布一次文件变更事件（线程安全，任意线程可调用）。
 
     action: write / replace / create / delete / config
@@ -118,6 +118,7 @@ def publish_file_change(action: str, path: str, old_text=None, new_text=None,
     old_text / new_text: 变更前后内容（文本模式），用于自动生成 diff
     diff_text: 预生成的 diff（可选，优先使用）
     summary: 一句话摘要（如 "替换 3 组字符串"）
+    status: 操作状态 ok / failed / rolled_back（面板显示状态徽章，默认 ok）
     """
     if diff_text is None:
         diff_text = build_diff(old_text, new_text, path)
@@ -136,6 +137,7 @@ def publish_file_change(action: str, path: str, old_text=None, new_text=None,
         "path": str(path),
         "diff": diff_text or "",
         "summary": summary or "",
+        "status": status or "ok",
     }
     try:
         _change_queue.put_nowait(rec)

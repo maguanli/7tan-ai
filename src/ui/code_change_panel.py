@@ -1,24 +1,31 @@
 """
-实时变更面板 — 展示 AI 修改代码的实时 diff（方案 B）
+实时变更面板 — 监控 AI 偷偷改文件（方案 A 双栏大师视图 + 方案 D 今日热力图摘要）
 
-功能：
-  - 左侧：修改记录列表（时间 + 操作 + 文件），最新置顶
-  - 右侧：diff 高亮视图（+绿 / -红 / @@蓝 / ---+++紫）
+功能（v6 升级）：
+  - 顶部「今日监控概览」：今日修改次数 / 涉及文件数 / 24 小时热力图
+      ▁▂▄▆█ 一眼看出 AI 今天哪个时段在疯狂改代码
+  - 左侧：修改记录列表（时间 + 操作 + 文件 + 变更统计 +n/-m + 状态徽章 ✅/⚠️/❌），最新置顶
+      支持【实时搜索】路径/摘要 + 【操作类型过滤】下拉
+  - 右侧：diff 高亮视图（+绿 / -红 / @@蓝 / ---+++紫）+ 变更统计头 + 上一处/下一处差异跳转
   - 📌 自动打开开关：AI 修改代码时自动弹出面板并置顶（默认开启）
   - 🗑 清空历史记录
-  - QTimer 轮询 code_change_bus（线程安全队列，与日志控制台同模式）
+  - QTimer 轮询 code_change_bus（线程安全队列 + jsonl 跨进程增量，实时兜底）
+  - 性能护栏：隐藏停表 / 512KB 限读 / 500 条上限 / 渲染防抖（防未响应）
 """
 from __future__ import annotations
 
 import html as _html
 import json
+from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QTextEdit, QListWidget, QListWidgetItem, QSplitter, QApplication,
+    QLineEdit, QComboBox,
 )
 from PyQt6.QtCore import Qt, QTimer, QByteArray
+from PyQt6.QtGui import QTextCursor
 
 # 绝对路径锚定项目 data 目录（与 code_change_bus 一致，不依赖启动 CWD）
 _GEOMETRY_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "panel_geometry.json"
@@ -52,6 +59,19 @@ _ACTION_LABELS = {
     "config": "配置",
 }
 
+# 状态徽章（status 字段：ok / failed / rolled_back，旧记录无 status → 默认 ✅）
+_STATUS_BADGES = {
+    "ok": ("✅", "#10b981"),
+    "success": ("✅", "#10b981"),
+    "failed": ("❌", "#ef4444"),
+    "error": ("❌", "#ef4444"),
+    "rolled_back": ("⚠️", "#f59e0b"),
+    "rollback": ("⚠️", "#f59e0b"),
+}
+
+# 热力图等级（今日每小时的修改次数 → 字符）
+_HEAT_LEVELS = (("█", 8), ("▆", 5), ("▄", 3), ("▂", 1), ("▁", 0))
+
 # v5 性能护栏（防 UI 主线程卡死/未响应）：
 #  1. 面板隐藏时停止全部轮询定时器（空闲零负载）
 #  2. 单次文件轮询最多读 512KB（大 diff 分多次消化，每轮 UI 工作量有上限）
@@ -66,6 +86,36 @@ def _action_icon(action: str) -> str:
 
 def _action_label(action: str) -> str:
     return _ACTION_LABELS.get(action, action)
+
+
+def _status_badge(status) -> tuple:
+    """状态徽章 → (emoji, 颜色)；旧记录/空值默认 ok"""
+    if not status:
+        return _STATUS_BADGES["ok"]
+    return _STATUS_BADGES.get(str(status).lower(), _STATUS_BADGES["ok"])
+
+
+def _diff_stats(diff_text: str) -> tuple:
+    """统计 diff 新增/删除行数（忽略 ---/+++/@@ 头，供列表 +n/-m 显示）"""
+    adds = dels = 0
+    if not diff_text:
+        return 0, 0
+    for ln in diff_text.splitlines():
+        if ln.startswith(("+++", "---", "@@")):
+            continue
+        if ln.startswith("+"):
+            adds += 1
+        elif ln.startswith("-"):
+            dels += 1
+    return adds, dels
+
+
+def _heat_bar(count: int) -> str:
+    """修改次数 → 热力图字符（0→▁ 低 →█ 高）"""
+    for ch, threshold in _HEAT_LEVELS:
+        if count >= threshold:
+            return ch
+    return "▁"
 
 
 def _diff_to_html(diff_text: str) -> str:
@@ -101,16 +151,18 @@ def _diff_to_html(diff_text: str) -> str:
 
 
 class CodeChangePanel(QWidget):
-    """代码修改实时面板（独立窗口，可由控制台按钮打开 / AI 修改时自动打开）"""
+    """代码修改实时面板（独立窗口：监控 AI 偷偷改了哪些文件）"""
 
     def __init__(self, parent=None, auto_open: bool = True):
         super().__init__(parent)
-        self.setWindowTitle("🔧 代码修改实时")
+        self.setWindowTitle("🔧 代码修改实时 — 监控 AI 改文件")
         self.setWindowFlag(Qt.WindowType.Window, True)
         self._auto_open = auto_open
         self._restore_geometry()
-        self._records: list[dict] = []
-        self._hist_cursor = 0  # jsonl 增量读取游标（跨进程实时兜底）
+        self._records: list[dict] = []      # 全量记录（最新在前）
+        self._visible: list[int] = []       # 过滤后的记录索引（对应列表行）
+        self._seen_keys: set = set()        # seq 去重
+        self._hist_cursor = 0               # jsonl 增量读取游标（跨进程实时兜底）
         self._build_ui()
         self._load_history_records()
         # 快速定时器：只拉内存队列（120ms，无文件 I/O，不卡 UI）
@@ -127,6 +179,11 @@ class CodeChangePanel(QWidget):
         self._render_timer.setSingleShot(True)
         self._render_timer.setInterval(300)
         self._render_timer.timeout.connect(self._render_current_row)
+        # 搜索过滤防抖：输入 200ms 后才重建列表
+        self._filter_timer = QTimer(self)
+        self._filter_timer.setSingleShot(True)
+        self._filter_timer.setInterval(200)
+        self._filter_timer.timeout.connect(self._apply_filter)
 
         # 几何防抖保存：拖动/缩放 300ms 后落盘，任何退出方式都不丢
         self._geometry_timer = QTimer(self)
@@ -149,17 +206,57 @@ class CodeChangePanel(QWidget):
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(4)
 
-        # ── 顶部工具栏 ──
+        # ── 顶部工具栏：标题 | 计数 | 搜索 | 类型过滤 | 自动打开 | 清空 | 关闭 ──
         bar = QHBoxLayout()
         title = QLabel("🔧 代码修改实时")
         title.setStyleSheet(
             f"font-size:14px;font-weight:bold;color:{T['text_primary']};")
         bar.addWidget(title)
 
-        self._count_label = QLabel("0 条")
+        self._count_label = QLabel("0/0 条")
         self._count_label.setStyleSheet(
             f"color:{T['text_secondary']};font-size:11px;padding:0 6px;")
         bar.addWidget(self._count_label)
+
+        # 搜索框（方案 A：实时搜索路径/摘要）
+        self._search_box = QLineEdit()
+        self._search_box.setPlaceholderText("🔍 搜索文件/摘要…")
+        self._search_box.setFixedWidth(170)
+        self._search_box.setClearButtonEnabled(True)
+        self._search_box.setStyleSheet(f"""
+            QLineEdit {{
+                background: {T['bg']}; color: {T['text_primary']};
+                border: 1px solid {T['border']}; border-radius: 4px;
+                padding: 3px 8px; font-size: 11px;
+            }}
+            QLineEdit:focus {{ border: 1px solid {T['accent2']}88; }}
+        """)
+        self._search_box.textChanged.connect(
+            lambda *_: self._filter_timer.start())
+        bar.addWidget(self._search_box)
+
+        # 操作类型过滤下拉（方案 A）
+        self._type_box = QComboBox()
+        self._type_box.addItem("全部类型", None)
+        for k in ("write", "replace", "create", "delete", "config"):
+            self._type_box.addItem(f"{_ACTION_ICONS[k]} {_ACTION_LABELS[k]}", k)
+        self._type_box.setFixedWidth(112)
+        self._type_box.setStyleSheet(f"""
+            QComboBox {{
+                background: {T['bg']}; color: {T['text_primary']};
+                border: 1px solid {T['border']}; border-radius: 4px;
+                padding: 3px 6px; font-size: 11px;
+            }}
+            QComboBox::drop-down {{ border: none; width: 18px; }}
+            QComboBox QAbstractItemView {{
+                background: {T['bg']}; color: {T['text_primary']};
+                selection-background-color: {T['accent']}66;
+                font-size: 11px;
+            }}
+        """)
+        # 先添加完所有项再连接（避免构建期误触发）
+        self._type_box.currentIndexChanged.connect(self._apply_filter)
+        bar.addWidget(self._type_box)
         bar.addStretch()
 
         self._auto_btn = QPushButton("📌 自动打开")
@@ -207,7 +304,16 @@ class CodeChangePanel(QWidget):
         bar.addWidget(close_btn)
         layout.addLayout(bar)
 
-        # ── 中部：左记录列表 + 右 diff 视图 ──
+        # ── 今日监控概览（方案 D：次数 / 文件数 / 24小时热力图）──
+        self._overview_label = QLabel("📊 今日 0 次 · 0 个文件 · 频率(时) " + "▁" * 24)
+        self._overview_label.setStyleSheet(
+            f"color:{T['text_secondary']};font-size:11px;padding:3px 8px;"
+            f"background:{T['bg']};border:1px solid {T['border']};border-radius:4px;")
+        self._overview_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(self._overview_label)
+
+        # ── 中部：左记录列表 + 右 diff 视图（方案 A 双栏大师视图）──
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self._list = QListWidget()
         self._list.setStyleSheet(f"""
@@ -222,6 +328,45 @@ class CodeChangePanel(QWidget):
         self._list.currentRowChanged.connect(self._show_record)
         splitter.addWidget(self._list)
 
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(3)
+        # diff 工具栏：统计信息 + 上一处/下一处差异跳转
+        diff_bar = QHBoxLayout()
+        self._diff_stats_label = QLabel("选择一条记录查看 diff")
+        self._diff_stats_label.setStyleSheet(
+            f"color:{T['text_secondary']};font-size:11px;padding:0 4px;")
+        diff_bar.addWidget(self._diff_stats_label)
+        diff_bar.addStretch()
+        prev_btn = QPushButton("⬆ 上一处")
+        prev_btn.setFixedHeight(24)
+        prev_btn.setToolTip("跳到上一个差异块 (@@)")
+        prev_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {T['accent']}22; color: {T['text_primary']};
+                border: 1px solid {T['border']}; border-radius: 4px;
+                padding: 1px 8px; font-size: 11px;
+            }}
+            QPushButton:hover {{ background: {T['accent']}55; }}
+        """)
+        prev_btn.clicked.connect(lambda: self._goto_diff(-1))
+        diff_bar.addWidget(prev_btn)
+        next_btn = QPushButton("⬇ 下一处")
+        next_btn.setFixedHeight(24)
+        next_btn.setToolTip("跳到下一个差异块 (@@)")
+        next_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {T['accent']}22; color: {T['text_primary']};
+                border: 1px solid {T['border']}; border-radius: 4px;
+                padding: 1px 8px; font-size: 11px;
+            }}
+            QPushButton:hover {{ background: {T['accent']}55; }}
+        """)
+        next_btn.clicked.connect(lambda: self._goto_diff(1))
+        diff_bar.addWidget(next_btn)
+        right_layout.addLayout(diff_bar)
+
         self._diff_view = QTextEdit()
         self._diff_view.setReadOnly(True)
         self._diff_view.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
@@ -234,10 +379,11 @@ class CodeChangePanel(QWidget):
                 selection-background-color: #264F78;
             }}
         """)
-        splitter.addWidget(self._diff_view)
+        right_layout.addWidget(self._diff_view, 1)
+        splitter.addWidget(right_panel)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([260, 620])
+        splitter.setSizes([300, 580])
         layout.addWidget(splitter, 1)
 
         # ── 底部状态 ──
@@ -272,22 +418,19 @@ class CodeChangePanel(QWidget):
             reverse=True)
         for rec in items:
             self._records.append(rec)
-            item = QListWidgetItem(
-                f"[{rec.get('ts', '')}] {_action_icon(rec.get('action', ''))} "
-                f"{_action_label(rec.get('action', ''))}  {rec.get('path', '')}")
-            item.setToolTip(rec.get("ts_full", ""))
-            self._list.addItem(item)
+            key = rec.get("seq") or (
+                rec.get("ts_full", ""), rec.get("action", ""), rec.get("path", ""))
+            self._seen_keys.add(key)
+        self._apply_filter()
+        self._update_summary()
         if self._records:
-            self._list.setCurrentRow(0)
-            self._show_record(0)
-            self._count_label.setText(f"{len(self._records)} 条")
             last = self._records[0]
             self._status.setText(
                 f"最新: {last.get('ts_full', '')}  {last.get('action', '')}  {last.get('path', '')}"
                 + (f"  |  {last.get('summary', '')}" if last.get("summary") else ""))
         else:
             self._status.setText("等待 AI 修改代码…（AI 修改文件时，这里会实时显示每次修改的 diff）")
-        # ④ 历史已全量加载 → 游标移到文件末尾，之后只增量读新事件
+        # 历史已全量加载 → 游标移到文件末尾，之后只增量读新事件
         self._hist_cursor = history_tail_size()
 
     # ── 事件轮询 ──
@@ -311,16 +454,9 @@ class CodeChangePanel(QWidget):
             pass
 
     def _ingest_records(self, recs: list):
-        """统一入库：seq 去重 + 插入列表（最新置顶）"""
+        """统一入库：seq 去重 + 插入全量（最新置顶）→ 重建过滤列表 + 刷新今日概览"""
         if not recs:
             return
-        # 持久化 seen 集合挂在实例上，避免每 60ms 重建全部记录
-        if not hasattr(self, "_seen_keys"):
-            self._seen_keys = {
-                (r.get("seq") if r.get("seq") else (
-                    r.get("ts_full", ""), r.get("action", ""), r.get("path", "")))
-                for r in self._records
-            }
         added = 0
         for rec in recs:
             key = rec.get("seq") or (
@@ -328,23 +464,13 @@ class CodeChangePanel(QWidget):
             if key in self._seen_keys:
                 continue
             self._seen_keys.add(key)
-            self._records.insert(0, rec)  # 最新在前，与列表行序一致
-            label = _action_label(rec["action"])
-            item = QListWidgetItem(
-                f"[{rec['ts']}] {_action_icon(rec['action'])} {label}  {rec['path']}")
-            item.setToolTip(rec["ts_full"])
-            self._list.insertItem(0, item)  # 最新置顶
+            self._records.insert(0, rec)  # 最新在前
             added += 1
-            if added == 1:
-                # 阻塞信号：选中不立刻渲染，交给 300ms 防抖合并
-                self._list.blockSignals(True)
-                self._list.setCurrentRow(0)
-                self._list.blockSignals(False)
-        # 内存上限：超 500 条丢最旧（防长期运行无界增长，列表/索引保持轻量）
+        # 内存上限：超 500 条丢最旧（防长期运行无界增长）
         while len(self._records) > _MAX_RECORDS:
             self._records.pop()
-            self._list.takeItem(self._list.count() - 1)
-        self._count_label.setText(f"{len(self._records)} 条")
+        self._apply_filter()
+        self._update_summary()
         if added:
             last = self._records[0]
             self._status.setText(
@@ -357,6 +483,92 @@ class CodeChangePanel(QWidget):
             self.show()
             self.raise_()
 
+    # ── 过滤 / 概览（方案 A + D 核心）──
+    def _apply_filter(self):
+        """按搜索词 + 操作类型过滤 → 重建列表（搜索防抖 200ms 后调用）"""
+        if not hasattr(self, "_list"):
+            return
+        kw = self._search_box.text().strip().lower()
+        typ = self._type_box.currentData()
+        self._visible = []
+        for i, r in enumerate(self._records):
+            if typ and r.get("action") != typ:
+                continue
+            if kw:
+                hay = " ".join((
+                    str(r.get("path", "")),
+                    str(r.get("summary", "")),
+                    str(r.get("diff", ""))[:200],
+                )).lower()
+                if kw not in hay:
+                    continue
+            self._visible.append(i)
+        # 重建列表（≤500 条，200ms 防抖后重建开销可忽略）
+        self._list.blockSignals(True)
+        self._list.clear()
+        for idx in self._visible:
+            r = self._records[idx]
+            adds, dels = _diff_stats(r.get("diff", ""))
+            badge, _ = _status_badge(r.get("status"))
+            stats = f"  (+{adds} -{dels})" if (adds or dels) else ""
+            item = QListWidgetItem(
+                f"[{r.get('ts', '')}] {_action_icon(r.get('action', ''))} "
+                f"{_action_label(r.get('action', ''))}  {r.get('path', '')}"
+                f"{stats} {badge}")
+            item.setToolTip(
+                f"{r.get('ts_full', '')}\n"
+                f"{_action_label(r.get('action', ''))} {r.get('path', '')}"
+                + (f"\n摘要: {r.get('summary', '')}" if r.get("summary") else ""))
+            self._list.addItem(item)
+        self._list.blockSignals(False)
+        if self._visible:
+            self._list.setCurrentRow(0)
+            self._show_record(self._visible[0])
+        else:
+            self._diff_view.setHtml(
+                "<div style='color:#94a3b8;'>（无匹配记录）</div>")
+        self._count_label.setText(f"{len(self._visible)}/{len(self._records)} 条")
+
+    def _update_summary(self):
+        """刷新顶部今日监控概览：今日次数 / 涉及文件数 / 24小时热力图"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        per_hour = [0] * 24
+        files: set = set()
+        total = 0
+        for r in self._records:
+            ts = r.get("ts_full", "")
+            if ts.startswith(today):
+                try:
+                    per_hour[int(ts[11:13])] += 1
+                except Exception:
+                    continue
+                total += 1
+                files.add(r.get("path", ""))
+        bars = "".join(_heat_bar(v) for v in per_hour)
+        self._overview_label.setText(
+            f"📊 今日 {total} 次 · {len(files)} 个文件 · 频率(时) {bars}")
+        tip_lines = [f"{i:02d}时: {v}次" for i, v in enumerate(per_hour) if v]
+        self._overview_label.setToolTip(
+            "24 小时修改热力图（0点→23点，▁低 █高）\n"
+            + ("\n".join(tip_lines) if tip_lines else "今日暂无修改"))
+
+    def _goto_diff(self, direction: int):
+        """跳转到下一个/上一个差异块（@@ 行），direction: 1=下一处, -1=上一处"""
+        doc = self._diff_view.document()
+        cursor = self._diff_view.textCursor()
+        cur_block = cursor.blockNumber()
+        targets = [b for b in range(doc.blockCount())
+                   if doc.findBlockByNumber(b).text().startswith("@@")]
+        if not targets:
+            return
+        if direction > 0:
+            nxt = next((t for t in targets if t > cur_block), targets[0])
+        else:
+            nxt = next((t for t in reversed(targets) if t < cur_block), targets[-1])
+        c = QTextCursor(doc.findBlockByNumber(nxt))
+        self._diff_view.setTextCursor(c)
+        self._diff_view.ensureCursorVisible()
+
     def _render_current_row(self):
         """防抖后的实际渲染（300ms 合并窗口结束才执行）"""
         row = self._list.currentRow()
@@ -364,12 +576,17 @@ class CodeChangePanel(QWidget):
             self._show_record(row)
 
     def _show_record(self, row: int):
-        if row < 0 or row >= len(self._records):
+        """row = 列表行号（过滤后可见列表）→ 映射到全量 _records 渲染 diff"""
+        if row < 0 or row >= len(self._visible):
             return
-        rec = self._records[row]
+        rec = self._records[self._visible[row]]
+        badge, bcolor = _status_badge(rec.get("status"))
+        adds, dels = _diff_stats(rec.get("diff", ""))
         head = (
+            f"<span style='color:{bcolor};font-size:14px;'>{badge}</span> "
             f"<b style='color:#00d4ff;'>{_action_label(rec['action']).upper()}</b> "
-            f"<span style='color:#94a3b8;'>{rec['ts_full']}</span><br>"
+            f"<span style='color:#94a3b8;'>{rec['ts_full']}</span>"
+            f"<span style='color:#10b981;'>  +{adds} -{dels}</span><br>"
             f"<span style='color:#fbbf24;'>{_html.escape(rec['path'])}</span>"
         )
         if rec.get("summary"):
@@ -388,13 +605,20 @@ class CodeChangePanel(QWidget):
         else:
             body = _diff_to_html(diff_text)
         self._diff_view.setHtml(head + body)
+        # 顶部 diff 工具栏统计
+        self._diff_stats_label.setText(
+            f"{badge} {_action_label(rec['action'])}  +{adds} -{dels}"
+            + (f"  ·  {rec.get('summary', '')}" if rec.get("summary") else ""))
 
     # ── 操作 ──
     def _clear(self):
         self._records.clear()
+        self._visible.clear()
+        self._seen_keys.clear()
         self._list.clear()
         self._diff_view.clear()
-        self._count_label.setText("0 条")
+        self._count_label.setText("0/0 条")
+        self._update_summary()
         self._status.setText("已清空，等待 AI 修改代码…")
 
     def show_panel(self):

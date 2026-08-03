@@ -2251,6 +2251,12 @@ class ChatPage(QWidget):
                     self._last_tts_sent = remaining
                 self._tts_stream_queue.put(None)  # 停止信号 → worker 统计成功句数并决定兜底
                 self._tts_stream_queue = None
+                # 🎤 标记全文"已朗读"：流式逐句朗读已覆盖全文，防止控制台 Agent 朗读 / 全局语音桥重复
+                try:
+                    from data.plugins.tts_piper.tools import tts_mark_spoken
+                    tts_mark_spoken(result)
+                except Exception:
+                    pass
             else:
                 # 传统模式（非流式）：全量朗读
                 import threading

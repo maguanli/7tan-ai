@@ -564,6 +564,11 @@ _dedup_lock = threading.Lock()
 DEDUP_WINDOW = 300  # 秒（5 分钟）
 
 
+def _dedup_clean(text: str) -> str:
+    """统一去重键：去除代码块后的纯净文本（与朗读内容一致）"""
+    return _strip_code_blocks((text or "").strip())
+
+
 def tts_speak_dedup(text: str) -> dict:
     """带全局去重的朗读：同一全文 5 分钟内只朗读一次。
 
@@ -571,7 +576,7 @@ def tts_speak_dedup(text: str) -> dict:
     _on_response / 工作台任务）同时触发时也只会出声一次。
     """
     global _dedup_spoken, _dedup_ts
-    clean = (text or "").strip()
+    clean = _dedup_clean(text)
     if not clean:
         return {"status": "ok", "message": "空文本", "skipped": True}
     with _dedup_lock:
@@ -582,3 +587,20 @@ def tts_speak_dedup(text: str) -> dict:
         _dedup_spoken = clean
         _dedup_ts = now
     return tts_speak(clean, play=True, strip_code=True)
+
+
+def tts_mark_spoken(text: str) -> dict:
+    """标记某段文本为'已朗读'（只注册全局去重键，不实际朗读）。
+
+    供流式朗读场景使用：流式已逐句朗读全文后调用，
+    防止控制台 Agent 朗读触发 / 全局语音桥与流式朗读重复。
+    """
+    global _dedup_spoken, _dedup_ts
+    clean = _dedup_clean(text)
+    if not clean:
+        return {"status": "ok", "message": "空文本", "skipped": True}
+    with _dedup_lock:
+        _dedup_spoken = clean
+        _dedup_ts = time.time()
+        logger.info("[TTS] 已标记为已朗读（去重注册，不实际播放）")
+    return {"status": "ok", "skipped": False}

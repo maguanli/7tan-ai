@@ -8274,8 +8274,9 @@ class MainWindow(QMainWindow):
         try:
             from src.agent.speak_bridge import init_global_tts
             init_global_tts()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[TTS-Bridge] 初始化失败: {e}")
+            logging.getLogger(__name__).warning(f"[TTS-Bridge] 初始化失败: {e}")
 
 
         # 中心 widget

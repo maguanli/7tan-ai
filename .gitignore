@@ -29,6 +29,10 @@ tools/*.exe
 # 沙盒临时文件
 data/sandbox/
 
+# 运行时数据与调试临时文件
+data/tmp/
+data/code_changes.jsonl
+
 # 备份文件
 *.bak
 backups/

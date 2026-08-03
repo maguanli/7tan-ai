@@ -149,6 +149,54 @@ def _enqueue(line: str):
         _dedup_map[h_fuzzy] = now
     ts = datetime.now().strftime("%H:%M:%S")
     _log_queue.put(f"{ts} │ {clean}")
+    # 🎤 控制台 Agent 内容朗读：检测 💬 Agent 行 → 后台朗读（全局去重防与聊天页重复）
+    _maybe_speak_agent_line(clean)
+
+
+# ===== 控制台 Agent 内容朗读（实时控制台显示 Agent 回复时同步发声） =====
+_AGENT_LINE_RE = re.compile(r'💬\s*Agent:\s*(.+)$', re.S)
+_last_agent_speak_ts = 0.0
+_agent_speak_lock = threading.Lock()
+
+
+def _maybe_speak_agent_line(line: str):
+    """检测 💬 Agent 行并触发朗读（聊天页已读的自动去重跳过）。
+
+    规则：
+      - 跳过 agent_loop 中间迭代的截断输出（`content[:100]...` 结尾带省略号）
+      - 2 秒防抖，避免同一回复多行重复触发
+      - 延迟 2 秒再朗读：等聊天页流式收尾 tts_mark_spoken 完成，
+        保证聊天页已朗读的内容在此处被全局去重拦截，不重复出声
+    """
+    global _last_agent_speak_ts
+    m = _AGENT_LINE_RE.search(line)
+    if not m:
+        return
+    content = m.group(1).strip()
+    if not content:
+        return
+    # 跳过截断的中间迭代输出（agent_loop 的 content[:100]...）
+    if content.endswith("..."):
+        return
+    now = _time.time()
+    with _agent_speak_lock:
+        if now - _last_agent_speak_ts < 2.0:
+            return
+        _last_agent_speak_ts = now
+
+    def _do_speak():
+        _time.sleep(2)
+        try:
+            # 语音开关检查（与全局语音桥一致：数据库 voice_mode）
+            from src.agent.speak_bridge import _voice_mode_enabled
+            if not _voice_mode_enabled():
+                return
+            from data.plugins.tts_piper.tools import tts_speak_dedup
+            tts_speak_dedup(content)
+        except Exception:
+            pass
+
+    threading.Thread(target=_do_speak, daemon=True).start()
 
 
 # ===== 1. Standard logging bridge =====

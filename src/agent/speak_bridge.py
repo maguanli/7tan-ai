@@ -47,6 +47,8 @@ def init_global_tts() -> None:
     try:
         from src.agent.agent_loop import register_agent_speak_callback
         register_agent_speak_callback(_global_tts_callback)
+        print("[TTS-Bridge] 全局语音朗读已注册（voice_mode 开关生效）")
         logger.info("[TTS-Bridge] 全局语音朗读已注册（voice_mode 开关生效）")
     except Exception as e:
+        print(f"[TTS-Bridge] 注册失败: {e}")
         logger.warning(f"[TTS-Bridge] 注册失败: {e}")

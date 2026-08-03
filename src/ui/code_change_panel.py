@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer
 
-from ..utils.code_change_bus import drain_changes
+from ..utils.code_change_bus import drain_changes, load_history
 
 CHANGE_THEME = {
     "accent": "#7c3aed",
@@ -89,6 +89,7 @@ class CodeChangePanel(QWidget):
         self._auto_open = auto_open
         self._records: list[dict] = []
         self._build_ui()
+        self._load_history_records()
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll)
         self._timer.start(60)
@@ -197,25 +198,64 @@ class CodeChangePanel(QWidget):
             f"color:{T['text_secondary']};font-size:11px;padding:2px 4px;")
         layout.addWidget(self._status)
 
+    # ── 历史加载（重启后不丢失）──
+    def _load_history_records(self):
+        """打开面板时加载持久化历史记录（最新在前），并清空队列中已持久化的重复项"""
+        # 队列中的事件已同步写入历史文件，直接丢弃避免重复
+        try:
+            drain_changes(1000)
+        except Exception:
+            pass
+        recs = load_history(300)
+        seen = set()
+        for rec in reversed(recs):  # 最新在前
+            key = (rec.get("ts_full", ""), rec.get("action", ""), rec.get("path", ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            self._records.append(rec)
+            item = QListWidgetItem(
+                f"[{rec.get('ts', '')}] {_action_icon(rec.get('action', ''))} {_action_label(rec.get('action', ''))}  {rec.get('path', '')}")
+            item.setToolTip(rec.get("ts_full", ""))
+            self._list.addItem(item)
+        if self._records:
+            self._list.setCurrentRow(0)
+            self._show_record(0)
+            self._count_label.setText(f"{len(self._records)} 条")
+            last = self._records[0]
+            self._status.setText(
+                f"最新: {last.get('ts_full', '')}  {last.get('action', '')}  {last.get('path', '')}"
+                + (f"  |  {last.get('summary', '')}" if last.get("summary") else ""))
+        else:
+            self._status.setText("等待 AI 修改代码…（AI 修改文件时，这里会实时显示每次修改的 diff）")
+
     # ── 事件轮询 ──
     def _poll(self):
         recs = drain_changes(50)
         if not recs:
             return
+        existing = {(r.get("ts_full", ""), r.get("action", ""), r.get("path", "")) for r in self._records}
+        added = 0
         for i, rec in enumerate(recs):
+            key = (rec.get("ts_full", ""), rec.get("action", ""), rec.get("path", ""))
+            if key in existing:
+                continue  # 历史已加载，跳过重复
+            existing.add(key)
             self._records.insert(0, rec)  # 最新在前，与列表行序一致
             label = _action_label(rec["action"])
             item = QListWidgetItem(
                 f"[{rec['ts']}] {_action_icon(rec['action'])} {label}  {rec['path']}")
             item.setToolTip(rec["ts_full"])
             self._list.insertItem(0, item)  # 最新置顶
-            if i == 0:
+            added += 1
+            if added == 1:
                 self._list.setCurrentRow(0)  # 自动选中最新一条
         self._count_label.setText(f"{len(self._records)} 条")
-        last = recs[-1]
-        self._status.setText(
-            f"最新: {last['ts_full']}  {last['action']}  {last['path']}"
-            + (f"  |  {last['summary']}" if last.get("summary") else ""))
+        if added:
+            last = self._records[0]
+            self._status.setText(
+                f"最新: {last['ts_full']}  {last['action']}  {last['path']}"
+                + (f"  |  {last['summary']}" if last.get("summary") else ""))
         # AI 修改代码时自动打开面板
         if self._auto_open and not self.isVisible():
             self.show()

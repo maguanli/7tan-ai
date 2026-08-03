@@ -8,11 +8,14 @@
 消费端（UI 主线程，QTimer 轮询）:
     drain_changes(max_items) -> list[dict]
 
-队列满时丢弃最旧记录，保证"最新修改"优先可见。
+v2: 事件同时持久化到 data/code_changes.jsonl（重启不丢），
+    面板打开时可调用 load_history() 加载历史记录。
+    队列满时丢弃最旧记录，保证"最新修改"优先可见。
 """
 from __future__ import annotations
 
 import difflib
+import json
 import queue
 import threading
 from datetime import datetime
@@ -21,6 +24,11 @@ from pathlib import Path
 _change_queue: "queue.Queue[dict]" = queue.Queue(maxsize=1000)
 _seq_lock = threading.Lock()
 _seq = 0
+
+_history_lock = threading.Lock()
+_HISTORY_MAX = 300            # 历史文件保留条数
+_HISTORY_MAX_BYTES = 5_000_000  # 5MB 上限
+_HISTORY_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "code_changes.jsonl"
 
 
 def _next_seq() -> int:
@@ -51,6 +59,27 @@ def build_diff(old_text, new_text, path, context: int = 2):
     except Exception:
         return None
     return text if text.strip() else None
+
+
+def _append_history(rec: dict):
+    """事件追加到历史文件（线程安全，失败不影响内存队列）"""
+    try:
+        with _history_lock:
+            _HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with open(_HISTORY_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            # 超限修剪（行数 or 体积）
+            try:
+                if _HISTORY_PATH.stat().st_size > _HISTORY_MAX_BYTES:
+                    with open(_HISTORY_PATH, "r", encoding="utf-8") as f:
+                        lines = f.readlines()
+                    if len(lines) > _HISTORY_MAX:
+                        with open(_HISTORY_PATH, "w", encoding="utf-8") as f:
+                            f.writelines(lines[-_HISTORY_MAX:])
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def publish_file_change(action: str, path: str, old_text=None, new_text=None,
@@ -87,6 +116,7 @@ def publish_file_change(action: str, path: str, old_text=None, new_text=None,
             _change_queue.put_nowait(rec)
         except queue.Full:
             pass
+    _append_history(rec)
     return rec
 
 
@@ -104,3 +134,29 @@ def drain_changes(max_items: int = 50) -> list:
 def pending_count() -> int:
     """当前待消费事件数"""
     return _change_queue.qsize()
+
+
+def load_history(limit: int = 300) -> list:
+    """加载历史记录（旧 → 新），用于面板打开时初始化。
+
+    重启后事件不丢失；文件损坏时静默跳过坏行。
+    """
+    if not _HISTORY_PATH.exists():
+        return []
+    try:
+        with open(_HISTORY_PATH, "r", encoding="utf-8") as f:
+            lines = f.readlines()[-limit:]
+    except Exception:
+        return []
+    recs = []
+    for ln in lines:
+        try:
+            recs.append(json.loads(ln))
+        except Exception:
+            continue
+    return recs
+
+
+def history_path() -> Path:
+    """历史文件路径（调试用）"""
+    return _HISTORY_PATH

@@ -4604,6 +4604,8 @@ class SettingsPage(QWidget):
 
             "mimo": "https://api.xiaomimimo.com/v1",
 
+            "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+
             "ollama": "http://localhost:11434/v1",
 
             "custom": "",

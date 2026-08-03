@@ -37,7 +37,7 @@ PROVIDER_BASE_SCORE = {
     "siliconflow": 70,
     "doubao": 65,
     "mimo": 88,
-    "qwen": 60,
+    "qwen": 85,
     "ollama": 40,
     "custom": 50,
 }
@@ -52,6 +52,7 @@ MODEL_TIER_BONUS = {
     "claude-3.5-sonnet": 15,
     "claude-3-opus": 13,
     "qwen-max": 8,
+    "qwen3-max": 15,
     "doubao-pro-32k": 8,
     "mimo-v2.5-pro": 15,
     "llama3": 5,

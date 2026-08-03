@@ -69,8 +69,17 @@ _HIGHLIGHT_RULES: list[tuple[str, str]] = [
 _HIGHLIGHT_PATTERNS = [(re.compile(p), c) for p, c in _HIGHLIGHT_RULES]
 
 
+# 快速预筛：合并 16 条规则为一条 alternation 正则，单次 search 判断是否命中
+# （普通行一次失败即返回，命中行也只需一次全量 sub，省 16 次独立正则扫描）
+_COMBINED_RULES = "|".join(f"(?:{p})" for p, _ in _HIGHLIGHT_RULES)
+_HIGHLIGHT_PROBE = re.compile(_COMBINED_RULES)
+
+# 颜色映射：probe 命中后仍需逐规则上色（命中行是少数，成本可接受）
 def _highlight_line(text: str) -> str:
     escaped = _html_lib.escape(text, quote=False)
+    # 预筛：单条组合正则，一次扫描，90%+ 普通行在此快速返回
+    if not _HIGHLIGHT_PROBE.search(text[:2000]):
+        return escaped
     result = escaped
     for pattern, color in _HIGHLIGHT_PATTERNS:
         result = pattern.sub(
@@ -547,6 +556,8 @@ class ConsoleViewer(QWidget):
         """)
         self._output = QTextEdit()
         self._output.setReadOnly(True)
+        # 🔒 行数硬上限：文档无限增长会导致 setValue(maximum()) 全量重排 → 主线程假死
+        self._output.document().setMaximumBlockCount(2000)
         clear_btn.clicked.connect(self._output.clear)
         bar.addWidget(clear_btn)
 
@@ -622,6 +633,9 @@ class ConsoleViewer(QWidget):
 
         html_parts = []
         for line in lines:
+            # 🔒 超长行截断显示（多 KB 的 Agent 回复整行高亮+渲染会卡主线程）
+            if len(line) > 2000:
+                line = line[:2000] + f"  …（已截断，原 {len(line)} 字符）"
             highlighted = _highlight_line(line)
             html_parts.append(
                 f'<div style="line-height:1.55;white-space:pre-wrap;'

@@ -185,6 +185,74 @@ def _coerce_value(val: str):
     return val
 
 
+# ============================================================
+# 沙盒文件变更快照 — 让代码修改实时面板能看到 sandbox_execute 的改动
+# ============================================================
+
+_SNAPSHOT_DIRS = ("src", "config", "data/prompts", "data/plugins")
+_SNAPSHOT_SKIP_DIRS = {"__pycache__", ".venv", "node_modules", "dist", "build"}
+_SNAPSHOT_EXTS = {".py", ".txt", ".yaml", ".yml", ".json", ".md", ".html", ".css", ".js", ".bat", ".sh"}
+_SNAPSHOT_MAX_FILE = 300_000  # 超过 300KB 不存内容，只记录变更事实
+
+
+def _snapshot_project_files() -> dict:
+    """对项目关键目录做快照: {path_str: (mtime_ns, size, content_or_None)}"""
+    root = _get_project_root()
+    snap = {}
+    for sub in _SNAPSHOT_DIRS:
+        base = root / sub
+        if not base.exists():
+            continue
+        for p in base.rglob("*"):
+            if not p.is_file() or p.suffix.lower() not in _SNAPSHOT_EXTS:
+                continue
+            if any(part in _SNAPSHOT_SKIP_DIRS for part in p.parts):
+                continue
+            try:
+                st = p.stat()
+                content = None
+                if st.st_size <= _SNAPSHOT_MAX_FILE:
+                    try:
+                        content = p.read_text(encoding="utf-8", errors="replace")
+                    except Exception:
+                        content = None
+                snap[str(p)] = (st.st_mtime_ns, st.st_size, content)
+            except Exception:
+                continue
+    return snap
+
+
+def _publish_sandbox_changes(before: dict):
+    """执行后快照对比，把变更发布到代码修改实时面板（best-effort，绝不抛异常）"""
+    try:
+        from ..utils.code_change_bus import publish_file_change
+        after = _snapshot_project_files()
+        published = 0
+        # 新建 / 修改
+        for path, (mt, size, content) in after.items():
+            old = before.get(path)
+            if old is None:
+                publish_file_change("create", path, new_text=content,
+                                    summary="沙盒新建文件")
+                published += 1
+            elif old[0] != mt or old[1] != size:
+                publish_file_change("write", path, old_text=old[2], new_text=content,
+                                    summary="沙盒修改")
+                published += 1
+            if published >= 20:  # 防刷屏：单次最多 20 条
+                break
+        # 删除
+        deleted = [p for p in before if p not in after]
+        for path in deleted[:10]:
+            publish_file_change("delete", path, old_text=before[path][2],
+                                summary="沙盒删除")
+            published += 1
+        if published:
+            logger.info(f"📡 沙盒变更已同步到代码面板: {published} 个文件")
+    except Exception as e:
+        logger.warning(f"沙盒变更快照对比失败（不影响执行结果）: {e}")
+
+
 @register_tool(
     name="sandbox_execute",
     description="在沙盒中安全执行 Python 脚本，验证自生代码。输出限制 100KB，超时 30 秒。",
@@ -208,6 +276,9 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
 
     # 写入脚本
     script_path.write_text(code, encoding="utf-8")
+
+    # ── 执行前快照（让代码修改实时面板能看到沙盒内发生的文件变更）──
+    _before_snap = _snapshot_project_files()
 
     try:
         # 找到真正的 Python 解释器
@@ -241,6 +312,9 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
         stdout = (result.stdout or "")[:MAX_OUTPUT_SIZE]
         stderr = (result.stderr or "")[:MAX_OUTPUT_SIZE]
 
+        # ── 执行后快照对比：沙盒内的文件变更发布到代码修改实时面板 ──
+        _publish_sandbox_changes(_before_snap)
+
         if result.returncode == 0:
             # 成功：清理脚本文件
             try:
@@ -267,6 +341,8 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
 
     except subprocess.TimeoutExpired:
         logger.error(f"⏰ 沙盒执行超时 ({timeout}s): {script_path}")
+        # 超时时进程可能已改过文件，也要对比
+        _publish_sandbox_changes(_before_snap)
         return f"⏰ 沙盒执行超时 ({timeout}s)\n--- 脚本 ---\n{script_path}"
     except FileNotFoundError:
         logger.error("❌ 找不到 Python 解释器")

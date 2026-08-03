@@ -62,11 +62,17 @@ def _action_label(action: str) -> str:
 
 
 def _diff_to_html(diff_text: str) -> str:
-    """diff 文本 → 行级高亮 HTML"""
+    """diff 文本 → 行级高亮 HTML（超过 500 行截断，防 UI 卡死）"""
     if not diff_text:
         return '<div style="color:#94a3b8;">（无差异内容）</div>'
+    _MAX_LINES = 500
+    lines = diff_text.splitlines()
+    truncated = len(lines) > _MAX_LINES
+    if truncated:
+        omitted = len(lines) - _MAX_LINES
+        lines = lines[:_MAX_LINES]
     parts = []
-    for line in diff_text.splitlines():
+    for line in lines:
         esc = _html.escape(line)
         style = ""
         if line.startswith("+++") or line.startswith("---"):
@@ -79,6 +85,10 @@ def _diff_to_html(diff_text: str) -> str:
             style = "color:#f87171;background:#ef44441a;"
         parts.append(
             f'<div style="{style}white-space:pre-wrap;font-family:\'Cascadia Code\',\'Fira Code\',Consolas,monospace;font-size:12px;line-height:1.5;">{esc}</div>'
+        )
+    if truncated:
+        parts.append(
+            f'<div style="color:#f59e0b;font-weight:bold;padding:6px 0;">⚠️ diff 过长，已省略后 {omitted} 行（完整内容请查看文件本身）</div>'
         )
     return "".join(parts)
 
@@ -96,9 +106,19 @@ class CodeChangePanel(QWidget):
         self._hist_cursor = 0  # jsonl 增量读取游标（跨进程实时兜底）
         self._build_ui()
         self._load_history_records()
+        # 快速定时器：只拉内存队列（60ms，无文件 I/O，不卡 UI）
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll)
         self._timer.start(60)
+        # 慢速定时器：jsonl 文件增量读取（400ms，跨进程兜底，文件 I/O 不阻塞主线程高频操作）
+        self._file_timer = QTimer(self)
+        self._file_timer.timeout.connect(self._poll_file_tail)
+        self._file_timer.start(400)
+        # 渲染防抖：高频新事件时 300ms 内只渲染最后一次
+        self._render_timer = QTimer(self)
+        self._render_timer.setSingleShot(True)
+        self._render_timer.setInterval(300)
+        self._render_timer.timeout.connect(self._render_current_row)
 
         # 几何防抖保存：拖动/缩放 300ms 后落盘，任何退出方式都不丢
         self._geometry_timer = QTimer(self)
@@ -264,9 +284,12 @@ class CodeChangePanel(QWidget):
 
     # ── 事件轮询 ──
     def _poll(self):
-        """轮询：内存队列 + jsonl 文件增量 双通道（跨进程实时兜底）"""
+        """快速轮询：只拉内存队列（无文件 I/O）"""
         recs = drain_changes(50)
-        # 文件通道：AI 工具若运行在其它进程，内存队列收不到，靠 jsonl 兜底
+        self._ingest_records(recs)
+
+    def _poll_file_tail(self):
+        """慢速轮询：jsonl 文件增量读取（跨进程兜底）"""
         try:
             from ..utils.code_change_bus import read_history_tail
             tail, cursor = read_history_tail(self._hist_cursor)
@@ -275,23 +298,28 @@ class CodeChangePanel(QWidget):
                 self._hist_cursor = 0
                 tail, cursor = read_history_tail(self._hist_cursor)
             self._hist_cursor = cursor
-            recs = recs + (tail or [])
+            self._ingest_records(tail or [])
         except Exception:
             pass
+
+    def _ingest_records(self, recs: list):
+        """统一入库：seq 去重 + 插入列表（最新置顶）"""
         if not recs:
             return
-        existing = {
-            (r.get("seq") if r.get("seq") else (
-                r.get("ts_full", ""), r.get("action", ""), r.get("path", "")))
-            for r in self._records
-        }
+        # 持久化 seen 集合挂在实例上，避免每 60ms 重建全部记录
+        if not hasattr(self, "_seen_keys"):
+            self._seen_keys = {
+                (r.get("seq") if r.get("seq") else (
+                    r.get("ts_full", ""), r.get("action", ""), r.get("path", "")))
+                for r in self._records
+            }
         added = 0
         for rec in recs:
             key = rec.get("seq") or (
                 rec.get("ts_full", ""), rec.get("action", ""), rec.get("path", ""))
-            if key in existing:
-                continue  # 已加载/已显示，跳过重复
-            existing.add(key)
+            if key in self._seen_keys:
+                continue
+            self._seen_keys.add(key)
             self._records.insert(0, rec)  # 最新在前，与列表行序一致
             label = _action_label(rec["action"])
             item = QListWidgetItem(
@@ -300,17 +328,28 @@ class CodeChangePanel(QWidget):
             self._list.insertItem(0, item)  # 最新置顶
             added += 1
             if added == 1:
-                self._list.setCurrentRow(0)  # 自动选中最新一条
+                # 阻塞信号：选中不立刻渲染，交给 300ms 防抖合并
+                self._list.blockSignals(True)
+                self._list.setCurrentRow(0)
+                self._list.blockSignals(False)
         self._count_label.setText(f"{len(self._records)} 条")
         if added:
             last = self._records[0]
             self._status.setText(
                 f"最新: {last['ts_full']}  {last['action']}  {last['path']}"
                 + (f"  |  {last['summary']}" if last.get("summary") else ""))
+            # 渲染防抖：300ms 内连续到达的事件只渲染最后一次
+            self._render_timer.start()
         # AI 修改代码时自动打开面板
         if self._auto_open and not self.isVisible():
             self.show()
             self.raise_()
+
+    def _render_current_row(self):
+        """防抖后的实际渲染（300ms 合并窗口结束才执行）"""
+        row = self._list.currentRow()
+        if row >= 0:
+            self._show_record(row)
 
     def _show_record(self, row: int):
         if row < 0 or row >= len(self._records):
@@ -411,4 +450,6 @@ class CodeChangePanel(QWidget):
     def closeEvent(self, event):
         self._save_geometry()
         self._timer.stop()
+        self._file_timer.stop()
+        self._render_timer.stop()
         super().closeEvent(event)

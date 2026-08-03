@@ -38,6 +38,8 @@ from PyQt6.QtGui import QTextCursor, QFont
 
 import logging
 
+logger = logging.getLogger(__name__)
+
 # ===== ANSI =====
 _ANSI_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
 
@@ -157,16 +159,77 @@ def _enqueue(line: str):
 _AGENT_LINE_RE = re.compile(r'💬\s*Agent:\s*(.+)$', re.S)
 _last_agent_speak_ts = 0.0
 _agent_speak_lock = threading.Lock()
+_console_tts_registered = False
+
+
+def _speak_console_async(text: str):
+    """后台朗读控制台 Agent 内容（带防重复 + 播放中检测 + 全链路日志）。
+
+    防重复策略（与聊天页/全局桥协调）：
+      1. tts_is_spoken(text) — 聊天页已朗读/已标记 → 跳过（绝不重复）
+      2. tts_is_busy()       — 聊天页正在播放 → 跳过（不叠加声音）
+      3. tts_speak 朗读成功后 tts_mark_spoken(text) — 后续通道不再重复
+    """
+    if not text or not text.strip():
+        return
+
+    def _do():
+        try:
+            from src.agent.speak_bridge import _voice_mode_enabled
+            if not _voice_mode_enabled():
+                logger.info("[TTS-Console] 语音模式关闭，跳过朗读")
+                return
+            from data.plugins.tts_piper.tools import (
+                tts_speak, tts_is_spoken, tts_is_busy, tts_mark_spoken,
+            )
+            if tts_is_spoken(text):
+                logger.info("[TTS-Console] 内容已在聊天页朗读过，跳过（防重复）")
+                return
+            if tts_is_busy():
+                logger.info("[TTS-Console] 聊天页正在朗读，跳过（防叠加）")
+                return
+            r = tts_speak(text, play=True, strip_code=True)
+            if r.get("status") == "ok":
+                tts_mark_spoken(text)  # 播后标记：防聊天页/后续通道重复
+                logger.info(
+                    "[TTS-Console] 控制台朗读完成: engine=%s size=%sKB",
+                    r.get("engine", "?"), r.get("size_kb", "?"),
+                )
+            else:
+                logger.warning("[TTS-Console] 控制台朗读失败: %s", r.get("message", "?"))
+        except Exception as e:
+            logger.warning("[TTS-Console] 朗读异常: %s: %s", type(e).__name__, e)
+
+    threading.Thread(target=_do, daemon=True).start()
+
+
+def _console_tts_callback(text: str):
+    """agent_loop 最终回复回调：控制台朗读（聊天页未读/未播才读）"""
+    if text and text.strip():
+        _speak_console_async(text)
+
+
+def init_console_tts():
+    """注册控制台朗读回调（幂等，多播不覆盖聊天页/全局桥）"""
+    global _console_tts_registered
+    if _console_tts_registered:
+        return
+    _console_tts_registered = True
+    try:
+        from src.agent.agent_loop import register_agent_speak_callback
+        register_agent_speak_callback(_console_tts_callback)
+        logger.info("[TTS-Console] 控制台朗读已注册（agent 最终回复回调）")
+    except Exception as e:
+        logger.warning("[TTS-Console] 注册失败: %s: %s", type(e).__name__, e)
 
 
 def _maybe_speak_agent_line(line: str):
-    """检测 💬 Agent 行并触发朗读（聊天页已读的自动去重跳过）。
+    """检测 💬 Agent 日志行 → 后台朗读（传统模式兜底，agent 回调的补充通道）。
 
     规则：
       - 跳过 agent_loop 中间迭代的截断输出（`content[:100]...` 结尾带省略号）
-      - 2 秒防抖，避免同一回复多行重复触发
-      - 延迟 2 秒再朗读：等聊天页流式收尾 tts_mark_spoken 完成，
-        保证聊天页已朗读的内容在此处被全局去重拦截，不重复出声
+      - 3 秒防抖，避免同一回复多行重复触发
+      - 防重复/防叠加由 _speak_console_async 统一处理
     """
     global _last_agent_speak_ts
     m = _AGENT_LINE_RE.search(line)
@@ -179,31 +242,11 @@ def _maybe_speak_agent_line(line: str):
     if content.endswith("..."):
         return
     now = _time.time()
-    # 5 秒防抖：同一回复多行 / _LoggingBridge+loguru 双触发
     with _agent_speak_lock:
-        if now - _last_agent_speak_ts < 5.0:
+        if now - _last_agent_speak_ts < 3.0:
             return
         _last_agent_speak_ts = now
-
-    def _do_speak():
-        _time.sleep(2)
-        try:
-            # 语音开关检查（与全局语音桥一致：数据库 voice_mode）
-            from src.agent.speak_bridge import _voice_mode_enabled
-            if not _voice_mode_enabled():
-                return
-            from data.plugins.tts_piper.tools import tts_speak
-            # 直接朗读，绕过全局去重（聊天页用 tts_speak_dedup/tts_mark_spoken，
-            # 控制台用独立 tts_speak 保证一定能听到，互不干扰）
-            r = tts_speak(content, play=True, strip_code=True)
-            if r.get('status') == 'ok':
-                logger.info(f"[TTS-Console] 控制台朗读完成: engine={r.get('engine','?')}")
-            else:
-                logger.warning(f"[TTS-Console] 控制台朗读失败: {r.get('message','?')}")
-        except Exception:
-            pass
-
-    threading.Thread(target=_do_speak, daemon=True).start()
+    _speak_console_async(content)
 
 
 # ===== 1. Standard logging bridge =====
@@ -357,6 +400,10 @@ def install_all():
     _install_os_pipe()
     _add_std_logging_bridge()
     _add_loguru_sink()
+    try:
+        init_console_tts()
+    except Exception:
+        pass
     import atexit
     @atexit.register
     def _cleanup_lock():

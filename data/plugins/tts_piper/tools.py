@@ -55,6 +55,23 @@ _play_pending = set()  # 队列中待播 WAV 路径（去重，杜绝同一文�
 _player_started = False
 _player_lock = threading.Lock()
 
+# === 播放忙碌状态（供控制台/其他通道判断"正在朗读"避免重复出声） ===
+_tts_busy = False
+_tts_busy_lock = threading.Lock()
+
+
+def _set_tts_busy(v: bool) -> None:
+    global _tts_busy
+    with _tts_busy_lock:
+        _tts_busy = v
+
+
+def tts_is_busy() -> bool:
+    """是否正在播放或队列中有待播音频（True=正在出声，其他通道应跳过）"""
+    with _tts_busy_lock:
+        return _tts_busy
+
+
 def _player_worker():
     """播放线程：串行播放队列中的 WAV，播完再取下一条（不再互相打断）"""
     while True:
@@ -69,10 +86,12 @@ def _player_worker():
                 logger.warning(f"[TTS] 播放跳过：文件过小(疑似损坏) {os.path.basename(wav_path)}")
             else:
                 logger.info(f"[TTS] ▶ 播放: {os.path.basename(wav_path)} ({os.path.getsize(wav_path) // 1024}KB)")
+                _set_tts_busy(True)
                 import winsound
                 # 同步播放：阻塞直到播完（SND_FILENAME 默认同步）
                 winsound.PlaySound(wav_path, winsound.SND_FILENAME)
                 logger.info("[TTS] ⏹ 播放完成")
+                _set_tts_busy(False)
         except Exception as e:
             logger.warning(f"[TTS] 播放失败（音频设备不可用？）: {wav_path}: {e}")
             # 兜底：winsound 失败时用系统默认播放器，至少能出声
@@ -113,6 +132,7 @@ def _enqueue_play(wav_path: str) -> None:
             logger.debug(f"[TTS] 忽略重复入队: {os.path.basename(wav_path)}")
             return
         _play_pending.add(wav_path)
+    _set_tts_busy(True)
     _ensure_player()
     _play_queue.put(wav_path)
 
@@ -608,3 +628,15 @@ def tts_mark_spoken(text: str) -> dict:
         _dedup_ts = time.time()
         logger.info("[TTS] 已标记为已朗读（去重注册，不实际播放）")
     return {"status": "ok", "skipped": False}
+
+
+def tts_is_spoken(text: str) -> bool:
+    """查询某文本是否已在全局去重窗口（5 分钟）内朗读/标记过。
+
+    供控制台朗读等通道判断：聊天页已读的内容不再重复朗读。
+    """
+    clean = _dedup_clean(text)
+    if not clean:
+        return True  # 空文本视为已处理，避免无意义朗读
+    with _dedup_lock:
+        return clean == _dedup_spoken and time.time() - _dedup_ts < DEDUP_WINDOW

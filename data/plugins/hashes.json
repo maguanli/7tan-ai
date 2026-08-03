@@ -36,10 +36,10 @@
     "template_generator": "89e7a398c38aeaa847bc97745e57fb09a8934ceb07599ce05e7d1c2e9c6c368f",
     "terminal_runner": "02634cf877ba3bb63d206b690724d4368c4782d2995f8966a2d976b6f41eaced",
     "test_runner": "d8fe4eca4896a25618628980ea1fbb53785465ed687e2474fb25f845ff50ead6",
-    "tts_piper": "2a374b3ca5b182c80a7083c8fd9fc01ce2746d27677ab9ebe586cc20747d89df",
+    "tts_piper": "7829f500ffa75816ced007585eb6efb18cb31c8a16ec45df98b34027a5d4c9ef",
     "web_search": "b5bdaea04c94fbb439b4e739aa7d82ca1d5d69f06726f3c750a989c0cb50eea6",
     "whisper_stt": "ba7805bce1a90b50d2d5557f5820e56cbc043b055a1417bb14c7fee6bec0d792",
     "zhanlizhi": "d25aca47c566fddb93ff6fc4251e9ec4ea89e4a79495fbc1ab30e9e82f68d0af"
   },
-  "sig": "b71d6aaa2edff166f9749ca73005e1c7fc65170e0e2f4ef837e2fde24c8f383d"
+  "sig": "f79e0f2cbd00061d02e0d51b5f812beaff2fdf2e2f8fc93a8d67708ff9251754"
 }

@@ -15,6 +15,32 @@ from ._theme import THEME
 API_BASE = "http://127.0.0.1:9800"
 
 
+def _fmt_sidebar_time(ts: str) -> str:
+    """侧边栏会话时间：今天显示 HH:MM，往年显示 YYYY-MM-DD，其余 MM-DD HH:MM"""
+    if not ts:
+        return ""
+    s = ts.strip()
+    try:
+        from datetime import datetime
+        dt = None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M"):
+            try:
+                dt = datetime.strptime(s[:19], fmt)
+                break
+            except ValueError:
+                continue
+        if dt is None:
+            return s[:10] if len(s) >= 10 else s
+        now = datetime.now()
+        if dt.date() == now.date():
+            return dt.strftime("%H:%M")
+        if dt.year == now.year:
+            return dt.strftime("%m-%d %H:%M")
+        return dt.strftime("%Y-%m-%d")
+    except Exception:
+        return s[:16]
+
+
 class SessionSidebar(QFrame):
     """左侧的对话列表"""
 
@@ -115,11 +141,15 @@ class SessionSidebar(QFrame):
             if len(title) > 20:
                 title = title[:20] + ".."
             sid = s.get("session_id", "")
-            updated = s.get("updated_at", "")
+            updated = s.get("last_activity") or s.get("updated_at", "")
+            if updated:
+                updated = _fmt_sidebar_time(updated)
             msg_count = s.get("message_count", 0)
             display = f"💬 {title}"
             if msg_count:
                 display += f"  ⟨{msg_count}⟩"
+            if updated:
+                display += f"  {updated}"
             item = QListWidgetItem(display)
             item.setData(Qt.ItemDataRole.UserRole, sid)
             item.setData(Qt.ItemDataRole.UserRole + 1, updated)

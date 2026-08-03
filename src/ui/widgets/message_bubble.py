@@ -24,6 +24,27 @@ class MessageBubble(QFrame):
 
     retry_requested = pyqtSignal(str)  # 触发重试
 
+    @staticmethod
+    def _format_timestamp(ts: str) -> str:
+        """统一时间显示：任意格式 → 'YYYY-MM-DD HH:MM'（含年月日）
+
+        支持: 2026-08-03 13:45:22 / 2026-08-03T13:45:22.123456 / 13:45:22（纯时间补今天日期）
+        """
+        if not ts:
+            return ""
+        s = ts.strip()
+        try:
+            # 完整日期时间 → 截取 YYYY-MM-DD HH:MM
+            if len(s) >= 16 and s[4] == '-' and s[7] == '-':
+                return s[:16].replace('T', ' ')
+            # 纯时间 HH:MM:SS / HH:MM → 补今天日期
+            if len(s) >= 5 and s[2] == ':':
+                from datetime import datetime
+                return datetime.now().strftime("%Y-%m-%d") + " " + s[:5]
+        except Exception:
+            pass
+        return s[:16]
+
     def __init__(self, role: str, content: str, timestamp: str = "",
                  cost: float = 0, iterations: int = 0, tokens: int = 0,
                  tool_calls: list = None, is_streaming: bool = False,
@@ -79,7 +100,7 @@ class MessageBubble(QFrame):
             header.addWidget(model_badge)
 
         if timestamp:
-            ts_label = QLabel(timestamp[:16] if len(timestamp) > 16 else timestamp)
+            ts_label = QLabel(self._format_timestamp(timestamp))
             ts_label.setStyleSheet(f"font-size: 10px; color: {THEME['text_muted']}; border: none; background: transparent;")
             header.addWidget(ts_label)
 

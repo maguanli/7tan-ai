@@ -1188,7 +1188,7 @@ class ChatPage(QWidget):
                 parsed.append({
                     "role": role, "content": content,
                     "html": html,
-                    "timestamp": msg.get("timestamp", ""),
+                    "timestamp": msg.get("timestamp") or msg.get("created_at", ""),
                     "cost": msg.get("cost", 0),
                     "tool_calls": msg.get("tool_calls"),
                     "model": msg.get("model", ""),
@@ -1318,7 +1318,7 @@ class ChatPage(QWidget):
         parsed_slice = self._current_parsed_data[new_start:self._rendered_start] if self._current_parsed_data else []
         old_messages = []
         for msg in reversed(parsed_slice):
-            md = {"role": msg["role"], "content": msg["content"], "timestamp": msg.get("timestamp", ""), "cost": msg.get("cost", 0), "tool_calls": msg.get("tool_calls"), "html": msg.get("html")}
+            md = {"role": msg["role"], "content": msg["content"], "timestamp": msg.get("timestamp") or msg.get("created_at", ""), "cost": msg.get("cost", 0), "tool_calls": msg.get("tool_calls"), "html": msg.get("html")}
             old_messages.append(md)
             self._message_data.insert(new_start, md)
 
@@ -1329,7 +1329,7 @@ class ChatPage(QWidget):
                 role = msg.get("role", "system")
                 content = msg.get("content", "")
                 html = self._pre_parse_single(content, role) if content else None
-                md = {"role": role, "content": content, "timestamp": msg.get("timestamp", ""), "cost": msg.get("cost", 0), "tool_calls": msg.get("tool_calls"), "html": html}
+                md = {"role": role, "content": content, "timestamp": msg.get("timestamp") or msg.get("created_at", ""), "cost": msg.get("cost", 0), "tool_calls": msg.get("tool_calls"), "html": html}
                 old_messages.append(md)
                 self._message_data.insert(new_start, md)
 

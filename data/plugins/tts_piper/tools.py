@@ -51,6 +51,7 @@ _voice_lock = threading.Lock()
 
 # === 全局播放队列（单线程串行播放，杜绝互相打断/线程堆积） ===
 _play_queue = queue.Queue()
+_play_pending = set()  # 队列中待播 WAV 路径（去重，杜绝同一文件播放两次）
 _player_started = False
 _player_lock = threading.Lock()
 
@@ -67,6 +68,9 @@ def _player_worker():
         except Exception as e:
             logger.warning(f"[TTS] 播放失败（音频设备不可用？）: {wav_path}: {e}")
         finally:
+            # 从待播集合移除（允许同路径文件后续重新入队）
+            with _player_lock:
+                _play_pending.discard(wav_path)
             # 播完清理临时文件，防止 OUTPUT_DIR 膨胀
             try:
                 if os.path.exists(wav_path):
@@ -86,7 +90,15 @@ def _ensure_player():
                 _player_started = True
 
 def _enqueue_play(wav_path: str) -> None:
-    """WAV 入队播放（异步返回，不阻塞调用方，不打断正在播放的声音）"""
+    """WAV 入队播放（异步返回，不阻塞调用方，不打断正在播放的声音）
+
+    去重：同一 WAV 路径已在队列中则忽略，杜绝"最后一句播放两次"。
+    """
+    with _player_lock:
+        if wav_path in _play_pending:
+            logger.debug(f"[TTS] 忽略重复入队: {os.path.basename(wav_path)}")
+            return
+        _play_pending.add(wav_path)
     _ensure_player()
     _play_queue.put(wav_path)
 
@@ -105,6 +117,8 @@ def tts_stop() -> dict:
                 break
     except Exception:
         pass
+    with _player_lock:
+        _play_pending.clear()
     return {"status": "ok", "message": "播放已停止"}
 
 # === 性别切换 ===

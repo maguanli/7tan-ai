@@ -236,6 +236,8 @@ class ChatPage(QWidget):
         self._tts_stream_queue: queue.Queue = None  # 句子队列
         self._tts_stream_worker_thread = None       # 后台播放线程
         self._tts_stream_text_pos = 0               # 已发送到 TTS 的文本位置
+        self._last_tts_sent = ""                   # 最后推送到 TTS 的句子（收尾防重）
+        self._tts_stream_done_ts = 0.0              # 流式朗读结束时间戳（防全文重复）
         self._render_queue: list = []
         self._render_timer = None
         self._render_insert_pos: int = 0
@@ -2212,7 +2214,10 @@ class ChatPage(QWidget):
                 # 流式 TTS：推送剩余文本 + 停止信号
                 remaining = self._streaming_text[self._tts_stream_text_pos:].strip()
                 if remaining and len(remaining) >= 2:
-                    self._tts_stream_queue.put(remaining)
+                    # 防重：若与最后推送的句子相同（pos 边界异常），跳过，避免最后一句两次
+                    if remaining != self._last_tts_sent:
+                        self._tts_stream_queue.put(remaining)
+                    self._last_tts_sent = remaining
                 self._tts_stream_queue.put(None)  # 停止信号
                 self._tts_stream_queue = None
             else:
@@ -2304,6 +2309,7 @@ class ChatPage(QWidget):
             sent = new_text[last_end:m.end()].strip()
             if sent and len(sent) >= 2:  # 至少 2 个字符，过滤纯标点
                 self._tts_stream_queue.put(sent)
+                self._last_tts_sent = sent
             last_end = m.end()
         self._tts_stream_text_pos += last_end
 
@@ -2320,12 +2326,10 @@ class ChatPage(QWidget):
             sentence = self._tts_stream_queue.get()
             if sentence is None:  # 停止信号
                 logger.info("[TTS Stream] Worker stopped")
-                # 同步停止播放队列，防止残留声音继续播
-                try:
-                    from data.plugins.tts_piper.tools import tts_stop
-                    tts_stop()
-                except Exception:
-                    pass
+                # 记录流式朗读结束时间（防 Agent 全文回调与流式重复 → 最后一句两次）
+                import time as _time
+                self._tts_stream_done_ts = _time.time()
+                # 不再 tts_stop()：让播放队列自然播完最后一句，避免"最后一句被切断"
                 break
             try:
                 logger.debug(f"[TTS Stream] Synthesizing: {sentence[:50]}...")
@@ -2348,6 +2352,15 @@ class ChatPage(QWidget):
 
     def _speak_response(self, text: str):
         """后台线程：语音模式下朗读 AI 回复"""
+        # 🛡️ 防"最后一句两次"：流式朗读进行中/刚结束(8s)时跳过全文朗读
+        # （流式 text_chunk 已覆盖全部内容；Agent speak 回调与流式收尾双通道会重复）
+        import time as _time
+        if self._tts_stream_queue is not None:
+            logger.debug("[TTS] 流式朗读进行中，跳过全文朗读（防重复）")
+            return
+        if _time.time() - self._tts_stream_done_ts < 8.0:
+            logger.debug("[TTS] 流式朗读刚结束，跳过全文朗读（防重复）")
+            return
         try:
             from data.plugins.tts_piper.tools import tts_speak
             from data.plugins.tts_piper.tools import _strip_code_blocks

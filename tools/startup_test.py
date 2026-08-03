@@ -28,7 +28,7 @@ print("=== 1. 版本信息 ===")
 def t_version():
     from src.config.version import APP_VERSION
     print(f"       APP_VERSION = {APP_VERSION}")
-    assert APP_VERSION == "1.0.4"
+    assert APP_VERSION == "1.0.5"
 step("version.py", t_version)
 
 print("\n=== 2. 关键安全模块导入（启动必经） ===")

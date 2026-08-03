@@ -597,5 +597,19 @@
       "stt_status"
     ],
     "icon": "🎤"
+  },
+  {
+    "id": "iching",
+    "name": "易经占卦",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "文化",
+    "description": "周易起卦与解读：金钱卦/数字卦/时间卦 + 爻辞彖传象传知识库 + DeepSeek 白话解读",
+    "tools": [
+      "iching_divine",
+      "iching_query"
+    ],
+    "icon": "☯"
   }
 ]

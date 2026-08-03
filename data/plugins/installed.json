@@ -36,6 +36,7 @@
     "snippet_manager",
     "perf_tools",
     "tts_piper",
-    "whisper_stt"
+    "whisper_stt",
+    "iching"
   ]
 }

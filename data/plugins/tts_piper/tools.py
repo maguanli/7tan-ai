@@ -604,13 +604,31 @@ def tts_speak_dedup(text: str) -> dict:
         if clean == _dedup_spoken and now - _dedup_ts < DEDUP_WINDOW:
             logger.info("[TTS] 全局去重：同一全文 5 分钟内已朗读，跳过")
             return {"status": "ok", "skipped": True, "message": "去重跳过"}
-    # 先播放，成功后再标记去重（防止播放失败却锁住 key 导致后续全被拦截）
+    # ⚡ 先原子登记（抢占）：多通道并发同时触发时，只有第一个能通过检查，
+    #    其余通道在锁内看到已登记 → 立即跳过 → 播放队列只入队 1 个音频（不再 3 遍）
+    _dedup_spoken = clean
+    _dedup_ts = time.time()
+    # 合成 + 播放（异步队列，立即返回）
     result = tts_speak(clean, play=True, strip_code=True)
-    if result.get("status") == "ok":
-        with _dedup_lock:
-            _dedup_spoken = clean
-            _dedup_ts = time.time()
+    if result.get("status") != "ok" or result.get("skipped"):
+        # ❌ 失败回滚：清除占位，允许后续通道重试（防"失败锁死 5 分钟"老 bug）
+        tts_clear_spoken(clean)
+        logger.warning("[TTS] 朗读失败，已回滚去重占位: %s", result.get("message", "?"))
     return result
+
+
+def tts_clear_spoken(text: str) -> dict:
+    """清除某文本的已朗读登记（失败回滚用，让其他通道可重试）"""
+    global _dedup_spoken, _dedup_ts
+    clean = _dedup_clean(text)
+    if not clean:
+        return {"status": "ok", "message": "空文本"}
+    with _dedup_lock:
+        if _dedup_spoken == clean:
+            _dedup_spoken = ""
+            _dedup_ts = 0.0
+            logger.info("[TTS] 已清除朗读登记（失败回滚）")
+    return {"status": "ok"}
 
 
 def tts_mark_spoken(text: str) -> dict:

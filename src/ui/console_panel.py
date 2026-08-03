@@ -165,10 +165,11 @@ _console_tts_registered = False
 def _speak_console_async(text: str):
     """后台朗读控制台 Agent 内容（带防重复 + 播放中检测 + 全链路日志）。
 
-    防重复策略（与聊天页/全局桥协调）：
-      1. tts_is_spoken(text) — 聊天页已朗读/已标记 → 跳过（绝不重复）
-      2. tts_is_busy()       — 聊天页正在播放 → 跳过（不叠加声音）
-      3. tts_speak 朗读成功后 tts_mark_spoken(text) — 后续通道不再重复
+    防重复策略（与聊天页/全局桥协调，原子抢占保证只出声一次）：
+      1. tts_is_spoken(text) — 已有通道登记（含本通道抢占/聊天页已读）→ 跳过
+      2. tts_is_busy()       — 正在播放 → 跳过（不叠加声音）
+      3. tts_mark_spoken(text) 先原子抢占登记 → tts_speak 合成入队
+      4. 失败 → tts_clear_spoken 回滚，允许其他通道重试（不锁死）
     """
     if not text or not text.strip():
         return
@@ -180,23 +181,27 @@ def _speak_console_async(text: str):
                 logger.info("[TTS-Console] 语音模式关闭，跳过朗读")
                 return
             from data.plugins.tts_piper.tools import (
-                tts_speak, tts_is_spoken, tts_is_busy, tts_mark_spoken,
+                tts_speak, tts_is_spoken, tts_is_busy,
+                tts_mark_spoken, tts_clear_spoken,
             )
             if tts_is_spoken(text):
-                logger.info("[TTS-Console] 内容已在聊天页朗读过，跳过（防重复）")
+                logger.info("[TTS-Console] 内容已登记朗读，跳过（防重复）")
                 return
             if tts_is_busy():
-                logger.info("[TTS-Console] 聊天页正在朗读，跳过（防叠加）")
+                logger.info("[TTS-Console] 正在播放中，跳过（防叠加）")
                 return
+            # ⚡ 先原子抢占登记：与聊天页/全局桥并发时只允许一路朗读
+            tts_mark_spoken(text)
             r = tts_speak(text, play=True, strip_code=True)
-            if r.get("status") == "ok":
-                tts_mark_spoken(text)  # 播后标记：防聊天页/后续通道重复
+            if r.get("status") == "ok" and not r.get("skipped"):
                 logger.info(
                     "[TTS-Console] 控制台朗读完成: engine=%s size=%sKB",
                     r.get("engine", "?"), r.get("size_kb", "?"),
                 )
             else:
-                logger.warning("[TTS-Console] 控制台朗读失败: %s", r.get("message", "?"))
+                # ❌ 失败回滚：允许其他通道重试（不锁死）
+                tts_clear_spoken(text)
+                logger.warning("[TTS-Console] 控制台朗读失败，已回滚: %s", r.get("message", "?"))
         except Exception as e:
             logger.warning("[TTS-Console] 朗读异常: %s: %s", type(e).__name__, e)
 

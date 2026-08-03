@@ -2373,6 +2373,14 @@ class ChatPage(QWidget):
                 if self._tts_stream_ok_count > 0:
                     # 流式已实际出声 → 防全文重复（Agent 回调晚到也不会再读一遍）
                     self._tts_streamed_this_reply = True
+                    # ⚡ 全局登记全文"已朗读"：否则全局桥/控制台通道收到回调后会再读全文（2~3 遍）
+                    try:
+                        from data.plugins.tts_piper.tools import tts_mark_spoken
+                        full_text = getattr(self, "_streaming_text", "") or ""
+                        if full_text.strip():
+                            tts_mark_spoken(full_text)
+                    except Exception:
+                        pass
                 else:
                     # 流式一句都没成功（纯代码/无标点/引擎全部失败）→ 全文兜底，保证一定能听到
                     full = getattr(self, "_streaming_text", "") or ""

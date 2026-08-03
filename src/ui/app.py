@@ -8686,11 +8686,11 @@ def launch_app():
 
             try:
 
-                show_onboarding(window)
+                window._onboarding_overlay = show_onboarding(window)
 
             except Exception as _ob_err:
 
-                logger.debug(f"[Onboarding] 引导遮罩异常: {_ob_err}")
+                logger.warning(f"[Onboarding] 引导遮罩异常: {_ob_err}")
 
         QTimer.singleShot(500, _show_ob)
 

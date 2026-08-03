@@ -2486,7 +2486,12 @@ class ChatPage(QWidget):
 
 
     def _remove_message(self, msg):
-        """移除指定消息（同步清理数据）"""
+        """移除指定消息（同步清理数据）
+
+        性能安全：不在布局中间 takeAt（触发几百个富文本气泡全量重排，
+        是主线程假死的头号嫌疑）。隐藏 widget 在 QVBoxLayout 中不占空间，
+        交给 deleteLater 事件循环安全回收。
+        """
         logger.info(f"[ChatPage] _remove_message called")
         if msg and msg in self._messages:
             # 从数据层移除
@@ -2498,11 +2503,15 @@ class ChatPage(QWidget):
                 if self._rendered_start > msg_idx:
                     self._rendered_start -= 1
             self._messages.remove(msg)
-            idx = self._messages_layout.indexOf(msg)
-            if idx >= 0:
-                item = self._messages_layout.takeAt(idx)
-                if item.widget():
-                    item.widget().deleteLater()
+            # 🔒 不再 takeAt（触发全量布局重排），隐藏 + 延迟删除即可
+            try:
+                msg.hide()
+            except Exception:
+                pass
+            try:
+                msg.deleteLater()
+            except Exception:
+                pass
 
 
 

@@ -8630,6 +8630,17 @@ def launch_app():
 
         app.setApplicationName("7Tan")
 
+        # ===== 主线程看门狗：UI 假死时自动 dump 线程栈到 logs/ =====
+        try:
+            from ..utils.watchdog import start as _wd_start, tick as _wd_tick
+            _wd_start()
+            _wd_timer = QTimer()
+            _wd_timer.timeout.connect(_wd_tick)
+            _wd_timer.start(1000)
+            logger.info("🛡️ 主线程看门狗已启动（假死时自动 dump 栈）")
+        except Exception as _wd_e:
+            logger.warning(f"看门狗启动失败: {_wd_e}")
+
 
 
         # ===== 登录门卫（P2-8：核心逻辑已编译进 entry_auth.pyd，防 patch 跳过登录） =====

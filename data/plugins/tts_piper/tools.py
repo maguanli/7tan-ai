@@ -601,6 +601,26 @@ def _dedup_clean(text: str) -> str:
     return _strip_code_blocks((text or "").strip())
 
 
+def _acquire_synth_slot(clean: str) -> bool:
+    """抢占全局合成位（互斥：同一时刻只允许一个合成任务）。
+
+    - 任何文本正在合成（_dedup_pending 非空）→ 直接跳过（防聊天页+控制台
+      并行合成同一轮回复导致重复朗读，防重读优先）
+    - 该文本已被朗读（5 分钟窗口）→ False
+    - 成功抢占 → True（调用方负责在完成/异常后释放）
+    """
+    global _dedup_spoken, _dedup_ts, _dedup_pending
+    with _dedup_lock:
+        if clean == _dedup_spoken and time.time() - _dedup_ts < DEDUP_WINDOW:
+            logger.info("[TTS] 该文本 5 分钟内已朗读，跳过（防重复）")
+            return False
+        if _dedup_pending:
+            logger.info("[TTS] 全局互斥：已有文本正在合成中，跳过（防并行合成重复朗读）")
+            return False
+        _dedup_pending = clean
+        return True
+
+
 def tts_speak_dedup(text: str) -> dict:
     """带全局去重的朗读：同一全文 5 分钟内只朗读一次。
 
@@ -624,8 +644,9 @@ def tts_speak_dedup(text: str) -> dict:
         if clean == _dedup_pending:
             logger.info("[TTS] 全局去重：同一全文正在朗读中，跳过")
             return {"status": "ok", "skipped": True, "message": "合成中跳过"}
-        # ⚡ 原子抢占：并发多通道只有第一个能进入合成
-        _dedup_pending = clean
+    # ⚡ 原子抢占 + 全局合成互斥：任何文本在合成中 → 最多等待 4 秒（防聊天页+控制台并行合成导致重复朗读）
+    if not _acquire_synth_slot(clean):
+        return {"status": "ok", "skipped": True, "message": "合成互斥跳过"}
     try:
         # 合成 + 播放（同步合成，异步队列播放）
         result = tts_speak(clean, play=True, strip_code=True)

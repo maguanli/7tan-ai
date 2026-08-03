@@ -194,37 +194,25 @@ def _speak_console_async(text: str):
             if not _voice_mode_enabled():
                 logger.info("[TTS-Console] 语音模式关闭，跳过朗读")
                 return
-            from data.plugins.tts_piper.tools import (
-                tts_speak, tts_is_spoken, tts_is_busy,
-                tts_mark_spoken, tts_clear_spoken,
-            )
-            if tts_is_spoken(text):
-                logger.info("[TTS-Console] 内容已登记朗读，跳过（防重复）")
-                return
+            from data.plugins.tts_piper.tools import tts_speak_dedup, tts_is_busy
             if tts_is_busy():
                 logger.info("[TTS-Console] 正在播放中，跳过（防叠加）")
                 return
-            # ⚡ 先原子抢占登记：与聊天页/全局桥并发时只允许一路朗读
-            tts_mark_spoken(text)
-            # 🔊 控制台可见反馈：让用户看到语音被调动
+            # 🔊 控制台可见反馈（是否真正出声由全局去重裁决：与聊天页共用同一套去重，只读一遍）
             logger.info("[TTS-Console] 🔊 开始朗读 Agent 回复（{}字）", len(text))
-            r = tts_speak(text, play=True, strip_code=True)
-            if r.get("status") == "ok" and not r.get("skipped"):
+            r = tts_speak_dedup(text)
+            if r.get("skipped"):
+                logger.info("[TTS-Console] 朗读被全局去重拦截（{}），跳过（防重复）", r.get("message", "?"))
+                return
+            if r.get("status") == "ok":
                 logger.info(
                     "[TTS-Console] 控制台朗读完成: engine={} size={}KB",
                     r.get("engine", "?"), r.get("size_kb", "?"),
                 )
             else:
-                # ❌ 失败回滚：允许其他通道重试（不锁死）
-                tts_clear_spoken(text)
-                logger.warning("[TTS-Console] 控制台朗读失败，已回滚: {}", r.get("message", "?"))
+                logger.warning("[TTS-Console] 控制台朗读失败: {}", r.get("message", "?"))
         except Exception as e:
-            # 🛡️ 异常也回滚抢占登记（防"登记残留 → 5 分钟静音"）
-            try:
-                tts_clear_spoken(text)
-            except Exception:
-                pass
-            logger.warning("[TTS-Console] 朗读异常(已回滚登记): {}: {}", type(e).__name__, e)
+            logger.warning("[TTS-Console] 朗读异常: {}: {}", type(e).__name__, e)
 
     threading.Thread(target=_do, daemon=True).start()
 
@@ -298,7 +286,7 @@ def _maybe_speak_agent_line(line: str):
         with _trunc_lock:
             _trunc_pending_text = content
             if _trunc_pending_timer is None:
-                _trunc_pending_timer = threading.Timer(2.0, _flush_trunc_pending)
+                _trunc_pending_timer = threading.Timer(5.0, _flush_trunc_pending)
                 _trunc_pending_timer.daemon = True
                 _trunc_pending_timer.start()
         logger.debug("[TTS-Console] Agent 实时内容已收录（{}字，稍后朗读）", len(content))

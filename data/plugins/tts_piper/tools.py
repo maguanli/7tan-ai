@@ -224,12 +224,18 @@ def tts_set_gender(gender: str) -> dict:
     Returns:
         {"status": "ok", "gender": "...", "voice": "..."}
     """
-    global _voice_gender
+    global _voice_gender, _dedup_spoken, _dedup_ts, _dedup_pending
     gender = gender.lower().strip()
     if gender not in ("female", "male"):
         return {"status": "error", "message": f"无效性别: {gender}，可选 female / male"}
 
     _voice_gender = gender
+    # 🔄 切换声音时清空去重状态：防止旧声音的"已朗读"登记让新声音 5 分钟静音
+    with _dedup_lock:
+        _dedup_spoken = ""
+        _dedup_ts = 0.0
+        _dedup_pending = ""
+    logger.info("[TTS] 切换声音: %s，已清空去重状态", gender)
     if gender == "female":
         return {"status": "ok", "gender": "female", "voice": "huayan (花颜)", "engine": "Piper (本地)"}
     else:
@@ -575,6 +581,7 @@ def tts_status() -> dict:
 # === 全局防重朗读（多通道共享：聊天页/全局桥/Agent 回调都走这里，同一全文 5 分钟内只朗读一次） ===
 _dedup_spoken = ""
 _dedup_ts = 0.0
+_dedup_pending = ""  # 正在合成中的文本（抢占标记，防并发重复合成）
 _dedup_lock = threading.Lock()
 DEDUP_WINDOW = 300  # 秒（5 分钟）
 
@@ -589,8 +596,13 @@ def tts_speak_dedup(text: str) -> dict:
 
     供聊天页 _speak_response 与全局语音桥共用，保证多通道（agent 回调 /
     _on_response / 工作台任务）同时触发时也只会出声一次。
+
+    两阶段防静音设计：
+      1. _dedup_pending 原子抢占：并发多通道只有第一个进入合成，其余跳过（防 3 遍）
+      2. 合成成功才转 _dedup_spoken（防 5 分钟静音）；任何异常/失败都释放占位，
+         允许后续通道重试（防"登记残留 → 全通道静音"）
     """
-    global _dedup_spoken, _dedup_ts
+    global _dedup_spoken, _dedup_ts, _dedup_pending
     clean = _dedup_clean(text)
     if not clean:
         return {"status": "ok", "message": "空文本", "skipped": True}
@@ -599,16 +611,33 @@ def tts_speak_dedup(text: str) -> dict:
         if clean == _dedup_spoken and now - _dedup_ts < DEDUP_WINDOW:
             logger.info("[TTS] 全局去重：同一全文 5 分钟内已朗读，跳过")
             return {"status": "ok", "skipped": True, "message": "去重跳过"}
-    # ⚡ 先原子登记（抢占）：多通道并发同时触发时，只有第一个能通过检查，
-    #    其余通道在锁内看到已登记 → 立即跳过 → 播放队列只入队 1 个音频（不再 3 遍）
-    _dedup_spoken = clean
-    _dedup_ts = time.time()
-    # 合成 + 播放（异步队列，立即返回）
-    result = tts_speak(clean, play=True, strip_code=True)
-    if result.get("status") != "ok" or result.get("skipped"):
-        # ❌ 失败回滚：清除占位，允许后续通道重试（防"失败锁死 5 分钟"老 bug）
-        tts_clear_spoken(clean)
-        logger.warning("[TTS] 朗读失败，已回滚去重占位: %s", result.get("message", "?"))
+        if clean == _dedup_pending:
+            logger.info("[TTS] 全局去重：同一全文正在朗读中，跳过")
+            return {"status": "ok", "skipped": True, "message": "合成中跳过"}
+        # ⚡ 原子抢占：并发多通道只有第一个能进入合成
+        _dedup_pending = clean
+    try:
+        # 合成 + 播放（同步合成，异步队列播放）
+        result = tts_speak(clean, play=True, strip_code=True)
+    except Exception as e:
+        # 🛡️ 任何异常都释放占位，绝不残留登记（防 5 分钟静音）
+        with _dedup_lock:
+            if _dedup_pending == clean:
+                _dedup_pending = ""
+        logger.error("[TTS] 朗读异常（已释放去重占位）: %s: %s", type(e).__name__, e)
+        return {"status": "error", "message": f"朗读异常: {type(e).__name__}: {e}"}
+    with _dedup_lock:
+        if _dedup_pending == clean:
+            _dedup_pending = ""
+    if result.get("status") == "ok" and not result.get("skipped"):
+        # ✅ 合成成功（音频已入播放队列）→ 转正式"已朗读"登记（5 分钟防重）
+        with _dedup_lock:
+            _dedup_spoken = clean
+            _dedup_ts = time.time()
+        logger.info("[TTS] 朗读成功，已登记去重（5 分钟）")
+    else:
+        # ❌ 未成功：不登记，允许后续重试（防失败锁死）
+        logger.warning("[TTS] 朗读未成功，不登记去重: %s", result.get("message", "?"))
     return result
 
 

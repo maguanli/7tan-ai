@@ -202,7 +202,12 @@ def _speak_console_async(text: str):
                 tts_clear_spoken(text)
                 logger.warning("[TTS-Console] 控制台朗读失败，已回滚: {}", r.get("message", "?"))
         except Exception as e:
-            logger.warning("[TTS-Console] 朗读异常: {}: {}", type(e).__name__, e)
+            # 🛡️ 异常也回滚抢占登记（防"登记残留 → 5 分钟静音"）
+            try:
+                tts_clear_spoken(text)
+            except Exception:
+                pass
+            logger.warning("[TTS-Console] 朗读异常(已回滚登记): {}: {}", type(e).__name__, e)
 
     threading.Thread(target=_do, daemon=True).start()
 

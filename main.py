@@ -24,6 +24,53 @@ def _get_project_root():
 PROJECT_ROOT = _get_project_root()
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# ============================================================
+# 🔒 单实例保护 — 防止多个 7Tan 主程序同时运行
+# 多实例共存会互相抢占 jsonl/日志/UI 事件/文件锁，导致未响应卡死。
+# 采用 Windows msvcrt 文件锁：进程退出自动释放，不会残留死锁。
+# ============================================================
+_INSTANCE_LOCK_FD = None
+
+
+def _acquire_single_instance() -> bool:
+    """获取单实例文件锁。返回 True = 本进程是唯一实例。"""
+    args = sys.argv[1:]
+    # CLI 单次任务/向导不阻塞（run / setup 可与桌面共存）
+    if any(a in args for a in ("run", "setup", "--cli")):
+        return True
+    if os.name != "nt":
+        return True  # 非 Windows 暂不启用
+    global _INSTANCE_LOCK_FD
+    lock_path = PROJECT_ROOT / "data" / ".instance.lock"
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        import msvcrt
+        _INSTANCE_LOCK_FD = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+        try:
+            msvcrt.locking(_INSTANCE_LOCK_FD, msvcrt.LK_NBLCK, 1)
+            return True
+        except OSError:
+            # 锁被占用 → 已有实例在运行
+            os.close(_INSTANCE_LOCK_FD)
+            _INSTANCE_LOCK_FD = None
+            return False
+    except Exception:
+        # 锁机制异常时放行，避免因保护导致无法启动
+        return True
+
+
+if not _acquire_single_instance():
+    _MSG = ("7Tan 已经在运行中！\n\n"
+            "检测到另一个 7Tan 实例正在运行。\n"
+            "请先关闭现有窗口（或任务管理器结束 python.exe），再重新启动。")
+    print("❌ 7Tan 已在运行中，本实例退出（单实例保护）")
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, _MSG, "7Tan 已在运行", 0x30)
+    except Exception:
+        pass
+    sys.exit(1)
+
 # 🔧 全局修复: subprocess text=True 在 Windows 中文系统下默认用 GBK 解码，
 # 遇到 UTF-8 内容会 UnicodeDecodeError。这里在入口统一补丁为 utf-8。
 import subprocess as _subprocess

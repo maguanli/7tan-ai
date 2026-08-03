@@ -28,6 +28,10 @@ WHISPER_Model = _first_existing(
     r"E:\7tan_voice\whisper\ggml-small.bin",
     r"G:\whisper_cpp\models\ggml-small.bin",
 )
+FFMPEG = _first_existing(
+    r"E:\7tan_voice\ffmpeg\ffmpeg.exe",
+    r"G:\ffmpeg\bin\ffmpeg.exe",
+)
 TEMP_DIR = Path(os.environ.get("TEMP", r"C:\Windows\Temp")) / "7tan_stt"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -61,6 +65,51 @@ def _record_audio(output_path: str, duration: float, sample_rate: int = 16000) -
     except Exception as e:
         print(f"[STT] 录音失败: {e}")
         return False
+
+
+def _wav_sample_rate(path: str) -> int:
+    """读取 WAV 文件采样率（失败返回 -1）"""
+    try:
+        with wave.open(path, 'rb') as wf:
+            return wf.getframerate()
+    except Exception:
+        return -1
+
+
+def _resample_to_16k(src_path: str) -> str:
+    """
+    若 WAV 采样率不是 16kHz，用 ffmpeg 重采样为 16kHz 单声道（whisper 最佳输入）。
+
+    修复：高采样率（22050/44100 等）音频直接识别会空结果/乱码的问题。
+
+    Returns:
+        识别用路径；已是 16kHz 或重采样失败时返回原路径。
+    """
+    rate = _wav_sample_rate(src_path)
+    if rate == 16000:
+        return src_path
+    if rate <= 0:
+        return src_path  # 非 WAV / 读不到采样率 → 原样尝试
+
+    if not FFMPEG.exists():
+        print(f"[STT] ffmpeg 不存在，无法重采样 {rate}Hz → 16000Hz，原样识别")
+        return src_path
+
+    dst = TEMP_DIR / f"resample_{int(time.time() * 1000)}.wav"
+    try:
+        result = subprocess.run(
+            [str(FFMPEG), "-y", "-i", src_path,
+             "-ar", "16000", "-ac", "1", "-acodec", "pcm_s16le",
+             str(dst)],
+            capture_output=True, timeout=30,
+        )
+        if result.returncode == 0 and dst.exists() and dst.stat().st_size > 44:
+            print(f"[STT] 重采样 {rate}Hz → 16000Hz 成功")
+            return str(dst)
+        return src_path
+    except Exception as e:
+        print(f"[STT] 重采样失败: {e}")
+        return src_path
 
 
 def _transcribe(wav_path: str) -> str:
@@ -156,10 +205,10 @@ def stt_listen(duration: float = 5) -> dict:
 
 def stt_transcribe_file(wav_path: str) -> dict:
     """
-    识别已有的 WAV 文件。
+    识别已有的 WAV 文件（自动重采样到 16kHz，兼容任意采样率）。
 
     Args:
-        wav_path: WAV 文件路径（16kHz 单声道最佳）
+        wav_path: WAV 文件路径（任意采样率，自动转为 16kHz 单声道）
 
     Returns:
         {"status": "ok", "text": "识别结果"}
@@ -168,7 +217,15 @@ def stt_transcribe_file(wav_path: str) -> dict:
         return {"status": "error", "message": f"文件不存在: {wav_path}"}
 
     t0 = time.time()
-    text = _transcribe(wav_path)
+    # P1: 自动重采样到 16kHz（whisper 最佳输入，修复高采样率识别为空/乱码）
+    work_path = _resample_to_16k(wav_path)
+    text = _transcribe(work_path)
+    # 清理重采样临时文件
+    if work_path != wav_path:
+        try:
+            os.remove(work_path)
+        except Exception:
+            pass
     elapsed = time.time() - t0
 
     return {
@@ -187,5 +244,6 @@ def stt_status() -> dict:
         "whisper_cli": str(WHISPER_CLI),
         "cli_exists": WHISPER_CLI.exists(),
         "model_exists": WHISPER_Model.exists(),
+        "ffmpeg": str(FFMPEG),
         "temp_dir": str(TEMP_DIR),
     }

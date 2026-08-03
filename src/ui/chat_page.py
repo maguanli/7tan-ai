@@ -153,6 +153,7 @@ class ChatPage(QWidget):
     delete_done_signal = pyqtSignal(bool, str, str)  # (success, session_id, detail)
     error_signal = pyqtSignal(str)  # error message
     messages_parsed_signal = pyqtSignal(str, list, int, int)  # session_id, parsed_msgs, start_idx, total
+    tts_notice_signal = pyqtSignal(str)  # 语音引擎提示（线程安全）
 
 
 
@@ -171,6 +172,7 @@ class ChatPage(QWidget):
         self.delete_done_signal.connect(self._on_delete_done)
         self.messages_parsed_signal.connect(self._on_messages_parsed)
         self.error_signal.connect(self._on_load_error)
+        self.tts_notice_signal.connect(self._on_tts_notice)
 
 
 
@@ -2307,9 +2309,20 @@ class ChatPage(QWidget):
                 logger.debug(f"[TTS Stream] Synthesizing: {sentence[:50]}...")
                 # play=True: 内部自动处理 MP3->WAV 转换（含 ffmpeg 缺失回退）
                 # 使用 os.startfile 作为回退播放方式
-                tts_speak(sentence, play=True, strip_code=True)
+                result = tts_speak(sentence, play=True, strip_code=True)
+                if result and result.get("fallback"):
+                    self.tts_notice_signal.emit(
+                        f"{result.get('fallback_from', '语音引擎')}：{result.get('fallback_reason', '引擎暂不可用')}，已自动切换"
+                    )
             except Exception as e:
                 logger.error(f"[TTS Stream] 句子播放失败: {e}")
+
+    def _on_tts_notice(self, msg: str):
+        """语音引擎提示 → 系统消息气泡（由信号跨线程触发）"""
+        try:
+            self._add_message("system", f"🔊 {msg}")
+        except Exception as e:
+            logger.warning(f"[TTS] 语音提示显示失败: {e}")
 
     def _speak_response(self, text: str):
         """后台线程：语音模式下朗读 AI 回复"""
@@ -2324,6 +2337,10 @@ class ChatPage(QWidget):
             # 全文合成 + 播放（内部自动处理 MP3->WAV 转换和回退）
             result = tts_speak(clean, play=True, strip_code=False)
             logger.info(f"[TTS] _speak_response OK: engine={result.get('engine', '?')}")
+            if result and result.get("fallback"):
+                self.tts_notice_signal.emit(
+                    f"{result.get('fallback_from', '语音引擎')}：{result.get('fallback_reason', '引擎暂不可用')}，已自动切换"
+                )
         except Exception as e:
             logger.error(f"[TTS] 朗读失败: {e}")
 

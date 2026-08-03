@@ -93,6 +93,7 @@ class CodeChangePanel(QWidget):
         self._auto_open = auto_open
         self._restore_geometry()
         self._records: list[dict] = []
+        self._hist_cursor = 0  # jsonl 增量读取游标（跨进程实时兜底）
         self._build_ui()
         self._load_history_records()
         self._timer = QTimer(self)
@@ -219,22 +220,29 @@ class CodeChangePanel(QWidget):
 
     # ── 历史加载（重启后不丢失）──
     def _load_history_records(self):
-        """打开面板时加载持久化历史记录（最新在前），并清空队列中已持久化的重复项"""
-        # 队列中的事件已同步写入历史文件，直接丢弃避免重复
+        """打开面板时加载记录：内存队列 + 历史文件双通道合并（seq 去重，最新在前）"""
+        from ..utils.code_change_bus import history_tail_size
+        # ① 内存队列中的事件（若 jsonl 写入失败仍有兜底）
+        queued = []
         try:
-            drain_changes(1000)
+            queued = drain_changes(1000)
         except Exception:
             pass
+        # ② 历史文件全量
         recs = load_history(300)
-        seen = set()
-        for rec in reversed(recs):  # 最新在前
-            key = (rec.get("ts_full", ""), rec.get("action", ""), rec.get("path", ""))
-            if key in seen:
-                continue
-            seen.add(key)
+        # ③ 按 seq 合并去重（旧记录无 seq 用 ts+action+path 兜底）
+        merged: dict = {}
+        for rec in queued + recs:
+            key = rec.get("seq") or (
+                rec.get("ts_full", ""), rec.get("action", ""), rec.get("path", ""))
+            merged[key] = rec
+        items = sorted(merged.values(),
+                       key=lambda r: r.get("seq") or 0, reverse=True)
+        for rec in items:
             self._records.append(rec)
             item = QListWidgetItem(
-                f"[{rec.get('ts', '')}] {_action_icon(rec.get('action', ''))} {_action_label(rec.get('action', ''))}  {rec.get('path', '')}")
+                f"[{rec.get('ts', '')}] {_action_icon(rec.get('action', ''))} "
+                f"{_action_label(rec.get('action', ''))}  {rec.get('path', '')}")
             item.setToolTip(rec.get("ts_full", ""))
             self._list.addItem(item)
         if self._records:
@@ -247,18 +255,38 @@ class CodeChangePanel(QWidget):
                 + (f"  |  {last.get('summary', '')}" if last.get("summary") else ""))
         else:
             self._status.setText("等待 AI 修改代码…（AI 修改文件时，这里会实时显示每次修改的 diff）")
+        # ④ 历史已全量加载 → 游标移到文件末尾，之后只增量读新事件
+        self._hist_cursor = history_tail_size()
 
     # ── 事件轮询 ──
     def _poll(self):
+        """轮询：内存队列 + jsonl 文件增量 双通道（跨进程实时兜底）"""
         recs = drain_changes(50)
+        # 文件通道：AI 工具若运行在其它进程，内存队列收不到，靠 jsonl 兜底
+        try:
+            from ..utils.code_change_bus import read_history_tail
+            tail, cursor = read_history_tail(self._hist_cursor)
+            if tail is None:
+                # 文件被修剪（超限删头部）→ 重置游标重读
+                self._hist_cursor = 0
+                tail, cursor = read_history_tail(self._hist_cursor)
+            self._hist_cursor = cursor
+            recs = recs + (tail or [])
+        except Exception:
+            pass
         if not recs:
             return
-        existing = {(r.get("ts_full", ""), r.get("action", ""), r.get("path", "")) for r in self._records}
+        existing = {
+            (r.get("seq") if r.get("seq") else (
+                r.get("ts_full", ""), r.get("action", ""), r.get("path", "")))
+            for r in self._records
+        }
         added = 0
-        for i, rec in enumerate(recs):
-            key = (rec.get("ts_full", ""), rec.get("action", ""), rec.get("path", ""))
+        for rec in recs:
+            key = rec.get("seq") or (
+                rec.get("ts_full", ""), rec.get("action", ""), rec.get("path", ""))
             if key in existing:
-                continue  # 历史已加载，跳过重复
+                continue  # 已加载/已显示，跳过重复
             existing.add(key)
             self._records.insert(0, rec)  # 最新在前，与列表行序一致
             label = _action_label(rec["action"])

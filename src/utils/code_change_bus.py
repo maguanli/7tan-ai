@@ -11,6 +11,8 @@
 v2: 事件同时持久化到 data/code_changes.jsonl（重启不丢），
     面板打开时可调用 load_history() 加载历史记录。
     队列满时丢弃最旧记录，保证"最新修改"优先可见。
+v3: read_history_tail() 跨进程增量读取 jsonl —— 即使发布端与
+    消费端不在同一进程（AI 工具调用 vs GUI），面板也能实时显示。
 """
 from __future__ import annotations
 
@@ -47,7 +49,7 @@ def build_diff(old_text, new_text, path, context: int = 2):
     """
     if old_text is None and new_text is None:
         return None
-    # 新建空文件：返回最小头部，让面板知道这是新建（避免显示“无差异”）
+    # 新建空文件：返回最小头部，让面板知道这是新建（避免显示"无差异"）
     if old_text is None and not (new_text or "").strip():
         return (f"--- a/{Path(path).as_posix()}\n"
                 f"+++ b/{Path(path).as_posix()}\n"
@@ -168,3 +170,57 @@ def load_history(limit: int = 300) -> list:
 def history_path() -> Path:
     """历史文件路径（调试用）"""
     return _HISTORY_PATH
+
+
+# ── v3: 跨进程增量读取（实时兜底）────────────────────────────
+# AI 工具调用与 GUI 可能运行在不同进程时，内存队列无法跨进程共享。
+# 但历史文件（jsonl）是共享的 —— 面板轮询时除了 drain 内存队列，
+# 还增量读取 jsonl 尾部，保证任何进程发布的修改都能实时显示。
+
+_TAIL_LOCK = threading.Lock()
+
+
+def read_history_tail(cursor: int = 0):
+    """增量读取历史文件尾部新增事件（线程安全，跨进程兜底）。
+
+    Args:
+        cursor: 上次读取到的字节偏移（0 = 从头读取）。
+
+    Returns:
+        (recs, new_cursor):
+            recs       解析出的新事件列表（可能为空）
+            new_cursor 本次读取后的文件字节偏移（下一次的 cursor）
+        若文件被修剪/变小（小于 cursor），返回 (None, 文件大小)，
+        调用方应重置游标后重新读取（合并时靠 seq 去重，不会重复）。
+    """
+    if not _HISTORY_PATH.exists():
+        return [], 0
+    try:
+        size = _HISTORY_PATH.stat().st_size
+        if cursor > size:
+            # 文件被修剪过（超过 300 条/5MB 会删头部）→ 通知重置
+            return None, size
+        with _TAIL_LOCK:
+            with open(_HISTORY_PATH, "r", encoding="utf-8") as f:
+                if cursor > 0:
+                    f.seek(cursor)
+                data = f.read()
+        recs = []
+        for ln in data.splitlines():
+            if not ln.strip():
+                continue
+            try:
+                recs.append(json.loads(ln))
+            except Exception:
+                continue
+        return recs, size
+    except Exception:
+        return [], cursor
+
+
+def history_tail_size() -> int:
+    """当前历史文件字节大小（用于初始化游标）"""
+    try:
+        return _HISTORY_PATH.stat().st_size
+    except Exception:
+        return 0

@@ -624,14 +624,9 @@ def run_agent_loop(
         if content:
             ctx.add_assistant_message(content)
         
-        # 如果有文本回复，记录
+        # 如果有文本回复，记录（语音回调仅最终结果触发一次，见 return 前）
         if content:
             logger.info(f"💬 Agent: {content[:100]}...")
-            if _agent_speak_callback:
-                try:
-                    threading.Thread(target=_agent_speak_callback, args=(content,), daemon=True).start()
-                except Exception:
-                    pass
         
         # 🔔 流式事件：思考内容（如果有）
         if event_callback and content:
@@ -658,6 +653,13 @@ def run_agent_loop(
                     continue
             else:
                 logger.info("no file modifications this iteration, skip review")
+            
+            # 🎤 Agent 语音回调：仅最终结果确定时触发一次（防每轮迭代重复朗读整段回复）
+            if _agent_speak_callback and final_result and final_result != "任务完成":
+                try:
+                    threading.Thread(target=_agent_speak_callback, args=(final_result,), daemon=True).start()
+                except Exception:
+                    pass
             
             return {
                 "success": True,

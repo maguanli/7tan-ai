@@ -238,6 +238,9 @@ class ChatPage(QWidget):
         self._tts_stream_text_pos = 0               # 已发送到 TTS 的文本位置
         self._last_tts_sent = ""                   # 最后推送到 TTS 的句子（收尾防重）
         self._tts_stream_done_ts = 0.0              # 流式朗读结束时间戳（防全文重复）
+        self._tts_streamed_this_reply = False       # 本次回复是否已由流式 TTS 完整朗读（防整段重复）
+        self._last_spoken_full = ""                 # 最近朗读的全文（防整段重复）
+        self._last_spoken_ts = 0.0                  # 最近朗读全文时间戳（防整段重复）
         self._render_queue: list = []
         self._render_timer = None
         self._render_insert_pos: int = 0
@@ -1940,6 +1943,7 @@ class ChatPage(QWidget):
                     pass
             self._tts_stream_queue = queue.Queue()
             self._tts_stream_text_pos = 0
+            self._tts_streamed_this_reply = False   # 新一轮回复：流式朗读标记重置
             import threading
             self._tts_stream_worker_thread = threading.Thread(
                 target=self._tts_stream_worker, daemon=True
@@ -2220,6 +2224,7 @@ class ChatPage(QWidget):
                     self._last_tts_sent = remaining
                 self._tts_stream_queue.put(None)  # 停止信号
                 self._tts_stream_queue = None
+                self._tts_streamed_this_reply = True  # 本次回复已由流式 TTS 完整朗读（防全文重复）
             else:
                 # 传统模式（非流式）：全量朗读
                 import threading
@@ -2361,6 +2366,10 @@ class ChatPage(QWidget):
         if _time.time() - self._tts_stream_done_ts < 8.0:
             logger.debug("[TTS] 流式朗读刚结束，跳过全文朗读（防重复）")
             return
+        # 🛡️ 防整段重复：本次回复已由流式 TTS 逐句完整朗读 → 不再全文朗读
+        if getattr(self, "_tts_streamed_this_reply", False):
+            logger.debug("[TTS] 本次回复已由流式朗读，跳过全文朗读（防整段重复）")
+            return
         try:
             from data.plugins.tts_piper.tools import tts_speak
             from data.plugins.tts_piper.tools import _strip_code_blocks
@@ -2368,6 +2377,12 @@ class ChatPage(QWidget):
             clean = _strip_code_blocks(text).strip()
             if not clean:
                 return
+            # 🛡️ 防整段重复：同一全文 5 分钟内只朗读一次（防多通道重复触发）
+            if clean == getattr(self, "_last_spoken_full", "") and _time.time() - getattr(self, "_last_spoken_ts", 0) < 300:
+                logger.debug("[TTS] 与最近朗读全文相同，跳过（防整段重复）")
+                return
+            self._last_spoken_full = clean
+            self._last_spoken_ts = _time.time()
 
             # 全文合成 + 播放（内部自动处理 MP3->WAV 转换和回退）
             result = tts_speak(clean, play=True, strip_code=False)

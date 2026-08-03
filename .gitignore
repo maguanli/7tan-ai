@@ -79,3 +79,4 @@ output/
 
 # 编译旧版残留（进程占用时临时改名）
 *.pyd.old
+\"tracked_list.txt\"  

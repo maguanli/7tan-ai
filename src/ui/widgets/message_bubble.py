@@ -3,11 +3,11 @@
 import json
 from loguru import logger
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QCursor
+from PyQt6.QtGui import QCursor, QTextOption
 from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QPlainTextEdit, QDialog, QMessageBox, QApplication,
-    QSizePolicy,
+    QSizePolicy, QTextBrowser,
 )
 
 # pygments
@@ -121,14 +121,18 @@ class MessageBubble(QFrame):
                 layout.addWidget(tc_widget)
 
         # ---- 消息内容 ----
-        self._content_label = QLabel()
-        self._content_label.setWordWrap(True)
-        self._content_label.setTextFormat(Qt.TextFormat.RichText)
+        self._content_label = QTextBrowser()
+        self._content_label.setReadOnly(True)
+        self._content_label.setFrameShape(QFrame.Shape.NoFrame)
         self._content_label.setOpenExternalLinks(True)
-        self._content_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.LinksAccessibleByMouse)
-        self._content_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self._content_label.setMinimumWidth(0)
-        self._content_label.setStyleSheet("border: none; background: transparent;")
+        self._content_label.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._content_label.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._content_label.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        self._content_label.setStyleSheet("QTextBrowser { border: none; background: transparent; }")
+        self._content_label.viewport().setAutoFillBackground(False)
+        self._content_label.document().setDocumentMargin(0)
+        # 高度自适应：内容/宽度变化时同步高度 = 文档实际高度（修复富文本显示不全）
+        self._content_label.document().contentsChanged.connect(self._sync_content_height)
 
         if role == "user":
             bubble_color = THEME['accent']
@@ -152,7 +156,7 @@ class MessageBubble(QFrame):
         else:
             html = self._md_to_html(content, text_color)
 
-        self._content_label.setText(html)
+        self._content_label.setHtml(html)
         logger.info("[MessageBubble] setText done")
 
         self.setStyleSheet(f"""
@@ -416,6 +420,30 @@ class MessageBubble(QFrame):
                 break
         self._header.insertWidget(insert_pos, badge)
 
+    def _sync_content_height(self):
+        """同步 QTextBrowser 高度 = 文档实际渲染高度，防止内容被裁剪（修复显示不全）"""
+        try:
+            tb = self._content_label
+            doc = tb.document()
+            w = tb.viewport().width()
+            if w > 10 and abs(doc.textWidth() - w) > 1:
+                doc.setTextWidth(w)
+            h = doc.size().height()
+            if h > 10:
+                tb.setFixedHeight(int(h) + 4)
+        except Exception:
+            pass
+
+    def resizeEvent(self, event):
+        """窗口/气泡尺寸变化时重新同步内容高度"""
+        super().resizeEvent(event)
+        self._sync_content_height()
+
+    def showEvent(self, event):
+        """首次显示时同步内容高度"""
+        super().showEvent(event)
+        self._sync_content_height()
+
     def update_content(self, new_content: str, is_streaming: bool = False):
         """更新消息内容（流式模式会自动节流）"""
         self._content = new_content
@@ -432,6 +460,10 @@ class MessageBubble(QFrame):
             if not self._update_timer.isActive():
                 self._update_timer.start(100)
         else:
+            # 非流式：清除流式残留 pending，确保渲染最新内容（修复显示不全）
+            if hasattr(self, '_update_timer'):
+                self._update_timer.stop()
+                self._pending_content = new_content
             self._do_update_label()
 
     def _do_update_label(self):
@@ -440,15 +472,19 @@ class MessageBubble(QFrame):
         流式模式下跳过 Markdown 解析（O(n²) 性能瓶颈），
         只做简单 HTML 转义 + 换行，流式结束后再完整渲染。
         """
-        content = getattr(self, '_pending_content', self._content)
+        # 流式：用最近一次 pending 文本；非流式：始终用最新 _content（修复显示不全）
+        if self._is_streaming:
+            content = getattr(self, '_pending_content', self._content)
+        else:
+            content = self._content
         if self._is_streaming:
             # 快速路径：纯文本转义 + 换行，不解析 Markdown
             esc = content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             esc = esc.replace('\n', '<br>')
             text_color = "#000000" if self._role == "user" else None
             color_style = f'color:{text_color};' if text_color else ''
-            self._content_label.setText(
+            self._content_label.setHtml(
                 f'<div style="{color_style}font-size:13px;line-height:1.6;word-break:break-word;">{esc}</div>'
             )
         else:
-            self._content_label.setText(self._md_to_html(content, "#000000" if self._role == "user" else None))
+            self._content_label.setHtml(self._md_to_html(content, "#000000" if self._role == "user" else None))

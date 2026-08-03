@@ -59,7 +59,7 @@ from PyQt6.QtGui import (
 
     QFont, QColor, QPalette, QCursor, QTextCursor,
 
-    QPixmap,
+    QPixmap, QTextOption,
 
 )
 
@@ -75,7 +75,7 @@ from PyQt6.QtWidgets import (
 
     QSizePolicy, QAbstractItemView, QMenu, QDialog,
 
-    QMessageBox, QProgressBar,
+    QMessageBox, QProgressBar, QAbstractScrollArea,
 
 )
 
@@ -779,7 +779,7 @@ class ChatPage(QWidget):
                 '<pre style="background:#272822;padding:12px;margin:0;overflow-x:auto;font-size:12px;line-height:1.5;border-radius:0 0 6px 6px;">' + highlighted + '</pre>'
                 '</div>'
             )
-        return _re.sub(r'<pre><code(?:\s+class="language-(\w+)")?>([\s\S]*?)</code></pre>', _hl, html)
+        return _re.sub(r'<pre><code(?:\s+class="language-([\w+#-]+)")?>([\s\S]*?)</code></pre>', _hl, html)
 
     def _remove_last_system_message(self):
         """移除最后一条系统消息（加载提示等）"""
@@ -827,15 +827,23 @@ class ChatPage(QWidget):
 
             ml.setContentsMargins(0, 0, 0, 0)
 
-            label = QLabel(content)
+            label = QTextBrowser()
 
-            label.setWordWrap(True)
+            label.setReadOnly(True)
 
-            label.setTextFormat(Qt.TextFormat.RichText)
+            label.setFrameShape(QFrame.Shape.NoFrame)
 
-            label.setStyleSheet("background: transparent;")
+            label.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+            label.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+            label.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustToContents)
+
+            label.setStyleSheet("QTextBrowser { background: transparent; border: none; }")
 
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            label.setHtml(content)
 
             ml.addWidget(label)
 
@@ -1709,9 +1717,20 @@ class ChatPage(QWidget):
                     wf.setframerate(sample_rate)
                     wf.writeframes(audio.tobytes())
                 
-                # Whisper STT
-                whisper_exe = r'G:\whisper_cpp\Release\whisper-cli.exe'
-                whisper_model = r'G:\whisper_cpp\models\ggml-small.bin'
+                # Whisper STT — 多候选路径（E 盘本地优先 → G 盘回退，防盘符抽风）
+                _whisper_candidates = [
+                    (r'E:\7tan_voice\whisper\whisper-cli.exe', r'E:\7tan_voice\whisper\ggml-small.bin'),
+                    (r'G:\whisper_cpp\Release\whisper-cli.exe', r'G:\whisper_cpp\models\ggml-small.bin'),
+                ]
+                whisper_exe = whisper_model = None
+                for _exe, _model in _whisper_candidates:
+                    if os.path.exists(_exe) and os.path.exists(_model):
+                        whisper_exe, whisper_model = _exe, _model
+                        break
+                if not whisper_exe:
+                    raise FileNotFoundError(
+                        "未找到 Whisper 语音识别引擎（请检查 E:\\7tan_voice 或 G:\\whisper_cpp）"
+                    )
                 result = subprocess.run(
                     [whisper_exe, '-m', whisper_model, '-f', tmp_wav, '-l', 'zh', '--no-timestamps'],
                     capture_output=True, text=True, timeout=30

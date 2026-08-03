@@ -144,14 +144,28 @@ def _filter_code_diff(diff_text: str) -> str:
     return '\n'.join(kept)
 
 
-# ── 全局 TTS 回调 ─────────────────────────────────────────
-_agent_speak_callback = None
+# ── 全局 TTS 回调（多播：聊天页 + 全局语音桥可同时注册） ──
+_agent_speak_callbacks = []
 
 
 def set_agent_speak_callback(callback):
-    """设置 Agent 说话回调（用于 TTS 语音朗读）"""
-    global _agent_speak_callback
-    _agent_speak_callback = callback
+    """设置唯一朗读回调（兼容旧接口：清空后注册）"""
+    global _agent_speak_callbacks
+    _agent_speak_callbacks = [callback] if callback else []
+
+
+def register_agent_speak_callback(callback):
+    """注册朗读回调（多播，不覆盖已有回调）"""
+    global _agent_speak_callbacks
+    if callback and callback not in _agent_speak_callbacks:
+        _agent_speak_callbacks.append(callback)
+
+
+def unregister_agent_speak_callback(callback):
+    """注销朗读回调"""
+    global _agent_speak_callbacks
+    if callback in _agent_speak_callbacks:
+        _agent_speak_callbacks.remove(callback)
 
 
 # ── LLM 调用封装 ──────────────────────────────────────────
@@ -654,12 +668,13 @@ def run_agent_loop(
             else:
                 logger.info("no file modifications this iteration, skip review")
             
-            # 🎤 Agent 语音回调：仅最终结果确定时触发一次（防每轮迭代重复朗读整段回复）
-            if _agent_speak_callback and final_result and final_result != "任务完成":
-                try:
-                    threading.Thread(target=_agent_speak_callback, args=(final_result,), daemon=True).start()
-                except Exception:
-                    pass
+            # 🎤 Agent 语音回调（多播）：仅最终结果确定时触发一次（防每轮迭代重复朗读整段回复）
+            if _agent_speak_callbacks and final_result and final_result != "任务完成":
+                for cb in list(_agent_speak_callbacks):
+                    try:
+                        threading.Thread(target=cb, args=(final_result,), daemon=True).start()
+                    except Exception:
+                        pass
             
             return {
                 "success": True,

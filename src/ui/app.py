@@ -8270,6 +8270,12 @@ class MainWindow(QMainWindow):
 
         self._apply_window_icon()
 
+        # 🎤 全局语音朗读桥：任何 Agent 回复（聊天/工作台任务）都可朗读，voice_mode 开关控制
+        try:
+            from src.agent.speak_bridge import init_global_tts
+            init_global_tts()
+        except Exception:
+            pass
 
 
         # 中心 widget

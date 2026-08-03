@@ -663,8 +663,8 @@ class ChatPage(QWidget):
             self._voice_btn.blockSignals(False)
             # 🎤 启动时恢复语音模式的 UI 和 Agent 回调
             self._input.setPlaceholderText("语音模式：点击录音按钮开始说话...")
-            from ..agent.agent_loop import set_agent_speak_callback
-            set_agent_speak_callback(self._speak_response)
+            from ..agent.agent_loop import register_agent_speak_callback
+            register_agent_speak_callback(self._speak_response)
 
         self._send_btn = QPushButton("发送 ▲")
         if self._voice_mode:
@@ -1622,16 +1622,16 @@ class ChatPage(QWidget):
             self._tts_stream_done_ts = 0.0
             self._last_spoken_full = ""
             self._last_spoken_ts = 0.0
-            # 🎤 设置 Agent 语音回调：让 Agent 中间消息也能朗读
-            from ..agent.agent_loop import set_agent_speak_callback
-            set_agent_speak_callback(self._speak_response)
+            # 🎤 设置 Agent 语音回调（多播注册，不覆盖全局语音桥）
+            from ..agent.agent_loop import register_agent_speak_callback
+            register_agent_speak_callback(self._speak_response)
         else:
             self._voice_btn.setText("🎤 语音")
             self._set_send_button("send")
             self._input.setPlaceholderText("输入消息... (Enter 发送, Shift+Enter 换行, 可拖拽文件)")
-            # 🎤 清除 Agent 语音回调
-            from ..agent.agent_loop import set_agent_speak_callback
-            set_agent_speak_callback(None)
+            # 🎤 注销本页面朗读回调（全局语音桥按 voice_mode 开关自行决定）
+            from ..agent.agent_loop import unregister_agent_speak_callback
+            unregister_agent_speak_callback(self._speak_response)
 
         # 持久化语音模式
         self._save_voice_gender()
@@ -1796,6 +1796,18 @@ class ChatPage(QWidget):
         if not text:
 
             return
+
+        # 🎤 每轮新消息：无条件重置语音防重状态（防止残留标记拦截本轮朗读）
+        self._tts_streamed_this_reply = False
+        self._tts_stream_done_ts = 0.0
+        self._last_spoken_full = ""
+        self._last_spoken_ts = 0.0
+        if getattr(self, "_tts_stream_queue", None) is not None:
+            try:
+                self._tts_stream_queue.put(None)
+            except Exception:
+                pass
+            self._tts_stream_queue = None
 
         # 标记处理中 + 按钮变终止
         self._is_processing = True
@@ -2390,7 +2402,8 @@ class ChatPage(QWidget):
             logger.debug("[TTS] 本次回复已由流式朗读，跳过全文朗读（防整段重复）")
             return
         try:
-            from data.plugins.tts_piper.tools import tts_speak
+            # 使用全局去重朗读：与全局语音桥共享去重，多通道同时触发也只出声一次
+            from data.plugins.tts_piper.tools import tts_speak_dedup
             from data.plugins.tts_piper.tools import _strip_code_blocks
 
             clean = _strip_code_blocks(text).strip()
@@ -2403,9 +2416,9 @@ class ChatPage(QWidget):
             self._last_spoken_full = clean
             self._last_spoken_ts = _time.time()
 
-            # 全文合成 + 播放（内部自动处理 MP3->WAV 转换和回退）
-            result = tts_speak(clean, play=True, strip_code=False)
-            logger.info(f"[TTS] _speak_response OK: engine={result.get('engine', '?')}")
+            # 全文合成 + 播放（内部自动处理 MP3->WAV 转换和回退，共享全局去重）
+            result = tts_speak_dedup(clean)
+            logger.info(f"[TTS] _speak_response OK: engine={result.get('engine', '?')} skipped={result.get('skipped', False)}")
             if result and result.get("fallback"):
                 self.tts_notice_signal.emit(
                     f"{result.get('fallback_from', '语音引擎')}：{result.get('fallback_reason', '引擎暂不可用')}，已自动切换"

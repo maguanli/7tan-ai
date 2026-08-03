@@ -62,11 +62,22 @@ def _player_worker():
         if wav_path is None:  # 停止信号
             break
         try:
-            import winsound
-            # 同步播放：阻塞直到播完（SND_FILENAME 默认同步）
-            winsound.PlaySound(wav_path, winsound.SND_FILENAME)
+            if not os.path.exists(wav_path):
+                logger.warning(f"[TTS] 播放失败：文件不存在 {wav_path}")
+            else:
+                logger.info(f"[TTS] ▶ 播放: {os.path.basename(wav_path)} ({os.path.getsize(wav_path) // 1024}KB)")
+                import winsound
+                # 同步播放：阻塞直到播完（SND_FILENAME 默认同步）
+                winsound.PlaySound(wav_path, winsound.SND_FILENAME)
+                logger.info("[TTS] ⏹ 播放完成")
         except Exception as e:
             logger.warning(f"[TTS] 播放失败（音频设备不可用？）: {wav_path}: {e}")
+            # 兜底：winsound 失败时用系统默认播放器，至少能出声
+            try:
+                if os.name == 'nt' and os.path.exists(wav_path):
+                    os.startfile(wav_path)
+            except Exception:
+                pass
         finally:
             # 从待播集合移除（允许同路径文件后续重新入队）
             with _player_lock:
@@ -126,8 +137,8 @@ _voice_gender: str = "female"  # "female" | "male"
 
 # === Edge TTS 并发锁 ===
 _edge_lock = threading.Lock()
-EDGE_MAX_RETRIES = 3
-EDGE_RETRY_DELAY = 2  # 秒
+EDGE_MAX_RETRIES = 1  # 失败快速回退，避免用户等 30-60 秒才听到声音
+EDGE_RETRY_DELAY = 1  # 秒
 
 # === Edge TTS 熔断器 ===
 _edge_tts_circuit_open = False  # True=熔断，直接跳过 edge-tts
@@ -213,7 +224,7 @@ def tts_get_gender() -> dict:
 # Edge TTS 核心 — Python API 优先 + CLI 回退
 # ============================================================
 
-def _run_edge_tts_api(text: str, voice: str, output_path: str, timeout: int = 10) -> None:
+def _run_edge_tts_api(text: str, voice: str, output_path: str, timeout: int = 8) -> None:
     """
     使用 edge_tts Python API 合成语音（无子进程，更可靠）。
 
@@ -304,7 +315,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                         "--write-media", mp3_path,
                     ]
                     result = subprocess.run(
-                        cmd, capture_output=True, text=True, timeout=10
+                        cmd, capture_output=True, text=True, timeout=5
                     )
                     if result.returncode != 0:
                         last_error = (
@@ -541,3 +552,30 @@ def tts_status() -> dict:
         }
 
     return result
+
+
+# === 全局防重朗读（多通道共享：聊天页/全局桥/Agent 回调都走这里，同一全文 5 分钟内只朗读一次） ===
+_dedup_spoken = ""
+_dedup_ts = 0.0
+_dedup_lock = threading.Lock()
+DEDUP_WINDOW = 300  # 秒（5 分钟）
+
+
+def tts_speak_dedup(text: str) -> dict:
+    """带全局去重的朗读：同一全文 5 分钟内只朗读一次。
+
+    供聊天页 _speak_response 与全局语音桥共用，保证多通道（agent 回调 /
+    _on_response / 工作台任务）同时触发时也只会出声一次。
+    """
+    global _dedup_spoken, _dedup_ts
+    clean = (text or "").strip()
+    if not clean:
+        return {"status": "ok", "message": "空文本", "skipped": True}
+    with _dedup_lock:
+        now = time.time()
+        if clean == _dedup_spoken and now - _dedup_ts < DEDUP_WINDOW:
+            logger.info("[TTS] 全局去重：同一全文 5 分钟内已朗读，跳过")
+            return {"status": "ok", "skipped": True, "message": "去重跳过"}
+        _dedup_spoken = clean
+        _dedup_ts = now
+    return tts_speak(clean, play=True, strip_code=True)

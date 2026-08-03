@@ -29,44 +29,62 @@ def run_tests(path: str = ".", test_path: str = "", verbose: bool = False) -> st
     if not os.path.isdir(path):
         return f"目录不存在: {path}"
 
-    files = os.listdir(path)
     extra = ["-v"] if verbose else []
 
-    # Python: pytest
-    if os.path.isfile(os.path.join(path, "pytest.ini")) or \
-       os.path.isfile(os.path.join(path, "pyproject.toml")):
-        cmd = [sys.executable, "-m", "pytest"]
-        if test_path:
-            cmd.append(test_path)
-        cmd += extra + ["--tb=short"]
-        return _exec(cmd, cwd=path, timeout=300)
-    # Python: unittest
-    if test_path:
-        cmd = [sys.executable, "-m", "unittest", test_path]
-        if verbose:
-            cmd.append("-v")
-        return _exec(cmd, cwd=path, timeout=300)
-    # Node: jest
-    if os.path.isfile(os.path.join(path, "jest.config.js")) or \
+    # ── Node / Go / Rust：按项目文件检测 ──
+    if os.path.isfile(os.path.join(path, "package.json")) or \
+       os.path.isfile(os.path.join(path, "jest.config.js")) or \
        os.path.isfile(os.path.join(path, "jest.config.ts")):
-        cmd = ["npx", "jest"] + extra
+        cmd = ["npx", "--yes", "jest"] + extra
         if test_path:
             cmd.append(test_path)
         return _exec(cmd, cwd=path, timeout=300)
-    # Go
     if os.path.isfile(os.path.join(path, "go.mod")):
         cmd = ["go", "test", "./..."]
         if verbose:
             cmd.append("-v")
         return _exec(cmd, cwd=path, timeout=300)
-    # Rust
     if os.path.isfile(os.path.join(path, "Cargo.toml")):
         cmd = ["cargo", "test"]
         if verbose:
             cmd.append("--")
         return _exec(cmd, cwd=path, timeout=600)
 
-    return "未检测到已知的测试框架。请使用 run_command 手动运行测试。"
+    # ── Python: pytest（配置文件 或 启发式发现 test_*.py）──
+    pytest_cfg = any(os.path.isfile(os.path.join(path, cfg))
+                     for cfg in ("pytest.ini", "setup.cfg", "tox.ini"))
+    if not pytest_cfg and os.path.isfile(os.path.join(path, "pyproject.toml")):
+        try:
+            with open(os.path.join(path, "pyproject.toml"), "r", encoding="utf-8") as f:
+                if "[tool.pytest" in f.read():
+                    pytest_cfg = True
+        except Exception:
+            pass
+
+    test_files = _find_test_files(path, (".py",))
+    py_tests_exist = bool(test_files)
+
+    if pytest_cfg or py_tests_exist or (test_path and test_path.endswith(".py")):
+        cmd = [sys.executable, "-m", "pytest"]
+        if test_path:
+            cmd.append(test_path)
+        elif not pytest_cfg and py_tests_exist:
+            # 无配置：显式指定发现的测试文件，避免全目录误扫
+            cmd += [str(f) for f in test_files[:20]]
+        cmd += extra + ["--tb=short"]
+        out = _exec(cmd, cwd=path, timeout=300)
+        if "No module named" in out and "pytest" in out:
+            return "未安装 pytest。请执行: pip install pytest\n\n" + out
+        return out
+
+    # Python: unittest（test_path 指定时）
+    if test_path:
+        cmd = [sys.executable, "-m", "unittest", test_path]
+        if verbose:
+            cmd.append("-v")
+        return _exec(cmd, cwd=path, timeout=300)
+
+    return "未检测到已知的测试框架（Node/Go/Rust/Python），也未发现 test_*.py 测试文件。请使用 run_command 手动运行测试。"
 
 
 @register_tool(
@@ -199,6 +217,24 @@ def generate_test_template(file_path: str, function_name: str = "") -> str:
         lines.append(f'        # AI 填写边界测试')
         lines.append(f'        pass')
     return "\n".join(lines)
+
+
+_EXCLUDE_DIRS = {"node_modules", "__pycache__", ".git", ".venv", "venv",
+                 "build", "dist", ".pytest_cache", ".idea", ".vscode",
+                 "downloads", "data", "logs"}
+
+
+def _find_test_files(root: str, exts: tuple) -> list:
+    """启发式递归查找测试文件（test_*.py / *_test.py 等）"""
+    found = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames
+                       if d not in _EXCLUDE_DIRS and not d.startswith(".")]
+        for fname in filenames:
+            if fname.startswith("test_") or fname.endswith("_test.py"):
+                if fname.endswith(exts):
+                    found.append(os.path.join(dirpath, fname))
+    return sorted(found)[:50]
 
 
 def _exec(cmd: list, cwd: str = None, timeout: int = 120) -> str:

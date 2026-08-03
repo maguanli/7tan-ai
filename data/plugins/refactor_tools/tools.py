@@ -180,6 +180,8 @@ def extract_function(file_path: str, start_line: int, end_line: int) -> str:
 )
 def format_code(file_path: str, formatter: str = "auto") -> str:
     """格式化代码文件"""
+    import subprocess
+    import sys as _sys
     if not os.path.isfile(file_path):
         return f"文件不存在: {file_path}"
 
@@ -191,32 +193,48 @@ def format_code(file_path: str, formatter: str = "auto") -> str:
     except Exception as e:
         return f"读取失败: {e}"
 
-    import subprocess
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+    def _run(cmd, timeout=60):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True,
+                                  timeout=timeout, creationflags=flags,
+                                  encoding="utf-8", errors="replace")
+        except Exception:
+            return None
+
     if ext == ".py":
-        # 尝试 black，回退到 autopep8
-        for fmt in [["black", "-q", file_path],
-                     ["autopep8", "--in-place", "--aggressive", file_path]]:
-            try:
-                r = subprocess.run(fmt, capture_output=True, text=True,
-                                  timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
-                if r.returncode == 0:
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        new = f.read()
-                    if new != original:
-                        return f"✅ 已格式化 ({fmt[0]}): {file_path}"
-                    return f"✅ 无需格式化: {file_path}"
-            except Exception:
-                continue
-        return "⚠️ 未安装格式化工具。请安装: pip install black"
+        # 优先 python -m black（兼容打包/独立环境 PATH 缺失），逐级回退
+        candidates = [
+            [_sys.executable, "-m", "black", "-q", file_path],
+            ["black", "-q", file_path],
+            [_sys.executable, "-m", "autopep8", "--in-place", "--aggressive", file_path],
+            ["autopep8", "--in-place", "--aggressive", file_path],
+        ]
+        for cmd in candidates:
+            r = _run(cmd)
+            if r is not None and r.returncode == 0:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    new = f.read()
+                if new != original:
+                    return f"✅ 已格式化 ({' '.join(cmd[:-1])}): {file_path}"
+                return f"✅ 无需格式化: {file_path}"
+        # 全部失败 → 自动安装 black 并重试一次
+        inst = _run([_sys.executable, "-m", "pip", "install", "black", "-q"], timeout=180)
+        if inst is not None and inst.returncode == 0:
+            r = _run([_sys.executable, "-m", "black", "-q", file_path])
+            if r is not None and r.returncode == 0:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    new = f.read()
+                if new != original:
+                    return f"✅ 已格式化 (black 自动安装后): {file_path}"
+                return f"✅ 无需格式化: {file_path}"
+        return "⚠️ 未安装格式化工具（black/autopep8），自动安装失败。请手动执行: pip install black"
     elif ext in (".js", ".ts", ".jsx", ".tsx", ".css", ".html", ".json"):
-        for fmt in [["npx", "prettier", "--write", file_path],
+        for cmd in [["npx", "--yes", "prettier", "--write", file_path],
                      ["prettier", "--write", file_path]]:
-            try:
-                r = subprocess.run(fmt, capture_output=True, text=True,
-                                  timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
-                if r.returncode == 0:
-                    return f"✅ 已格式化 (prettier): {file_path}"
-            except Exception:
-                continue
+            r = _run(cmd, timeout=120)
+            if r is not None and r.returncode == 0:
+                return f"✅ 已格式化 (prettier): {file_path}"
         return "⚠️ 未安装 Prettier。请安装: npm install -g prettier"
     return f"不支持的文件类型: {ext}"

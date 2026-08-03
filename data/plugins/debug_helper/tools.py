@@ -13,7 +13,7 @@ import traceback
 
 @register_tool(
     name="analyze_error",
-    description="分析 Python 错误堆栈，解释错误原因并提供修复建议。支持常见错误类型：ImportError、AttributeError、TypeError、KeyError 等。",
+    description="分析 Python 错误堆栈，解释错误原因并提供修复建议。支持常见错误类型：ImportError、AttributeError、TypeError、KeyError、NameError 等。",
     parameters={
         "type": "object",
         "properties": {
@@ -31,8 +31,8 @@ def analyze_error(traceback_text: str) -> str:
     frames = []
 
     for line in lines:
-        # 提取错误类型
-        m = re.match(r'^(\w+(?:Error|Exception|Warning|ErrorException))\s*:?\s*(.*)', line)
+        # 提取错误类型（兼容 json.decoder.JSONDecodeError 等带模块前缀的写法）
+        m = re.match(r'^(?:[\w.]+\.)*(\w+(?:Error|Exception|Warning|ErrorException))\s*:?\s*(.*)', line)
         if m:
             error_type = m.group(1)
             error_msg = m.group(2)
@@ -46,7 +46,7 @@ def analyze_error(traceback_text: str) -> str:
     if error_msg:
         result.append(f"   消息: {error_msg}")
 
-    # 解释和建议
+    # ── 知识库：常见错误类型 → 通用修复建议 ──
     suggestions = {
         "ImportError": ("模块未找到或导入路径错误。\n"
                         "  • 检查模块是否已安装: pip install <module>\n"
@@ -85,6 +85,10 @@ def analyze_error(traceback_text: str) -> str:
                            "  • 检查网络连接\n"
                            "  • 确认目标服务是否运行\n"
                            "  • 检查防火墙/代理设置"),
+        "TimeoutError": ("操作超时。\n"
+                        "  • 增大超时时间\n"
+                        "  • 检查目标服务是否可达\n"
+                        "  • 检查网络/防火墙/代理"),
         "SyntaxError": ("语法错误。\n"
                        "  • 检查括号是否匹配\n"
                        "  • 检查缩进是否一致\n"
@@ -96,7 +100,95 @@ def analyze_error(traceback_text: str) -> str:
                              "  • 函数内部有同名局部赋值，遮蔽了全局导入\n"
                              "  • 删除函数内部重复的 import 语句\n"
                              "  • 使用 global 关键字声明全局变量"),
+        "NameError": ("名称未定义。\n"
+                     "  • 检查变量是否已赋值/定义\n"
+                     "  • 检查是否忘记 import\n"
+                     "  • 检查拼写是否与定义处一致"),
+        "RuntimeError": ("运行时错误。\n"
+                        "  • 查看消息中的具体原因\n"
+                        "  • 检查资源（文件/线程/协程）状态\n"
+                        "  • 检查是否在不正确的上下文中调用"),
+        "ZeroDivisionError": ("除零错误。\n"
+                             "  • 检查除数是否可能为 0\n"
+                             "  • 添加除数判断: if b != 0"),
+        "AssertionError": ("断言失败。\n"
+                          "  • 检查断言条件是否成立\n"
+                          "  • 排查前置条件/输入数据是否合法"),
+        "RecursionError": ("递归过深。\n"
+                          "  • 检查递归终止条件\n"
+                          "  • 增加递归深度限制或改写为迭代"),
+        "OverflowError": ("数值溢出。\n"
+                         "  • 使用更大的数值类型\n"
+                         "  • 检查数值是否超出范围"),
+        "StopIteration": ("迭代器耗尽。\n"
+                         "  • 使用 for 循环替代手动 next()\n"
+                         "  • 或给 next() 提供默认值: next(it, default)"),
+        "EOFError": ("读取到文件结尾。\n"
+                    "  • 检查是否提前到达 EOF\n"
+                    "  • 使用循环读取并判断内容是否为空"),
+        "BrokenPipeError": ("管道断裂。\n"
+                           "  • 下游进程提前退出\n"
+                           "  • 捕获 BrokenPipeError 并优雅退出"),
+        "OSError": ("操作系统错误。\n"
+                   "  • 查看消息中的具体原因（权限/路径/资源）\n"
+                   "  • 检查文件是否被其他程序占用"),
+        "JSONDecodeError": ("JSON 解析失败。\n"
+                           "  • 检查 JSON 格式是否合法\n"
+                           "  • json.loads() 前先验证内容\n"
+                           "  • 检查文件编码是否为 utf-8"),
+        "UnicodeDecodeError": ("编码解码失败。\n"
+                              "  • 打开文件时指定 encoding='utf-8'\n"
+                              "  • 使用 errors='replace' 容忍坏字节"),
+        "UnicodeEncodeError": ("编码写入失败。\n"
+                              "  • 写文件时指定 encoding='utf-8'\n"
+                              "  • 替换无法编码的字符"),
     }
+
+    # ── 精准定位：从错误消息提取关键名称 → 针对性建议 ──
+    hint = ""
+    if "NameError" in error_type:
+        m = re.search(r"name\s+'([^']+)'", error_msg)
+        if m:
+            hint = (f"\n  🎯 未定义名称: '{m.group(1)}'\n"
+                    "     • 是否忘记定义/赋值？\n"
+                    "     • 是否忘记 import？\n"
+                    "     • 拼写是否与定义处一致？")
+    elif "AttributeError" in error_type:
+        m = re.search(r"'([^']+)' object has no attribute '([^']+)'", error_msg)
+        if m:
+            hint = (f"\n  🎯 对象 '{m.group(1)}' 没有属性 '{m.group(2)}'\n"
+                    "     • 检查属性/方法名拼写\n"
+                    "     • 用 type(obj) 确认对象类型\n"
+                    "     • 确认对象不是 None")
+    elif "KeyError" in error_type:
+        m = re.search(r"['\"]([^'\"]+)['\"]", error_msg)
+        if m:
+            hint = (f"\n  🎯 缺失键: '{m.group(1)}'\n"
+                    "     • 使用 dict.get(key, 默认值)\n"
+                    "     • 打印 dict.keys() 确认键名拼写")
+    elif "ModuleNotFoundError" in error_type or "ImportError" in error_type:
+        m = re.search(r"No module named '([^']+)'|import ([^ ,]+)", error_msg)
+        if m:
+            mod = m.group(1) or m.group(2)
+            hint = (f"\n  🎯 缺失模块: '{mod}'\n"
+                    "     • 安装: pip install " + mod.split(".")[0])
+    elif "UnboundLocalError" in error_type:
+        m = re.search(r"local variable '([^']+)'", error_msg)
+        if m:
+            hint = (f"\n  🎯 局部变量 '{m.group(1)}' 在赋值前被引用\n"
+                    "     • 检查函数作用域内的变量赋值顺序")
+    elif "JSONDecodeError" in error_type:
+        m = re.search(r"line (\d+)", error_msg)
+        if m:
+            hint = f"\n  🎯 JSON 错误位于第 {m.group(1)} 行，重点检查该行格式"
+    elif "TypeError" in error_type:
+        m = re.search(r"'([^']+)' object is not callable", error_msg)
+        if m:
+            hint = (f"\n  🎯 对象 '{m.group(1)}' 不可调用\n"
+                    "     • 检查是否把变量误当函数调用\n"
+                    "     • 检查函数名是否被同名变量覆盖")
+        elif "unsupported operand" in error_msg:
+            hint = "\n  🎯 操作数类型不匹配，检查运算符两边的类型"
 
     for key, suggestion in suggestions.items():
         if key in error_type:
@@ -104,6 +196,9 @@ def analyze_error(traceback_text: str) -> str:
             break
     else:
         result.append(f"\n💡 未识别的错误类型，请检查堆栈中的具体文件和行号。")
+
+    if hint:
+        result.append(hint)
 
     if frames:
         result.append(f"\n📋 调用栈 ({len(frames)} 帧):")

@@ -16,6 +16,12 @@ import asyncio as _asyncio
 import concurrent.futures
 from pathlib import Path
 from loguru import logger
+import logging
+
+# 静音 piper 库的巨型 DEBUG 日志（synthesize 时打印 text + 完整 phonemes 音素表，
+# 单条可达数千字符，会刷屏控制台/文件日志）。此处在插件加载源头兜底，
+# 即使 logger.setup 未调用也生效。
+logging.getLogger("piper").setLevel(logging.WARNING)
 
 # === 女声配置 (Piper) — 多候选路径（E 盘本地优先 → G 盘回退，防盘符抽风） ===
 def _first_existing(*paths):

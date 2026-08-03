@@ -14,8 +14,16 @@ def create_session() -> str:
     return str(uuid.uuid4())[:8]
 
 
-def save_message(session_id: str, role: str, content: str, tool_name: str = ""):
-    """保存对话消息到数据库"""
+def save_message(session_id: str, role: str, content: str, tool_name: str = "", model: str = ""):
+    """保存对话消息到数据库
+
+    Args:
+        session_id: 会话 ID
+        role: 'user' | 'assistant' | 'tool'
+        content: 消息内容
+        tool_name: 工具名（tool 消息用）
+        model: 生成该消息的 AI 模型名（assistant 消息用）
+    """
     session = get_session()
     try:
         msg = ConversationHistory(
@@ -23,6 +31,7 @@ def save_message(session_id: str, role: str, content: str, tool_name: str = ""):
             role=role,
             content=content,
             tool_name=tool_name,
+            model=model,
         )
         session.add(msg)
         session.commit()

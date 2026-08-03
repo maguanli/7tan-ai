@@ -51,6 +51,7 @@ class ChatResponse(BaseModel):
     cost: float = 0
     iterations: int = 0
     tokens: int = 0
+    model: str = ""  # 生成该回复的 AI 模型名
 
 
 def _load_system_prompt() -> str:
@@ -131,8 +132,8 @@ async def send_message(req: ChatRequest):
                 detail=f"AI 请求超时（{_get_agent_loop_timeout()}秒），请稍后重试。如果是复杂任务，尝试分步执行。"
             )
 
-        # 保存 AI 回复
-        save_message(session_id, "assistant", result.get("result", ""))
+        # 保存 AI 回复（带模型名）
+        save_message(session_id, "assistant", result.get("result", ""), model=req.model or "")
 
         return ChatResponse(
             session_id=session_id,
@@ -141,6 +142,7 @@ async def send_message(req: ChatRequest):
             cost=result.get("cost", 0),
             iterations=result.get("iterations", 0),
             tokens=result.get("total_tokens", 0),
+            model=req.model or "",
         )
     except HTTPException:
         raise
@@ -221,8 +223,10 @@ async def send_message_stream(req: ChatRequest):
             elif event.get("type") == "done":
                 final_data = event
                 full_result = event.get("result", full_result)
+                # 标记生成该回复的模型
+                final_data["model"] = req.model or ""
                 # Save final result
-                save_message(session_id, "assistant", full_result)
+                save_message(session_id, "assistant", full_result, model=req.model or "")
             
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         

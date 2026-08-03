@@ -801,7 +801,7 @@ class ChatPage(QWidget):
                      cost: float = 0, iterations: int = 0, tokens: int = 0,
 
                      tool_calls: list = None, is_streaming: bool = False,
-                     pre_parsed_html: str = None) -> MessageBubble:
+                     pre_parsed_html: str = None, model_name: str = "") -> MessageBubble:
 
         """添加消息气泡（延迟渲染：仅可见范围创建重量 Widget）"""
         # 存储原始数据（即使不渲染也保存）
@@ -810,6 +810,7 @@ class ChatPage(QWidget):
             "role": role, "content": content, "timestamp": ts,
             "cost": cost, "iterations": iterations, "tokens": tokens,
             "tool_calls": tool_calls, "html": pre_parsed_html,
+            "model": model_name,
         })
         logger.info(f"[ChatPage] _add_message role={role} data_idx={len(self._message_data)-1}")
         # 新消息始终在末尾渲染，更新范围
@@ -1190,6 +1191,7 @@ class ChatPage(QWidget):
                     "timestamp": msg.get("timestamp", ""),
                     "cost": msg.get("cost", 0),
                     "tool_calls": msg.get("tool_calls"),
+                    "model": msg.get("model", ""),
                 })
             self.messages_parsed_signal.emit(session_id, parsed, start_idx, total)
 
@@ -1232,6 +1234,7 @@ class ChatPage(QWidget):
                     cost=msg.get("cost", 0),
                     tool_calls=msg.get("tool_calls"),
                     pre_parsed_html=msg.get("html"),
+                    model_name=msg.get("model", ""),
                 )
                 self._rendered_end += 1
         finally:
@@ -1838,6 +1841,8 @@ class ChatPage(QWidget):
 
 
 
+        self._last_reply_model = model or ""
+
         self._pending_result = None
 
         self._pending_error = None
@@ -2252,7 +2257,8 @@ class ChatPage(QWidget):
             logger.info("[ChatPage] calling _add_message assistant")
 
             self._add_message("assistant", result, cost=cost, iterations=iterations,
-                              tokens=data.get("tokens", 0))
+                              tokens=data.get("tokens", 0),
+                              model_name=data.get("model") or getattr(self, "_last_reply_model", ""))
             self._update_context_indicator()
 
             logger.info("[ChatPage] full render ok")

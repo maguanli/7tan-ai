@@ -362,12 +362,14 @@ class ConversationHistory(Base):
     content = Column(Text)
     tool_name = Column(String)
     session_id = Column(String)
+    model = Column(String, default="")  # 生成该消息的 AI 模型
     created_at = Column(DateTime, default=datetime.now)
 
     def to_dict(self) -> dict:
         return {
             "id": self.id, "role": self.role, "content": self.content,
             "tool_name": self.tool_name, "session_id": self.session_id,
+            "model": self.model or "",
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -416,6 +418,17 @@ def init_db(db_path: str = None):
     """初始化数据库（创建所有表 + 迁移 AI 配置）"""
     engine = get_engine(db_path)
     Base.metadata.create_all(engine)
+    # 幂等迁移：为 conversation_history 添加 model 列（旧库升级）
+    try:
+        from sqlalchemy import text as _sa_text
+        with engine.connect() as conn:
+            cols = [r[1] for r in conn.execute(_sa_text("PRAGMA table_info(conversation_history)")).fetchall()]
+            if "model" not in cols:
+                conn.execute(_sa_text("ALTER TABLE conversation_history ADD COLUMN model VARCHAR DEFAULT ''"))
+                conn.commit()
+                logger.info("✅ 数据库迁移：conversation_history 增加 model 列")
+    except Exception as e:
+        logger.warning(f"数据库迁移(model列)跳过: {e}")
     # 从 YAML 迁移 AI 配置到数据库（仅首次）
     try:
         ensure_default_ai_config()

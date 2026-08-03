@@ -28,7 +28,7 @@ class MessageBubble(QFrame):
                  cost: float = 0, iterations: int = 0, tokens: int = 0,
                  tool_calls: list = None, is_streaming: bool = False,
                  session_id: str = None, pre_parsed_html: str = None,
-                 parent=None):
+                 model_name: str = "", parent=None):
         super().__init__(parent)
         logger.info(f"[MessageBubble] init start role={role} len={len(content)}")
         self._role = role
@@ -61,6 +61,22 @@ class MessageBubble(QFrame):
         role_label = QLabel(role_name)
         role_label.setStyleSheet(f"font-size: 12px; font-weight: bold; color: {THEME['text_secondary']}; border: none; background: transparent;")
         header.addWidget(role_label)
+
+        # 🤖 模型徽章：标明这条 AI 回复是哪个模型说的
+        if role == "assistant" and model_name:
+            model_badge = QLabel(f"🤖 {model_name}")
+            model_badge.setStyleSheet(f"""
+                QLabel {{
+                    background: {THEME['accent']}22;
+                    color: {THEME['accent']};
+                    border: 1px solid {THEME['accent']}55;
+                    border-radius: 8px;
+                    padding: 1px 8px;
+                    font-size: 10px;
+                    font-weight: bold;
+                }}
+            """)
+            header.addWidget(model_badge)
 
         if timestamp:
             ts_label = QLabel(timestamp[:16] if len(timestamp) > 16 else timestamp)

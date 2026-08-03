@@ -156,9 +156,12 @@ def _enqueue(line: str):
 
 # ===== 控制台 Agent 内容朗读（实时控制台显示 Agent 回复时同步发声） =====
 _AGENT_LINE_RE = re.compile(r'💬\s*Agent:\s*(.+)$', re.S)
-_last_agent_speak_ts = 0.0
-_agent_speak_lock = threading.Lock()
 _console_tts_registered = False
+
+# —— Agent 截断行(中间迭代)朗读：最新优先 + 2 秒合并窗口（防刷屏堆积） ——
+_trunc_pending_text = None      # 待朗读的最新截断内容
+_trunc_pending_timer = None     # 合并窗口定时器
+_trunc_lock = threading.Lock()
 
 
 def _speak_console_async(text: str):
@@ -237,32 +240,60 @@ def init_console_tts():
         logger.warning("[TTS-Console] 注册失败: {}: {}", type(e).__name__, e)
 
 
-def _maybe_speak_agent_line(line: str):
-    """检测 💬 Agent 日志行 → 后台朗读（传统模式兜底，agent 回调的补充通道）。
+def _flush_trunc_pending():
+    """合并窗口到期：朗读暂存的最新截断内容（最新优先，只读一条）"""
+    global _trunc_pending_text, _trunc_pending_timer
+    with _trunc_lock:
+        text = _trunc_pending_text
+        _trunc_pending_text = None
+        _trunc_pending_timer = None
+    if text:
+        logger.info("[TTS-Console] 🔊 朗读 Agent 实时内容（{}字）", len(text))
+        _speak_console_async(text)
 
-    规则：
-      - 跳过 agent_loop 中间迭代的截断输出（`content[:100]...` 结尾带省略号）
-      - 3 秒防抖，避免同一回复多行重复触发
+
+def _cancel_trunc_pending():
+    """最终完整回复到达：取消待读的截断内容（只读最终回复）"""
+    global _trunc_pending_text, _trunc_pending_timer
+    with _trunc_lock:
+        if _trunc_pending_timer is not None:
+            try:
+                _trunc_pending_timer.cancel()
+            except Exception:
+                pass
+            _trunc_pending_timer = None
+        _trunc_pending_text = None
+
+
+def _maybe_speak_agent_line(line: str):
+    """检测 💬 Agent 日志行 → 后台朗读（agent 回调的补充通道）。
+
+    规则（用户要求：💬 Agent 内容全部朗读）：
+      - 中间迭代截断输出（`content[:100]...`）→ 朗读：2 秒合并窗口内多条只读最新一条（实时播报，不堆积）
+      - 最终完整回复（无省略号）→ 立即朗读，并取消待读的截断内容
       - 防重复/防叠加由 _speak_console_async 统一处理
     """
-    global _last_agent_speak_ts
+    global _trunc_pending_text, _trunc_pending_timer
     m = _AGENT_LINE_RE.search(line)
     if not m:
         return
     content = m.group(1).strip()
     if not content:
         return
-    # 跳过截断的中间迭代输出（agent_loop 的 content[:100]...）
-    if content.endswith("..."):
-        logger.debug("[TTS-Console] 检测到 Agent 行但为截断输出，跳过（{}字）", len(content))
+    is_truncated = content.endswith("...")
+    if is_truncated:
+        # 截断内容：暂存最新一条，2 秒合并窗口结束后朗读（实时播报，不堆积）
+        with _trunc_lock:
+            _trunc_pending_text = content
+            if _trunc_pending_timer is None:
+                _trunc_pending_timer = threading.Timer(2.0, _flush_trunc_pending)
+                _trunc_pending_timer.daemon = True
+                _trunc_pending_timer.start()
+        logger.debug("[TTS-Console] Agent 实时内容已收录（{}字，稍后朗读）", len(content))
         return
-    now = _time.time()
-    with _agent_speak_lock:
-        if now - _last_agent_speak_ts < 3.0:
-            logger.debug("[TTS-Console] 防抖拦截（{}s内已触发过）", round(now - _last_agent_speak_ts, 1))
-            return
-        _last_agent_speak_ts = now
-    logger.info("[TTS-Console] 检测到 Agent 内容，触发朗读（{}字）", len(content))
+    # 最终完整回复：优先朗读（取消待读截断行）
+    _cancel_trunc_pending()
+    logger.info("[TTS-Console] 检测到 Agent 完整回复，触发朗读（{}字）", len(content))
     _speak_console_async(content)
 
 

@@ -159,8 +159,11 @@ def _enqueue(line: str):
         _dedup_map[h_fuzzy] = now
     ts = datetime.now().strftime("%H:%M:%S")
     _log_queue.put(f"{ts} │ {clean}")
-    # 🎤 控制台 Agent 内容朗读：检测 💬 Agent 行 → 后台朗读（全局去重防与聊天页重复）
-    _maybe_speak_agent_line(clean)
+    # NOTE: 朗读检测不在 _enqueue 里做！
+    # 此处位于 loguru sink emit 链中，若同步调用 _maybe_speak_agent_line
+    # → 内部 logger.info → loguru 重入 → error interceptor → sys.stderr
+    # → _StreamRedirector.write → 与当前 sink 争同一把锁 → 死锁（历史 3 次未响应根因）
+    # 朗读检测已移到 _drain_queue（QTimer 事件循环，不在 emit 链中）。
 
 
 # ===== 控制台 Agent 内容朗读（实时控制台显示 Agent 回复时同步发声） =====
@@ -370,7 +373,9 @@ def _add_loguru_sink():
 class _StreamRedirector:
     def __init__(self):
         self._buf = ""
-        self._lock = threading.Lock()
+        # 🔒 RLock：loguru error interceptor 重入写 stderr 时（同线程）
+        # 普通 Lock 会死等自己持有的锁 → 应用假死；RLock 允许同线程重入
+        self._lock = threading.RLock()
 
     def write(self, s):
         if not s:
@@ -627,6 +632,14 @@ class ConsoleViewer(QWidget):
 
         if not lines:
             return
+
+        # 🎤 Agent 内容朗读：在 QTimer 事件循环里检测（不在 loguru emit 链中，
+        # 内部 logger 调用安全，杜绝 sink 重入死锁）
+        try:
+            for line in lines:
+                _maybe_speak_agent_line(line)
+        except Exception:
+            pass
 
         self._total_lines += len(lines)
         self._line_count.setText(f"{self._total_lines} 行")

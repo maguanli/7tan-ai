@@ -11,12 +11,16 @@
 from __future__ import annotations
 
 import html as _html
+import json
+from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QTextEdit, QListWidget, QListWidgetItem, QSplitter,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QByteArray
+
+_GEOMETRY_FILE = Path("data/panel_geometry.json")
 
 from ..utils.code_change_bus import drain_changes, load_history
 
@@ -85,8 +89,8 @@ class CodeChangePanel(QWidget):
         super().__init__(parent)
         self.setWindowTitle("🔧 代码修改实时")
         self.setWindowFlag(Qt.WindowType.Window, True)
-        self.resize(880, 580)
         self._auto_open = auto_open
+        self._restore_geometry()
         self._records: list[dict] = []
         self._build_ui()
         self._load_history_records()
@@ -301,6 +305,53 @@ class CodeChangePanel(QWidget):
         self.raise_()
         self.activateWindow()
 
+    # ── 窗口位置/大小持久化 ──
+    def _save_geometry(self):
+        """保存窗口位置和大小到 JSON 文件"""
+        try:
+            geom = self.saveGeometry().data().hex()
+            _GEOMETRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _GEOMETRY_FILE.write_text(
+                json.dumps({"geometry": geom}, ensure_ascii=False),
+                encoding="utf-8")
+        except Exception as e:
+            print(f"[面板] 保存窗口几何失败: {e}")
+
+    def _restore_geometry(self):
+        """从 JSON 文件恢复窗口位置和大小"""
+        try:
+            if not _GEOMETRY_FILE.exists():
+                self.resize(880, 580)
+                return
+            data = json.loads(_GEOMETRY_FILE.read_text(encoding="utf-8"))
+            geom = data.get("geometry")
+            if geom and self.restoreGeometry(QByteArray.fromHex(bytes(geom, "ascii"))):
+                # 验证窗口在可见屏幕内（防多显示器断开后窗口跑到屏幕外）
+                from PyQt6.QtGui import QGuiApplication
+                screen = QGuiApplication.screenAt(self.frameGeometry().center())
+                if screen is None:
+                    # 窗口在屏幕外，重置到主屏中心
+                    primary = QGuiApplication.primaryScreen()
+                    if primary:
+                        geo = primary.availableGeometry()
+                        self.move(geo.center().x() - 440, geo.center().y() - 290)
+                        self.resize(880, 580)
+            else:
+                self.resize(880, 580)
+        except Exception as e:
+            print(f"[面板] 恢复窗口几何失败: {e}")
+            self.resize(880, 580)
+
+    def showEvent(self, event):
+        """每次显示时恢复位置（防止被主窗口居中覆盖）"""
+        super().showEvent(event)
+
+    def hideEvent(self, event):
+        """关闭/隐藏面板时保存位置"""
+        self._save_geometry()
+        super().hideEvent(event)
+
     def closeEvent(self, event):
+        self._save_geometry()
         self._timer.stop()
         super().closeEvent(event)

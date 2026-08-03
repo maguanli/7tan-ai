@@ -1,8 +1,0 @@
-{"seq": 1, "ts": "15:49:14", "ts_full": "2026-08-03 15:49:14", "action": "create", "path": "data\\tmp\\_link_test.txt", "diff": "", "summary": "创建新文件"}
-{"seq": 1, "ts": "15:49:48", "ts_full": "2026-08-03 15:49:48", "action": "delete", "path": "data\\tmp\\_link_test.txt", "diff": "", "summary": "删除文件"}
-{"seq": 2, "ts": "15:49:48", "ts_full": "2026-08-03 15:49:48", "action": "delete", "path": "data\\tmp\\check_syntax.py", "diff": "", "summary": "删除文件"}
-{"seq": 3, "ts": "15:49:48", "ts_full": "2026-08-03 15:49:48", "action": "delete", "path": "data\\tmp\\check_history.py", "diff": "", "summary": "删除文件"}
-{"seq": 4, "ts": "15:49:48", "ts_full": "2026-08-03 15:49:48", "action": "delete", "path": "data\\tmp\\check_link.py", "diff": "", "summary": "删除文件"}
-{"seq": 5, "ts": "15:49:48", "ts_full": "2026-08-03 15:49:48", "action": "delete", "path": "data\\tmp\\check_link_err.txt", "diff": "", "summary": "删除文件"}
-{"seq": 6, "ts": "15:49:48", "ts_full": "2026-08-03 15:49:48", "action": "delete", "path": "data\\tmp\\err_extract.txt", "diff": "", "summary": "删除文件"}
-{"seq": 7, "ts": "15:49:48", "ts_full": "2026-08-03 15:49:48", "action": "delete", "path": "data\\tmp\\log_extract.txt", "diff": "", "summary": "删除文件"}

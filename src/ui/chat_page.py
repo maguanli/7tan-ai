@@ -874,7 +874,8 @@ class ChatPage(QWidget):
 
             session_id=self._current_session_id,
 
-            pre_parsed_html=pre_parsed_html
+            pre_parsed_html=pre_parsed_html,
+            model_name=model_name,
 
         )
 

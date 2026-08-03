@@ -234,6 +234,7 @@ class ChatPage(QWidget):
         self._is_processing = False   # AI 是否正在处理中（用于发送↔终止按钮切换）
         # 🎤 流式 TTS：逐句合成+播放，消除语音延迟
         self._tts_stream_queue: queue.Queue = None  # 句子队列
+        self._tts_stream_ok_count = 0  # 流式朗读【实际成功】句数（决定是否全文兜底，防"入队≠出声"误判）
         self._tts_stream_worker_thread = None       # 后台播放线程
         self._tts_stream_text_pos = 0               # 已发送到 TTS 的文本位置
         self._last_tts_sent = ""                   # 最后推送到 TTS 的句子（收尾防重）
@@ -1802,6 +1803,7 @@ class ChatPage(QWidget):
         self._tts_stream_done_ts = 0.0
         self._last_spoken_full = ""
         self._last_spoken_ts = 0.0
+        self._tts_stream_ok_count = 0
         if getattr(self, "_tts_stream_queue", None) is not None:
             try:
                 self._tts_stream_queue.put(None)
@@ -1955,6 +1957,7 @@ class ChatPage(QWidget):
         self._tts_stream_done_ts = 0.0
         self._last_spoken_full = ""
         self._last_spoken_ts = 0.0
+        self._tts_stream_ok_count = 0
 
         # 🎤 流式 TTS 初始化：先停旧 worker，再新建
         if self._voice_mode and not self._voice_recording:
@@ -2239,23 +2242,15 @@ class ChatPage(QWidget):
         if self._voice_mode and not self._voice_recording and success and result:
             if self._tts_stream_queue is not None:
                 # 流式 TTS：推送剩余文本 + 停止信号
+                # 是否全文兜底由 worker 按【实际播放成功句数】决定（防"入队≠出声"静音）
                 remaining = self._streaming_text[self._tts_stream_text_pos:].strip()
-                streamed_any = self._tts_stream_text_pos > 0  # 流式是否已推过句子
                 if remaining and len(remaining) >= 2:
                     # 防重：若与最后推送的句子相同（pos 边界异常），跳过，避免最后一句两次
                     if remaining != self._last_tts_sent:
                         self._tts_stream_queue.put(remaining)
-                        streamed_any = True
                     self._last_tts_sent = remaining
-                self._tts_stream_queue.put(None)  # 停止信号
+                self._tts_stream_queue.put(None)  # 停止信号 → worker 统计成功句数并决定兜底
                 self._tts_stream_queue = None
-                if streamed_any:
-                    # 本次回复已由流式 TTS 完整朗读 → 防全文重复
-                    self._tts_streamed_this_reply = True
-                else:
-                    # 流式实际一句都没读（纯代码/无标点/引擎无输出）→ 全文兜底，保证一定能听到
-                    import threading
-                    threading.Thread(target=self._speak_response, args=(result,), daemon=True).start()
             else:
                 # 传统模式（非流式）：全量朗读
                 import threading
@@ -2350,28 +2345,50 @@ class ChatPage(QWidget):
         self._tts_stream_text_pos += last_end
 
     def _tts_stream_worker(self):
-        """后台线程：从队列取句子 → 合成 → 播放"""
-        import winsound
+        """后台线程：从队列取句子 → 合成 → 播放
+
+        核心修复：按【实际播放成功句数】决定是否全文兜底。
+        - 句子全部失败（在线引擎断网等）→ 自动朗读全文，保证一定能听到
+        - 至少 1 句成功 → 标记 _tts_streamed_this_reply，防止 Agent 回调/全文二次朗读
+        """
         logger.info("[TTS Stream] Worker started")
         try:
             from data.plugins.tts_piper.tools import tts_speak
         except Exception as e:
             logger.error(f"[TTS Stream] 无法导入 TTS 引擎: {e}")
             return
+        total = 0
         while True:
             sentence = self._tts_stream_queue.get()
-            if sentence is None:  # 停止信号
-                logger.info("[TTS Stream] Worker stopped")
-                # 记录流式朗读结束时间（防 Agent 全文回调与流式重复 → 最后一句两次）
+            if sentence is None:  # 停止信号 → 收尾判定
                 import time as _time
                 self._tts_stream_done_ts = _time.time()
+                logger.info(f"[TTS Stream] Worker stopped: 成功 {self._tts_stream_ok_count}/{total} 句")
+                if self._tts_stream_ok_count > 0:
+                    # 流式已实际出声 → 防全文重复（Agent 回调晚到也不会再读一遍）
+                    self._tts_streamed_this_reply = True
+                else:
+                    # 流式一句都没成功（纯代码/无标点/引擎全部失败）→ 全文兜底，保证一定能听到
+                    full = getattr(self, "_streaming_text", "") or ""
+                    if full.strip():
+                        logger.info("[TTS Stream] 流式 0 句成功 → 全文兜底朗读")
+                        # 重置 8 秒防重窗口，否则全文兜底会被 _speak_response 拦截
+                        self._tts_stream_done_ts = 0.0
+                        import threading as _th
+                        _th.Thread(target=self._speak_response, args=(full,), daemon=True).start()
                 # 不再 tts_stop()：让播放队列自然播完最后一句，避免"最后一句被切断"
                 break
+            total += 1
             try:
                 logger.debug(f"[TTS Stream] Synthesizing: {sentence[:50]}...")
                 # play=True: 内部自动处理 MP3->WAV 转换（含 ffmpeg 缺失回退）
-                # 使用 os.startfile 作为回退播放方式
                 result = tts_speak(sentence, play=True, strip_code=True)
+                if result and result.get("status") == "ok":
+                    self._tts_stream_ok_count += 1
+                    logger.info(f"[TTS Stream] 句子播放成功 #{self._tts_stream_ok_count}")
+                else:
+                    msg = (result or {}).get("message", "未知原因")
+                    logger.warning(f"[TTS Stream] 句子合成失败: {msg}")
                 if result and result.get("fallback"):
                     self.tts_notice_signal.emit(
                         f"{result.get('fallback_from', '语音引擎')}：{result.get('fallback_reason', '引擎暂不可用')}，已自动切换"

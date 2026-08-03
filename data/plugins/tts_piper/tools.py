@@ -64,6 +64,9 @@ def _player_worker():
         try:
             if not os.path.exists(wav_path):
                 logger.warning(f"[TTS] 播放失败：文件不存在 {wav_path}")
+            elif os.path.getsize(wav_path) < 1024:
+                # 0 字节/损坏文件直接跳过（防 winsound 卡死或爆音）
+                logger.warning(f"[TTS] 播放跳过：文件过小(疑似损坏) {os.path.basename(wav_path)}")
             else:
                 logger.info(f"[TTS] ▶ 播放: {os.path.basename(wav_path)} ({os.path.getsize(wav_path) // 1024}KB)")
                 import winsound
@@ -315,7 +318,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                         "--write-media", mp3_path,
                     ]
                     result = subprocess.run(
-                        cmd, capture_output=True, text=True, timeout=5
+                        cmd, capture_output=True, text=True, timeout=4
                     )
                     if result.returncode != 0:
                         last_error = (
@@ -347,7 +350,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                     str(_FFMPEG), "-y", "-i", mp3_path,
                     "-af", "volume=2.0", "-acodec", "pcm_s16le", "-ar", "22050",
                     wav_path
-                ], capture_output=True, timeout=15, check=True)
+                ], capture_output=True, timeout=10, check=True)
                 os.remove(mp3_path)
             except FileNotFoundError:
                 # ffmpeg 二进制不存在

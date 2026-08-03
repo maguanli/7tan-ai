@@ -8622,15 +8622,17 @@ def launch_app():
 
 
 
-        # ===== 新人引导：欢迎向导（API Key 设置） =====
+        # ===== 新人引导：欢迎向导（API Key 设置，按用户独立判断） =====
 
         from .welcome_wizard import should_show_wizard, show_welcome_wizard
 
-        if should_show_wizard():
+        _cur_username = (user_info or {}).get("username", "") or ""
 
-            logger.info("[Onboarding] 显示欢迎向导...")
+        if should_show_wizard(_cur_username):
 
-            api_key = show_welcome_wizard()
+            logger.info(f"[Onboarding] 显示欢迎向导 (user={_cur_username or 'default'})...")
+
+            api_key = show_welcome_wizard(username=_cur_username)
 
             if api_key:
 
@@ -8678,7 +8680,7 @@ def launch_app():
 
 
 
-        # ===== 新人引导：主界面交互式引导遮罩（延迟 500ms，确保窗口绘制完毕）=====
+        # ===== 新人引导：主界面交互式引导遮罩（延迟 500ms，确保窗口绘制完毕，按用户独立判断）=====
 
         from .onboarding import show_onboarding
 
@@ -8686,7 +8688,7 @@ def launch_app():
 
             try:
 
-                window._onboarding_overlay = show_onboarding(window)
+                window._onboarding_overlay = show_onboarding(window, username=_cur_username)
 
             except Exception as _ob_err:
 

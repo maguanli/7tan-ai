@@ -441,8 +441,9 @@ class WelcomeWizard(QDialog):
 
     wizard_finished = object()  # sentinel: 用户完成
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, username: str | None = None):
         super().__init__(parent)
+        self._username = username or ""
         self.setWindowTitle("7Tan — 新手指引")
         self.setFixedSize(560, 520)
         self.setWindowFlags(
@@ -712,15 +713,11 @@ class WelcomeWizard(QDialog):
         self.accept()
 
     def _disable_wizard(self):
-        """不再提示 — 永久禁用新手引导"""
+        """不再提示 — 仅对当前用户禁用新手引导"""
         try:
-            from ..config.loader import load_config, save_config
-            config = load_config()
-            if "app" not in config:
-                config["app"] = {}
-            config["app"]["wizard_disabled"] = True
-            save_config(config)
-            logger.info("[Wizard] 用户选择不再提示，已永久禁用")
+            from ..utils.user_prefs import set_user_pref
+            set_user_pref(self._username, "wizard_disabled", True)
+            logger.info(f"[Wizard] 用户 {self._username or 'default'} 选择不再提示，已禁用")
         except Exception as e:
             logger.warning(f"[Wizard] 保存禁用设置失败: {e}")
         self._save_key()
@@ -803,18 +800,17 @@ class WelcomeWizard(QDialog):
 # 公开接口
 # ============================================================
 
-def should_show_wizard() -> bool:
-    """判断是否需要显示新手引导
+def should_show_wizard(username: str | None = None) -> bool:
+    """判断是否需要显示新手引导（按用户独立判断）
     
-    只有用户勾选「不再提示」才跳过。
+    只有该用户勾选「不再提示」才跳过，不影响其他用户。
     即使已有 Key，仍然显示引导（预填已有值，用户可修改）。
     """
     try:
-        from ..config.loader import load_config
-        config = load_config()
+        from ..utils.user_prefs import get_user_pref
 
-        # 用户选择了不再提示
-        if config.get("app", {}).get("wizard_disabled", False):
+        # 该用户选择了不再提示
+        if get_user_pref(username or "", "wizard_disabled", False):
             return False
 
         # 始终显示引导（已有 Key 时会通过 _load_existing_config 预填）
@@ -823,7 +819,7 @@ def should_show_wizard() -> bool:
         return True
 
 
-def show_welcome_wizard(parent=None) -> str | None:
+def show_welcome_wizard(parent=None, username: str | None = None) -> str | None:
     """
     显示新手引导向导。
 
@@ -831,7 +827,7 @@ def show_welcome_wizard(parent=None) -> str | None:
         用户输入的 API Key（可能为空）
         None 表示用户关闭窗口取消
     """
-    wizard = WelcomeWizard(parent)
+    wizard = WelcomeWizard(parent, username=username)
     result = wizard.exec()
 
     if result == QDialog.DialogCode.Accepted:

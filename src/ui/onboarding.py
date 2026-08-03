@@ -445,39 +445,34 @@ class _BubbleWidget(QFrame):
 _ONBOARDING_DONE_KEY = "onboarding_completed"
 
 
-def is_onboarding_done() -> bool:
-    """判断新人引导是否已完成"""
+def is_onboarding_done(username: str | None = None) -> bool:
+    """判断新人引导是否已完成（按用户独立判断）"""
     try:
-        from ..config.loader import load_config
-        config = load_config()
-        return config.get("app", {}).get(_ONBOARDING_DONE_KEY, False)
+        from ..utils.user_prefs import get_user_pref
+        return bool(get_user_pref(username or "", _ONBOARDING_DONE_KEY, False))
     except Exception:
         return False
 
 
-def mark_onboarding_done():
-    """标记新人引导已完成"""
+def mark_onboarding_done(username: str | None = None):
+    """标记新人引导已完成（按用户独立标记）"""
     try:
-        from ..config.loader import load_config, save_config
-        config = load_config()
-        if "app" not in config:
-            config["app"] = {}
-        config["app"][_ONBOARDING_DONE_KEY] = True
-        save_config(config)
-        logger.info("[Onboarding] 已标记引导完成")
+        from ..utils.user_prefs import set_user_pref
+        set_user_pref(username or "", _ONBOARDING_DONE_KEY, True)
+        logger.info(f"[Onboarding] 已标记引导完成 (user={username or 'default'})")
     except Exception as e:
         logger.warning(f"[Onboarding] 标记失败: {e}")
 
 
-def show_onboarding(parent, steps: list[OnboardingStep] | None = None) -> OnboardingOverlay | None:
+def show_onboarding(parent, steps: list[OnboardingStep] | None = None, username: str | None = None) -> OnboardingOverlay | None:
     """
     在父窗口上显示新人引导遮罩。
 
     返回 OnboardingOverlay 实例，连接其 finished / skipped 信号以处理后续逻辑。
     如果引导已完成或没有步骤，返回 None。
     """
-    if is_onboarding_done():
-        logger.info("[Onboarding] 引导已完成，跳过")
+    if is_onboarding_done(username):
+        logger.info(f"[Onboarding] 引导已完成，跳过 (user={username or 'default'})")
         return None
 
     if steps is not None and len(steps) == 0:
@@ -485,11 +480,11 @@ def show_onboarding(parent, steps: list[OnboardingStep] | None = None) -> Onboar
 
     overlay = OnboardingOverlay(parent, steps)
 
-    def _on_done():
-        mark_onboarding_done()
+    def _on_done(_username: str | None = None):
+        mark_onboarding_done(_username)
 
-    overlay.finished.connect(_on_done)
-    overlay.skipped.connect(mark_onboarding_done)
+    overlay.finished.connect(lambda: _on_done(username))
+    overlay.skipped.connect(lambda: mark_onboarding_done(username))
 
     logger.info("[Onboarding] 显示新人引导遮罩")
     return overlay

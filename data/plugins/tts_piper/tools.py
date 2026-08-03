@@ -247,7 +247,7 @@ def tts_get_gender() -> dict:
 # Edge TTS 核心 — Python API 优先 + CLI 回退
 # ============================================================
 
-def _run_edge_tts_api(text: str, voice: str, output_path: str, timeout: int = 8) -> None:
+def _run_edge_tts_api(text: str, voice: str, output_path: str, timeout: int = 3) -> None:
     """
     使用 edge_tts Python API 合成语音（无子进程，更可靠）。
 
@@ -265,17 +265,12 @@ def _run_edge_tts_api(text: str, voice: str, output_path: str, timeout: int = 8)
                     pass  # 忽略词边界事件
 
     try:
-        # 检查当前线程是否已有事件循环（如 GUI 主线程）
-        try:
-            _asyncio.get_running_loop()
-            # 已有事件循环 → 在新线程中运行（避免嵌套事件循环）
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(_asyncio.run, _synthesize())
-                future.result(timeout=timeout)
-        except RuntimeError:
-            # 当前线程无事件循环 → 直接运行
-            _asyncio.run(_synthesize())
-    except _asyncio.TimeoutError:
+        # 统一在新线程中运行并强制超时（无论当前线程是否已有事件循环，
+        # 避免网络卡死时无限等待 → 朗读延迟高达 10+ 秒）
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_asyncio.run, _synthesize())
+            future.result(timeout=timeout)
+    except concurrent.futures.TimeoutError:
         raise TimeoutError(f"Edge TTS API 超时（{timeout}秒）")
 
 
@@ -338,7 +333,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                         "--write-media", mp3_path,
                     ]
                     result = subprocess.run(
-                        cmd, capture_output=True, text=True, timeout=4
+                        cmd, capture_output=True, text=True, timeout=2
                     )
                     if result.returncode != 0:
                         last_error = (

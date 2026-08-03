@@ -179,8 +179,9 @@ def _maybe_speak_agent_line(line: str):
     if content.endswith("..."):
         return
     now = _time.time()
+    # 5 秒防抖：同一回复多行 / _LoggingBridge+loguru 双触发
     with _agent_speak_lock:
-        if now - _last_agent_speak_ts < 2.0:
+        if now - _last_agent_speak_ts < 5.0:
             return
         _last_agent_speak_ts = now
 
@@ -191,8 +192,14 @@ def _maybe_speak_agent_line(line: str):
             from src.agent.speak_bridge import _voice_mode_enabled
             if not _voice_mode_enabled():
                 return
-            from data.plugins.tts_piper.tools import tts_speak_dedup
-            tts_speak_dedup(content)
+            from data.plugins.tts_piper.tools import tts_speak
+            # 直接朗读，绕过全局去重（聊天页用 tts_speak_dedup/tts_mark_spoken，
+            # 控制台用独立 tts_speak 保证一定能听到，互不干扰）
+            r = tts_speak(content, play=True, strip_code=True)
+            if r.get('status') == 'ok':
+                logger.info(f"[TTS-Console] 控制台朗读完成: engine={r.get('engine','?')}")
+            else:
+                logger.warning(f"[TTS-Console] 控制台朗读失败: {r.get('message','?')}")
         except Exception:
             pass
 

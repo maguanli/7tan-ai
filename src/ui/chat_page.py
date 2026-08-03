@@ -2436,11 +2436,13 @@ class ChatPage(QWidget):
             if clean == getattr(self, "_last_spoken_full", "") and _time.time() - getattr(self, "_last_spoken_ts", 0) < 300:
                 logger.debug("[TTS] 与最近朗读全文相同，跳过（防整段重复）")
                 return
-            self._last_spoken_full = clean
-            self._last_spoken_ts = _time.time()
 
             # 全文合成 + 播放（内部自动处理 MP3->WAV 转换和回退，共享全局去重）
             result = tts_speak_dedup(clean)
+            # 播放成功后才标记已读（防止失败却锁住 key 导致后续全被拦截）
+            if result.get("status") == "ok" and not result.get("skipped"):
+                self._last_spoken_full = clean
+                self._last_spoken_ts = _time.time()
             logger.info(f"[TTS] _speak_response OK: engine={result.get('engine', '?')} skipped={result.get('skipped', False)}")
             if result and result.get("fallback"):
                 self.tts_notice_signal.emit(

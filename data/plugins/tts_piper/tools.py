@@ -584,9 +584,13 @@ def tts_speak_dedup(text: str) -> dict:
         if clean == _dedup_spoken and now - _dedup_ts < DEDUP_WINDOW:
             logger.info("[TTS] 全局去重：同一全文 5 分钟内已朗读，跳过")
             return {"status": "ok", "skipped": True, "message": "去重跳过"}
-        _dedup_spoken = clean
-        _dedup_ts = now
-    return tts_speak(clean, play=True, strip_code=True)
+    # 先播放，成功后再标记去重（防止播放失败却锁住 key 导致后续全被拦截）
+    result = tts_speak(clean, play=True, strip_code=True)
+    if result.get("status") == "ok":
+        with _dedup_lock:
+            _dedup_spoken = clean
+            _dedup_ts = time.time()
+    return result
 
 
 def tts_mark_spoken(text: str) -> dict:

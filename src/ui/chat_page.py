@@ -1270,6 +1270,7 @@ class ChatPage(QWidget):
                 cost=msg.get("cost", 0),
                 tool_calls=msg.get("tool_calls"),
                 pre_parsed_html=msg.get("html"),
+                model_name=msg.get("model", ""),
             )
             self._rendered_end += 1
         finally:
@@ -1396,7 +1397,8 @@ class ChatPage(QWidget):
             tokens=md.get("tokens", 0),
             tool_calls=md.get("tool_calls"), is_streaming=False,
             session_id=self._current_session_id,
-            pre_parsed_html=md.get("html")
+            pre_parsed_html=md.get("html"),
+            model_name=md.get("model", ""),
         )
         bubble.retry_requested.connect(lambda t, r=md["role"]: self._retry_message(t))
         self._messages_layout.insertWidget(insert_pos, bubble)
@@ -2060,6 +2062,8 @@ class ChatPage(QWidget):
 
                     session_id=self._streaming_session_id,
 
+                    model_name=self._last_reply_model or "",
+
                 )
 
             else:
@@ -2173,6 +2177,11 @@ class ChatPage(QWidget):
             self._streaming_assistant_bubble.update_content(result, is_streaming=False)
 
             self._streaming_assistant_bubble.set_tokens(data.get("tokens", 0))
+
+            # 更新模型名徽章（用后端返回的实际模型名）
+            _model = data.get("model") or self._last_reply_model or ""
+            if _model:
+                self._streaming_assistant_bubble.set_model_name(_model)
 
             # 更新 tool_calls 最终状态
 

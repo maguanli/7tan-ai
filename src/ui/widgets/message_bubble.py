@@ -56,6 +56,7 @@ class MessageBubble(QFrame):
         self._content = content
         self._session_id = session_id
         self._is_streaming = is_streaming
+        self._model_badge = None  # 模型名徽章引用（流式完成后可更新）
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
@@ -97,6 +98,7 @@ class MessageBubble(QFrame):
                     font-weight: bold;
                 }}
             """)
+            self._model_badge = model_badge
             header.addWidget(model_badge)
 
         if timestamp:
@@ -456,6 +458,31 @@ class MessageBubble(QFrame):
                 insert_pos = i
                 break
         self._header.insertWidget(insert_pos, badge)
+
+    def set_model_name(self, model_name: str):
+        """设置/更新模型名徽章（流式完成后调用）"""
+        if not model_name or self._role != "assistant":
+            return
+        if self._model_badge:
+            # 已有徽章 → 更新文本
+            self._model_badge.setText(model_name)
+            self._model_badge.show()
+        else:
+            # 没有 → 新建徽章，插入到角色名后面（index=2: icon + role_label 之后）
+            badge = QLabel(model_name)
+            badge.setStyleSheet(f"""
+                QLabel {{
+                    background: {THEME['accent']}22;
+                    color: {THEME['accent']};
+                    border: 1px solid {THEME['accent']}55;
+                    border-radius: 8px;
+                    padding: 1px 8px;
+                    font-size: 10px;
+                    font-weight: bold;
+                }}
+            """)
+            self._model_badge = badge
+            self._header.insertWidget(2, badge)
 
     def _sync_content_height(self):
         """同步 QTextBrowser 高度 = 文档实际渲染高度，防止内容被裁剪（修复显示不全）"""

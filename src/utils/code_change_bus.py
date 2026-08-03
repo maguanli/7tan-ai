@@ -38,6 +38,9 @@ _START_MS = int(time.time() * 1000)
 _history_lock = threading.Lock()
 _HISTORY_MAX = 300            # 历史文件保留条数
 _HISTORY_MAX_BYTES = 5_000_000  # 5MB 上限
+# v5: 单条 diff 体积上限 —— 防止写超大文件时 jsonl 出现 MB 级记录，
+#    导致面板 UI 线程 400ms 轮询解析卡死（未响应的主要风险源）
+_MAX_DIFF_CHARS = 120_000
 _HISTORY_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "code_changes.jsonl"
 
 
@@ -118,6 +121,12 @@ def publish_file_change(action: str, path: str, old_text=None, new_text=None,
     """
     if diff_text is None:
         diff_text = build_diff(old_text, new_text, path)
+    # v5: diff 体积上限（在换行边界截断，保持可解析；显示端本就只渲染前 500 行）
+    if diff_text and len(diff_text) > _MAX_DIFF_CHARS:
+        cut = diff_text.rfind("\n", 0, _MAX_DIFF_CHARS)
+        if cut <= 0:
+            cut = _MAX_DIFF_CHARS
+        diff_text = diff_text[:cut] + "\n…（diff 过长，已截断，完整内容请直接查看文件）"
     now = datetime.now()
     rec = {
         "seq": _next_seq(),
@@ -194,11 +203,14 @@ def history_path() -> Path:
 _TAIL_LOCK = threading.Lock()
 
 
-def read_history_tail(cursor: int = 0):
+def read_history_tail(cursor: int = 0, max_bytes: int = 0):
     """增量读取历史文件尾部新增事件（线程安全，跨进程兜底）。
 
     Args:
         cursor: 上次读取到的字节偏移（0 = 从头读取）。
+        max_bytes: 单次最多读取字节数（0 = 不限制）。
+            限制后返回的 cursor = min(文件大小, cursor + 读取字节)，
+            未读完的部分下次轮询继续（每轮 UI 线程工作量有上限，防卡死）。
 
     Returns:
         (recs, new_cursor):
@@ -218,7 +230,7 @@ def read_history_tail(cursor: int = 0):
             with open(_HISTORY_PATH, "r", encoding="utf-8") as f:
                 if cursor > 0:
                     f.seek(cursor)
-                data = f.read()
+                data = f.read(max_bytes) if max_bytes and max_bytes > 0 else f.read()
         recs = []
         for ln in data.splitlines():
             if not ln.strip():
@@ -226,8 +238,24 @@ def read_history_tail(cursor: int = 0):
             try:
                 recs.append(json.loads(ln))
             except Exception:
+                # 游标落在半行处（文件被并发追加/裁剪）→ 跳过该行碎片，
+                # 下一轮从新游标续读可恢复完整行，不丢事件
                 continue
-        return recs, size
+        if max_bytes and max_bytes > 0:
+            # 限流读时：若截断落在半行处，游标回退到最后一个完整换行之后，
+            # 下轮从完整行开头重读，保证不丢记录（单条记录 ≤120KB < 512KB 上限，
+            # 不会出现整块无换行的死循环）
+            last_nl = data.rfind("\n")
+            if last_nl < 0:
+                new_cursor = cursor          # 整块无换行：下轮重读同一块
+            elif last_nl < len(data) - 1:
+                new_cursor = cursor + last_nl + 1   # 回退到半行之前
+            else:
+                new_cursor = cursor + len(data)     # 恰好整行结束
+            new_cursor = min(new_cursor, size)
+        else:
+            new_cursor = size
+        return recs, new_cursor
     except Exception:
         return [], cursor
 

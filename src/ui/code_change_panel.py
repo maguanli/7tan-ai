@@ -52,6 +52,13 @@ _ACTION_LABELS = {
     "config": "配置",
 }
 
+# v5 性能护栏（防 UI 主线程卡死/未响应）：
+#  1. 面板隐藏时停止全部轮询定时器（空闲零负载）
+#  2. 单次文件轮询最多读 512KB（大 diff 分多次消化，每轮 UI 工作量有上限）
+#  3. 内存最多保留 500 条记录（长期运行不无界增长）
+_MAX_RECORDS = 500
+_MAX_TAIL_BYTES = 512 * 1024
+
 
 def _action_icon(action: str) -> str:
     return _ACTION_ICONS.get(action, "📄")
@@ -106,14 +113,15 @@ class CodeChangePanel(QWidget):
         self._hist_cursor = 0  # jsonl 增量读取游标（跨进程实时兜底）
         self._build_ui()
         self._load_history_records()
-        # 快速定时器：只拉内存队列（60ms，无文件 I/O，不卡 UI）
+        # 快速定时器：只拉内存队列（120ms，无文件 I/O，不卡 UI）
+        # 注意：定时器不在此启动 —— 面板启动时创建但未显示，
+        # 若此时运行轮询等于无意义的后台空转（历史已全量加载）。
+        # 首次 showEvent 才启动，hideEvent 停止 → 隐藏期零负载。
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll)
-        self._timer.start(60)
-        # 慢速定时器：jsonl 文件增量读取（400ms，跨进程兜底，文件 I/O 不阻塞主线程高频操作）
+        # 慢速定时器：jsonl 文件增量读取（600ms，跨进程兜底；单次限 512KB，UI 线程每轮有上限）
         self._file_timer = QTimer(self)
         self._file_timer.timeout.connect(self._poll_file_tail)
-        self._file_timer.start(400)
         # 渲染防抖：高频新事件时 300ms 内只渲染最后一次
         self._render_timer = QTimer(self)
         self._render_timer.setSingleShot(True)
@@ -289,14 +297,14 @@ class CodeChangePanel(QWidget):
         self._ingest_records(recs)
 
     def _poll_file_tail(self):
-        """慢速轮询：jsonl 文件增量读取（跨进程兜底）"""
+        """慢速轮询：jsonl 文件增量读取（跨进程兜底，单次限 512KB 防卡）"""
         try:
             from ..utils.code_change_bus import read_history_tail
-            tail, cursor = read_history_tail(self._hist_cursor)
+            tail, cursor = read_history_tail(self._hist_cursor, _MAX_TAIL_BYTES)
             if tail is None:
                 # 文件被修剪（超限删头部）→ 重置游标重读
                 self._hist_cursor = 0
-                tail, cursor = read_history_tail(self._hist_cursor)
+                tail, cursor = read_history_tail(self._hist_cursor, _MAX_TAIL_BYTES)
             self._hist_cursor = cursor
             self._ingest_records(tail or [])
         except Exception:
@@ -332,6 +340,10 @@ class CodeChangePanel(QWidget):
                 self._list.blockSignals(True)
                 self._list.setCurrentRow(0)
                 self._list.blockSignals(False)
+        # 内存上限：超 500 条丢最旧（防长期运行无界增长，列表/索引保持轻量）
+        while len(self._records) > _MAX_RECORDS:
+            self._records.pop()
+            self._list.takeItem(self._list.count() - 1)
         self._count_label.setText(f"{len(self._records)} 条")
         if added:
             last = self._records[0]
@@ -439,12 +451,20 @@ class CodeChangePanel(QWidget):
         self._geometry_timer.start()
 
     def showEvent(self, event):
-        """每次显示时恢复位置（防止被主窗口居中覆盖）"""
+        """显示面板 → 恢复轮询，并立即补读一次（防隐藏期间错过事件）"""
         super().showEvent(event)
+        self._timer.start(120)
+        self._file_timer.start(600)
+        try:
+            self._poll_file_tail()
+        except Exception:
+            pass
 
     def hideEvent(self, event):
-        """关闭/隐藏面板时保存位置"""
+        """隐藏面板 → 保存位置 + 停止全部轮询（空闲零负载，防后台空转）"""
         self._save_geometry()
+        self._timer.stop()
+        self._file_timer.stop()
         super().hideEvent(event)
 
     def closeEvent(self, event):

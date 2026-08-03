@@ -13,19 +13,27 @@ v2: 事件同时持久化到 data/code_changes.jsonl（重启不丢），
     队列满时丢弃最旧记录，保证"最新修改"优先可见。
 v3: read_history_tail() 跨进程增量读取 jsonl —— 即使发布端与
     消费端不在同一进程（AI 工具调用 vs GUI），面板也能实时显示。
+v4: seq 改为【全局唯一】（进程ID + 毫秒时间戳 + 自增序号）——
+    修复跨进程/重启后 seq 从 1 重新计数，导致面板把新事件
+    误判为"已存在"而去重丢弃（实时显示失效的根因）。
 """
 from __future__ import annotations
 
 import difflib
 import json
+import os
 import queue
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
 _change_queue: "queue.Queue[dict]" = queue.Queue(maxsize=1000)
 _seq_lock = threading.Lock()
 _seq = 0
+# 本进程唯一前缀：进程ID + 启动时刻（毫秒）→ 跨进程/重启绝不重复
+_PID = os.getpid()
+_START_MS = int(time.time() * 1000)
 
 _history_lock = threading.Lock()
 _HISTORY_MAX = 300            # 历史文件保留条数
@@ -33,11 +41,17 @@ _HISTORY_MAX_BYTES = 5_000_000  # 5MB 上限
 _HISTORY_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "code_changes.jsonl"
 
 
-def _next_seq() -> int:
+def _next_seq() -> str:
+    """生成全局唯一 seq（字符串）。
+
+    v4: 旧版为进程内自增 int，多个进程/多次重启都会从 1 开始，
+    导致面板按 seq 去重时把新事件误判为已存在而丢弃（实时失效）。
+    新版："{pid}-{启动毫秒}-{自增}" 保证任何进程/重启后都唯一。
+    """
     global _seq
     with _seq_lock:
         _seq += 1
-        return _seq
+        return f"{_PID}-{_START_MS}-{_seq}"
 
 
 def build_diff(old_text, new_text, path, context: int = 2):

@@ -236,8 +236,12 @@ class CodeChangePanel(QWidget):
             key = rec.get("seq") or (
                 rec.get("ts_full", ""), rec.get("action", ""), rec.get("path", ""))
             merged[key] = rec
-        items = sorted(merged.values(),
-                       key=lambda r: r.get("seq") or 0, reverse=True)
+        # ④ 排序：v4 后 seq 为字符串（pid-时间戳-序号），旧记录为 int，
+        #    直接对 seq 排序会 int/str 崩溃 → 统一用 ts_full 字符串排序
+        items = sorted(
+            merged.values(),
+            key=lambda r: (r.get("ts_full") or "", str(r.get("seq") or "")),
+            reverse=True)
         for rec in items:
             self._records.append(rec)
             item = QListWidgetItem(

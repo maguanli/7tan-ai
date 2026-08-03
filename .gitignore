@@ -32,6 +32,7 @@ data/sandbox/
 # 运行时数据与调试临时文件
 data/tmp/
 data/code_changes.jsonl
+data/.instance.lock
 
 # 备份文件
 *.bak

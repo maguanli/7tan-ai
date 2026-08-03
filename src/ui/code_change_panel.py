@@ -119,6 +119,24 @@ def _heat_bar(count: int) -> str:
     return "▁"
 
 
+def _short_path(path: str) -> str:
+    """隐藏项目根目录前缀，只显示相对路径（D:/7tan/7tanAI/src/ui/x.py → src/ui/x.py）
+
+    记录里可能是绝对路径（Windows 反斜杠）或相对路径；统一规范化后
+    若以项目根开头则去掉前缀。非项目内路径原样返回。
+    """
+    if not path:
+        return ""
+    try:
+        root = str(Path(__file__).resolve().parent.parent.parent).replace("/", "\\")
+        p = str(path).replace("/", "\\")
+        if p.lower().startswith(root.lower()):
+            return p[len(root):].lstrip("\\/")
+    except Exception:
+        pass
+    return str(path)
+
+
 def _diff_to_html(diff_text: str) -> str:
     """diff 文本 → 行级高亮 HTML（超过 500 行截断，防 UI 卡死）"""
     if not diff_text:
@@ -435,7 +453,7 @@ class CodeChangePanel(QWidget):
         if self._records:
             last = self._records[0]
             self._status.setText(
-                f"最新: {last.get('ts_full', '')}  {last.get('action', '')}  {last.get('path', '')}"
+                f"最新: {last.get('ts_full', '')}  {last.get('action', '')}  {_short_path(last.get('path', ''))}"
                 + (f"  |  {last.get('summary', '')}" if last.get("summary") else ""))
         else:
             self._status.setText("等待 AI 修改代码…（AI 修改文件时，这里会实时显示每次修改的 diff）")
@@ -502,7 +520,7 @@ class CodeChangePanel(QWidget):
         if added:
             last = self._records[0]
             self._status.setText(
-                f"最新: {last['ts_full']}  {last['action']}  {last['path']}"
+                f"最新: {last['ts_full']}  {last['action']}  {_short_path(last['path'])}"
                 + (f"  |  {last['summary']}" if last.get("summary") else ""))
             # 渲染防抖：300ms 内连续到达的事件只渲染最后一次
             self._render_timer.start()
@@ -542,7 +560,7 @@ class CodeChangePanel(QWidget):
             stats = f"  (+{adds} -{dels})" if (adds or dels) else ""
             item = QListWidgetItem(
                 f"[{r.get('ts', '')}] {_action_icon(r.get('action', ''))} "
-                f"{_action_label(r.get('action', ''))}  {r.get('path', '')}"
+                f"{_action_label(r.get('action', ''))}  {_short_path(r.get('path', ''))}"
                 f"{stats} {badge}")
             item.setToolTip(
                 f"{r.get('ts_full', '')}\n"
@@ -616,7 +634,7 @@ class CodeChangePanel(QWidget):
             f"<b style='color:#00d4ff;'>{_action_label(rec['action']).upper()}</b> "
             f"<span style='color:#94a3b8;'>{rec['ts_full']}</span>"
             f"<span style='color:#10b981;'>  +{adds} -{dels}</span><br>"
-            f"<span style='color:#fbbf24;'>{_html.escape(rec['path'])}</span>"
+            f"<span style='color:#fbbf24;'>{_html.escape(_short_path(rec['path']))}</span>"
         )
         if rec.get("summary"):
             head += f"<br><span style='color:#10b981;'>{_html.escape(rec['summary'])}</span>"

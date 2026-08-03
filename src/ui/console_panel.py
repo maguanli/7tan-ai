@@ -249,12 +249,15 @@ def _maybe_speak_agent_line(line: str):
         return
     # 跳过截断的中间迭代输出（agent_loop 的 content[:100]...）
     if content.endswith("..."):
+        logger.debug("[TTS-Console] 检测到 Agent 行但为截断输出，跳过（{}字）", len(content))
         return
     now = _time.time()
     with _agent_speak_lock:
         if now - _last_agent_speak_ts < 3.0:
+            logger.debug("[TTS-Console] 防抖拦截（{}s内已触发过）", round(now - _last_agent_speak_ts, 1))
             return
         _last_agent_speak_ts = now
+    logger.info("[TTS-Console] 检测到 Agent 内容，触发朗读（{}字）", len(content))
     _speak_console_async(content)
 
 

@@ -1,6 +1,8 @@
 """日志配置"""
 import sys
 import re
+import logging
+from datetime import datetime
 from pathlib import Path
 
 from loguru import logger
@@ -24,6 +26,35 @@ def _console_filter(record):
     return True
 
 
+_std_handler_installed = False
+
+
+def _install_std_file_handler(log_path: Path) -> None:
+    """为标准 logging 添加文件 handler（agent_loop 等模块的可追溯性）。
+
+    背景：agent_loop / speak_bridge 等用标准 logging 打印关键日志
+    （💬 Agent、调用工具、迭代等），此前只有控制台可见、不进文件日志，
+    导致问题排查完全黑盒。此处将标准 logging 同步写入文件。
+    """
+    global _std_handler_installed
+    if _std_handler_installed:
+        return
+    _std_handler_installed = True
+    try:
+        handler = logging.FileHandler(
+            log_path / f"std_python_{datetime.now():%Y-%m-%d}.log",
+            encoding="utf-8",
+        )
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d | %(message)s"
+        ))
+        root = logging.getLogger()
+        root.addHandler(handler)
+        logger.info(f"标准 logging 文件 handler 已安装: {log_path / ('std_python_' + datetime.now().strftime('%Y-%m-%d') + '.log')}")
+    except Exception as e:
+        logger.warning(f"标准 logging 文件 handler 安装失败: {e}")
+
+
 def setup_logging(level: str = "INFO", retention: str = "30 days",
                   rotation: str = "100 MB", log_dir: str = "./logs"):
     """初始化日志系统"""
@@ -31,6 +62,11 @@ def setup_logging(level: str = "INFO", retention: str = "30 days",
     log_path.mkdir(parents=True, exist_ok=True)
 
     logger.remove()
+
+    # 标准 logging → 文件（补齐 agent_loop 等标准 logging 模块的可追溯性）
+    # agent_loop 用 logging.getLogger 打印 💬 Agent/调用工具 等关键日志，
+    # 之前只进控制台不进文件 → 出问题完全无法排查（黑盒）
+    _install_std_file_handler(log_path)
 
     # 控制台输出（彩色）— 带过滤器，屏蔽启动噪音
     if sys.stdout is not None:

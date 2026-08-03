@@ -2304,6 +2304,12 @@ class ChatPage(QWidget):
             sentence = self._tts_stream_queue.get()
             if sentence is None:  # 停止信号
                 logger.info("[TTS Stream] Worker stopped")
+                # 同步停止播放队列，防止残留声音继续播
+                try:
+                    from data.plugins.tts_piper.tools import tts_stop
+                    tts_stop()
+                except Exception:
+                    pass
                 break
             try:
                 logger.debug(f"[TTS Stream] Synthesizing: {sentence[:50]}...")

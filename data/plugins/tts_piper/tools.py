@@ -7,6 +7,8 @@
 import os
 import time
 import wave
+import queue
+import uuid
 import threading
 import re
 import subprocess
@@ -46,6 +48,64 @@ MALE_VOLUME = "+80%"  # 男声默认偏小，加 80% 对齐女声音量
 
 _voice = None
 _voice_lock = threading.Lock()
+
+# === 全局播放队列（单线程串行播放，杜绝互相打断/线程堆积） ===
+_play_queue = queue.Queue()
+_player_started = False
+_player_lock = threading.Lock()
+
+def _player_worker():
+    """播放线程：串行播放队列中的 WAV，播完再取下一条（不再互相打断）"""
+    while True:
+        wav_path = _play_queue.get()
+        if wav_path is None:  # 停止信号
+            break
+        try:
+            import winsound
+            # 同步播放：阻塞直到播完（SND_FILENAME 默认同步）
+            winsound.PlaySound(wav_path, winsound.SND_FILENAME)
+        except Exception as e:
+            logger.warning(f"[TTS] 播放失败（音频设备不可用？）: {wav_path}: {e}")
+        finally:
+            # 播完清理临时文件，防止 OUTPUT_DIR 膨胀
+            try:
+                if os.path.exists(wav_path):
+                    os.remove(wav_path)
+            except OSError:
+                pass
+
+def _ensure_player():
+    """确保播放线程已启动（单例）"""
+    global _player_started
+    if not _player_started:
+        with _player_lock:
+            if not _player_started:
+                threading.Thread(
+                    target=_player_worker, daemon=True, name="tts-player"
+                ).start()
+                _player_started = True
+
+def _enqueue_play(wav_path: str) -> None:
+    """WAV 入队播放（异步返回，不阻塞调用方，不打断正在播放的声音）"""
+    _ensure_player()
+    _play_queue.put(wav_path)
+
+def tts_stop() -> dict:
+    """停止播放：清空队列并停止当前正在播放的声音"""
+    try:
+        import winsound
+        winsound.PlaySound(None, winsound.SND_PURGE)
+    except Exception:
+        pass
+    try:
+        while not _play_queue.empty():
+            try:
+                _play_queue.get_nowait()
+            except queue.Empty:
+                break
+    except Exception:
+        pass
+    return {"status": "ok", "message": "播放已停止"}
 
 # === 性别切换 ===
 _voice_gender: str = "female"  # "female" | "male"
@@ -93,9 +153,8 @@ def _get_voice():
 
 
 def _play_wav(wav_path: str) -> None:
-    """播放 WAV 文件（异步）"""
-    import winsound
-    winsound.PlaySound(wav_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+    """播放 WAV 文件（入队串行播放，不打断其他声音）"""
+    _enqueue_play(wav_path)
 
 
 def _strip_code_blocks(text: str) -> str:
@@ -201,8 +260,9 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
             logger.info("[TTS] Edge TTS 熔断冷却时间到，尝试恢复")
 
     ts = int(time.time() * 1000)
-    mp3_path = str(OUTPUT_DIR / f"tts_{ts}.mp3")
-    wav_path = str(OUTPUT_DIR / f"tts_{ts}.wav")
+    uid = uuid.uuid4().hex[:8]
+    mp3_path = str(OUTPUT_DIR / f"tts_{ts}_{uid}.mp3")
+    wav_path = str(OUTPUT_DIR / f"tts_{ts}_{uid}.wav")
 
     last_error = ""
     for attempt in range(1, EDGE_MAX_RETRIES + 1):
@@ -303,9 +363,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
 
             size_kb = round(os.path.getsize(wav_path) / 1024, 1)
             if play:
-                threading.Thread(
-                    target=_play_wav, args=(wav_path,), daemon=True
-                ).start()
+                _play_wav(wav_path)
 
             if attempt > 1:
                 logger.info(f"[TTS] Edge TTS 第{attempt}次重试成功")
@@ -360,7 +418,8 @@ def _speak_piper(text: str, play: bool) -> dict:
     """Piper 女声合成 → WAV → 播放"""
     voice = _get_voice()
     ts = int(time.time() * 1000)
-    wav_path = str(OUTPUT_DIR / f"tts_{ts}.wav")
+    uid = uuid.uuid4().hex[:8]
+    wav_path = str(OUTPUT_DIR / f"tts_{ts}_{uid}.wav")
 
     # 使用 synthesize_wav 直接写入 WAV（新版 Piper API）
     with wave.open(wav_path, "wb") as wf:
@@ -368,9 +427,7 @@ def _speak_piper(text: str, play: bool) -> dict:
 
     size_kb = round(os.path.getsize(wav_path) / 1024, 1)
     if play:
-        threading.Thread(
-            target=_play_wav, args=(wav_path,), daemon=True
-        ).start()
+        _play_wav(wav_path)
 
     return {
         "status": "ok",

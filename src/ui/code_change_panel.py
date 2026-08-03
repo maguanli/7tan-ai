@@ -273,7 +273,19 @@ class CodeChangePanel(QWidget):
         if rec.get("summary"):
             head += f"<br><span style='color:#10b981;'>{_html.escape(rec['summary'])}</span>"
         head += "<hr>"
-        self._diff_view.setHtml(head + _diff_to_html(rec["diff"]))
+        diff_text = rec.get("diff") or ""
+        if not diff_text:
+            # 旧版记录未保存内容时的友好提示
+            if rec.get("action") == "create":
+                hint = "（新建文件 — 该记录生成时未保存文件内容）"
+            elif rec.get("action") == "delete":
+                hint = "（删除文件 — 该记录未保存被删内容）"
+            else:
+                hint = "（无差异内容）"
+            body = f"<div style='color:#94a3b8;'>{hint}</div>"
+        else:
+            body = _diff_to_html(diff_text)
+        self._diff_view.setHtml(head + body)
 
     # ── 操作 ──
     def _clear(self):

@@ -41,15 +41,23 @@ def _next_seq() -> int:
 def build_diff(old_text, new_text, path, context: int = 2):
     """生成 unified diff 文本。
 
-    - old_text 为 None → 新建文件，返回 None
-    - 无实际差异 → 返回 None
+    - old_text 为 None（新建文件）→ 全部行显示为新增 (+)
+    - new_text 为 None（删除文件）→ 全部行显示为删除 (-)
+    - 两文本都为空/无差异 → 返回 None
     """
-    if old_text is None:
+    if old_text is None and new_text is None:
         return None
-    old_lines = old_text.splitlines(keepends=True)
-    new_lines = new_text.splitlines(keepends=True)
+    # 新建空文件：返回最小头部，让面板知道这是新建（避免显示“无差异”）
+    if old_text is None and not (new_text or "").strip():
+        return (f"--- a/{Path(path).as_posix()}\n"
+                f"+++ b/{Path(path).as_posix()}\n"
+                "@@ -0,0 +0,0 @@\n（空文件）")
+    # 标准组合：splitlines() 不带 keepends + lineterm="" + join("\n")
+    # （避免 header 行 ---/+++/@@ 粘连、内容行错位）
+    old_lines = [] if old_text is None else old_text.splitlines()
+    new_lines = [] if new_text is None else new_text.splitlines()
     try:
-        text = "".join(difflib.unified_diff(
+        text = "\n".join(difflib.unified_diff(
             old_lines, new_lines,
             fromfile=f"a/{Path(path).as_posix()}",
             tofile=f"b/{Path(path).as_posix()}",

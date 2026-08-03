@@ -201,8 +201,15 @@ def delete_file(path: str) -> str:
             publish_file_change("delete", str(p), summary="删除目录")
             return f"🗑️ 已删除目录: {path}"
         else:
+            # 删除前尝试读取文本内容，让实时面板能显示被删内容（仅限小文本文件）
+            old_text = None
+            try:
+                if p.stat().st_size <= 262144:  # 256KB 以内才读，防大文件卡顿
+                    old_text = p.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                old_text = None
             p.unlink()
-            publish_file_change("delete", str(p), summary="删除文件")
+            publish_file_change("delete", str(p), old_text=old_text, summary="删除文件")
             return f"🗑️ 已删除: {path}"
     except Exception as e:
         return f"❌ 删除失败: {e}"

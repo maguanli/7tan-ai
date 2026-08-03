@@ -80,6 +80,11 @@ def manage_env(project_root: str = ".", action: str = "list",
 
         with open(env_path, "w") as f:
             f.writelines(new_lines)
+        try:
+            from src.utils.code_change_bus import publish_file_change
+            publish_file_change("config", env_path, summary=f"{action_word} .env 变量 {key}=***")
+        except Exception:
+            pass
         return f"✅ 已{action_word}: {key}=***"
 
     elif action == "check":
@@ -239,4 +244,9 @@ def generate_env_template(project_root: str = ".") -> str:
     filepath = os.path.join(project_root, ".env.example")
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(template)
+    try:
+        from src.utils.code_change_bus import publish_file_change
+        publish_file_change("config", filepath, new_text=template, summary="生成 .env.example")
+    except Exception:
+        pass
     return f"✅ .env.example 已生成 ({len(env_vars)} 个变量)"

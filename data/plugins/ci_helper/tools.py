@@ -130,6 +130,12 @@ def generate_ci_config(ci_type: str, project_root: str = ".") -> str:
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(tmpl["content"])
+    try:
+        from src.utils.code_change_bus import publish_file_change
+        publish_file_change("create", filepath, new_text=tmpl["content"],
+                            summary=f"生成 CI 配置 {ci_type}")
+    except Exception:
+        pass
     return f"✅ CI 配置已生成: {filepath}"
 
 
@@ -258,6 +264,12 @@ def bump_version(project_root: str = ".", bump: str = "patch") -> str:
 
         with open(fpath, "w") as f:
             f.write(new_content)
+        try:
+            from src.utils.code_change_bus import publish_file_change
+            publish_file_change("write", fpath, new_text=new_content,
+                                summary=f"版本升级 {m.group(1)}.{m.group(2)}.{m.group(3)} → {new_version}")
+        except Exception:
+            pass
         updated.append(f"{fname}: {m.group(1)}.{m.group(2)}.{m.group(3)} → {new_version}")
 
     return "\n".join(updated) if updated else "未找到版本信息文件"

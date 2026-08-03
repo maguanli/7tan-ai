@@ -25,6 +25,11 @@ def _load() -> dict:
 def _save(data: dict):
     with open(SNIPPETS_FILE, "w", encoding="utf-8") as f:
         _json.dump(data, f, ensure_ascii=False, indent=2)
+    try:
+        from src.utils.code_change_bus import publish_file_change
+        publish_file_change("config", str(SNIPPETS_FILE), summary="保存代码片段库")
+    except Exception:
+        pass
 
 
 @register_tool(

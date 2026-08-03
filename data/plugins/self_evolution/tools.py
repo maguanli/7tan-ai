@@ -123,6 +123,12 @@ def create_plugin(plugin_id: str, plugin_name: str, description: str, tools_code
             plugin_dir = base_root / "data" / "plugins" / plugin_id
             plugin_dir.mkdir(parents=True, exist_ok=True)
             (plugin_dir / "tools.py").write_text(tools_code, encoding="utf-8")
+            try:
+                from src.utils.code_change_bus import publish_file_change
+                publish_file_change("create", str(plugin_dir / "tools.py"),
+                                    new_text=tools_code, summary=f"创建插件 {plugin_id} tools.py")
+            except Exception:
+                pass
 
             # manifest
             manifest_path = base_root / "data" / "plugins" / "manifest.json"

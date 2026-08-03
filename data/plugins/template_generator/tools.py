@@ -117,6 +117,12 @@ def create_project(template: str, name: str, path: str = ".") -> str:
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         with open(full_path, "w", encoding="utf-8") as f:
             f.write(formatted_content)
+        try:
+            from src.utils.code_change_bus import publish_file_change
+            publish_file_change("create", full_path, new_text=formatted_content,
+                                summary=f"项目脚手架 {template}")
+        except Exception:
+            pass
         created.append(f"  ✅ {formatted_path}")
 
     return (f"🎉 项目 '{name}' 已创建 (模板: {template})\n\n" + "\n".join(created))
@@ -150,4 +156,9 @@ def generate_gitignore(project_type: str, path: str = ".") -> str:
         return f"⚠️ .gitignore 已存在，不会覆盖"
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(content)
+    try:
+        from src.utils.code_change_bus import publish_file_change
+        publish_file_change("create", filepath, new_text=content, summary="生成 .gitignore")
+    except Exception:
+        pass
     return f"✅ .gitignore 已生成 ({project_type})"

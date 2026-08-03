@@ -17,6 +17,7 @@ from __future__ import annotations
 import html as _html
 import json
 from datetime import datetime
+import time
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
@@ -174,6 +175,14 @@ class CodeChangePanel(QWidget):
         # 慢速定时器：jsonl 文件增量读取（600ms，跨进程兜底；单次限 512KB，UI 线程每轮有上限）
         self._file_timer = QTimer(self)
         self._file_timer.timeout.connect(self._poll_file_tail)
+        # 守护定时器（隐藏期也运行，1.5s 一次极轻量）：只 stat jsonl 大小，
+        # 有新增才小量读取 → 触发自动打开。修复【面板隐藏时不轮询 → 自动打开
+        # 失效、与控制台文件操作不同步】问题。
+        self._guard_last_size = -1
+        self._last_user_hide = 0.0
+        self._guard_timer = QTimer(self)
+        self._guard_timer.timeout.connect(self._guard_poll)
+        self._guard_timer.start(1500)
         # 渲染防抖：高频新事件时 300ms 内只渲染最后一次
         self._render_timer = QTimer(self)
         self._render_timer.setSingleShot(True)
@@ -453,6 +462,25 @@ class CodeChangePanel(QWidget):
         except Exception:
             pass
 
+    def _guard_poll(self):
+        """隐藏期守护轮询：仅 stat 文件大小（微秒级），有新增才小量读 jsonl 尾部。
+
+        面板隐藏时主轮询停止，若不做守护则永远感知不到 AI 文件修改
+        （自动打开失效 + 与控制台操作不同步）。守护只在有变化时做一次
+        小量读取（≤64KB），负载可忽略。
+        """
+        if self.isVisible():
+            return
+        try:
+            from ..utils.code_change_bus import history_tail_size
+            size = history_tail_size()
+            if size == self._guard_last_size:
+                return
+            self._guard_last_size = size
+            self._poll_file_tail()
+        except Exception:
+            pass
+
     def _ingest_records(self, recs: list):
         """统一入库：seq 去重 + 插入全量（最新置顶）→ 重建过滤列表 + 刷新今日概览"""
         if not recs:
@@ -478,10 +506,11 @@ class CodeChangePanel(QWidget):
                 + (f"  |  {last['summary']}" if last.get("summary") else ""))
             # 渲染防抖：300ms 内连续到达的事件只渲染最后一次
             self._render_timer.start()
-        # AI 修改代码时自动打开面板
+        # AI 修改代码时自动打开面板（用户手动关闭后 20 秒内不自动弹出，防打扰）
         if self._auto_open and not self.isVisible():
-            self.show()
-            self.raise_()
+            if time.time() - self._last_user_hide > 20:
+                self.show()
+                self.raise_()
 
     # ── 过滤 / 概览（方案 A + D 核心）──
     def _apply_filter(self):
@@ -675,8 +704,9 @@ class CodeChangePanel(QWidget):
         self._geometry_timer.start()
 
     def showEvent(self, event):
-        """显示面板 → 恢复轮询，并立即补读一次（防隐藏期间错过事件）"""
+        """显示面板 → 停止守护、恢复主轮询，并立即补读一次（防隐藏期间错过事件）"""
         super().showEvent(event)
+        self._guard_timer.stop()
         self._timer.start(120)
         self._file_timer.start(600)
         try:
@@ -685,10 +715,12 @@ class CodeChangePanel(QWidget):
             pass
 
     def hideEvent(self, event):
-        """隐藏面板 → 保存位置 + 停止全部轮询（空闲零负载，防后台空转）"""
+        """隐藏面板 → 保存位置 + 停止主轮询，改跑轻量守护（隐藏期仍能感知修改并自动弹出）"""
         self._save_geometry()
+        self._last_user_hide = time.time()
         self._timer.stop()
         self._file_timer.stop()
+        self._guard_timer.start(1500)
         super().hideEvent(event)
 
     def closeEvent(self, event):

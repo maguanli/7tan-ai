@@ -166,6 +166,12 @@ fi
     try:
         pre_commit_hook.write_text(hook_content)
         pre_commit_hook.chmod(0o755)
+        try:
+            from src.utils.code_change_bus import publish_file_change
+            publish_file_change("create", str(pre_commit_hook), new_text=hook_content,
+                                summary="Git Hook 初始化")
+        except Exception:
+            pass
         return f"✅ Git Hook 已初始化: {pre_commit_hook}"
     except Exception as e:
         return f"❌ 初始化失败: {e}"

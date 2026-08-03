@@ -10,6 +10,7 @@ from pathlib import Path
 from .registry import register_tool
 from ..utils.helpers import ensure_dir, human_readable_size
 from ..utils.code_change_bus import publish_file_change
+from loguru import logger
 
 
 @register_tool(
@@ -155,6 +156,7 @@ def write_file(path: str, content: str, encoding: str = "utf-8", mode: str = "te
                 path=str(p),
                 summary=f"二进制写入 {len(raw)} bytes",
             )
+            logger.info(f"✏️ 已写入(二进制): {path} ({len(raw)} bytes)")
             return f"✅ 已写入（二进制）: {path} ({len(raw)} bytes)"
         else:
             existed = p.exists()
@@ -172,6 +174,7 @@ def write_file(path: str, content: str, encoding: str = "utf-8", mode: str = "te
                 new_text=content,
                 summary="创建新文件" if not existed else f"重写 {len(content.splitlines())} 行",
             )
+            logger.info(f"✏️ 已写入: {path} ({len(content.splitlines())} 行)")
             return f"✅ 已写入: {path}"
     except Exception as e:
         return f"❌ 写入失败: {e}"
@@ -199,6 +202,7 @@ def delete_file(path: str) -> str:
         if p.is_dir():
             shutil.rmtree(p)
             publish_file_change("delete", str(p), summary="删除目录")
+            logger.info(f"🗑️ 已删除目录: {path}")
             return f"🗑️ 已删除目录: {path}"
         else:
             # 删除前尝试读取文本内容，让实时面板能显示被删内容（仅限小文本文件）
@@ -210,6 +214,7 @@ def delete_file(path: str) -> str:
                 old_text = None
             p.unlink()
             publish_file_change("delete", str(p), old_text=old_text, summary="删除文件")
+            logger.info(f"🗑️ 已删除文件: {path}")
             return f"🗑️ 已删除: {path}"
     except Exception as e:
         return f"❌ 删除失败: {e}"

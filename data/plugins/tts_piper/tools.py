@@ -67,9 +67,13 @@ def _set_tts_busy(v: bool) -> None:
 
 
 def tts_is_busy() -> bool:
-    """是否正在播放或队列中有待播音频（True=正在出声，其他通道应跳过）"""
+    """是否正在播放或队列中有待播音频（True=正在出声/排队中，其他通道应跳过）"""
     with _tts_busy_lock:
-        return _tts_busy
+        if _tts_busy:
+            return True
+    # 🆕 播放队列中还有待播音频 → 也视为忙碌：防控制台/聊天页重复排队出声
+    with _player_lock:
+        return _play_queue.qsize() > 0 or len(_play_pending) > 0
 
 
 def _player_worker():
@@ -253,7 +257,7 @@ def tts_get_gender() -> dict:
 # Edge TTS 核心 — Python API 优先 + CLI 回退
 # ============================================================
 
-def _run_edge_tts_api(text: str, voice: str, output_path: str, timeout: int = 3) -> None:
+def _run_edge_tts_api(text: str, voice: str, output_path: str, timeout: int = 2) -> None:
     """
     使用 edge_tts Python API 合成语音（无子进程，更可靠）。
 
@@ -681,4 +685,10 @@ def tts_is_spoken(text: str) -> bool:
     if not clean:
         return True  # 空文本视为已处理，避免无意义朗读
     with _dedup_lock:
-        return clean == _dedup_spoken and time.time() - _dedup_ts < DEDUP_WINDOW
+        now = time.time()
+        if clean == _dedup_spoken and now - _dedup_ts < DEDUP_WINDOW:
+            return True
+        # 🆕 合成中（pending 抢占）也视为已处理：防聊天页合成期间控制台重复朗读
+        if clean == _dedup_pending:
+            return True
+        return False

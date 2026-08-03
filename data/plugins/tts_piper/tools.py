@@ -263,7 +263,7 @@ def tts_get_gender() -> dict:
 # Edge TTS 核心 — Python API 优先 + CLI 回退
 # ============================================================
 
-def _run_edge_tts_api(text: str, voice: str, output_path: str, timeout: int = 2) -> None:
+def _run_edge_tts_api(text: str, voice: str, output_path: str, timeout: int = 6) -> None:
     """
     使用 edge_tts Python API 合成语音（无子进程，更可靠）。
 
@@ -349,7 +349,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                         "--write-media", mp3_path,
                     ]
                     result = subprocess.run(
-                        cmd, capture_output=True, text=True, timeout=2
+                        cmd, capture_output=True, text=True, timeout=6
                     )
                     if result.returncode != 0:
                         last_error = (

@@ -191,6 +191,8 @@ def _speak_console_async(text: str):
                 return
             # ⚡ 先原子抢占登记：与聊天页/全局桥并发时只允许一路朗读
             tts_mark_spoken(text)
+            # 🔊 控制台可见反馈：让用户看到语音被调动
+            logger.info("[TTS-Console] 🔊 开始朗读 Agent 回复（{}字）", len(text))
             r = tts_speak(text, play=True, strip_code=True)
             if r.get("status") == "ok" and not r.get("skipped"):
                 logger.info(
@@ -225,9 +227,12 @@ def init_console_tts():
         return
     _console_tts_registered = True
     try:
-        from src.agent.agent_loop import register_agent_speak_callback
+        from src.agent.agent_loop import register_agent_speak_callback, _agent_speak_callbacks
         register_agent_speak_callback(_console_tts_callback)
-        logger.info("[TTS-Console] 控制台朗读已注册（agent 最终回复回调）")
+        logger.info(
+            "[TTS-Console] 控制台朗读已注册（agent 最终回复回调，当前回调数={}）",
+            len(_agent_speak_callbacks),
+        )
     except Exception as e:
         logger.warning("[TTS-Console] 注册失败: {}: {}", type(e).__name__, e)
 

@@ -8276,7 +8276,14 @@ class MainWindow(QMainWindow):
             init_global_tts()
         except Exception as e:
             print(f"[TTS-Bridge] 初始化失败: {e}")
-            logging.getLogger(__name__).warning(f"[TTS-Bridge] 初始化失败: {e}")
+
+        # 🎤 控制台朗读显式注册（模块级注册时序不可靠，这里兜底确保注册 + 日志可查）
+        try:
+            from src.ui.console_panel import init_console_tts
+            init_console_tts()
+            print("[TTS-Console] 控制台朗读初始化完成（app 启动显式注册）")
+        except Exception as e:
+            print(f"[TTS-Console] 初始化失败: {e}")
 
 
         # 中心 widget

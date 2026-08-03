@@ -668,6 +668,12 @@ def run_agent_loop(
             else:
                 logger.info("no file modifications this iteration, skip review")
             
+            # 🖥️ 控制台显示完整最终回复（非截断）+ 触发日志行朗读兜底
+            try:
+                logger.info(f"💬 Agent: {final_result}")
+            except Exception:
+                pass
+
             # 🎤 Agent 语音回调（多播）：仅最终结果确定时触发一次（防每轮迭代重复朗读整段回复）
             if _agent_speak_callbacks and final_result and final_result != "任务完成":
                 for cb in list(_agent_speak_callbacks):

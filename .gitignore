@@ -31,6 +31,10 @@ data/sandbox/
 
 # 备份文件
 *.bak
+backups/
+*.pyd.broken*
+*.pyd.bad*
+*.moved_from_security
 
 # Python
 __pycache__/

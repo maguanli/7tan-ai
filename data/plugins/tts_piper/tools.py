@@ -15,11 +15,30 @@ import concurrent.futures
 from pathlib import Path
 from loguru import logger
 
-# === 女声配置 (Piper) ===
-VOICE_ONNX = Path(r"G:\piper\piper\voices\zh_CN-huayan-medium.onnx")
-VOICE_JSON = Path(r"G:\piper\piper\voices\zh_CN-huayan-medium.onnx.json")
-OUTPUT_DIR = Path(r"G:\piper\output")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+# === 女声配置 (Piper) — 多候选路径（E 盘本地优先 → G 盘回退，防盘符抽风） ===
+def _first_existing(*paths):
+    for p in paths:
+        try:
+            if Path(p).exists():
+                return Path(p)
+        except OSError:
+            continue
+    return Path(paths[0])
+
+VOICE_ONNX = _first_existing(
+    r"E:\7tan_voice\piper\voices\zh_CN-huayan-medium.onnx",
+    r"G:\piper\piper\voices\zh_CN-huayan-medium.onnx",
+)
+VOICE_JSON = _first_existing(
+    r"E:\7tan_voice\piper\voices\zh_CN-huayan-medium.onnx.json",
+    r"G:\piper\piper\voices\zh_CN-huayan-medium.onnx.json",
+)
+OUTPUT_DIR = Path(r"E:\7tan_voice\piper\output")
+try:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    OUTPUT_DIR = Path(r"G:\piper\output")
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # === 男声配置 (Edge TTS) ===
 MALE_VOICE = "zh-CN-YunxiNeural"  # 云希 — 年轻自然男声
@@ -235,8 +254,12 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
 
             # === MP3 → WAV（用于 winsound 播放） ===
             try:
+                _FFMPEG = _first_existing(
+                    r"E:\7tan_voice\ffmpeg\ffmpeg.exe",
+                    r"G:\ffmpeg\bin\ffmpeg.exe",
+                )
                 subprocess.run([
-                    r"G:\ffmpeg\bin\ffmpeg.exe", "-y", "-i", mp3_path,
+                    str(_FFMPEG), "-y", "-i", mp3_path,
                     "-af", "volume=2.0", "-acodec", "pcm_s16le", "-ar", "22050",
                     wav_path
                 ], capture_output=True, timeout=15, check=True)

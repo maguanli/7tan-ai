@@ -10,10 +10,25 @@ import threading
 import wave
 from pathlib import Path
 
-WHISPER_DIR = Path(r"G:\whisper_cpp")
-WHISPER_CLI = WHISPER_DIR / "Release" / "whisper-cli.exe"
-WHISPER_Model = WHISPER_DIR / "models" / "ggml-small.bin"
-TEMP_DIR = Path(r"G:\whisper_cpp\temp")
+def _first_existing(*paths):
+    for p in paths:
+        try:
+            if Path(p).exists():
+                return Path(p)
+        except OSError:
+            continue
+    return Path(paths[0])
+
+# 多候选路径（E 盘本地优先 → G 盘回退，防盘符抽风）
+WHISPER_CLI = _first_existing(
+    r"E:\7tan_voice\whisper\whisper-cli.exe",
+    r"G:\whisper_cpp\Release\whisper-cli.exe",
+)
+WHISPER_Model = _first_existing(
+    r"E:\7tan_voice\whisper\ggml-small.bin",
+    r"G:\whisper_cpp\models\ggml-small.bin",
+)
+TEMP_DIR = Path(os.environ.get("TEMP", r"C:\Windows\Temp")) / "7tan_stt"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 _recording = False
@@ -60,7 +75,7 @@ def _transcribe(wav_path: str) -> str:
              str(wav_path)],
             capture_output=True,
             timeout=120,
-            cwd=str(WHISPER_DIR),
+            cwd=str(WHISPER_CLI.parent),  # 用 exe 所在目录（E 盘时 dll 同目录）
         )
 
         if result.returncode != 0:

@@ -4602,6 +4602,8 @@ class SettingsPage(QWidget):
 
             "moonshot": "https://api.moonshot.cn/v1",
 
+            "mimo": "https://api.xiaomimimo.com/v1",
+
             "ollama": "http://localhost:11434/v1",
 
             "custom": "",

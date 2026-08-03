@@ -36,6 +36,7 @@ PROVIDER_BASE_SCORE = {
     "openai": 90,
     "siliconflow": 70,
     "doubao": 65,
+    "mimo": 88,
     "qwen": 60,
     "ollama": 40,
     "custom": 50,
@@ -52,6 +53,7 @@ MODEL_TIER_BONUS = {
     "claude-3-opus": 13,
     "qwen-max": 8,
     "doubao-pro-32k": 8,
+    "mimo-v2.5-pro": 15,
     "llama3": 5,
     "mistral": 5,
 }

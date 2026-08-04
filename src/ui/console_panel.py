@@ -176,19 +176,23 @@ _trunc_pending_timer = None     # 合并窗口定时器
 _trunc_lock = threading.Lock()
 
 # —— 忙碌暂存（最新一条），播放完成后自动补读（修复"忙碌即丢弃"导致的漏读） ——
-_pending_speak = None
+_pending_speak = None          # (text, trunc_prefix) 或 None
 _pending_speak_lock = threading.Lock()
 
+# —— 最后实际朗读的截断前缀（最终回复跳过此前缀，防"重读前面一小部分"） ——
+_last_trunc_read = None
+_last_trunc_read_lock = threading.Lock()
 
-def _set_pending_speak(text):
-    """暂存待补读内容（最新覆盖旧，只保留一条）"""
+
+def _set_pending_speak(text, trunc_prefix=None):
+    """暂存待补读内容（最新覆盖旧，只保留一条；trunc_prefix 为截断前缀）"""
     global _pending_speak
     with _pending_speak_lock:
-        _pending_speak = text
+        _pending_speak = (text, trunc_prefix)
 
 
 def _take_pending_speak():
-    """取走待补读内容（取走后清空）"""
+    """取走待补读内容（取走后清空，返回 (text, trunc_prefix) 或 None）"""
     global _pending_speak
     with _pending_speak_lock:
         t = _pending_speak
@@ -203,19 +207,24 @@ def _clear_pending_speak():
         _pending_speak = None
 
 
-def _speak_console_async(text: str):
+def _speak_console_async(text: str, trunc_prefix: str = None):
     """后台朗读控制台 Agent 内容（带防重复 + 播放中检测 + 全链路日志）。
 
     防重复策略（与聊天页/全局桥协调，原子抢占保证只出声一次）：
       1. tts_is_spoken(text) — 已有通道登记（含本通道抢占/聊天页已读）→ 跳过
-      2. tts_is_busy()       — 正在播放 → 跳过（不叠加声音）
-      3. tts_mark_spoken(text) 先原子抢占登记 → tts_speak 合成入队
-      4. 失败 → tts_clear_spoken 回滚，允许其他通道重试（不锁死）
+      2. tts_is_busy()       — 正在播放 → 暂存待补读（不漏读，播完自动补读）
+      3. tts_speak_dedup()   — 全局去重合成播放（5 分钟同一全文只读一次）
+      4. 实际朗读成功且 trunc_prefix 非空 → 记录截断前缀（供最终回复跳过，防重读前面部分）
+
+    Args:
+        text: 要朗读的文本
+        trunc_prefix: 截断行前缀（不含尾部省略号）；朗读成功时记录，最终回复据此跳过已读前缀
     """
     if not text or not text.strip():
         return
 
     def _do():
+        global _last_trunc_read
         try:
             from src.agent.speak_bridge import _voice_mode_enabled
             if not _voice_mode_enabled():
@@ -228,7 +237,7 @@ def _speak_console_async(text: str):
                 return
             if tts_is_busy():
                 # 🔧 修复漏读：忙碌不再丢弃，暂存最新一条，播放完成后自动补读
-                _set_pending_speak(text)
+                _set_pending_speak(text, trunc_prefix)
                 logger.info("[TTS-Console] 正在播放中，暂存待补读（最新一条）")
                 return
             # 🔊 控制台可见反馈（是否真正出声由全局去重裁决：与聊天页共用同一套去重，只读一遍）
@@ -238,12 +247,16 @@ def _speak_console_async(text: str):
                 msg = r.get("message", "?")
                 # 合成互斥/合成中 → 暂存待补读（不漏）；纯去重（已朗读）→ 丢弃
                 if "互斥" in msg or "合成" in msg:
-                    _set_pending_speak(text)
+                    _set_pending_speak(text, trunc_prefix)
                     logger.info("[TTS-Console] 合成互斥，暂存待补读（{}）", msg)
                 else:
                     logger.info("[TTS-Console] 朗读被全局去重拦截（{}），跳过（防重复）", msg)
                 return
             if r.get("status") == "ok":
+                # ✅ 实际朗读成功 → 记录截断前缀（供最终回复跳过，防重读前面部分）
+                if trunc_prefix:
+                    with _last_trunc_read_lock:
+                        _last_trunc_read = trunc_prefix
                 logger.info(
                     "[TTS-Console] 控制台朗读完成: engine={} size={}KB",
                     r.get("engine", "?"), r.get("size_kb", "?"),
@@ -256,10 +269,44 @@ def _speak_console_async(text: str):
     threading.Thread(target=_do, daemon=True).start()
 
 
+def _speak_final_reply(content: str) -> None:
+    """朗读最终完整回复：跳过已朗读的截断前缀（防"重读前面一小部分"）。
+
+    1. 若内容以最后实际朗读的截断前缀开头 → 只读新增部分（前缀已读过），
+       并先登记全文已读，防其他通道（聊天页/全局桥）再次全文朗读 → 重读前缀；
+       若内容与截断前缀完全相同 → 全部已读过，跳过朗读。
+    2. 无前缀可跳 → 正常全文朗读（由 tts_speak_dedup 内部登记去重）。
+    """
+    global _last_trunc_read
+    if not content or not content.strip():
+        return
+    read_text = content
+    with _last_trunc_read_lock:
+        prefix = _last_trunc_read
+        _last_trunc_read = None
+    if prefix:
+        if content == prefix:
+            logger.info("[TTS-Console] 最终回复与已读截断内容相同，跳过朗读（防重读）")
+            return
+        if content.startswith(prefix):
+            read_text = content[len(prefix):]
+            logger.info(
+                "[TTS-Console] 最终回复跳过已读前缀（{}字），只读新增部分（{}字）",
+                len(prefix), len(read_text),
+            )
+            # 登记全文已读：防聊天页/全局桥等其他通道再次全文朗读 → 重读前缀
+            try:
+                from data.plugins.tts_piper.tools import tts_mark_spoken
+                tts_mark_spoken(content)
+            except Exception as e:
+                logger.warning("[TTS-Console] 全文去重登记失败: {}", e)
+    _speak_console_async(read_text)
+
+
 def _console_tts_callback(text: str):
-    """agent_loop 最终回复回调：控制台朗读（聊天页未读/未播才读）"""
+    """agent_loop 最终回复回调：控制台朗读（跳过已读截断前缀，防重读前面部分）"""
     if text and text.strip():
-        _speak_console_async(text)
+        _speak_final_reply(text)
 
 
 def _on_console_play_finished():
@@ -269,10 +316,11 @@ def _on_console_play_finished():
         if tts_is_busy():
             # 队列已有新内容在播 → 保持暂存，等下一次完成回调再补读
             return
-        text = _take_pending_speak()
-        if text:
+        item = _take_pending_speak()
+        if item:
+            text, trunc_prefix = item
             logger.info("[TTS-Console] ▶ 播放完成，补读暂存内容（{}字）", len(text))
-            _speak_console_async(text)
+            _speak_console_async(text, trunc_prefix)
     except Exception as e:
         logger.warning("[TTS-Console] 补读回调异常: {}: {}", type(e).__name__, e)
 
@@ -305,8 +353,12 @@ def _flush_trunc_pending():
         _trunc_pending_text = None
         _trunc_pending_timer = None
     if text:
-        logger.info("[TTS-Console] 🔊 朗读 Agent 实时内容（{}字）", len(text))
-        _speak_console_async(text)
+        # 🔧 去掉尾部省略号再朗读（避免读成"点点点"），并记录截断前缀供最终回复跳过
+        prefix = text[:-3].rstrip() if text.endswith("...") else None
+        clean_text = prefix if prefix else text
+        if clean_text:
+            logger.info("[TTS-Console] 🔊 朗读 Agent 实时内容（{}字）", len(clean_text))
+            _speak_console_async(clean_text, trunc_prefix=prefix)
 
 
 def _cancel_trunc_pending():
@@ -350,10 +402,10 @@ def _maybe_speak_agent_line(line: str):
                 _trunc_pending_timer.start()
         logger.debug("[TTS-Console] Agent 实时内容已收录（{}字，稍后朗读）", len(content))
         return
-    # 最终完整回复：优先朗读（取消待读截断行）
+    # 最终完整回复：优先朗读（取消待读截断行 + 跳过已读截断前缀防重读）
     _cancel_trunc_pending()
     logger.info("[TTS-Console] 检测到 Agent 完整回复，触发朗读（{}字）", len(content))
-    _speak_console_async(content)
+    _speak_final_reply(content)
 
 
 # ===== 1. Standard logging bridge =====

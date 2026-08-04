@@ -154,7 +154,7 @@ class ChatPage(QWidget):
     error_signal = pyqtSignal(str)  # error message
     messages_parsed_signal = pyqtSignal(str, list, int, int)  # session_id, parsed_msgs, start_idx, total
     tts_notice_signal = pyqtSignal(str)  # 语音引擎提示（线程安全）
-    tts_speak_signal = pyqtSignal(str)  # 朗读开始提示（线程安全，显示"正在语音说话"）
+    tts_speak_signal = pyqtSignal(str)  # 朗读开始提示（线程安全，显示"正在说"）
 
 
 
@@ -177,7 +177,7 @@ class ChatPage(QWidget):
         self.tts_speak_signal.connect(self._on_tts_speak)
         self._tts_toast = None  # 朗读提示 Toast（懒创建，不写入聊天记录）
 
-        # 🎤 注册 TTS 朗读开始回调 → 聊天区显示「正在语音说话」（跨线程经信号）
+        # 🎤 注册 TTS 朗读开始回调 → Toast 显示「正在说」（跨线程经信号）
         try:
             from data.plugins.tts_piper.tools import register_tts_start_callback
             register_tts_start_callback(self._on_tts_start)
@@ -246,6 +246,7 @@ class ChatPage(QWidget):
         self._tts_stream_queue: queue.Queue = None  # 句子队列
         self._tts_stream_noticed = False  # 流式朗读提示已显示标记（防逐句刷屏）
         self._tts_stream_ok_count = 0  # 流式朗读【实际成功】句数（决定是否全文兜底，防"入队≠出声"误判）
+        self._tts_stream_fail_texts = []  # 流式朗读失败句子文本（停止时补读，防朗读不完整）
         self._tts_stream_worker_thread = None       # 后台播放线程
         self._tts_stream_text_pos = 0               # 已发送到 TTS 的文本位置
         self._last_tts_sent = ""                   # 最后推送到 TTS 的句子（收尾防重）
@@ -1815,6 +1816,7 @@ class ChatPage(QWidget):
         self._last_spoken_full = ""
         self._last_spoken_ts = 0.0
         self._tts_stream_ok_count = 0
+        self._tts_stream_fail_texts = []
         if getattr(self, "_tts_stream_queue", None) is not None:
             try:
                 self._tts_stream_queue.put(None)
@@ -1969,6 +1971,7 @@ class ChatPage(QWidget):
         self._last_spoken_full = ""
         self._last_spoken_ts = 0.0
         self._tts_stream_ok_count = 0
+        self._tts_stream_fail_texts = []  # 流式失败句子收集（停止时补读，保证朗读完整）
 
         # 🎤 流式 TTS 初始化：先停旧 worker，再新建
         if self._voice_mode and not self._voice_recording:
@@ -2258,15 +2261,19 @@ class ChatPage(QWidget):
                 remaining = self._streaming_text[self._tts_stream_text_pos:].strip()
                 if remaining and len(remaining) >= 2:
                     # 防重：若与最后推送的句子相同（pos 边界异常），跳过，避免最后一句两次
-                    if remaining != self._last_tts_sent:
-                        self._tts_stream_queue.put(remaining)
-                    self._last_tts_sent = remaining
+                    for part in self._split_long_sentence(remaining):
+                        if part and part != self._last_tts_sent:
+                            self._tts_stream_queue.put(part)
+                        if part:
+                            self._last_tts_sent = part
                 self._tts_stream_queue.put(None)  # 停止信号 → worker 统计成功句数并决定兜底
                 self._tts_stream_queue = None
                 # 🎤 标记全文"已朗读"：流式逐句朗读已覆盖全文，防止控制台 Agent 朗读 / 全局语音桥重复
+                # （仅当流式无失败句子时标记；有失败时由 worker 补读失败内容，不标记防兜底被拦）
                 try:
                     from data.plugins.tts_piper.tools import tts_mark_spoken
-                    tts_mark_spoken(result)
+                    if not getattr(self, "_tts_stream_fail_texts", None):
+                        tts_mark_spoken(result)
                 except Exception:
                     pass
             else:
@@ -2347,6 +2354,26 @@ class ChatPage(QWidget):
 
     # ==================== 流式 TTS ====================
 
+    def _split_long_sentence(self, sent: str) -> list:
+        """超长句子按次要标点（逗号/分号/顿号/冒号）二次切分，
+        防单句过长导致 Edge TTS 合成超时丢句（朗读不完整）。"""
+        MAX_LEN = 120
+        if len(sent) <= MAX_LEN:
+            return [sent]
+        parts = re.split(r'([，；、：])', sent)
+        chunks, cur = [], ""
+        for p in parts:
+            if not p:
+                continue
+            if len(cur) + len(p) > MAX_LEN and cur:
+                chunks.append(cur)
+                cur = p
+            else:
+                cur += p
+        if cur:
+            chunks.append(cur)
+        return [c.strip() for c in chunks if c.strip()]
+
     def _push_new_sentences_to_tts(self):
         """从 _streaming_text 中检测新完成的句子，推入 TTS 播放队列"""
         new_text = self._streaming_text[self._tts_stream_text_pos:]
@@ -2357,8 +2384,10 @@ class ChatPage(QWidget):
         for m in re.finditer(r'[。！？]|\n\n', new_text):
             sent = new_text[last_end:m.end()].strip()
             if sent and len(sent) >= 2:  # 至少 2 个字符，过滤纯标点
-                self._tts_stream_queue.put(sent)
-                self._last_tts_sent = sent
+                for part in self._split_long_sentence(sent):
+                    if part:
+                        self._tts_stream_queue.put(part)
+                        self._last_tts_sent = part
             last_end = m.end()
         self._tts_stream_text_pos += last_end
 
@@ -2381,9 +2410,11 @@ class ChatPage(QWidget):
             if sentence is None:  # 停止信号 → 收尾判定
                 import time as _time
                 self._tts_stream_done_ts = _time.time()
-                logger.info(f"[TTS Stream] Worker stopped: 成功 {self._tts_stream_ok_count}/{total} 句")
-                if self._tts_stream_ok_count > 0:
-                    # 流式已实际出声 → 防全文重复（Agent 回调晚到也不会再读一遍）
+                fail_texts = list(getattr(self, "_tts_stream_fail_texts", None) or [])
+                self._tts_stream_fail_texts = []
+                logger.info(f"[TTS Stream] Worker stopped: 成功 {self._tts_stream_ok_count}/{total} 句，失败 {len(fail_texts)} 句")
+                if self._tts_stream_ok_count > 0 and not fail_texts:
+                    # 流式全部成功 → 防全文重复（Agent 回调晚到也不会再读一遍）
                     self._tts_streamed_this_reply = True
                     # ⚡ 全局登记全文"已朗读"：否则全局桥/控制台通道收到回调后会再读全文（2~3 遍）
                     try:
@@ -2393,6 +2424,25 @@ class ChatPage(QWidget):
                             tts_mark_spoken(full_text)
                     except Exception:
                         pass
+                elif fail_texts:
+                    # 🔧 部分句子失败（Edge 超时/网络等）→ 补读失败句子，保证对话内容朗读完整
+                    # 清除全文"已读"标记：防 _on_stream_finished 已 mark 导致其他通道兜底被拦截
+                    self._tts_streamed_this_reply = False
+                    try:
+                        from data.plugins.tts_piper.tools import tts_clear_spoken
+                        full_text = getattr(self, "_streaming_text", "") or ""
+                        if full_text.strip():
+                            tts_clear_spoken(full_text)
+                    except Exception:
+                        pass
+                    missed = "。".join(fail_texts)
+                    if missed.strip():
+                        logger.info(f"[TTS Stream] {len(fail_texts)} 句失败，补读失败内容（{len(missed)}字）")
+                        try:
+                            from data.plugins.tts_piper.tools import tts_speak_dedup
+                            tts_speak_dedup(missed)
+                        except Exception as e2:
+                            logger.warning(f"[TTS Stream] 失败内容补读异常: {e2}")
                 else:
                     # 流式一句都没成功（纯代码/无标点/引擎全部失败）→ 全文兜底，保证一定能听到
                     full = getattr(self, "_streaming_text", "") or ""
@@ -2409,18 +2459,23 @@ class ChatPage(QWidget):
                 logger.debug(f"[TTS Stream] Synthesizing: {sentence[:50]}...")
                 # play=True: 内部自动处理 MP3->WAV 转换（含 ffmpeg 缺失回退）
                 result = tts_speak(sentence, play=True, strip_code=True)
-                if result and result.get("status") == "ok":
+                if result and result.get("status") == "ok" and not result.get("skipped"):
                     self._tts_stream_ok_count += 1
                     logger.info(f"[TTS Stream] 句子播放成功 #{self._tts_stream_ok_count}")
+                elif result and result.get("skipped"):
+                    # 移除代码块后无可朗读文本（纯代码句）→ 不算失败，不补读
+                    logger.info("[TTS Stream] 句子无可朗读内容（代码块），跳过")
                 else:
                     msg = (result or {}).get("message", "未知原因")
                     logger.warning(f"[TTS Stream] 句子合成失败: {msg}")
+                    self._tts_stream_fail_texts.append(sentence)
                 if result and result.get("fallback"):
                     self.tts_notice_signal.emit(
                         f"{result.get('fallback_from', '语音引擎')}：{result.get('fallback_reason', '引擎暂不可用')}，已自动切换"
                     )
             except Exception as e:
                 logger.error(f"[TTS Stream] 句子播放失败: {e}")
+                self._tts_stream_fail_texts.append(sentence)
 
     def _on_tts_start(self, text: str):
         """TTS 开始朗读（后台线程调用）→ 转发信号到主线程显示提示"""
@@ -2438,7 +2493,7 @@ class ChatPage(QWidget):
         """朗读开始 → 顶部 Toast 悬浮提示（3秒自动消失，不写入聊天记录）"""
         try:
             shown = text if len(text) <= 120 else text[:120] + "…"
-            self._show_tts_toast(f"🔊 正在语音说话：{shown}")
+            self._show_tts_toast(f"🔊 正在说：{shown}")
         except Exception as e:
             logger.warning(f"[TTS] 朗读提示显示失败: {e}")
 
@@ -2546,6 +2601,7 @@ class ChatPage(QWidget):
             self._tts_stream_queue = None
             self._tts_streamed_this_reply = False
             self._tts_stream_done_ts = 0.0
+            self._tts_stream_fail_texts = []
 
         # 重置发送按钮
         self._is_processing = False

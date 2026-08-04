@@ -103,6 +103,35 @@ def tts_is_busy() -> bool:
         return _play_queue.qsize() > 0 or len(_play_pending) > 0
 
 
+def _play_sound_with_watchdog(winsound, wav_path: str, timeout: int = 180) -> None:
+    """带看门狗的同步播放：音频设备卡死时强制停止，防播放线程永久阻塞。
+
+    - 正常音频在 timeout 秒内必然播完（默认 3 分钟）
+    - 超时 → SND_PURGE 强制停止 + 告警（不影响后续播放）
+    """
+    stop_flag = threading.Event()
+
+    def _watchdog():
+        if stop_flag.wait(timeout=timeout):
+            return
+        logger.warning(
+            f"[TTS] 播放看门狗：播放超时 {timeout}s，强制停止 "
+            f"{os.path.basename(wav_path)}"
+        )
+        try:
+            winsound.PlaySound(None, winsound.SND_PURGE)
+        except Exception:
+            pass
+
+    threading.Thread(
+        target=_watchdog, daemon=True, name="tts-play-watchdog"
+    ).start()
+    try:
+        winsound.PlaySound(wav_path, winsound.SND_FILENAME)
+    finally:
+        stop_flag.set()
+
+
 def _player_worker():
     """播放线程：串行播放队列中的 WAV，播完再取下一条（不再互相打断）"""
     while True:
@@ -119,8 +148,8 @@ def _player_worker():
                 logger.info(f"[TTS] ▶ 播放: {os.path.basename(wav_path)} ({os.path.getsize(wav_path) // 1024}KB)")
                 _set_tts_busy(True)
                 import winsound
-                # 同步播放：阻塞直到播完（SND_FILENAME 默认同步）
-                winsound.PlaySound(wav_path, winsound.SND_FILENAME)
+                # 同步播放：阻塞直到播完（SND_FILENAME 默认同步），带看门狗防卡死
+                _play_sound_with_watchdog(winsound, wav_path)
                 logger.info("[TTS] ⏹ 播放完成")
                 _set_tts_busy(False)
         except Exception as e:
@@ -257,7 +286,7 @@ def tts_set_gender(gender: str) -> dict:
     Returns:
         {"status": "ok", "gender": "...", "voice": "..."}
     """
-    global _voice_gender, _dedup_spoken, _dedup_ts, _dedup_pending
+    global _voice_gender, _dedup_spoken, _dedup_ts, _dedup_pending, _synth_slot_ts
     gender = gender.lower().strip()
     if gender not in ("female", "male"):
         return {"status": "error", "message": f"无效性别: {gender}，可选 female / male"}
@@ -268,6 +297,7 @@ def tts_set_gender(gender: str) -> dict:
         _dedup_spoken = ""
         _dedup_ts = 0.0
         _dedup_pending = ""
+        _synth_slot_ts = 0.0
     logger.info("[TTS] 切换声音: %s，已清空去重状态", gender)
     if gender == "female":
         return {"status": "ok", "gender": "female", "voice": "huayan (花颜)", "engine": "Piper (本地)"}
@@ -499,16 +529,40 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
 # Piper TTS（女声，本地）
 # ============================================================
 
+PIPER_SYNTH_TIMEOUT = 30  # 秒：Piper 推理超时（onnxruntime 偶发卡死保护）
+
+
 def _speak_piper(text: str, play: bool) -> dict:
-    """Piper 女声合成 → WAV → 播放"""
+    """Piper 女声合成 → WAV → 播放（带推理超时保护，防卡死）"""
     voice = _get_voice()
     ts = int(time.time() * 1000)
     uid = uuid.uuid4().hex[:8]
     wav_path = str(OUTPUT_DIR / f"tts_{ts}_{uid}.wav")
 
-    # 使用 synthesize_wav 直接写入 WAV（新版 Piper API）
-    with wave.open(wav_path, "wb") as wf:
-        voice.synthesize_wav(text, wf)
+    # 合成结果容器（线程安全：单写单读）
+    synth_result = {}
+    synth_done = threading.Event()
+
+    def _synth():
+        try:
+            # 使用 synthesize_wav 直接写入 WAV（新版 Piper API）
+            with wave.open(wav_path, "wb") as wf:
+                voice.synthesize_wav(text, wf)
+            synth_result["ok"] = True
+        except Exception as e:
+            synth_result["err"] = e
+        finally:
+            synth_done.set()
+
+    # 🛡️ 推理放 daemon 线程 + 超时：onnxruntime 偶发卡死时 30 秒即放弃，
+    # 不再永久阻塞语音系统（daemon 线程卡死不阻碍进程退出）
+    threading.Thread(target=_synth, daemon=True, name="tts-piper-synth").start()
+    if not synth_done.wait(timeout=PIPER_SYNTH_TIMEOUT):
+        raise TimeoutError(
+            f"Piper 合成超时（{PIPER_SYNTH_TIMEOUT}秒），已放弃本次合成"
+        )
+    if "err" in synth_result:
+        raise synth_result["err"]
 
     size_kb = round(os.path.getsize(wav_path) / 1024, 1)
     if play:
@@ -671,8 +725,10 @@ def tts_status() -> dict:
 _dedup_spoken = ""
 _dedup_ts = 0.0
 _dedup_pending = ""  # 正在合成中的文本（抢占标记，防并发重复合成）
+_synth_slot_ts = 0.0  # 合成占位时间戳（看门狗用）
 _dedup_lock = threading.Lock()
 DEDUP_WINDOW = 300  # 秒（5 分钟）
+SYNTH_SLOT_TIMEOUT = 90  # 秒：合成占位超时强制释放（防合成卡死导致语音永久锁死）
 
 
 def _dedup_clean(text: str) -> str:
@@ -688,15 +744,24 @@ def _acquire_synth_slot(clean: str) -> bool:
     - 该文本已被朗读（5 分钟窗口）→ False
     - 成功抢占 → True（调用方负责在完成/异常后释放）
     """
-    global _dedup_spoken, _dedup_ts, _dedup_pending
+    global _dedup_spoken, _dedup_ts, _dedup_pending, _synth_slot_ts
     with _dedup_lock:
-        if clean == _dedup_spoken and time.time() - _dedup_ts < DEDUP_WINDOW:
+        now = time.time()
+        # 🛡️ 看门狗：合成占位超时强制释放（防合成卡死 → 语音永久锁死）
+        if _dedup_pending and now - _synth_slot_ts > SYNTH_SLOT_TIMEOUT:
+            logger.warning(
+                f"[TTS] 全局互斥看门狗：合成占位超时 {SYNTH_SLOT_TIMEOUT}s，"
+                "强制释放（防语音系统锁死）"
+            )
+            _dedup_pending = ""
+        if clean == _dedup_spoken and now - _dedup_ts < DEDUP_WINDOW:
             logger.info("[TTS] 该文本 5 分钟内已朗读，跳过（防重复）")
             return False
         if _dedup_pending:
             logger.info("[TTS] 全局互斥：已有文本正在合成中，跳过（防并行合成重复朗读）")
             return False
         _dedup_pending = clean
+        _synth_slot_ts = now
         return True
 
 
@@ -734,11 +799,13 @@ def tts_speak_dedup(text: str) -> dict:
         with _dedup_lock:
             if _dedup_pending == clean:
                 _dedup_pending = ""
+                _synth_slot_ts = 0.0
         logger.error("[TTS] 朗读异常（已释放去重占位）: %s: %s", type(e).__name__, e)
         return {"status": "error", "message": f"朗读异常: {type(e).__name__}: {e}"}
     with _dedup_lock:
         if _dedup_pending == clean:
             _dedup_pending = ""
+            _synth_slot_ts = 0.0
     if result.get("status") == "ok" and not result.get("skipped"):
         # ✅ 合成成功（音频已入播放队列）→ 转正式"已朗读"登记（5 分钟防重）
         with _dedup_lock:

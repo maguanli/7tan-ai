@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "1.0.5",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.5.zip",
+      "md5": "cacdc87f83cf2e7293fd50859977ea25",
+      "size": 354807002,
+      "notes": "1.0.5 更新：修复了一些BUG。",
+      "release_date": "2026-08-04"
+    },
+    {
       "version": "1.0.3",
       "channel": "stable",
       "platform": "windows",

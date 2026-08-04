@@ -33,20 +33,33 @@ def _first_existing(*paths):
             continue
     return Path(paths[0])
 
+_PKG_DIR = Path(__file__).resolve().parent
 VOICE_ONNX = _first_existing(
+    str(_PKG_DIR / "models" / "zh_CN-huayan-medium.onnx"),
     r"E:\7tan_voice\piper\voices\zh_CN-huayan-medium.onnx",
     r"G:\piper\piper\voices\zh_CN-huayan-medium.onnx",
 )
 VOICE_JSON = _first_existing(
+    str(_PKG_DIR / "models" / "zh_CN-huayan-medium.onnx.json"),
     r"E:\7tan_voice\piper\voices\zh_CN-huayan-medium.onnx.json",
     r"G:\piper\piper\voices\zh_CN-huayan-medium.onnx.json",
 )
-OUTPUT_DIR = Path(r"E:\7tan_voice\piper\output")
-try:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-except OSError:
-    OUTPUT_DIR = Path(r"G:\piper\output")
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _pick_output_dir():
+    """输出目录：E 盘优先 → G 盘回退 → 用户目录兜底（打包后无 E/G 盘也能用）"""
+    for cand in (Path(r"E:\7tan_voice\piper\output"), Path(r"G:\piper\output")):
+        try:
+            cand.mkdir(parents=True, exist_ok=True)
+            return cand
+        except OSError:
+            continue
+    fallback = Path.home() / "7tan_voice" / "piper" / "output"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
+OUTPUT_DIR = _pick_output_dir()
 
 # === 男声配置 (Edge TTS) ===
 MALE_VOICE = "zh-CN-YunxiNeural"  # 云希 — 年轻自然男声

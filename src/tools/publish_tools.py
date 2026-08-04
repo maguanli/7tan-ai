@@ -22,6 +22,10 @@ from .registry import register_tool
             "download_url": {"type": "string", "description": "下载链接（OSS 外链）"},
             "logo_path": {"type": "string", "description": "本地 LOGO 路径"},
             "screenshot_paths": {"type": "string", "description": "本地截图路径（JSON 数组）"},
+            "developer": {"type": "string", "description": "开发商名称（如 西安西品网络科技有限公司）"},
+            "beian": {"type": "string", "description": "备案号（如 陕ICP备16005864号-28A）"},
+            "version": {"type": "string", "description": "版本号（如 v1.0.3）"},
+            "system_require": {"type": "string", "description": "系统要求（如 Android 5.0+）", "default": "5.0"},
             "resource_type": {"type": "string", "description": "'game' 或 'software'", "default": "game"},
         },
         "required": ["title", "intro", "download_url"]
@@ -31,7 +35,8 @@ from .registry import register_tool
 )
 def api_publish_to_7tan(title: str, intro: str, download_url: str, category: str = "",
                         tags: str = "", logo_path: str = "", screenshot_paths: str = "",
-                        resource_type: str = "game") -> str:
+                        developer: str = "", beian: str = "", version: str = "",
+                        system_require: str = "5.0", resource_type: str = "game") -> str:
     """
     优先通过 API 发布，失败则回退到浏览器发布。
     """
@@ -46,7 +51,8 @@ def api_publish_to_7tan(title: str, intro: str, download_url: str, category: str
     if not token:
         steps.append("WARN: No valid API Token, falling back to browser publish...")
         return publish_to_7tan(title, intro, download_url, category, tags,
-                               logo_path, screenshot_paths, resource_type)
+                               logo_path, screenshot_paths, resource_type,
+                               developer, beian, version, system_require)
 
     steps.append("KEY: Token valid, using API publish")
 
@@ -84,7 +90,8 @@ def api_publish_to_7tan(title: str, intro: str, download_url: str, category: str
 
     try:
         browser_result = publish_to_7tan(title, intro, download_url, category, tags,
-                                         logo_path, screenshot_paths, resource_type)
+                                         logo_path, screenshot_paths, resource_type,
+                                         developer, beian, version, system_require)
         return "\n".join(steps) + "\n\n" + browser_result
     except Exception as e:
         return "\n".join(steps) + f"\n\nFAIL: Browser fallback also failed: {e}"
@@ -103,6 +110,10 @@ def api_publish_to_7tan(title: str, intro: str, download_url: str, category: str
             "download_url": {"type": "string", "description": "下载链接（OSS 外链）"},
             "logo_path": {"type": "string", "description": "本地 LOGO 路径"},
             "screenshot_paths": {"type": "string", "description": "本地截图路径（JSON 数组）"},
+            "developer": {"type": "string", "description": "开发商名称（如 西安西品网络科技有限公司）"},
+            "beian": {"type": "string", "description": "备案号（如 陕ICP备16005864号-28A）"},
+            "version": {"type": "string", "description": "版本号（如 v1.0.3）"},
+            "system_require": {"type": "string", "description": "系统要求（如 Android 5.0+）", "default": "5.0"},
             "resource_type": {"type": "string", "description": "'game' 或 'software'", "default": "game"},
         },
         "required": ["title", "intro", "download_url"]
@@ -112,7 +123,8 @@ def api_publish_to_7tan(title: str, intro: str, download_url: str, category: str
 )
 def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "",
                     tags: str = "", logo_path: str = "", screenshot_paths: str = "",
-                    resource_type: str = "game") -> str:
+                    developer: str = "", beian: str = "", version: str = "",
+                    system_require: str = "5.0", resource_type: str = "game") -> str:
     """
     自动发布到7坛后台。
     智能导航：登录 → 读取页面链接 → 找到「安卓游戏」→ 找到「发布」按钮 → 填写表单 → 提交。
@@ -130,6 +142,40 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
     try:
         admin_url = config.get("site_7tan", {}).get("base_url", "")
         steps = []
+
+        # ===== 编辑模式：URL 为 content_edit.php?id=xxx 时直接修改已有记录 =====
+        import re as _re
+        edit_id = None
+        try:
+            _u = bridge.execute_js('(function(){ return location.href; })()', timeout=3.0) or ""
+            _m = _re.search(r'content_edit\.php\?id=(\d+)', _u)
+            if _m and int(_m.group(1)) > 0:
+                edit_id = int(_m.group(1))
+        except Exception:
+            pass
+
+        if edit_id:
+            steps.append(f"✏️ 编辑模式: content_edit.php?id={edit_id}，直接在当前页填写并保存")
+            fill_report, all_filled = _fill_form_via_bridge(
+                bridge, title, intro, category, tags, download_url,
+                logo_path, screenshot_paths, resource_type,
+                developer, beian, version, system_require)
+            steps.append(fill_report)
+            time.sleep(1)
+            for sel in ['button[type="submit"]:has-text("保存")',
+                        'button:has-text("保存")',
+                        'input[type="submit"]:has-text("保存")',
+                        'button[type="submit"]', 'input[type="submit"]']:
+                result = bridge.click(sel)
+                if "not_found" not in result and "超时" not in result:
+                    steps.append(f"💾 保存: {result}")
+                    break
+            time.sleep(3)
+            txt = bridge.get_page_text(500)
+            if any(w in txt for w in ["成功", "操作成功", "success"]):
+                steps.append("✅ 保存成功!")
+                return "✅ 保存成功!\n  ID: " + str(edit_id) + "\n\n" + "\n".join(steps)
+            return "⚠️ 保存已提交，请手动验证。\n\n" + "\n".join(steps)
 
         # ⚠️ 硬性检查：LOGO和截图必须存在本地才能发布
         import os as _os
@@ -322,7 +368,8 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
         # ===== 步骤 6: 填写表单 =====
         fill_report, all_filled = _fill_form_via_bridge(
             bridge, title, intro, category, tags, download_url,
-            logo_path, screenshot_paths, resource_type)
+            logo_path, screenshot_paths, resource_type,
+            developer, beian, version, system_require)
         steps.append(fill_report)
 
         if not all_filled:
@@ -379,7 +426,8 @@ def publish_to_7tan(title: str, intro: str, download_url: str, category: str = "
 
 
 def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
-                          logo_path, screenshot_paths, resource_type):
+                          logo_path, screenshot_paths, resource_type,
+                          developer="", beian="", version="", system_require="5.0"):
     """通过 Bridge 执行 JS 填写发布表单，返回填写报告"""
     filled = {}
     not_found = {}
@@ -475,25 +523,51 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
         else:
             not_found["下载链接"] = "未找到 ll_text"
 
-    # === 系统要求 → name="ll_xitong" 填 5.0 ===
-    r = bridge.execute_js("""
-        (function() {
+    # === 系统要求 → name="ll_xitong" ===
+    _xitong = system_require or '5.0'
+    r = bridge.execute_js(f"""
+        (function() {{
             var el = document.querySelector('input[name="ll_xitong"]');
-            if (el) { el.value = '5.0'; el.dispatchEvent(new Event('input')); return 'ok'; }
+            if (el) {{ el.value = {json.dumps(_xitong)}; el.dispatchEvent(new Event('input')); return 'ok'; }}
             return 'not found';
-        })()
+        }})()
     """, timeout=2.0)
-    filled["系统要求"] = "5.0" if "ok" in r else "未找到 ll_xitong"
+    filled["系统要求"] = _xitong if "ok" in r else "未找到 ll_xitong"
 
     # === 开发商 → name="ll_kaifa" ===
-    r = bridge.execute_js("""
-        (function() {
-            var el = document.querySelector('input[name="ll_kaifa"]');
-            if (el) { el.value = '官方'; el.dispatchEvent(new Event('input')); return 'ok'; }
-            return 'not found';
-        })()
-    """, timeout=2.0)
-    filled["开发商"] = "官方" if "ok" in r else "未找到 ll_kaifa"
+    if developer:
+        r = bridge.execute_js(f"""
+            (function() {{
+                var el = document.querySelector('input[name="ll_kaifa"]');
+                if (el) {{ el.value = {json.dumps(developer)}; el.dispatchEvent(new Event('input')); return 'ok'; }}
+                return 'not found';
+            }})()
+        """, timeout=2.0)
+        filled["开发商"] = developer if "ok" in r else "未找到 ll_kaifa"
+    else:
+        filled["开发商"] = "（未提供，跳过）"
+
+    # === 备案号 → name="ll_beian" ===
+    if beian:
+        r = bridge.execute_js(f"""
+            (function() {{
+                var el = document.querySelector('input[name="ll_beian"]');
+                if (el) {{ el.value = {json.dumps(beian)}; el.dispatchEvent(new Event('input')); return 'ok'; }}
+                return 'not found';
+            }})()
+        """, timeout=2.0)
+        filled["备案号"] = beian if "ok" in r else "未找到 ll_beian"
+
+    # === 版本号 → name="ll_banben" ===
+    if version:
+        r = bridge.execute_js(f"""
+            (function() {{
+                var el = document.querySelector('input[name="ll_banben"]');
+                if (el) {{ el.value = {json.dumps(version)}; el.dispatchEvent(new Event('input')); return 'ok'; }}
+                return 'not found';
+            }})()
+        """, timeout=2.0)
+        filled["版本号"] = version if "ok" in r else "未找到 ll_banben"
 
     # === 标签 ===
     if tags:
@@ -509,7 +583,7 @@ def _fill_form_via_bridge(bridge, title, intro, category, tags, download_url,
                 filled["标签"] = tags
                 break
         else:
-            not_found["标签"] = "未找到标签输入框"
+            filled["标签"] = "⚠️ 站点无标签字段，已忽略（不阻塞发布）"
 
     # === 生成报告 ===
 

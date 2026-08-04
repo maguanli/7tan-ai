@@ -32,6 +32,7 @@ class VideoEditorPage(QWidget):
         self._recorder.on_time_updated = self._on_recording_time
         self._recorder.on_state_changed = self._on_recording_state
         self._recorder.on_error = self._on_recording_error
+        self._recorder.on_audio_warning = self._on_audio_warning
 
         # 浮动控制条
         self._overlay = RecorderOverlay()
@@ -209,3 +210,11 @@ class VideoEditorPage(QWidget):
             self._btn_record.setEnabled(True)
         QTimer.singleShot(0, _update)
         QTimer.singleShot(3000, self._overlay.hide)
+
+    def _on_audio_warning(self, msg: str):
+        """音频不可用警告 — 线程安全：状态栏提示（不再静默无声）"""
+        logger.warning(f"[录屏] {msg}")
+
+        def _update():
+            self._status.setText(f"⚠️ {msg}")
+        QTimer.singleShot(0, _update)

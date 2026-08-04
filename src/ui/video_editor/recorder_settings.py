@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QCheckBox, QSlider, QLabel, QFileDialog, QLineEdit,
     QButtonGroup, QRadioButton, QMessageBox,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont
 
 from src.ui.video_editor.data_models import RecordingConfig
@@ -93,6 +93,7 @@ class RecorderSettingsDialog(QDialog):
 
         self._setup_ui()
         self._load_config()
+        QTimer.singleShot(0, self._refresh_audio_status)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -153,6 +154,14 @@ class RecorderSettingsDialog(QDialog):
         audio_group = QGroupBox("🎵 音频参数")
         audio_form = QFormLayout(audio_group)
         audio_form.setSpacing(8)
+
+        # 系统音频设备检测状态提示
+        self._sys_audio_status = QLabel("检测中…")
+        self._sys_audio_status.setWordWrap(True)
+        self._sys_audio_status.setStyleSheet(
+            "color:#e8a33d; font-size:11px; padding:2px 4px;"
+        )
+        audio_form.addRow("系统声音:", self._sys_audio_status)
 
         self._sys_audio_check = QCheckBox("录制系统声音（WASAPI Loopback）")
         self._sys_audio_check.setChecked(True)
@@ -258,6 +267,33 @@ class RecorderSettingsDialog(QDialog):
     def _on_mic_toggled(self, checked: bool):
         self._mic_device_combo.setEnabled(checked)
         # 滑块始终可调，不依赖勾选状态
+
+    def _refresh_audio_status(self):
+        """检测系统音频捕获设备并显示状态（后台线程，避免卡 UI）"""
+        import threading
+
+        def _do():
+            try:
+                from src.ui.video_editor.screen_recorder import ScreenRecorder
+                dev = ScreenRecorder()._detect_loopback_device()
+                ok = bool(dev)
+                msg = f"✅ 已检测到系统音频设备：{dev}" if ok else (
+                    "⚠️ 未检测到系统音频捕获设备（立体声混音/Stereo Mix），"
+                    "录屏将只有画面。请在系统声音设置中启用“立体声混音”。"
+                )
+                color = "#6fbf73" if ok else "#e8a33d"
+            except Exception as e:
+                msg = f"⚠️ 音频设备检测失败: {e}"
+                color = "#e8a33d"
+
+            def _apply():
+                self._sys_audio_status.setText(msg)
+                self._sys_audio_status.setStyleSheet(
+                    f"color:{color}; font-size:11px; padding:2px 4px;"
+                )
+            QTimer.singleShot(0, _apply)
+
+        threading.Thread(target=_do, daemon=True).start()
 
     def _browse_output_dir(self):
         path = QFileDialog.getExistingDirectory(self, "选择保存目录")

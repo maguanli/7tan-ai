@@ -13,6 +13,7 @@ import subprocess
 import threading
 import time
 import os
+import re
 import atexit
 from pathlib import Path
 from typing import Optional, Callable
@@ -50,6 +51,10 @@ class ScreenRecorder:
         self.on_time_updated: Optional[Callable[[float], None]] = None
         self.on_state_changed: Optional[Callable[[str], None]] = None
         self.on_error: Optional[Callable[[str], None]] = None
+        self.on_audio_warning: Optional[Callable[[str], None]] = None  # 音频不可用警告
+
+        # 音频状态（供 UI 提示）
+        self._audio_warning: Optional[str] = None
 
         # 注册退出清理，防止孤儿 ffmpeg 进程
         atexit.register(self._cleanup_on_exit)
@@ -160,6 +165,7 @@ class ScreenRecorder:
         self._frame_count = 0
         self._est_elapsed = 0.0  # gdigrab 模式估算时间
         self._audio_failed = False
+        self._audio_warning = None
 
         try:
             self._process = self._build_ffmpeg_pipe(config)
@@ -214,11 +220,22 @@ class ScreenRecorder:
         if self.on_state_changed:
             self.on_state_changed("recording")
 
+        # 用实际生效配置（可能已回退为无音频）打印音频状态，避免误导
+        actual = self._config or config
+        audio_on = actual.capture_system_audio or actual.capture_mic
         logger.info(
-            f"🎥 开始录制 — 模式={config.mode}, "
-            f"分辨率={config.region_rect[2]}x{config.region_rect[3]}, "
-            f"fps={config.fps}, 音频={'✅' if config.capture_system_audio else '❌'}"
+            f"🎥 开始录制 — 模式={actual.mode}, "
+            f"分辨率={actual.region_rect[2]}x{actual.region_rect[3]}, "
+            f"fps={actual.fps}, 音频={'✅' if audio_on else '❌'}"
         )
+        # 音频不可用 → 明确通知 UI，不再静默无声
+        if not audio_on and self._audio_warning:
+            logger.warning(f"[录屏] {self._audio_warning}")
+            if self.on_audio_warning:
+                try:
+                    self.on_audio_warning(self._audio_warning)
+                except Exception:
+                    pass
         return True
 
     def pause(self):
@@ -351,16 +368,33 @@ class ScreenRecorder:
         if config.capture_system_audio:
             try:
                 loopback_dev = self._detect_loopback_device()
-                # 预检：设备是否存在
-                ok, _ = self._check_audio_device(loopback_dev)
-                if ok:
-                    cmd += ["-f", "dshow", "-i", loopback_dev,
+                # 候选设备：alternative名 → 完整名 → 常见简称（多级尝试，防简称打不开）
+                candidates = []
+                if loopback_dev:
+                    candidates.append(loopback_dev)
+                for extra in ("audio=立体声混音", "audio=Stereo Mix",
+                              "audio=What U Hear", "audio=Wave Out Mix"):
+                    if extra not in candidates:
+                        candidates.append(extra)
+
+                used_dev = None
+                for dev in candidates:
+                    ok, _ = self._check_audio_device(dev)
+                    if ok:
+                        used_dev = dev
+                        break
+                if used_dev:
+                    cmd += ["-f", "dshow", "-i", used_dev,
                             "-thread_queue_size", "4096"]
                     audio_inputs.append(f"[{len(audio_inputs) + 1}:a]")
-                    logger.info(f"系统音频: {loopback_dev}")
+                    logger.info(f"系统音频: {used_dev}")
                 else:
-                    audio_devices_failed.append(f"系统音频({loopback_dev})")
-                    logger.warning(f"系统音频设备不可用: {loopback_dev}")
+                    audio_devices_failed.append("系统音频(全部候选不可用)")
+                    self._audio_warning = (
+                        "未检测到可用的系统音频捕获设备（立体声混音/Stereo Mix），"
+                        "本次录制将仅保留画面。请在系统声音设置中启用“立体声混音”。"
+                    )
+                    logger.warning(self._audio_warning)
             except Exception as e:
                 audio_devices_failed.append(f"系统音频({e})")
                 logger.warning(f"系统音频初始化失败: {e}")
@@ -433,36 +467,76 @@ class ScreenRecorder:
             creationflags=subprocess.CREATE_NO_WINDOW
         )
 
-    def _detect_loopback_device(self) -> str:
-        """自动检测 Windows WASAPI 环回设备名（结果缓存）"""
+    def _detect_loopback_device(self) -> Optional[str]:
+        """自动检测 Windows 系统音频捕获设备（结果缓存）
+
+        修复录屏无声：ffmpeg dshow 必须使用「完整设备名」或 alternative name，
+        硬编码的简称（audio=立体声混音）打不开设备 → 之前总是静默无声。
+        现在依次尝试：
+          1. alternative name（纯 ASCII @device_cm_...\\wave_...，最稳）
+          2. 完整设备名（优先含 混音/Stereo Mix/loopback 的 audio 设备）
+          3. 列表中的第一个 audio 设备
+        全部失败返回 None（由调用方明确提示，不再静默降级）。
+        """
         if hasattr(self, '_cached_loopback'):
             return self._cached_loopback
-        candidates = [
-            "audio=立体声混音",
-            "audio=Stereo Mix",
-            "audio=What U Hear",
-            "audio=Wave Out Mix",
-            "audio=Loopback",
-        ]
+        self._cached_loopback = None
+        ffmpeg = str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg"
         try:
             result = subprocess.run(
-                [str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg",
-                 "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
-                capture_output=True, encoding="utf-8", errors="replace",
-                timeout=3, creationflags=subprocess.CREATE_NO_WINDOW
+                [ffmpeg, "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
+                capture_output=True, timeout=6, creationflags=subprocess.CREATE_NO_WINDOW
             )
-            stderr = (result.stderr or "") + (result.stdout or "")
-            for line in stderr.split("\n"):
-                line_lower = line.strip().lower()
-                if "stereo mix" in line_lower or "loopback" in line_lower or "立体声混音" in line:
-                    if '"' in line:
-                        dev = line.split('"')[1]
-                        self._cached_loopback = f"audio={dev}"
+            raw = (result.stderr or b"") + (result.stdout or b"")
+            # 双编码解码：ffmpeg 不同版本可能输出 UTF-8 或 GBK
+            stderr = ""
+            for enc in ("utf-8", "gbk", "latin-1"):
+                try:
+                    stderr = raw.decode(enc)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            if not stderr:
+                stderr = raw.decode("utf-8", "replace")
+
+            # 1) alternative name（音频设备格式 @device_cm_{...}\wave_{...}）
+            for line in stderr.splitlines():
+                if "@device_cm_" in line and "wave_" in line:
+                    m = re.search(r'@device_cm_[^\s"\']+', line)
+                    if m:
+                        self._cached_loopback = f"audio={m.group(0)}"
+                        logger.info(f"系统音频设备(alternative): {self._cached_loopback}")
                         return self._cached_loopback
-        except Exception:
-            pass
-        self._cached_loopback = candidates[0]
-        return self._cached_loopback
+
+            # 2) 完整设备名：优先混音类，其次任意 audio 设备
+            pref = None
+            first_audio = None
+            for line in stderr.splitlines():
+                if '"' not in line:
+                    continue
+                name = line.split('"')[1]
+                if not name or "dshow" in name.lower():
+                    continue
+                if "(audio)" in line or "(Audio)" in line:
+                    if first_audio is None:
+                        first_audio = name
+                    low = name.lower()
+                    if ("混音" in name or "stereo mix" in low or "loopback" in low
+                            or "what u hear" in low or "wave out mix" in low):
+                        pref = name
+                        break
+            if pref:
+                self._cached_loopback = f"audio={pref}"
+                logger.info(f"系统音频设备(全名): {self._cached_loopback}")
+                return self._cached_loopback
+            if first_audio:
+                self._cached_loopback = f"audio={first_audio}"
+                logger.info(f"系统音频设备(首个audio): {self._cached_loopback}")
+                return self._cached_loopback
+        except Exception as e:
+            logger.warning(f"检测系统音频设备异常: {e}")
+        logger.warning("未检测到任何系统音频捕获设备")
+        return None
 
     def _detect_mic_device(self, device_id: Optional[int] = None) -> str:
         """自动检测麦克风 dshow 设备名（结果缓存）"""
@@ -544,9 +618,9 @@ class ScreenRecorder:
             # 用 -t 0.1 快速测试能否打开设备
             result = subprocess.run(
                 [ffmpeg, "-y", "-f", "dshow", "-i", device_spec,
-                 "-t", "0.1", "-f", "null", "-"],
+                 "-t", "0.2", "-f", "null", "-"],
                 capture_output=True, encoding="utf-8", errors="replace",
-                timeout=2, creationflags=subprocess.CREATE_NO_WINDOW
+                timeout=6, creationflags=subprocess.CREATE_NO_WINDOW
             )
             stderr = (result.stderr or "") + (result.stdout or "")
             stderr_lower = stderr.lower()
@@ -742,13 +816,23 @@ def get_available_mics() -> list[dict]:
 
 
 def check_wasapi_available() -> bool:
-    """检查 WASAPI loopback 是否可用"""
+    """检查系统音频捕获设备（立体声混音/任何 audio 设备）是否可用"""
     try:
+        ffmpeg = str(FFMPEG_PATH) if FFMPEG_PATH.exists() else "ffmpeg"
         result = subprocess.run(
-            ["ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
-            capture_output=True, encoding="utf-8", errors="replace",
-            timeout=10, creationflags=subprocess.CREATE_NO_WINDOW
+            [ffmpeg, "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
+            capture_output=True, timeout=10, creationflags=subprocess.CREATE_NO_WINDOW
         )
-        return "立体声混音" in result.stderr or "Stereo Mix" in result.stderr
+        raw = (result.stderr or b"") + (result.stdout or b"")
+        for enc in ("utf-8", "gbk", "latin-1"):
+            try:
+                stderr = raw.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            stderr = raw.decode("utf-8", "replace")
+        return ("立体声混音" in stderr or "Stereo Mix" in stderr
+                or ("@device_cm_" in stderr and "wave_" in stderr))
     except Exception:
         return False

@@ -154,6 +154,7 @@ class ChatPage(QWidget):
     error_signal = pyqtSignal(str)  # error message
     messages_parsed_signal = pyqtSignal(str, list, int, int)  # session_id, parsed_msgs, start_idx, total
     tts_notice_signal = pyqtSignal(str)  # 语音引擎提示（线程安全）
+    tts_speak_signal = pyqtSignal(str)  # 朗读开始提示（线程安全，显示"正在语音说话"）
 
 
 
@@ -173,6 +174,14 @@ class ChatPage(QWidget):
         self.messages_parsed_signal.connect(self._on_messages_parsed)
         self.error_signal.connect(self._on_load_error)
         self.tts_notice_signal.connect(self._on_tts_notice)
+        self.tts_speak_signal.connect(self._on_tts_speak)
+
+        # 🎤 注册 TTS 朗读开始回调 → 聊天区显示「正在语音说话」（跨线程经信号）
+        try:
+            from data.plugins.tts_piper.tools import register_tts_start_callback
+            register_tts_start_callback(self._on_tts_start)
+        except Exception:
+            pass
 
 
 
@@ -234,6 +243,7 @@ class ChatPage(QWidget):
         self._is_processing = False   # AI 是否正在处理中（用于发送↔终止按钮切换）
         # 🎤 流式 TTS：逐句合成+播放，消除语音延迟
         self._tts_stream_queue: queue.Queue = None  # 句子队列
+        self._tts_stream_noticed = False  # 流式朗读提示已显示标记（防逐句刷屏）
         self._tts_stream_ok_count = 0  # 流式朗读【实际成功】句数（决定是否全文兜底，防"入队≠出声"误判）
         self._tts_stream_worker_thread = None       # 后台播放线程
         self._tts_stream_text_pos = 0               # 已发送到 TTS 的文本位置
@@ -1970,6 +1980,7 @@ class ChatPage(QWidget):
             self._tts_stream_queue = queue.Queue()
             self._tts_stream_text_pos = 0
             self._tts_streamed_this_reply = False   # 新一轮回复：流式朗读标记重置
+            self._tts_stream_noticed = False        # 新一轮流式：朗读提示标记重置
             import threading
             self._tts_stream_worker_thread = threading.Thread(
                 target=self._tts_stream_worker, daemon=True
@@ -2409,6 +2420,26 @@ class ChatPage(QWidget):
                     )
             except Exception as e:
                 logger.error(f"[TTS Stream] 句子播放失败: {e}")
+
+    def _on_tts_start(self, text: str):
+        """TTS 开始朗读（后台线程调用）→ 转发信号到主线程显示提示"""
+        try:
+            # 流式逐句朗读期间只提示第一句（避免每句刷屏）
+            if self._tts_stream_queue is not None:
+                if getattr(self, "_tts_stream_noticed", False):
+                    return
+                self._tts_stream_noticed = True
+            self.tts_speak_signal.emit(text)
+        except Exception:
+            pass
+
+    def _on_tts_speak(self, text: str):
+        """朗读开始 → 聊天区插入系统消息「🔊 正在语音说话：xxx…」"""
+        try:
+            shown = text if len(text) <= 120 else text[:120] + "…"
+            self._add_message("system", f"🔊 正在语音说话：{shown}")
+        except Exception as e:
+            logger.warning(f"[TTS] 朗读提示显示失败: {e}")
 
     def _on_tts_notice(self, msg: str):
         """语音引擎提示 → 系统消息气泡（由信号跨线程触发）"""

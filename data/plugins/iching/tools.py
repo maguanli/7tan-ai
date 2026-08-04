@@ -7,10 +7,13 @@ import os
 import sys
 
 ICHING_DIR = r"D:\7tan\iching"
+# FIX: 绝不能把 ICHING_DIR(D:\7tan\iching) 放进 sys.path！
+# 该目录下的 data.py 会劫持顶层模块名 `data`，导致应用内所有
+# `from data.plugins.tts_piper...` 导入报 "data is not a package"（语音功能失效）。
+# 只需父目录 D:\7tan 在 sys.path 即可 import iching 包。
 ICHING_PARENT = r"D:\7tan"  # import iching 需要父目录在 sys.path
-for _p in (ICHING_PARENT, ICHING_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+if ICHING_PARENT not in sys.path:
+    sys.path.append(ICHING_PARENT)  # append 放末尾，不抢占其他模块
 
 from src.tools.registry import register_tool
 

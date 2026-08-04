@@ -18,6 +18,14 @@ from pathlib import Path
 from loguru import logger
 import logging
 
+# 🛡️ 防顶层 data 劫持：某些插件（如 iching）曾把含 data.py 的目录塞进 sys.path，
+# 导致顶层模块名 `data` 被非包模块占用，`from data.plugins...` 全部报
+# "No module named 'data.plugins'; 'data' is not a package"（语音功能失效）。
+# 这里检测并清除被劫持的 data，让 Python 重新从 data 包导入。
+import sys as _sys
+if "data" in _sys.modules and not hasattr(_sys.modules["data"], "__path__"):
+    _sys.modules.pop("data", None)
+
 # 静音 piper 库的巨型 DEBUG 日志（synthesize 时打印 text + 完整 phonemes 音素表，
 # 单条可达数千字符，会刷屏控制台/文件日志）。此处在插件加载源头兜底，
 # 即使 logger.setup 未调用也生效。
@@ -401,6 +409,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                 logger.warning("[TTS] ffmpeg 未找到，无法转换 MP3→WAV")
                 if play:
                     os.startfile(mp3_path) if os.name == 'nt' else None
+                    _notify_tts_start(text)
                     _update_circuit_breaker(True)
                     return {
                         "status": "ok",
@@ -419,6 +428,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                 logger.warning(f"[TTS] ffmpeg 转换失败: {e}")
                 if play:
                     os.startfile(mp3_path) if os.name == 'nt' else None
+                    _notify_tts_start(text)
                     _update_circuit_breaker(True)
                     return {
                         "status": "ok",
@@ -436,6 +446,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
             size_kb = round(os.path.getsize(wav_path) / 1024, 1)
             if play:
                 _play_wav(wav_path)
+                _notify_tts_start(text)
 
             if attempt > 1:
                 logger.info(f"[TTS] Edge TTS 第{attempt}次重试成功")
@@ -500,6 +511,7 @@ def _speak_piper(text: str, play: bool) -> dict:
     size_kb = round(os.path.getsize(wav_path) / 1024, 1)
     if play:
         _play_wav(wav_path)
+        _notify_tts_start(text)
 
     return {
         "status": "ok",
@@ -513,6 +525,33 @@ def _speak_piper(text: str, play: bool) -> dict:
 # ============================================================
 # 统一接口
 # ============================================================
+
+# === 朗读开始通知回调（供 UI 显示"正在语音说话"提示） ===
+_tts_start_callbacks = []
+_tts_start_lock = threading.Lock()
+
+
+def register_tts_start_callback(callback) -> None:
+    """注册朗读开始回调（幂等）。实际出声（播放队列入队）时调用 callback(text)。"""
+    if not callable(callback):
+        return
+    with _tts_start_lock:
+        if callback not in _tts_start_callbacks:
+            _tts_start_callbacks.append(callback)
+
+
+def _notify_tts_start(text: str) -> None:
+    """通知所有已注册回调：一段文本已开始朗读（已入播放队列）。"""
+    if not text:
+        return
+    with _tts_start_lock:
+        cbs = list(_tts_start_callbacks)
+    for cb in cbs:
+        try:
+            cb(text)
+        except Exception as e:
+            logger.warning(f"[TTS] 朗读开始回调异常: {e}")
+
 
 def tts_speak(text: str, play: bool = True, strip_code: bool = True) -> dict:
     """

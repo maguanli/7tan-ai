@@ -249,7 +249,7 @@ class ProStatusWidget(QFrame):
             username = token_data.get("username", "") if token_data else ""
             if not username:
                 username = self._user_info.get("username", "")
-            self._level_text.setText(f"专业版  {username}" if username else "专业版")
+            self._level_text.setText(f"进化版  {username}" if username else "进化版")
 
             if pro_expires:
                 dt = datetime.fromtimestamp(pro_expires)
@@ -282,7 +282,7 @@ class ProStatusWidget(QFrame):
                 username = self._user_info.get("username", "")
             self._level_text.setText(f"免费版  {username}" if username else "免费版")
             self._expiry_label.setVisible(False)
-            self._upgrade_btn.setText("⭐ 升级专业版")
+            self._upgrade_btn.setText("⭐ 升级进化版")
 
         # 更新评分
         self._update_score()

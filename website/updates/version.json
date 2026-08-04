@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "1.0.6",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.6.zip",
+      "md5": "eb15aebe2752b9114600092c94f45d8a",
+      "size": 425961061,
+      "notes": "1.0.6 更新：修复语音功能（TTS引擎初始化失败/模型文件复制失败）。",
+      "release_date": "2026-08-04"
+    },
+    {
       "version": "1.0.5",
       "channel": "stable",
       "platform": "windows",

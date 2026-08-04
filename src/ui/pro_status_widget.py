@@ -363,14 +363,10 @@ class ProStatusWidget(QFrame):
                 QMessageBox.warning(self, "刷新失败", msg)
 
     def _on_upgrade(self) -> None:
-        """打开 7tan.com 升级专业版页面"""
-        from src.config.loader import load_config as _load_cfg3
-        _cfg3 = _load_cfg3()
-        _base = _cfg3.get("site_7tan", {}).get("base_url", "")
-        _site_root = _base.replace("/api", "") if _base else ""
-        url = _site_root + "/pro.php" if _site_root else "https://www.7tan.com/pro.php"
+        """打开 7tan.com 升级进化版页面（固定官网域名，避免配置域名错误）"""
+        url = "https://www.7tan.com/pro.php"
         webbrowser.open(url)
-        logger.info("[ProStatus] 打开升级页面: www.7tan.com/pro.php")
+        logger.info("[ProStatus] 打开升级页面: https://www.7tan.com/pro.php")
 
     def _on_logout(self) -> None:
         """退出会员登录"""

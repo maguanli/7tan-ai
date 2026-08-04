@@ -175,6 +175,7 @@ class ChatPage(QWidget):
         self.error_signal.connect(self._on_load_error)
         self.tts_notice_signal.connect(self._on_tts_notice)
         self.tts_speak_signal.connect(self._on_tts_speak)
+        self._tts_toast = None  # 朗读提示 Toast（懒创建，不写入聊天记录）
 
         # 🎤 注册 TTS 朗读开始回调 → 聊天区显示「正在语音说话」（跨线程经信号）
         try:
@@ -2434,12 +2435,48 @@ class ChatPage(QWidget):
             pass
 
     def _on_tts_speak(self, text: str):
-        """朗读开始 → 聊天区插入系统消息「🔊 正在语音说话：xxx…」"""
+        """朗读开始 → 顶部 Toast 悬浮提示（3秒自动消失，不写入聊天记录）"""
         try:
             shown = text if len(text) <= 120 else text[:120] + "…"
-            self._add_message("system", f"🔊 正在语音说话：{shown}")
+            self._show_tts_toast(f"🔊 正在语音说话：{shown}")
         except Exception as e:
             logger.warning(f"[TTS] 朗读提示显示失败: {e}")
+
+    def _show_tts_toast(self, msg: str) -> None:
+        """在聊天区右上角显示朗读提示 Toast，3 秒后自动消失（不写入聊天记录）。"""
+        try:
+            if self._tts_toast is None:
+                self._tts_toast = QLabel(self)
+                self._tts_toast.setStyleSheet(
+                    "background-color: rgba(30,33,62,235);"
+                    "color: #e2e8f0;"
+                    "border: 1px solid #334155;"
+                    "border-radius: 14px;"
+                    "padding: 8px 16px;"
+                    "font-size: 13px;"
+                )
+                self._tts_toast.setWordWrap(True)
+                self._tts_toast.setMaximumWidth(560)
+                self._tts_toast.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+                self._tts_toast.hide()
+            self._tts_toast.setText(msg)
+            self._tts_toast.adjustSize()
+            # 定位到聊天区右上角（留 16px 边距），窗口过窄时向左收缩
+            x = max(8, self.width() - self._tts_toast.width() - 16)
+            self._tts_toast.move(x, 16)
+            self._tts_toast.show()
+            self._tts_toast.raise_()
+            QTimer.singleShot(3000, self._hide_tts_toast)
+        except Exception as e:
+            logger.warning(f"[TTS] Toast 显示失败: {e}")
+
+    def _hide_tts_toast(self) -> None:
+        """隐藏朗读提示 Toast（QTimer 到期回调，组件可能已销毁需容错）。"""
+        try:
+            if self._tts_toast is not None:
+                self._tts_toast.hide()
+        except Exception:
+            pass
 
     def _on_tts_notice(self, msg: str):
         """语音引擎提示 → 系统消息气泡（由信号跨线程触发）"""

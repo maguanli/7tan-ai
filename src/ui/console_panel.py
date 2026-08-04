@@ -175,6 +175,33 @@ _trunc_pending_text = None      # 待朗读的最新截断内容
 _trunc_pending_timer = None     # 合并窗口定时器
 _trunc_lock = threading.Lock()
 
+# —— 忙碌暂存（最新一条），播放完成后自动补读（修复"忙碌即丢弃"导致的漏读） ——
+_pending_speak = None
+_pending_speak_lock = threading.Lock()
+
+
+def _set_pending_speak(text):
+    """暂存待补读内容（最新覆盖旧，只保留一条）"""
+    global _pending_speak
+    with _pending_speak_lock:
+        _pending_speak = text
+
+
+def _take_pending_speak():
+    """取走待补读内容（取走后清空）"""
+    global _pending_speak
+    with _pending_speak_lock:
+        t = _pending_speak
+        _pending_speak = None
+    return t
+
+
+def _clear_pending_speak():
+    """清空待补读内容（最终回复优先时丢弃暂存中间内容）"""
+    global _pending_speak
+    with _pending_speak_lock:
+        _pending_speak = None
+
 
 def _speak_console_async(text: str):
     """后台朗读控制台 Agent 内容（带防重复 + 播放中检测 + 全链路日志）。
@@ -194,15 +221,27 @@ def _speak_console_async(text: str):
             if not _voice_mode_enabled():
                 logger.info("[TTS-Console] 语音模式关闭，跳过朗读")
                 return
-            from data.plugins.tts_piper.tools import tts_speak_dedup, tts_is_busy
+            from data.plugins.tts_piper.tools import tts_speak_dedup, tts_is_busy, tts_is_spoken
+            # 已在去重窗口内朗读过 → 跳过（不暂存，防重复）
+            if tts_is_spoken(text):
+                logger.info("[TTS-Console] 该内容已朗读过（去重窗口内），跳过")
+                return
             if tts_is_busy():
-                logger.info("[TTS-Console] 正在播放中，跳过（防叠加）")
+                # 🔧 修复漏读：忙碌不再丢弃，暂存最新一条，播放完成后自动补读
+                _set_pending_speak(text)
+                logger.info("[TTS-Console] 正在播放中，暂存待补读（最新一条）")
                 return
             # 🔊 控制台可见反馈（是否真正出声由全局去重裁决：与聊天页共用同一套去重，只读一遍）
             logger.info("[TTS-Console] 🔊 开始朗读 Agent 回复（{}字）", len(text))
             r = tts_speak_dedup(text)
             if r.get("skipped"):
-                logger.info("[TTS-Console] 朗读被全局去重拦截（{}），跳过（防重复）", r.get("message", "?"))
+                msg = r.get("message", "?")
+                # 合成互斥/合成中 → 暂存待补读（不漏）；纯去重（已朗读）→ 丢弃
+                if "互斥" in msg or "合成" in msg:
+                    _set_pending_speak(text)
+                    logger.info("[TTS-Console] 合成互斥，暂存待补读（{}）", msg)
+                else:
+                    logger.info("[TTS-Console] 朗读被全局去重拦截（{}），跳过（防重复）", msg)
                 return
             if r.get("status") == "ok":
                 logger.info(
@@ -223,6 +262,21 @@ def _console_tts_callback(text: str):
         _speak_console_async(text)
 
 
+def _on_console_play_finished():
+    """播放完成回调：若播放队列空闲且有暂存内容 → 自动补读（修复"忙碌即丢弃"漏读）"""
+    try:
+        from data.plugins.tts_piper.tools import tts_is_busy
+        if tts_is_busy():
+            # 队列已有新内容在播 → 保持暂存，等下一次完成回调再补读
+            return
+        text = _take_pending_speak()
+        if text:
+            logger.info("[TTS-Console] ▶ 播放完成，补读暂存内容（{}字）", len(text))
+            _speak_console_async(text)
+    except Exception as e:
+        logger.warning("[TTS-Console] 补读回调异常: {}: {}", type(e).__name__, e)
+
+
 def init_console_tts():
     """注册控制台朗读回调（幂等，多播不覆盖聊天页/全局桥）"""
     global _console_tts_registered
@@ -232,6 +286,9 @@ def init_console_tts():
     try:
         from src.agent.agent_loop import register_agent_speak_callback, _agent_speak_callbacks
         register_agent_speak_callback(_console_tts_callback)
+        # 🔧 播放完成回调：空闲时补读忙碌暂存的内容（修复漏读）
+        from data.plugins.tts_piper.tools import register_tts_finish_callback
+        register_tts_finish_callback(_on_console_play_finished)
         logger.info(
             "[TTS-Console] 控制台朗读已注册（agent 最终回复回调，当前回调数={}）",
             len(_agent_speak_callbacks),
@@ -263,6 +320,8 @@ def _cancel_trunc_pending():
                 pass
             _trunc_pending_timer = None
         _trunc_pending_text = None
+    # 🔧 最终回复优先：丢弃暂存的中间内容，只读最终回复
+    _clear_pending_speak()
 
 
 def _maybe_speak_agent_line(line: str):
@@ -286,7 +345,7 @@ def _maybe_speak_agent_line(line: str):
         with _trunc_lock:
             _trunc_pending_text = content
             if _trunc_pending_timer is None:
-                _trunc_pending_timer = threading.Timer(5.0, _flush_trunc_pending)
+                _trunc_pending_timer = threading.Timer(2.0, _flush_trunc_pending)
                 _trunc_pending_timer.daemon = True
                 _trunc_pending_timer.start()
         logger.debug("[TTS-Console] Agent 实时内容已收录（{}字，稍后朗读）", len(content))

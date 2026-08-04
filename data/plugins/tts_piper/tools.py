@@ -141,6 +141,8 @@ def _player_worker():
                     os.remove(wav_path)
             except OSError:
                 pass
+            # 🆕 播放槽位已释放（成功/跳过/失败），通知完成回调（停止信号不经过此路径）
+            _notify_tts_finish()
 
 def _ensure_player():
     """确保播放线程已启动（单例）"""
@@ -551,6 +553,31 @@ def _notify_tts_start(text: str) -> None:
             cb(text)
         except Exception as e:
             logger.warning(f"[TTS] 朗读开始回调异常: {e}")
+
+
+# === 播放完成通知回调（供控制台补读忙碌时暂存的内容，修复漏读） ===
+_tts_finish_callbacks = []
+_tts_finish_lock = threading.Lock()
+
+
+def register_tts_finish_callback(callback) -> None:
+    """注册播放完成回调（幂等）。每段音频播放完毕/跳过/失败（槽位释放）时调用 callback()。"""
+    if not callable(callback):
+        return
+    with _tts_finish_lock:
+        if callback not in _tts_finish_callbacks:
+            _tts_finish_callbacks.append(callback)
+
+
+def _notify_tts_finish() -> None:
+    """通知所有已注册回调：播放槽位已释放（一段音频播完/跳过/失败）。停止信号不触发。"""
+    with _tts_finish_lock:
+        cbs = list(_tts_finish_callbacks)
+    for cb in cbs:
+        try:
+            cb()
+        except Exception as e:
+            logger.warning(f"[TTS] 播放完成回调异常: {e}")
 
 
 def tts_speak(text: str, play: bool = True, strip_code: bool = True) -> dict:

@@ -25,6 +25,19 @@ def _get_site_base_url() -> str:
         return ""
 
 
+def _get_api_url(endpoint: str) -> str:
+    """获取 API 端点 URL：内置官方端点优先（www.7tan.com/api/*）。
+
+    内置端点为空时才回退到 config 的 base_url（兼容自建服务器）。
+    修复：config base_url 指向管理后台域名（img.7tan.cn），
+    直接传 fallback 会把 API 请求拼到错误域名导致 404。
+    """
+    url = get_api_url(endpoint)
+    if not url:
+        url = get_api_url(endpoint, fallback_base=_get_site_base_url())
+    return url
+
+
 # ============================================================
 # 超时配置
 # ============================================================
@@ -109,7 +122,7 @@ def login(username: str, password: str, remember_me: bool = False, device_info: 
         NetworkError: 网络连接失败
         ServerError: 服务器错误
     """
-    url = get_api_url("login", fallback_base=_get_site_base_url())
+    url = _get_api_url("login")
     if not url:
         raise ServerError("API 端点未配置")
 
@@ -178,7 +191,7 @@ def online_verify(token: str) -> dict:
             "error": None / "错误信息",
         }
     """
-    url = get_api_url("verify", fallback_base=_get_site_base_url())
+    url = _get_api_url("verify")
     if not url:
         return {"valid": False, "level": "unknown", "error": "API 端点未配置"}
 
@@ -220,7 +233,7 @@ def refresh_token(token: str, device_id: str = "") -> dict:
     Returns:
         {"success": True, "token": "new_token", "level": "pro", ...}
     """
-    url = get_api_url("refresh", fallback_base=_get_site_base_url())
+    url = _get_api_url("refresh")
     if not url:
         return {"success": False, "message": "API 端点未配置"}
 
@@ -304,7 +317,7 @@ def trial_call(token: str, model: str, messages: list) -> dict:
             "error": str or None,      # 错误信息
         }
     """
-    url = get_api_url("trial", fallback_base=_get_site_base_url())
+    url = _get_api_url("trial")
     if not url:
         return {"success": False, "error": "试用 API 端点未配置", "trials_left": 0}
 
@@ -392,7 +405,7 @@ def api_publish_resource(
             "publish_url": "https://...",
         }
     """
-    url = get_api_url("publish", fallback_base=_get_site_base_url())
+    url = _get_api_url("publish")
     if not url:
         return {
             "success": False,

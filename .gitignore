@@ -92,3 +92,4 @@ data/panel_geometry.json
 # 调试临时脚本与运行时检查文件
 tmp/
 data/tasklist_check.txt
+src/security/auth_client_new.pyd  

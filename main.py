@@ -24,6 +24,32 @@ def _get_project_root():
 PROJECT_ROOT = _get_project_root()
 sys.path.insert(0, str(PROJECT_ROOT))
 
+
+def _apply_pending_security_update():
+    """启动早期应用待更新的安全模块（auth_client_new.pyd → auth_client.pyd）。
+
+    进程刚启动尚未加载 security 模块，文件未被锁定，可安全替换。
+    用于在重启 7Tan 后自动生效已编译的安全模块修复（如 API 端点域名修复）。
+    """
+    try:
+        import shutil
+        sec_dir = PROJECT_ROOT / "src" / "security"
+        pending = sec_dir / "auth_client_new.pyd"
+        if not pending.exists():
+            return
+        target = sec_dir / "auth_client.pyd"
+        bak_dir = PROJECT_ROOT / "backups" / "pyd_auto"
+        bak_dir.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            shutil.copy2(target, bak_dir / "auth_client.pyd")
+        os.replace(str(pending), str(target))
+        print("[Startup] ✅ 已应用安全模块更新: auth_client.pyd")
+    except Exception as e:
+        print(f"[Startup] ⚠️ 应用安全模块更新失败: {e}")
+
+
+_apply_pending_security_update()
+
 # ============================================================
 # 🔒 单实例保护 — 防止多个 7Tan 主程序同时运行
 # 多实例共存会互相抢占 jsonl/日志/UI 事件/文件锁，导致未响应卡死。

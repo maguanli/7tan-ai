@@ -51,7 +51,7 @@ class MessageBubble(QFrame):
                  session_id: str = None, pre_parsed_html: str = None,
                  model_name: str = "", parent=None):
         super().__init__(parent)
-        logger.info(f"[MessageBubble] init start role={role} len={len(content)}")
+        logger.debug(f"[MessageBubble] init start role={role} len={len(content)}")
         self._role = role
         self._content = content
         self._session_id = session_id
@@ -171,7 +171,8 @@ class MessageBubble(QFrame):
         self._content_label.viewport().setAutoFillBackground(False)
         self._content_label.document().setDocumentMargin(0)
         # 高度自适应：内容/宽度变化时同步高度 = 文档实际高度（修复富文本显示不全）
-        self._content_label.document().contentsChanged.connect(self._sync_content_height)
+        # [性能修复] 已移除 contentsChanged 连接：setHtml 时反复触发 QTextDocument 全量重排，
+        # 是历史会话加载主线程卡顿(光标转圈)的根因，改为 setHtml 后一次性同步高度
 
         if role == "user":
             bubble_color = THEME['accent']
@@ -196,7 +197,9 @@ class MessageBubble(QFrame):
             html = self._md_to_html(content, text_color)
 
         self._content_label.setHtml(html)
-        logger.info("[MessageBubble] setText done")
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, self._sync_content_height)  # 布局完成后一次性同步高度（替代 contentsChanged 风暴）
+        logger.debug("[MessageBubble] setText done")
 
         self.setStyleSheet(f"""
             MessageBubble {{
@@ -494,7 +497,10 @@ class MessageBubble(QFrame):
                 doc.setTextWidth(w)
             h = doc.size().height()
             if h > 10:
-                tb.setFixedHeight(int(h) + 4)
+                last = getattr(self, '_last_sync_h', 0)
+                if abs(int(h) - last) > 1:
+                    tb.setFixedHeight(int(h) + 4)
+                    self._last_sync_h = int(h)
         except Exception:
             pass
 

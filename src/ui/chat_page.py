@@ -830,7 +830,7 @@ class ChatPage(QWidget):
             "tool_calls": tool_calls, "html": pre_parsed_html,
             "model": model_name,
         })
-        logger.info(f"[ChatPage] _add_message role={role} data_idx={len(self._message_data)-1}")
+        logger.debug(f"[ChatPage] _add_message role={role} data_idx={len(self._message_data)-1}")
         # 新消息始终在末尾渲染，更新范围
         self._rendered_end = len(self._message_data)
 
@@ -838,7 +838,7 @@ class ChatPage(QWidget):
 
             # 已经是 HTML（欢迎消息等），用 QLabel
 
-            logger.info("[ChatPage] HTML path")
+            logger.debug("[ChatPage] HTML path")
 
             msg = QFrame()
 
@@ -878,7 +878,7 @@ class ChatPage(QWidget):
 
 
 
-        logger.info(f"[ChatPage] creating MessageBubble role={role} len={len(content)}")
+        logger.debug(f"[ChatPage] creating MessageBubble role={role} len={len(content)}")
 
         bubble = MessageBubble(
 
@@ -1269,7 +1269,7 @@ class ChatPage(QWidget):
             if self._render_timer is None:
                 self._render_timer = QTimer(self)
                 self._render_timer.timeout.connect(self._render_next_batch)
-            self._render_timer.start(10)
+            self._render_timer.start(16)
         else:
             self._finish_render()
 

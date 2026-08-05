@@ -1,6 +1,6 @@
 <?php
 // ============================================================
-// 购买专业版页面
+// 购买进化版页面
 // 位置: /pro.php
 // 前端 JS 驱动验证，支持 BBS 登录 + auth_token Cookie 双通道
 // ============================================================
@@ -9,7 +9,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>7Tan 专业版 - 7坛游戏社区</title>
+    <title>7Tan 进化版 - 7坛游戏社区</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
@@ -136,7 +136,7 @@ function renderLoggedIn() {
         statusHtml = `
             <div class="status-card">
                 <div>
-                    <span class="status-badge status-pro">✅ 专业版</span>
+                    <span class="status-badge status-pro">✅ 进化版</span>
                     <span style="margin-left:12px;color:#ccc;">${escHtml(u.username)}</span>
                 </div>
                 <div class="status-info">
@@ -144,7 +144,7 @@ function renderLoggedIn() {
                     &nbsp;(剩余 <strong>${remainingDays}</strong> 天)
                 </div>
             </div>
-            <p style="text-align:center;color:#888;padding:20px;">🎉 你已是专业版用户，享受全部 AI 功能</p>`;
+            <p style="text-align:center;color:#888;padding:20px;">🎉 你已是进化版用户，享受全部 AI 功能</p>`;
     } else {
         statusHtml = `
             <div class="status-card">
@@ -160,8 +160,8 @@ function renderLoggedIn() {
     }
 
     document.getElementById('app').innerHTML = `
-        <h1 class="page-title">🚀 7Tan 专业版</h1>
-        <p class="page-subtitle">解锁全部 AI 功能，效率翻倍</p>
+        <h1 class="page-title">🚀 7Tan 进化版</h1>
+        <p class="page-subtitle">解锁全部 AI 功能，效率翻倍，软件可以修改自己进行升级进化，功能强大。</p>
         ${statusHtml}
     `;
 }
@@ -173,7 +173,7 @@ function renderLoginPrompt() {
     document.getElementById('app').innerHTML = `
         <div class="login-prompt">
             <h2>🔐 请先登录</h2>
-            <p>登录后才能查看和购买专业版</p>
+            <p>登录后才能查看和购买进化版</p>
             <a href="/bbs/login.php?redirect=/pro.php">点击登录</a>
             <p style="margin-top:12px;font-size:12px;color:#666;">登录后自动返回此页面</p>
         </div>

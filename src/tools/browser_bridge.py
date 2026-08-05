@@ -7,6 +7,7 @@
 """
 import threading
 import time
+import json
 from pathlib import Path
 
 from PyQt6.QtCore import QObject, pyqtSlot, QUrl, QTimer
@@ -387,29 +388,74 @@ class BrowserBridge(QObject):
             files_js.append(f'["{fname}","{b64}"]')
         files_json = "[" + ",".join(files_js) + "]"
 
+        # 多候选选择器：逗号分隔，逐个尝试；支持自动查找封面/图片 input
+        selectors = [s.strip() for s in str(selector).split(',') if s.strip()] if selector else []
+        selectors += [
+            '[class*="cover"] input[type="file"]',
+            'input[type="file"][accept*="image"]',
+            'input[type="file"][accept*="png"]',
+            'input[type="file"]',
+        ]
+        # 去重
+        seen = set()
+        uniq = []
+        for s in selectors:
+            if s not in seen:
+                seen.add(s)
+                uniq.append(s)
+        selectors = uniq
+
         js = f"""
         (function() {{
             var files_data = {files_json};
-            var el = document.querySelector('{selector}');
-            if (!el || el.type !== 'file') return 'selector_not_found';
+            var sels = {json.dumps(selectors)};
+            var el = null, used = '';
+            for (var i = 0; i < sels.length; i++) {{
+                var nodes = document.querySelectorAll(sels[i]);
+                for (var j = 0; j < nodes.length; j++) {{
+                    var n = nodes[j];
+                    if (n && n.type === 'file') {{
+                        el = n; used = sels[i]; break;
+                    }}
+                }}
+                if (el) break;
+            }}
+            // 兜底：遍历所有 file input，优先 accept 含 image
+            if (!el) {{
+                var all = document.querySelectorAll('input[type="file"]');
+                for (var k = 0; k < all.length; k++) {{
+                    var a = all[k];
+                    if (!el || (a.accept && a.accept.indexOf('image') >= 0)) el = a;
+                }}
+                if (el) used = '(auto)';
+            }}
+            if (!el) return 'selector_not_found';
 
             var dt = new DataTransfer();
-            files_data.forEach(function(fd) {{
-                var name = fd[0];
-                var b64 = fd[1];
-                var binary = atob(b64);
-                var bytes = new Uint8Array(binary.length);
-                for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-                var mime = name.endsWith('.png') ? 'image/png' : 
-                          name.endsWith('.jpg') || name.endsWith('.jpeg') ? 'image/jpeg' : 
-                          'application/octet-stream';
-                var file = new File([bytes], name, {{type: mime}});
-                dt.items.add(file);
-            }});
-            el.files = dt.files;
+            var ok = true;
+            try {{
+                files_data.forEach(function(fd) {{
+                    var name = fd[0];
+                    var b64 = fd[1];
+                    var binary = atob(b64);
+                    var bytes = new Uint8Array(binary.length);
+                    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                    var mime = name.endsWith('.png') ? 'image/png' : 
+                              name.endsWith('.jpg') || name.endsWith('.jpeg') ? 'image/jpeg' : 
+                              'application/octet-stream';
+                    var file = new File([bytes], name, {{type: mime}});
+                    dt.items.add(file);
+                }});
+                el.files = dt.files;
+            }} catch(e) {{ ok = false; }}
+            if (!ok || !el.files || el.files.length === 0) return 'inject_failed';
+            // 完整事件序列（React 17+/18+ 兼容）
             el.dispatchEvent(new Event('change', {{bubbles: true}}));
             el.dispatchEvent(new Event('input', {{bubbles: true}}));
-            return 'uploaded_{len(valid)}';
+            try {{
+                el.dispatchEvent(new Event('change', {{bubbles: true, composed: true}}));
+            }} catch(e) {{}}
+            return 'uploaded_' + el.files.length + '_via_' + used;
         }})()
         """
 

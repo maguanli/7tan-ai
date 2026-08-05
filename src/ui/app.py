@@ -2937,6 +2937,13 @@ class BrowserPage(QWidget):
 
         profile = QWebEngineProfile.defaultProfile()
 
+        # Cookie/存储持久化：固定路径，重启不丢登录态（默认路径随临时目录漂移）
+        try:
+            from ..tools.cookie_manager import ensure_profile_storage
+            ensure_profile_storage()
+        except Exception:
+            pass
+
         profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
 
         profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
@@ -8631,6 +8638,13 @@ def launch_app():
         app.setStyleSheet(DARK_STYLESHEET)
 
         app.setApplicationName("7Tan")
+
+        # ===== 浏览器 Cookie 持久化：重启保持登录态（固定存储路径 + 导出/恢复） =====
+        try:
+            from ..tools.cookie_manager import setup_cookie_persistence
+            setup_cookie_persistence()
+        except Exception as _ce:
+            logger.warning(f"Cookie 持久化初始化失败: {_ce}")
 
         # ===== 主线程看门狗：UI 假死时自动 dump 线程栈到 logs/ =====
         try:

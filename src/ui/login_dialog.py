@@ -463,19 +463,41 @@ class LoginDialog(QDialog):
             self._btn_toggle_pwd.setText("👁")
 
     def _open_url(self, url: str):
-        """在系统默认浏览器中打开 URL（QDesktopServices 优先，失败回退 webbrowser）"""
-        from PyQt6.QtGui import QDesktopServices
-        from PyQt6.QtCore import QUrl
-        if not QDesktopServices.openUrl(QUrl(url)):
+        """在系统默认浏览器中打开 URL（三级兜底：QDesktopServices → webbrowser → os.startfile）"""
+        try:
+            from PyQt6.QtGui import QDesktopServices
+            from PyQt6.QtCore import QUrl
+            if QDesktopServices.openUrl(QUrl(url)):
+                return
+        except Exception as _e:
+            logger.debug("[Login] QDesktopServices 打开失败: " + str(_e))
+        try:
             import webbrowser
-            webbrowser.open(url)
+            if webbrowser.open(url):
+                return
+        except Exception as _e:
+            logger.debug("[Login] webbrowser 打开失败: " + str(_e))
+        try:
+            import os
+            os.startfile(url)  # Windows ShellExecute，管理员权限下也可靠
+        except Exception as _e:
+            logger.error("[Login] 打开 URL 失败: " + url + " -> " + str(_e))
+            self._show_error("无法打开浏览器，请手动访问: " + url)
 
     def _on_forgot_password(self):
-        """忘记密码 → 打开 7tan.com"""
-        _base6 = _cfg5.get("site_7tan", {}).get("base_url", "")
-        _site_root6 = _base6.replace("/api", "") if _base6 else "https://www.7tan.com"
-        _site_root6 = _site_root6.replace("img.7tan.cn", "www.7tan.com")
-        self._open_url(_site_root6 + "/bbs/77562/")
+        """忘记密码 → 打开 7tan.com 找回密码页面"""
+        try:
+            from src.config.loader import load_config as _load_cfg6
+            _cfg6 = _load_cfg6()
+            _base6 = _cfg6.get("site_7tan", dict()).get("base_url", "") if _cfg6 else ""
+            _site_root6 = _base6.replace("/api", "") if _base6 else "https://www.7tan.com"
+            _site_root6 = _site_root6.replace("img.7tan.cn", "www.7tan.com")
+            _url6 = _site_root6 + "/bbs/77562/"
+            logger.info("[Login] 忘记密码 -> " + _url6)
+            self._open_url(_url6)
+        except Exception as _e:
+            logger.error("[Login] 忘记密码跳转异常: " + str(_e))
+            self._open_url("https://www.7tan.com/bbs/77562/")  # 兜底直连官网
         self._show_error("")  # 清除错误
 
     def _on_login(self):

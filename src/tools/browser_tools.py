@@ -325,13 +325,41 @@ def click_element(selector: str, text: str = None) -> str:
     requires_browser=True,
 )
 def screenshot(filename: str) -> str:
-    """对当前页面截图（线程安全）"""
-    if _source_view is None:
-        return "⚠️ 浏览器未打开"
+    """对当前页面截图（线程安全）。
+
+    WebView 失效时自动回退系统屏幕截图（mss/pyautogui），
+    保证截图功能永远可用，并明确告知截图方式。
+    """
     path = Path("data/screenshots") / filename
     path.parent.mkdir(parents=True, exist_ok=True)
-    ok = _get_bridge().screenshot(str(path))
-    return f"✅ 截图已保存: {path}" if ok else f"❌ 截图失败: {path}"
+
+    # 当前活跃视图是否有效
+    view = _get_active_view()
+    view_ok = False
+    if view is not None:
+        try:
+            view_ok = view.page() is not None
+        except RuntimeError:
+            view_ok = False
+        except Exception:
+            view_ok = False
+
+    if not view_ok:
+        # WebView 已销毁 → 系统级截图兜底（不依赖 bridge）
+        from .browser_bridge import _fallback_system_screenshot
+        ok = _fallback_system_screenshot(str(path))
+        if ok:
+            logger.warning(f"🖥️ [screenshot] WebView 已销毁，已用系统截图兜底: {path}")
+            return f"⚠️ 浏览器视图已失效，已用【系统屏幕截图】兜底保存: {path}"
+        return f"❌ 截图失败: 浏览器视图已销毁且系统截图不可用 ({path})"
+
+    bridge = _get_bridge()
+    if bridge is None:
+        return "⚠️ 浏览器桥接未初始化"
+    result = bridge.screenshot(str(path))
+    if result:
+        return f"✅ 截图已保存: {path}"
+    return f"❌ 截图失败: {path}"
 
 
 @register_tool(

@@ -227,6 +227,10 @@ def select_region():
 # 4. 主流程
 # ============================================================
 def main():
+    import sys
+    if hasattr(sys.stdout, 'reconfigure'):
+        try: sys.stdout.reconfigure(encoding='utf-8')
+        except Exception: pass
     parser = argparse.ArgumentParser(description="区域裁剪 OCR 工具（优化版）")
     parser.add_argument("--region", help="识别区域 x,y,w,h，如 100,200,800,300")
     parser.add_argument("--select", action="store_true", help="用鼠标框选区域（推荐）")

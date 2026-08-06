@@ -114,6 +114,23 @@ class BrowserBridge(QObject):
 
     # ===== 截图 =====
 
+    def is_webview_valid(self) -> bool:
+        """检查 WebView 是否仍然有效（未被 Qt 销毁）。
+
+        QWebEngineView 窗口被关闭/页面进程崩溃后，C++ 对象会被销毁，
+        此时访问任何属性都会抛 RuntimeError。提前检测避免崩溃。
+        """
+        try:
+            if self._web_view is None:
+                return False
+            # 访问 page() 会触发 RuntimeError（若 C++ 对象已删除）
+            page = self._web_view.page()
+            return page is not None
+        except RuntimeError:
+            return False
+        except Exception:
+            return False
+
     def screenshot(self, filepath: str) -> bool:
         """
         对当前页面截图（线程安全）。
@@ -138,13 +155,31 @@ class BrowserBridge(QObject):
 
     @pyqtSlot(str)
     def _screenshot_impl(self, filepath: str):
-        """在主线程执行截图"""
+        """在主线程执行截图。
+
+        WebView 有效 → grab() 截取页面；
+        WebView 已销毁 → 自动回退系统级屏幕截图（mss），保证截图功能可用。
+        """
         try:
             path = Path(filepath)
             path.parent.mkdir(parents=True, exist_ok=True)
-            self._web_view.grab().save(str(path))
-            logger.debug(f"📸 [Bridge] 截图已保存: {filepath}")
-            self._pending_js_result = "ok"
+            if self.is_webview_valid():
+                try:
+                    self._web_view.grab().save(str(path))
+                    logger.debug(f"📸 [Bridge] 截图已保存: {filepath}")
+                    self._pending_js_result = "ok"
+                    return
+                except RuntimeError:
+                    # grab 期间 WebView 恰好被销毁 → 走兜底
+                    pass
+            # ===== WebView 已销毁 → 系统级截图兜底 =====
+            ok = _fallback_system_screenshot(str(path))
+            if ok:
+                logger.warning(f"🖥️ [Bridge] WebView 已销毁，已用系统截图兜底: {filepath}")
+                self._pending_js_result = "fallback"
+            else:
+                logger.error("📸 [Bridge] 系统截图兜底也失败，截图彻底失败")
+                self._pending_js_result = "webview_deleted"
         except Exception as e:
             logger.error(f"📸 [Bridge] 截图失败: {e}")
             self._pending_js_result = "error"
@@ -508,3 +543,33 @@ def unregister_bridge():
     _bridge = None
     _admin_bridge = None
     logger.info("🔌 BrowserBridge 已释放")
+
+
+def _fallback_system_screenshot(filepath: str) -> bool:
+    """系统级截图兜底：WebView 销毁后直接截取屏幕（主显示器）。
+
+    优先 mss（C 扩展毫秒级），不可用时回退 pyautogui。
+    保证截图功能在浏览器失效时依然可用。
+    """
+    # mss 优先
+    try:
+        import mss
+        from mss.tools import to_png
+        with mss.mss() as sct:
+            monitor = sct.monitors[1]  # 主显示器
+            shot = sct.grab(monitor)
+            to_png(shot.rgb, shot.size, output=filepath)
+        return True
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.error(f"🖥️ [Bridge] mss 系统截图失败: {e}")
+    # pyautogui 兜底
+    try:
+        import pyautogui
+        img = pyautogui.screenshot()
+        img.save(filepath)
+        return True
+    except Exception as e:
+        logger.error(f"🖥️ [Bridge] pyautogui 系统截图失败: {e}")
+        return False

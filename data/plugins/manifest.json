@@ -650,5 +650,23 @@
       "gzh_ocr_read"
     ],
     "icon": "📰"
+  },
+  {
+    "id": "viral_writer",
+    "name": "爆款文章工坊",
+    "version": "1.0.0",
+    "author": "7Tan",
+    "type": "custom",
+    "category": "写作",
+    "description": "爆款方法论 + DeepSeek 深度推理：选题→标题→大纲→正文→金句→发布检查，一站式产出高传播公众号文章",
+    "tools": [
+      "viral_topic",
+      "viral_title",
+      "viral_outline",
+      "viral_write",
+      "viral_quotes",
+      "viral_check"
+    ],
+    "icon": "🚀"
   }
 ]

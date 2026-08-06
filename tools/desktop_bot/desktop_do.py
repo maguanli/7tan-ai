@@ -56,6 +56,37 @@ _OCR_CACHE_TTL = 3.0
 _OCR_SCALE = 0.75
 
 
+def _wait_async(op):
+    """等待 WinRT 异步操作完成，兼容 winrt/winsdk 新旧版本。
+
+    - 旧版 winsdk/winrt: op.get()
+    - winsdk 1.x 部分操作: op.get_results() 可用
+    - winsdk 1.x 部分操作（如 BitmapDecoder.create_async）必须真正 await
+    """
+    if hasattr(op, 'get'):
+        return op.get()
+    try:
+        return op.get_results()
+    except Exception:
+        pass
+    # winsdk 1.x：必须在事件循环中 await（新线程避免阻塞调用线程）
+    import asyncio
+    import threading
+
+    box = {}
+
+    async def _await_op(o):
+        return await o
+
+    def _run():
+        box['v'] = asyncio.run(_await_op(op))
+
+    t = threading.Thread(target=_run)
+    t.start()
+    t.join()
+    return box['v']
+
+
 def _get_ocr_engine():
     global _ocr_engine
     if _ocr_engine is not None:
@@ -131,9 +162,9 @@ def _ocr_screen(region=None):
             writer.store_async().get_results()
         stream.seek(0)
 
-        decoder = BD.create_async(stream).get_results()
-        bitmap = decoder.get_software_bitmap_async().get_results()
-        result = engine.recognize_async(bitmap).get_results()
+        decoder = _wait_async(BD.create_async(stream))
+        bitmap = _wait_async(decoder.get_software_bitmap_async())
+        result = _wait_async(engine.recognize_async(bitmap))
 
         ox, oy = (0, 0)
         if region:
@@ -256,6 +287,72 @@ def _list_windows(keyword=None):
     WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     user32.EnumWindows(WNDENUMPROC(cb), 0)
     return result
+
+
+def _get_window_rect(hwnd):
+    """获取窗口矩形 (left, top, width, height)"""
+    user32 = ctypes.windll.user32
+    r = wintypes.RECT()
+    user32.GetWindowRect(hwnd, ctypes.byref(r))
+    return (r.left, r.top, r.right - r.left, r.bottom - r.top)
+
+
+def _foreground_window():
+    """获取前台窗口 (hwnd, title, rect) 或 (None, '', None)"""
+    user32 = ctypes.windll.user32
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return None, '', None
+    length = user32.GetWindowTextLengthW(hwnd)
+    title = ''
+    if length > 0:
+        buf = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(hwnd, buf, length + 1)
+        title = buf.value
+    return hwnd, title, _get_window_rect(hwnd)
+
+
+def cmd_snapshot(top=12, ocr_top=25, region=None):
+    """结构化桌面快照：前台窗口 + 窗口列表(标题/位置/大小/前台标记) + 前台窗口区域 OCR 摘要。
+
+    为什么快：① 窗口元信息毫秒级（不截图）② OCR 只跑前台窗口区域（比全屏快 5~10 倍）
+    ③ 输出精简 JSON，AI 一眼看懂，token 消耗小。
+    """
+    import json
+    fg_hwnd, fg_title, fg_rect = _foreground_window()
+    items = []
+    for hwnd, title in _list_windows():
+        try:
+            x, y, w, h = _get_window_rect(hwnd)
+        except Exception:
+            continue
+        if w < 80 or h < 80:  # 过滤托盘/极小窗口
+            continue
+        items.append({
+            'title': title[:60],
+            'x': x, 'y': y, 'w': w, 'h': h,
+            'foreground': (hwnd == fg_hwnd),
+        })
+    items.sort(key=lambda it: (not it['foreground'], -it['w'] * it['h']))
+    out = {
+        'foreground': fg_title or '(无前台窗口)',
+        'fg_rect': fg_rect,
+        'windows': items[:top],
+    }
+    # 只 OCR 前台窗口区域（裁掉标题栏 ~40px，减小范围加速）
+    ocr_region = region
+    if ocr_region is None and fg_rect and fg_rect[2] > 100 and fg_rect[3] > 100:
+        x, y, w, h = fg_rect
+        ocr_region = f'{x},{y + 40},{w},{max(100, h - 40)}'
+    if ocr_region:
+        lines = _ocr_screen(ocr_region)
+        out['fg_text'] = [
+            {'text': ln['text'], 'cx': int(ln['cx']), 'cy': int(ln['cy'])}
+            for ln in lines[:ocr_top]
+        ]
+    else:
+        out['fg_text'] = []
+    return json.dumps(out, ensure_ascii=False, indent=1)
 
 
 def _activate_window(keyword):
@@ -494,6 +591,11 @@ def main():
     pi = sub.add_parser('paste-img'); pi.add_argument('--path', required=True); pi.add_argument('--pos', default='')
     h = sub.add_parser('hotkey'); h.add_argument('--keys', required=True)
     v = sub.add_parser('verify'); v.add_argument('--text', required=True); v.add_argument('--region', default='')
+    sn = sub.add_parser('snapshot')
+    sn.add_argument('--top', type=int, default=12)
+    sn.add_argument('--ocr-top', type=int, default=25)
+    sn.add_argument('--region', default='')
+
     sc = sub.add_parser('send-chat')
     sc.add_argument('--window', required=True)
     sc.add_argument('--search', required=True)
@@ -526,6 +628,8 @@ def main():
             print(cmd_hotkey(args.keys))
         elif cmd == 'verify':
             print(cmd_verify(args.text, args.region or None))
+        elif cmd == 'snapshot':
+            print(cmd_snapshot(args.top, args.ocr_top, args.region or None))
         elif cmd == 'send-chat':
             print(cmd_send_chat(args.window, args.search, args.message,
                                 args.hotkey, verify=not args.no_verify))

@@ -104,6 +104,37 @@ class WindowsOcrEngine:
         if debug:
             print(f"[debug] Windows OCR 语言: {engine.recognizer_language.language_tag}")
 
+    @staticmethod
+    def _wait(op):
+        """等待 WinRT 异步操作完成，兼容 winrt/winsdk 新旧版本。
+
+        - 旧版 winsdk/winrt: op.get()
+        - winsdk 1.x 部分操作: op.get_results() 可用
+        - winsdk 1.x 部分操作（如 BitmapDecoder.create_async）必须真正 await
+        """
+        if hasattr(op, "get"):  # 旧版 winrt/winsdk
+            return op.get()
+        try:
+            return op.get_results()
+        except Exception:
+            pass
+        # winsdk 1.x：必须在事件循环中 await（当前线程可能无事件循环，用新线程）
+        import asyncio
+        import threading
+
+        box = {}
+
+        async def _await_op(o):
+            return await o
+
+        def _run():
+            box["v"] = asyncio.run(_await_op(op))
+
+        t = threading.Thread(target=_run)
+        t.start()
+        t.join()
+        return box["v"]
+
     def recognize(self, pil_img):
         """识别 PIL 图片，返回文本。"""
         buf = io.BytesIO()
@@ -117,12 +148,12 @@ class WindowsOcrEngine:
         if hasattr(writer, "store"):
             writer.store()
         else:
-            writer.store_async().get()
+            self._wait(writer.store_async())
         stream.seek(0)
 
-        decoder = self._BD.create_async(stream).get()
-        bitmap = decoder.get_software_bitmap_async().get()
-        result = self.engine.recognize_async(bitmap).get()
+        decoder = self._wait(self._BD.create_async(stream))
+        bitmap = self._wait(decoder.get_software_bitmap_async())
+        result = self._wait(self.engine.recognize_async(bitmap))
         return result.text
 
 

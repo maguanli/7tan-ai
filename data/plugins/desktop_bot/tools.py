@@ -81,6 +81,28 @@ def desktop_windows(keyword: str = "") -> str:
 
 
 @register_tool(
+    name="desktop_snapshot",
+    description="获取桌面结构化快照（最快看明白桌面）：前台窗口标题+位置、可见窗口列表(标题/坐标/大小/是否前台)、前台窗口区域 OCR 文字摘要（带坐标）。一次调用代替 截图+全屏OCR：窗口信息毫秒级、OCR只跑活动窗口区域（比全屏快5~10倍）、输出精简JSON token消耗小。桌面自动化第一步建议用它。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "top": {"type": "integer", "description": "最多返回窗口数", "default": 12},
+            "ocr_top": {"type": "integer", "description": "OCR 摘要最多行数", "default": 25},
+            "region": {"type": "string", "description": "指定 OCR 区域 x,y,w,h（默认=前台窗口区域）", "default": ""},
+        },
+        "required": [],
+    },
+    category="desktop"
+)
+def desktop_snapshot(top: int = 12, ocr_top: int = 25, region: str = "") -> str:
+    """桌面快照（结构化摘要）"""
+    args = ['snapshot', '--top', str(top), '--ocr-top', str(ocr_top)]
+    if region:
+        args += ['--region', region]
+    return _run(args, timeout=60)
+
+
+@register_tool(
     name="desktop_activate",
     description="激活指定窗口（按标题模糊匹配，自动恢复最小化并置前）。用于把微信/QQ/任意软件窗口切到前台。",
     parameters={

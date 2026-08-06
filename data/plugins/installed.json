@@ -37,6 +37,7 @@
     "perf_tools",
     "tts_piper",
     "whisper_stt",
-    "iching"
+    "iching",
+    "sunzi"
   ]
 }

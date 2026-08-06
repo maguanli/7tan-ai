@@ -612,5 +612,21 @@
       "iching_daily"
     ],
     "icon": "☯"
+  },
+  {
+    "id": "sunzi",
+    "name": "孙子兵法",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "builtin",
+    "category": "知识",
+    "description": "孙子兵法智慧：兵法问答、决策推演、篇章查询、每日兵法。接入独立知识库项目，先谋后动、避实击虚、知彼知己。",
+    "tools": [
+      "sunzi_ask",
+      "sunzi_strategy",
+      "sunzi_chapter",
+      "sunzi_daily"
+    ],
+    "icon": "⚔️"
   }
 ]

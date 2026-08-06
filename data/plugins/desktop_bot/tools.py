@@ -1,0 +1,305 @@
+# -*- coding: utf-8 -*-
+"""
+通用桌面机器人插件 🤖 — 屏幕自动化通用能力（微信/QQ/任意桌面软件）
+基于 tools/desktop_bot/desktop_do.py（mss 截图 + Windows OCR 定位 + pyautogui 键鼠 + win32 剪贴板）
+工具:
+  desktop_env_check     环境检查（依赖库/OCR 引擎/窗口）
+  desktop_windows       列出可见窗口
+  desktop_activate      激活窗口（标题模糊匹配）
+  desktop_screenshot    全屏/区域截图
+  desktop_ocr           屏幕 OCR（文字+坐标）
+  desktop_click_text    按文字定位点击（OCR 找字→点字）
+  desktop_click_pos     按坐标点击
+  desktop_type_text     输入文本（剪贴板直写，毫秒级）
+  desktop_paste_image   粘贴图片到当前焦点
+  desktop_hotkey        发送组合键
+  desktop_verify        验证屏幕是否出现文字
+  desktop_send_chat     通用聊天发送（激活→搜索→输入→发送→验证）
+"""
+import os
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))  # 7tanAI 根目录
+DO = os.path.join(ROOT, 'tools', 'desktop_bot', 'desktop_do.py')
+
+from src.tools.registry import register_tool
+
+CREATE_NO_WINDOW = 0x08000000
+
+
+def _run(args_list, timeout=120):
+    """调用统一入口脚本 desktop_do.py，返回 stdout"""
+    if not os.path.exists(DO):
+        return f'❌ 缺少桌面机器人脚本: {DO}'
+    cmd = [sys.executable, DO] + args_list
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True,
+                           encoding='utf-8', errors='replace',
+                           timeout=timeout, cwd=ROOT,
+                           creationflags=CREATE_NO_WINDOW)
+        out = r.stdout or ''
+        if r.returncode != 0:
+            out += '\n[stderr] ' + ((r.stderr or '')[-1500:])
+        return out.strip() or f'（无输出，exit={r.returncode}）'
+    except subprocess.TimeoutExpired:
+        return '⏰ 执行超时。请确认目标软件窗口已打开并显示在前台。'
+    except Exception as e:
+        return f'❌ 执行失败: {e}'
+
+
+@register_tool(
+    name="desktop_env_check",
+    description="检查桌面机器人环境：mss/PIL/pyautogui/win32clipboard/winrt 依赖是否安装、Windows OCR 引擎是否可用、可见窗口列表。每次桌面自动化前先调用。",
+    parameters={"type": "object", "properties": {}, "required": []},
+    category="desktop"
+)
+def desktop_env_check() -> str:
+    """环境检查"""
+    return _run(['check-env'], timeout=60)
+
+
+@register_tool(
+    name="desktop_windows",
+    description="列出当前桌面所有可见窗口（可带关键字过滤）。用于确认目标软件（微信等）是否打开、窗口标题是什么。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "keyword": {"type": "string", "description": "标题关键字过滤（如 微信），留空列出全部", "default": ""},
+        },
+        "required": [],
+    },
+    category="desktop"
+)
+def desktop_windows(keyword: str = "") -> str:
+    """列出窗口"""
+    args = ['windows']
+    if keyword:
+        args += ['--keyword', keyword]
+    return _run(args, timeout=30)
+
+
+@register_tool(
+    name="desktop_activate",
+    description="激活指定窗口（按标题模糊匹配，自动恢复最小化并置前）。用于把微信/QQ/任意软件窗口切到前台。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "窗口标题关键字（如 微信）"},
+        },
+        "required": ["title"],
+    },
+    category="desktop"
+)
+def desktop_activate(title: str) -> str:
+    """激活窗口"""
+    if not title.strip():
+        return "请提供窗口标题关键字（--title）"
+    return _run(['activate', '--title', title], timeout=30)
+
+
+@register_tool(
+    name="desktop_screenshot",
+    description="对桌面全屏或指定区域截图保存到本地。用于查看当前屏幕状态、记录证据。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "save": {"type": "string", "description": "保存路径（留空自动生成到 data/screenshots）", "default": ""},
+            "region": {"type": "string", "description": "区域 x,y,w,h（留空=全屏）", "default": ""},
+        },
+        "required": [],
+    },
+    category="desktop"
+)
+def desktop_screenshot(save: str = "", region: str = "") -> str:
+    """截图"""
+    args = ['screenshot']
+    if save:
+        args += ['--save', save]
+    if region:
+        args += ['--region', region]
+    return _run(args, timeout=30)
+
+
+@register_tool(
+    name="desktop_ocr",
+    description="对屏幕（全屏或指定区域）进行 OCR 文字识别，返回每行文字的坐标。用于了解屏幕上有哪些按钮/文字、定位元素。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "region": {"type": "string", "description": "区域 x,y,w,h（留空=全屏）", "default": ""},
+        },
+        "required": [],
+    },
+    category="desktop"
+)
+def desktop_ocr(region: str = "") -> str:
+    """屏幕 OCR"""
+    args = ['ocr']
+    if region:
+        args += ['--region', region]
+    return _run(args, timeout=60)
+
+
+@register_tool(
+    name="desktop_click_text",
+    description="按文字定位点击：OCR 找到屏幕上指定的文字（按钮/菜单项），点击其中心。文字支持 | 分隔多个候选。可传排除词防止点错。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "text": {"type": "string", "description": "要点击的文字（多个候选用 | 分隔，如 发表|发送）"},
+            "exclude": {"type": "string", "description": "排除词（含这些词的文字不点，多个用 | 分隔）", "default": ""},
+            "region": {"type": "string", "description": "限定搜索区域 x,y,w,h（留空=全屏）", "default": ""},
+            "double": {"type": "boolean", "description": "是否双击", "default": False},
+        },
+        "required": ["text"],
+    },
+    category="desktop"
+)
+def desktop_click_text(text: str, exclude: str = "", region: str = "", double: bool = False) -> str:
+    """按文字点击"""
+    if not text.strip():
+        return "请提供要点击的文字（--text）"
+    args = ['click', '--text', text]
+    if exclude:
+        args += ['--exclude', exclude]
+    if region:
+        args += ['--region', region]
+    if double:
+        args += ['--double']
+    return _run(args, timeout=60)
+
+
+@register_tool(
+    name="desktop_click_pos",
+    description="按屏幕坐标点击（x,y）。适合已知精确位置时使用。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "pos": {"type": "string", "description": "坐标 x,y（如 500,300）"},
+            "double": {"type": "boolean", "description": "是否双击", "default": False},
+        },
+        "required": ["pos"],
+    },
+    category="desktop"
+)
+def desktop_click_pos(pos: str, double: bool = False) -> str:
+    """坐标点击"""
+    if not pos.strip():
+        return "请提供坐标（--pos x,y）"
+    args = ['click-pos', '--pos', pos]
+    if double:
+        args += ['--double']
+    return _run(args, timeout=30)
+
+
+@register_tool(
+    name="desktop_type_text",
+    description="向当前焦点输入文本：剪贴板直写+Ctrl+V 粘贴（毫秒级，支持中文）。可先点击指定坐标再输入。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "text": {"type": "string", "description": "要输入的文本内容"},
+            "pos": {"type": "string", "description": "先点击的坐标 x,y（可选）", "default": ""},
+        },
+        "required": ["text"],
+    },
+    category="desktop"
+)
+def desktop_type_text(text: str, pos: str = "") -> str:
+    """输入文本"""
+    if not text:
+        return "请提供文本内容（--text）"
+    args = ['type', '--text', text]
+    if pos:
+        args += ['--pos', pos]
+    return _run(args, timeout=30)
+
+
+@register_tool(
+    name="desktop_paste_image",
+    description="把本地图片粘贴到当前焦点窗口（剪贴板写入图片+Ctrl+V）。用于往聊天/编辑器里贴图。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "本地图片路径"},
+            "pos": {"type": "string", "description": "先点击的坐标 x,y（可选）", "default": ""},
+        },
+        "required": ["path"],
+    },
+    category="desktop"
+)
+def desktop_paste_image(path: str, pos: str = "") -> str:
+    """粘贴图片"""
+    if not path:
+        return "请提供图片路径（--path）"
+    args = ['paste-img', '--path', path]
+    if pos:
+        args += ['--pos', pos]
+    return _run(args, timeout=30)
+
+
+@register_tool(
+    name="desktop_hotkey",
+    description="发送键盘组合键（如 ctrl,f / ctrl,v / alt,tab / enter）。用于触发搜索、粘贴、发送等操作。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "keys": {"type": "string", "description": "组合键，逗号分隔（如 ctrl,f 或 enter）"},
+        },
+        "required": ["keys"],
+    },
+    category="desktop"
+)
+def desktop_hotkey(keys: str) -> str:
+    """组合键"""
+    if not keys.strip():
+        return "请提供键位（--keys ctrl,f）"
+    return _run(['hotkey', '--keys', keys], timeout=30)
+
+
+@register_tool(
+    name="desktop_verify",
+    description="验证屏幕是否出现指定文字（OCR 全屏/区域查找）。用于操作后确认结果（消息上屏、弹窗出现等）。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "text": {"type": "string", "description": "要查找的文字（多个候选用 | 分隔）"},
+            "region": {"type": "string", "description": "限定区域 x,y,w,h（留空=全屏）", "default": ""},
+        },
+        "required": ["text"],
+    },
+    category="desktop"
+)
+def desktop_verify(text: str, region: str = "") -> str:
+    """验证屏幕文字"""
+    if not text.strip():
+        return "请提供要查找的文字（--text）"
+    args = ['verify', '--text', text]
+    if region:
+        args += ['--region', region]
+    return _run(args, timeout=60)
+
+
+@register_tool(
+    name="desktop_send_chat",
+    description="通用聊天发送流程：激活窗口 → 打开搜索(Ctrl+F) → 输入搜索词 → 回车进入聊天 → 粘贴消息 → 回车发送 → OCR 验证消息上屏。用于微信/QQ等桌面聊天软件自动发消息。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "window": {"type": "string", "description": "窗口标题关键字（如 微信）"},
+            "search": {"type": "string", "description": "搜索对象名（如 7坛游戏社区）"},
+            "message": {"type": "string", "description": "要发送的消息内容"},
+            "hotkey": {"type": "string", "description": "搜索快捷键（默认 ctrl,f）", "default": "ctrl,f"},
+        },
+        "required": ["window", "search", "message"],
+    },
+    category="desktop"
+)
+def desktop_send_chat(window: str, search: str, message: str, hotkey: str = "ctrl,f") -> str:
+    """通用聊天发送"""
+    if not window.strip() or not search.strip() or not message.strip():
+        return "请提供 window/search/message 三项参数"
+    return _run(['send-chat', '--window', window, '--search', search,
+                 '--message', message, '--hotkey', hotkey], timeout=90)

@@ -668,5 +668,29 @@
       "viral_check"
     ],
     "icon": "🚀"
+  },
+  {
+    "id": "desktop_bot",
+    "name": "桌面机器人",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "custom",
+    "category": "自动化",
+    "description": "通用桌面自动化：窗口激活/截图/OCR定位/按字点击/文本图片输入/组合键/聊天发送。基于 mss + Windows OCR + pyautogui + win32 剪贴板，可操作微信、QQ、任意桌面软件。",
+    "tools": [
+      "desktop_env_check",
+      "desktop_windows",
+      "desktop_activate",
+      "desktop_screenshot",
+      "desktop_ocr",
+      "desktop_click_text",
+      "desktop_click_pos",
+      "desktop_type_text",
+      "desktop_paste_image",
+      "desktop_hotkey",
+      "desktop_verify",
+      "desktop_send_chat"
+    ],
+    "icon": "🤖"
   }
 ]

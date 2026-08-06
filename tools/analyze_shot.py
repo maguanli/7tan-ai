@@ -1,36 +1,19 @@
-"""分析桌面截图：统计颜色分布，判断窗口是否正常渲染"""
-import sys
-from collections import Counter
+# -*- coding: utf-8 -*-
+"""分析成功截图 search_input.png：定位搜索框和联想面板结构"""
+import sys, io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+sys.path.insert(0, r'D:\7tan\7tanAI\tools')
 from PIL import Image
+import wechat_scan as ws
 
-path = sys.argv[1]
-img = Image.open(path).convert("RGB")
-w, h = img.size
-print(f"size: {w}x{h}")
-
-# 缩小采样
-small = img.resize((160, 90))
-px = list(small.getdata())
-total = len(px)
-counter = Counter(px)
-
-# 判断主色调
-top = counter.most_common(8)
-for color, cnt in top:
-    print(f"  #{color[0]:02X}{color[1]:02X}{color[2]:02X} : {cnt/total*100:.1f}%")
-
-# 统计暗/亮占比
-dark = sum(c for c, n in counter.items() if sum(c) < 120) / total
-light = sum(c for c, n in counter.items() if sum(c) >= 500) / total
-mid = 1 - dark - light
-print(f"dark={dark*100:.1f}% light={light*100:.1f}% mid={mid*100:.1f}%")
-
-# 多样性（颜色数）
-print(f"distinct_colors={len(counter)}")
-
-if light > 0.98:
-    print("RESULT: 全白/接近全白 -> 窗口空白!")
-elif dark > 0.98:
-    print("RESULT: 全黑/接近全黑 -> 窗口空白!")
-else:
-    print("RESULT: 有内容渲染")
+for name in ['search_input.png', 'sbhit_0.png']:
+    try:
+        img = Image.open(rf'D:\7tan\7tanAI\tools\ocr_work\{name}')
+    except Exception as e:
+        print(name, "OPEN FAIL", e)
+        continue
+    print(f"===== {name} size={img.size} =====")
+    big = img.resize((img.width*2, img.height*2), Image.LANCZOS)
+    words, text = ws.ocr_words(big, scale=1.0)
+    for wx, wy, ww, wh, wt in words[:40]:
+        print(f"  ({wx},{wy},{ww},{wh}) | {wt}")

@@ -628,5 +628,27 @@
       "sunzi_daily"
     ],
     "icon": "⚔️"
+  },
+  {
+    "id": "gzh_publish",
+    "name": "公众号发布",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "custom",
+    "category": "发布",
+    "description": "微信公众号爆款文章发布套件：标题/作者/正文/摘要/封面/原创声明/存草稿/发表，基于桌面自动化（pyautogui+剪贴板+OCR）。含爆款调研工具（区域OCR读阅读量，不烧CPU）。",
+    "tools": [
+      "gzh_env_check",
+      "gzh_fill_form",
+      "gzh_paste_body",
+      "gzh_set_digest",
+      "gzh_set_cover",
+      "gzh_toggle_original",
+      "gzh_save_draft",
+      "gzh_do_publish",
+      "gzh_full_flow",
+      "gzh_ocr_read"
+    ],
+    "icon": "📰"
   }
 ]

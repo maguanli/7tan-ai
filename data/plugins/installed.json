@@ -38,6 +38,7 @@
     "tts_piper",
     "whisper_stt",
     "iching",
-    "sunzi"
+    "sunzi",
+    "gzh_publish"
   ]
 }

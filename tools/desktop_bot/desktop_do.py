@@ -450,9 +450,15 @@ def cmd_ocr(region):
     return '\n'.join(out)
 
 
-def cmd_click_text(text, exclude, region, double):
+def cmd_click_text(text, exclude, region, double, window=None):
     keywords = [k.strip() for k in text.split('|') if k.strip()]
     exs = [k.strip() for k in exclude.split('|') if k.strip()] if exclude else None
+    # 🔒 点击前快照确认：验证前台窗口正是期望的窗口，防止点错对象
+    if window:
+        fg_hwnd, fg_title, _ = _foreground_window()
+        if not fg_title or window.lower() not in fg_title.lower():
+            return (f'❌ 点击前验证失败：期望在「{window}」窗口操作，'
+                    f'但当前前台窗口是「{fg_title or "无"}」。已取消点击（防误点）。')
     hit = _find_text(keywords, exclude=exs, region=region)
     if not hit:
         return f'❌ 未在屏幕找到文字: {text}'
@@ -520,7 +526,167 @@ def cmd_verify(text, region):
     return f'❌ 屏幕未出现文字: {text}'
 
 
-def cmd_send_chat(window, search, message, hotkey, verify=True):
+def cmd_uia(title=None, depth=4, top=80):
+    """UI Automation 控件树：直接读原生控件（按钮/编辑框/文本），比 OCR 快 10 倍且零乱码。
+
+    优先 pywinauto(UIA backend)，失败回退 uiautomation 库。输出 JSON：控件类型/名称/坐标。
+    """
+    import json
+    hwnd = None
+    if title:
+        wins = _list_windows(title)
+        if not wins:
+            return json.dumps({'error': f'未找到标题含「{title}」的窗口'}, ensure_ascii=False)
+        hwnd = wins[0][0]
+    # ---- 优先 pywinauto UIA backend ----
+    try:
+        from pywinauto import Desktop
+        from pywinauto.controls.uiawrapper import UIAWrapper
+        if hwnd is None:
+            app = Desktop(backend='uia')
+            win = app.window(handle=app.active())
+        else:
+            app = Desktop(backend='uia')
+            win = app.window(handle=hwnd)
+        controls = []
+
+        def walk(el, d):
+            if len(controls) >= top or d > depth:
+                return
+            try:
+                ctype = el.element_info.control_type or ''
+            except Exception:
+                ctype = ''
+            if ctype and ctype not in ('Window', 'Pane'):
+                name = ''
+                try:
+                    name = el.window_text() or ''
+                except Exception:
+                    pass
+                try:
+                    r = el.rectangle()
+                    rect = [int(r.left), int(r.top), int(r.width()), int(r.height())]
+                except Exception:
+                    rect = None
+                if name or ctype in ('Button', 'Edit', 'CheckBox', 'ComboBox', 'TabItem', 'ListItem'):
+                    controls.append({'type': ctype, 'name': (name or '')[:40], 'rect': rect})
+            try:
+                children = el.children()
+            except Exception:
+                children = []
+            for ch in children[:50]:
+                walk(ch, d + 1)
+
+        walk(win, 0)
+        if controls:
+            return json.dumps({'backend': 'pywinauto', 'count': len(controls),
+                               'controls': controls[:top]}, ensure_ascii=False, indent=1)
+    except Exception as e:
+        pass  # 回退到 uiautomation 库
+    # ---- 回退：uiautomation 库（更稳定，支持微信） ----
+    try:
+        import uiautomation as auto
+        root = auto.ControlFromHandle(hwnd) if hwnd else auto.GetForegroundControl()
+        if root is None:
+            return json.dumps({'error': '无法获取目标控件（前台无窗口或无 UIA 支持）'}, ensure_ascii=False)
+        controls = []
+
+        def walk2(el, d):
+            if len(controls) >= top or d > depth:
+                return
+            try:
+                ctype = el.ControlTypeName or ''
+            except Exception:
+                ctype = ''
+            if ctype and ctype not in ('WindowControl', 'PaneControl', 'CustomControl'):
+                name = ''
+                try:
+                    name = el.Name or ''
+                except Exception:
+                    pass
+                try:
+                    r = el.BoundingRectangle
+                    rect = [int(r.left), int(r.top), int(r.width()), int(r.height())]
+                except Exception:
+                    rect = None
+                if name or 'Button' in ctype or 'Edit' in ctype or 'List' in ctype or 'Tab' in ctype:
+                    controls.append({'type': ctype.replace('Control', ''), 'name': (name or '')[:40], 'rect': rect})
+            try:
+                children = el.GetChildren()
+            except Exception:
+                children = []
+            for ch in children[:50]:
+                walk2(ch, d + 1)
+
+        walk2(root, 0)
+        return json.dumps({'backend': 'uiautomation', 'count': len(controls),
+                           'controls': controls[:top]}, ensure_ascii=False, indent=1)
+    except ImportError as e:
+        return json.dumps({'error': f'缺少 UIA 库（pywinauto/uiautomation）: {e}'}, ensure_ascii=False)
+
+
+def cmd_tmatch(template, region=None, threshold=0.8, max_matches=5, save=None):
+    """模板匹配：用图像模板（如发送/保存按钮图标）在屏幕中定位，比 OCR 更稳。
+
+    cv2.matchTemplate(TM_CCOEFF_NORMED) + 非极大值抑制。
+    返回所有匹配点（屏幕坐标）。阈值 0~1，默认 0.8。
+    """
+    import json
+    if not os.path.exists(template):
+        return json.dumps({'error': f'模板文件不存在: {template}'}, ensure_ascii=False)
+    try:
+        import mss
+        import numpy as np
+        import cv2
+    except ImportError as e:
+        return json.dumps({'error': f'缺少依赖(mss/numpy/cv2): {e}'}, ensure_ascii=False)
+    try:
+        with mss.mss() as sct:
+            if region:
+                x, y, w, h = [int(v) for v in region.split(',')]
+                shot = sct.grab({'left': x, 'top': y, 'width': w, 'height': h})
+                ox, oy = x, y
+            else:
+                shot = sct.grab(sct.monitors[0])
+                ox, oy = 0, 0
+        screen = np.array(shot)[:, :, :3]  # BGRA -> BGR
+        tpl = cv2.imread(template)
+        if tpl is None:
+            return json.dumps({'error': f'无法读取模板图片（可能不是有效图片）: {template}'}, ensure_ascii=False)
+        th, tw = tpl.shape[:2]
+        if screen.shape[0] < th or screen.shape[1] < tw:
+            return json.dumps({'error': '屏幕比模板还小，无法匹配'}, ensure_ascii=False)
+        res = cv2.matchTemplate(screen, tpl, cv2.TM_CCOEFF_NORMED)
+        loc = np.where(res >= threshold)
+        pts = list(zip(loc[1], loc[0]))
+        # 非极大值抑制（按分数排序，贪心去重重叠框）
+        scored = sorted(pts, key=lambda p: res[p[1], p[0]], reverse=True)
+        picks = []
+        for px, py in scored:
+            if all(abs(px - qx) > tw // 2 and abs(py - qy) > th // 2 for qx, qy in picks):
+                picks.append((px, py))
+                if len(picks) >= max_matches:
+                    break
+        matches = [{
+            'cx': int(px + tw / 2 + ox),
+            'cy': int(py + th / 2 + oy),
+            'x': int(px + ox), 'y': int(py + oy),
+            'w': int(tw), 'h': int(th),
+            'score': round(float(res[py, px]), 3),
+        } for px, py in picks]
+        if save and matches:
+            vis = screen.copy()
+            for m in matches:
+                cv2.rectangle(vis, (m['x'] - ox, m['y'] - oy),
+                              (m['x'] - ox + m['w'], m['y'] - oy + m['h']), (0, 0, 255), 2)
+            cv2.imwrite(save, vis)
+        return json.dumps({'count': len(matches), 'matches': matches,
+                           'save': save or ''}, ensure_ascii=False, indent=1)
+    except Exception as e:
+        return json.dumps({'error': f'模板匹配失败: {e}'}, ensure_ascii=False)
+
+
+def cmd_send_chat(window, search, message, hotkey, verify=True, require_window=True):
     """通用聊天发送：激活窗口 → 搜索 → 进入聊天 → 粘贴消息 → 回车 → 验证"""
     if not message.strip():
         return '❌ 消息内容为空，拒绝发送'
@@ -550,7 +716,20 @@ def cmd_send_chat(window, search, message, hotkey, verify=True):
     # 4. 回车进入聊天
     pg.press('enter')
     steps.append('回车进入聊天')
-    time.sleep(0.6)
+    time.sleep(0.8)
+    # 4.5 🔒 防发错闸门：OCR 确认目标对象已出现在屏幕上（聊天标题/搜索候选），
+    #     找不到 = 可能没进对聊天窗口，拒绝粘贴/发送！
+    if require_window:
+        probe = search.replace(' ', '').strip()
+        hit = None
+        if len(probe) >= 2:
+            hit = _find_text([probe], region=None)
+        if not hit:
+            fg = _foreground_window()
+            return (f'❌ 防发错闸门拦截：搜索「{search}」后未在屏幕确认到该名称，'
+                    f'拒绝发送（当前前台窗口: {fg[1] or "未知"}）。'
+                    f'可能原因：①搜索无结果/进了错误聊天 ②窗口遮挡。请人工确认后重试。')
+        steps.append(f'✅ 已确认目标「{hit[2]}」在屏幕')
     # 5. 粘贴消息
     ok, err = _set_clipboard_text(message)
     if not ok:
@@ -585,6 +764,17 @@ def main():
     c = sub.add_parser('click'); c.add_argument('--text', required=True)
     c.add_argument('--exclude', default=''); c.add_argument('--region', default='')
     c.add_argument('--double', action='store_true')
+    c.add_argument('--window', default='', help='点击前验证前台窗口标题含此关键字，不符则拒绝点击')
+    u = sub.add_parser('uia')
+    u.add_argument('--title', default='', help='窗口标题关键字（留空=前台窗口）')
+    u.add_argument('--depth', type=int, default=4)
+    u.add_argument('--top', type=int, default=80)
+    tm = sub.add_parser('tmatch')
+    tm.add_argument('--template', required=True, help='模板图片路径（如发送按钮图标）')
+    tm.add_argument('--region', default='')
+    tm.add_argument('--threshold', type=float, default=0.8)
+    tm.add_argument('--max-matches', type=int, default=5)
+    tm.add_argument('--save', default='', help='标注结果保存路径')
     cp = sub.add_parser('click-pos'); cp.add_argument('--pos', required=True)
     cp.add_argument('--double', action='store_true')
     t = sub.add_parser('type'); t.add_argument('--text', required=True); t.add_argument('--pos', default='')
@@ -602,6 +792,7 @@ def main():
     sc.add_argument('--message', required=True)
     sc.add_argument('--hotkey', default='ctrl,f')
     sc.add_argument('--no-verify', action='store_true')
+    sc.add_argument('--no-window-check', action='store_true', help='关闭防发错闸门（不推荐）')
 
     args = p.parse_args()
     cmd = args.cmd
@@ -617,7 +808,8 @@ def main():
         elif cmd == 'ocr':
             print(cmd_ocr(args.region or None))
         elif cmd == 'click':
-            print(cmd_click_text(args.text, args.exclude, args.region or None, args.double))
+            print(cmd_click_text(args.text, args.exclude, args.region or None,
+                                 args.double, args.window or None))
         elif cmd == 'click-pos':
             print(cmd_click_pos(args.pos, args.double))
         elif cmd == 'type':
@@ -630,9 +822,15 @@ def main():
             print(cmd_verify(args.text, args.region or None))
         elif cmd == 'snapshot':
             print(cmd_snapshot(args.top, args.ocr_top, args.region or None))
+        elif cmd == 'uia':
+            print(cmd_uia(args.title or None, args.depth, args.top))
+        elif cmd == 'tmatch':
+            print(cmd_tmatch(args.template, args.region or None,
+                             args.threshold, args.max_matches, args.save or None))
         elif cmd == 'send-chat':
             print(cmd_send_chat(args.window, args.search, args.message,
-                                args.hotkey, verify=not args.no_verify))
+                                args.hotkey, verify=not args.no_verify,
+                                require_window=not args.no_window_check))
         else:
             p.print_help()
     except KeyboardInterrupt:

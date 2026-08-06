@@ -165,8 +165,56 @@ def desktop_ocr(region: str = "") -> str:
 
 
 @register_tool(
+    name="desktop_uia",
+    description="UI Automation 控件树：直接读取目标窗口的原生控件（按钮/输入框/文本/列表项），带控件类型/名称/坐标。比 OCR 快 10 倍且零乱码（不依赖图像识别）。适合：找微信发送按钮、输入框、菜单项等原生控件。优先 pywinauto，自动回退 uiautomation。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "窗口标题关键字（留空=前台窗口）", "default": ""},
+            "depth": {"type": "integer", "description": "遍历深度", "default": 4},
+            "top": {"type": "integer", "description": "最多返回控件数", "default": 80},
+        },
+        "required": [],
+    },
+    category="desktop"
+)
+def desktop_uia(title: str = "", depth: int = 4, top: int = 80) -> str:
+    """读取 UIA 控件树"""
+    args = ['uia', '--depth', str(depth), '--top', str(top)]
+    if title:
+        args += ['--title', title]
+    return _run(args, timeout=90)
+
+
+@register_tool(
+    name="desktop_tmatch",
+    description="模板匹配：用图像模板（如发送/保存按钮图标、LOGO）在屏幕中定位元素，比 OCR 更稳（不依赖文字识别）。返回所有匹配点坐标+相似度。用法：先把目标图标截图存成 png（可用 desktop_screenshot 裁剪），再传入 --template 匹配。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "template": {"type": "string", "description": "模板图片路径（如 data/screenshots/btn_send.png）"},
+            "region": {"type": "string", "description": "限定搜索区域 x,y,w,h（留空=全屏）", "default": ""},
+            "threshold": {"type": "number", "description": "匹配阈值 0~1，默认 0.8（越高越严格）", "default": 0.8},
+            "max_matches": {"type": "integer", "description": "最多返回匹配数", "default": 5},
+        },
+        "required": ["template"],
+    },
+    category="desktop"
+)
+def desktop_tmatch(template: str, region: str = "", threshold: float = 0.8, max_matches: int = 5) -> str:
+    """模板匹配定位"""
+    if not template.strip():
+        return "请提供模板图片路径（--template）"
+    args = ['tmatch', '--template', template, '--threshold', str(threshold),
+            '--max-matches', str(max_matches)]
+    if region:
+        args += ['--region', region]
+    return _run(args, timeout=60)
+
+
+@register_tool(
     name="desktop_click_text",
-    description="按文字定位点击：OCR 找到屏幕上指定的文字（按钮/菜单项），点击其中心。文字支持 | 分隔多个候选。可传排除词防止点错。",
+    description="按文字定位点击：OCR 找到屏幕上指定的文字（按钮/菜单项），点击其中心。文字支持 | 分隔多个候选。可传排除词防止点错。支持 --window 前置窗口验证：点前确认前台窗口是目标窗口，防止点错对象。",
     parameters={
         "type": "object",
         "properties": {
@@ -174,13 +222,14 @@ def desktop_ocr(region: str = "") -> str:
             "exclude": {"type": "string", "description": "排除词（含这些词的文字不点，多个用 | 分隔）", "default": ""},
             "region": {"type": "string", "description": "限定搜索区域 x,y,w,h（留空=全屏）", "default": ""},
             "double": {"type": "boolean", "description": "是否双击", "default": False},
+            "window": {"type": "string", "description": "点击前验证前台窗口标题含此关键字（如 微信），不符则拒绝点击（防误点）", "default": ""},
         },
         "required": ["text"],
     },
     category="desktop"
 )
-def desktop_click_text(text: str, exclude: str = "", region: str = "", double: bool = False) -> str:
-    """按文字点击"""
+def desktop_click_text(text: str, exclude: str = "", region: str = "", double: bool = False, window: str = "") -> str:
+    """按文字点击（含窗口验证）"""
     if not text.strip():
         return "请提供要点击的文字（--text）"
     args = ['click', '--text', text]
@@ -190,6 +239,8 @@ def desktop_click_text(text: str, exclude: str = "", region: str = "", double: b
         args += ['--region', region]
     if double:
         args += ['--double']
+    if window:
+        args += ['--window', window]
     return _run(args, timeout=60)
 
 
@@ -306,7 +357,7 @@ def desktop_verify(text: str, region: str = "") -> str:
 
 @register_tool(
     name="desktop_send_chat",
-    description="通用聊天发送流程：激活窗口 → 打开搜索(Ctrl+F) → 输入搜索词 → 回车进入聊天 → 粘贴消息 → 回车发送 → OCR 验证消息上屏。用于微信/QQ等桌面聊天软件自动发消息。",
+    description="通用聊天发送流程：激活窗口 → 打开搜索(Ctrl+F) → 输入搜索词 → 回车进入聊天 → 粘贴消息 → 回车发送 → OCR 验证消息上屏。⚠️ 内置防发错闸门：回车进入聊天后，先 OCR 确认目标对象名称出现在屏幕上，确认不了就拒绝发送（杜绝发错对象）。用于微信/QQ等桌面聊天软件自动发消息。",
     parameters={
         "type": "object",
         "properties": {

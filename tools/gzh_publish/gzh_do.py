@@ -81,6 +81,13 @@ KEYWORDS = {
     'confirm':  ['确定', '发表'],
 }
 
+# 各操作 OCR 关键词的排除词（防止点错：弹窗文案、提示语等）
+EXCLUDES = {
+    'publish': ['确定', '确认', '成功', '取消', '是否', '吗', '预览', '群发'],
+    'confirm': ['是否', '成功', '完成', '取消'],
+    'title':   ['副标题', '原标题', '标题党'],
+}
+
 # ---------------------------------------------------------------
 # OCR 文字定位（mss 截图 + Windows OCR，引擎复用 + 结果缓存）
 # ---------------------------------------------------------------
@@ -162,12 +169,12 @@ def _ocr_screen():
         if hasattr(writer, 'store'):
             writer.store()
         else:
-            writer.store_async().get()
+            writer.store_async().get_results()
         stream.seek(0)
 
-        decoder = BD.create_async(stream).get()
-        bitmap = decoder.get_software_bitmap_async().get()
-        result = engine.recognize_async(bitmap).get()
+        decoder = BD.create_async(stream).get_results()
+        bitmap = decoder.get_software_bitmap_async().get_results()
+        result = engine.recognize_async(bitmap).get_results()
 
         lines = []
         for line in result.lines:
@@ -193,21 +200,31 @@ def _ocr_screen():
         return []
 
 
-def _find_text(keywords, lines=None):
+def _find_text(keywords, lines=None, exclude=None, region=None):
     """在 OCR 结果中找关键词，返回 (cx, cy, 命中文本) 或 None。
+    - exclude: 排除词列表，命中文本含任一排除词则跳过（防误点弹窗文案）
+    - region: (x1,y1,x2,y2) 屏幕坐标区域限制，只在该区域内找
     匹配规则：关键词与识别文本互为子串（长度>=2），避免误匹配。"""
     if lines is None:
         lines = _ocr_screen()
     if not lines:
         return None
+    exs = [e.replace(' ', '') for e in (exclude or []) if e]
     for kw in keywords:
         k = kw.replace(' ', '')
         if len(k) < 2:
             continue
         for ln in lines:
             t = ln['text']
-            if k in t or t in k:
-                return (ln['cx'], ln['cy'], t)
+            if not (k in t or t in k):
+                continue
+            if exs and any(e in t or t in e for e in exs):
+                continue
+            if region:
+                x1, y1, x2, y2 = region
+                if not (x1 <= ln['cx'] <= x2 and y1 <= ln['cy'] <= y2):
+                    continue
+            return (ln['cx'], ln['cy'], t)
     return None
 
 
@@ -232,7 +249,7 @@ def resolve(args, key, kw=None):
     explicit = val if val and val != default else None   # 用户显式传了非默认坐标
 
     if args.dynamic != 'off' and not explicit:
-        hit = _find_text(KEYWORDS.get(kw, []))
+        hit = _find_text(KEYWORDS.get(kw, []), exclude=EXCLUDES.get(kw))
         if hit:
             return (int(hit[0]), int(hit[1])), f'ocr[{hit[2]}]'
 
@@ -274,16 +291,88 @@ def front_window():
     return False
 
 
-def click_paste(pg, pc, pos, text, pause=0.5):
-    """双击定位 + 剪贴板粘贴（兼容中文）"""
+def click_paste(pg, pc, pos, text, pause=0.35):
+    """双击定位 + 剪贴板粘贴（兼容中文）。pause 缩短后每次粘贴省 ~0.5s。"""
     pg.click(pos[0], pos[1])
     time.sleep(pause)
     pg.click(pos[0], pos[1])
     time.sleep(pause * 0.5)
     pc.copy(text)
-    time.sleep(0.3)
+    time.sleep(0.25)
     pg.hotkey('ctrl', 'v')
-    time.sleep(0.8)
+    time.sleep(0.5)
+
+
+def _screen_size():
+    """当前屏幕尺寸 (w, h)，OCR 失败时兜底 1920x1080"""
+    try:
+        import mss
+        with mss.mss() as sct:
+            m = sct.monitors[0]
+            return m['width'], m['height']
+    except Exception:
+        return 1920, 1080
+
+
+def wait_for(keywords, timeout=8.0, appear=True, exclude=None, region=None, interval=0.6):
+    """智能等待：轮询 OCR 直到关键词出现/消失，替代固定 sleep。
+    页面好了立刻继续（省时间），超时返回 None。OCR 不可用时不阻塞。"""
+    if _get_ocr_engine() is None:
+        return None
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        hit = _find_text(keywords, exclude=exclude, region=region)
+        if appear and hit:
+            return hit
+        if not appear and not hit:
+            return None
+        time.sleep(interval)
+    return None
+
+
+def _check_page_ready():
+    """发表前安全检查：确认标题/正文占位符已消失（内容已填），防止误发空文章。
+    仅在 OCR 有明确证据表明内容缺失时阻止；OCR 不可用时放行。"""
+    lines = _ocr_screen()
+    if not lines:
+        return True
+    missing = []
+    if _find_text(['请在这里输入标题'], lines):
+        missing.append('标题')
+    if _find_text(['从这里开始写正文'], lines):
+        missing.append('正文')
+    if missing:
+        print('  🛑 发表前安全检查未通过：' + '、'.join(missing) + ' 仍为空！')
+        print('  🛑 已阻止发表，请先补全内容再重试。')
+        return False
+    return True
+
+
+def _img_to_clipboard(path):
+    """图片直写剪贴板（win32 CF_DIB，省去 PowerShell 启动 2-3s），失败回退 PowerShell。"""
+    try:
+        import win32clipboard
+        from PIL import Image
+        import io as _io
+        img = Image.open(path).convert('RGB')
+        buf = _io.BytesIO()
+        img.save(buf, 'BMP')
+        data = buf.getvalue()[14:]          # 去掉 14 字节 BMP 文件头，留 BITMAPINFOHEADER+像素
+        win32clipboard.OpenClipboard()
+        try:
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+        finally:
+            win32clipboard.CloseClipboard()
+        return True
+    except Exception:
+        try:
+            cmd = ['powershell', '-NoProfile', '-Command',
+                   f"Set-Clipboard -Path '{path}'"]
+            subprocess.run(cmd, capture_output=True, timeout=30, shell=True)
+            return True
+        except Exception:
+            return False
 
 
 # ---------------- 各动作实现 ----------------
@@ -326,6 +415,13 @@ def cmd_fill_form(args, pg, pc):
         pos, src = resolve(args, 'author')
         click_paste(pg, pc, pos, args.author)
         print(f'  ✅ 作者已填入 {pos} [{src}]: {args.author}')
+        # 验证：OCR 确认作者名出现在屏幕上（防"没填上"）
+        if len(args.author) >= 2:
+            hit = wait_for([args.author], timeout=4.0, appear=True)
+            if hit:
+                print(f'  ✓ 作者验证通过（OCR 识别到「{args.author}」）')
+            else:
+                print(f'  ⚠️ 作者验证未通过：OCR 未识别到「{args.author}」，请人工确认')
     if not args.title and not args.author:
         print('  ⚠️ 未提供 --title / --author')
 
@@ -369,15 +465,12 @@ def cmd_paste_body(args, pg, pc):
             if not os.path.exists(path):
                 print(f'  ⚠️ 图片不存在，跳过: {path}')
                 continue
-            try:
-                cmd = ['powershell', '-NoProfile', '-Command', f"Set-Clipboard -Path '{path}'"]
-                subprocess.run(cmd, capture_output=True, timeout=30, shell=True)
-            except Exception as e:
-                print(f'  ⚠️ 图片放入剪贴板失败: {e}')
+            if not _img_to_clipboard(path):
+                print(f'  ⚠️ 图片放入剪贴板失败: {path}')
                 continue
-            time.sleep(0.8)
+            time.sleep(0.5)
             pg.hotkey('ctrl', 'v')
-            time.sleep(1.5)
+            time.sleep(1.2)
             print(f'  ✅ 粘贴图片: {os.path.basename(path)}')
     print('  ✅ 正文粘贴完成')
 
@@ -423,15 +516,23 @@ def cmd_toggle_original(args, pg, pc):
 def cmd_save_draft(args, pg, pc):
     dp, src = resolve(args, 'draft')
     pg.click(dp[0], dp[1])
-    time.sleep(3.0)
-    print(f'  ✅ 已点击保存草稿 {dp} [{src}]')
+    # 智能等待：等「保存成功」toast 出现（最多 6 秒），比固定 3 秒更快更稳
+    hit = wait_for(['保存成功', '已保存'], timeout=6.0, appear=True)
+    if hit:
+        print(f'  ✅ 保存草稿成功（OCR 确认: {hit[2]}） @ {dp} [{src}]')
+    else:
+        time.sleep(1.5)
+        print(f'  ⚠️ 已点击保存草稿 {dp} [{src}]（未识别到成功提示，请人工确认）')
 
 
 def cmd_publish(args, pg, pc):
-    # 优先 OCR 找「发表」按钮（窗口/分辨率变化也能命中）
+    # 0) 发表前安全检查：标题/正文必须已填，防止误发不完整文章
+    if not _check_page_ready():
+        return
+    # 1) 优先 OCR 找「发表」按钮（排除弹窗文案误匹配）
     pub, psrc = None, 'default'
     if args.dynamic != 'off':
-        hit = _find_text(KEYWORDS['publish'])
+        hit = _find_text(KEYWORDS['publish'], exclude=EXCLUDES.get('publish'))
         if hit:
             pub = (int(hit[0]), int(hit[1]))
             psrc = f'ocr[{hit[2]}]'
@@ -441,14 +542,26 @@ def cmd_publish(args, pg, pc):
         pub = (dp[0] + 260, dp[1])
         psrc = 'default(+260)'
     pg.click(pub[0], pub[1])
-    time.sleep(2.0)
-    pg.click(pub[0], pub[1])
-    time.sleep(2.5)
-    print(f'  ↪ 已点击发表按钮 {pub} [{psrc}]')
-    cp, csrc = resolve(args, 'publish_confirm', kw='confirm')
+    time.sleep(1.2)
+    # 2) 弹窗出现后，在屏幕右下方区域找「确定/发表」确认按钮（避免点弹窗文案中心）
+    sw, sh = _screen_size()
+    confirm_found = _find_text(KEYWORDS['confirm'],
+                               exclude=EXCLUDES.get('confirm'),
+                               region=(int(sw * 0.4), int(sh * 0.3), sw, sh))
+    if confirm_found:
+        cp = (int(confirm_found[0]), int(confirm_found[1]))
+        print(f'  ↪ 已点击发表按钮 {pub} [{psrc}]，弹窗确认 @ {cp} [ocr:{confirm_found[2]}]')
+    else:
+        cp, csrc = resolve(args, 'publish_confirm', kw='confirm')
+        print(f'  ↪ 已点击发表按钮 {pub} [{psrc}]，未识别弹窗，用经验坐标 {cp} [{csrc}]')
     pg.click(cp[0], cp[1])
-    time.sleep(5.0)
-    print(f'  ✅ 已点击发表弹窗确认 {cp} [{csrc}]')
+    # 3) 智能等待发表成功提示（最多 10 秒），确认真的发出去了
+    done = wait_for(['发表成功', '群发成功', '已发表'], timeout=10.0, appear=True)
+    if done:
+        print(f'  ✅ 发表成功（OCR 确认: {done[2]}）')
+    else:
+        time.sleep(2.0)
+        print('  ⚠️ 已点击发表确认，但未识别到成功提示，请人工确认后台状态')
 
 
 def cmd_full_flow(args, pg, pc):

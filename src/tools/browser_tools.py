@@ -38,7 +38,28 @@ def register_web_view(view, role: str = "source"):
         register_admin_bridge(view)
     else:
         register_bridge(view)
+    # 处理 JS window.open() 弹窗 → 在当前视图打开（自动化点击不再被静默丢弃）
+    try:
+        view.page().setNewWindowRequestedHandler(
+            lambda req, v=view: _open_new_window_in_view(v, req)
+        )
+    except Exception:
+        pass
     logger.info(f"✅ BrowserView 已注册 [{role}]")
+
+
+def _open_new_window_in_view(view, request):
+    """处理 JS window.open() 弹窗：在当前视图打开 URL，避免被静默丢弃。
+
+    微信公众平台等后台点击草稿/文章会用 window.open 打开编辑页，
+    若不处理，QWebEngineView 会直接丢弃新窗口请求，导致点击无反应。
+    """
+    try:
+        url = request.requestedUrl()
+        if url.isValid() and not url.isEmpty():
+            view.setUrl(url)
+    except Exception:
+        pass
 
 
 def _get_active_view():

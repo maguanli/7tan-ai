@@ -31,6 +31,11 @@ from .context_manager import (
 
 logger = logging.getLogger(__name__)
 
+
+class AgentAbortedError(Exception):
+    """用户中止 Agent 任务时抛出（_call_llm 检测到 abort_event 后立即抛出）"""
+    pass
+
 # ── 重试与超时 ───────────────────────────────────────────
 MAX_RETRIES = 5           # 总共最多 5 次重试（含首次）
 BASE_DELAY = 2.0          # 指数退避基数（秒）
@@ -170,7 +175,7 @@ def unregister_agent_speak_callback(callback):
 
 # ── LLM 调用封装 ──────────────────────────────────────────
 
-def _call_llm(model, messages, tools, config, timeout=API_TIMEOUT):
+def _call_llm(model, messages, tools, config, timeout=API_TIMEOUT, abort_event=None):
     """统一 LLM 调用入口，带超时和重试。
     
     Args:
@@ -187,6 +192,55 @@ def _call_llm(model, messages, tools, config, timeout=API_TIMEOUT):
         TimeoutError: 超时
         Exception: 其他错误
     """
+    # \U0001f527 修复孤儿 tool_calls（assistant 带 tool_calls 但无 tool 响应），防止 API 400
+    if messages:
+        messages = _repair_messages(messages)
+
+    if abort_event is not None:
+        # \U0001f514 可中止模式：API 调用跑在 daemon 线程，主线程每 0.5s 轮询中止信号。
+        # 用户点「终止任务」后立即抛 AgentAbortedError，不等 API 返回/重试结束。
+        holder = {}
+
+        def _run_with_retry():
+            last_error = None
+            for attempt in range(1, MAX_RETRIES + 1):
+                try:
+                    holder["result"] = model.call_with_retry(
+                        messages=messages,
+                        tools=tools if tools else None,
+                        config=config,
+                        timeout=timeout,
+                    )
+                    return
+                except TimeoutError:
+                    last_error = TimeoutError(f"API 调用超时 ({timeout}s)")
+                    logger.warning(f"\u23f0 API 超时 (attempt {attempt}/{MAX_RETRIES})")
+                except Exception as e:
+                    last_error = e
+                    logger.warning(f"\u26a0\ufe0f API 错误 (attempt {attempt}/{MAX_RETRIES}): {_fix_surrogates(str(e))}")
+
+                if attempt < MAX_RETRIES:
+                    delay = BASE_DELAY * (2 ** (attempt - 1))
+                    logger.info(f"\U0001f504 {delay:.1f}s 后重试...")
+                    # 等待重试期间也可中止
+                    if abort_event.wait(delay):
+                        holder["aborted"] = True
+                        return
+
+            holder["error"] = last_error or RuntimeError("API 调用失败")
+
+        t = threading.Thread(target=_run_with_retry, daemon=True)
+        t.start()
+        while t.is_alive():
+            if abort_event.is_set():
+                raise AgentAbortedError("用户已终止任务")
+            t.join(timeout=0.5)
+        if holder.get("aborted"):
+            raise AgentAbortedError("用户已终止任务")
+        if "error" in holder:
+            raise holder["error"]
+        return holder["result"]
+
     last_error = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -295,7 +349,7 @@ def _split_diff_by_file(diff_text: str, max_chars: int) -> list:
     return chunks if chunks else [diff_text]
 
 
-def _run_review_cycle(model, messages, config, system_prompt, iteration, total_cost, all_logs, task_mode):
+def _run_review_cycle(model, messages, config, system_prompt, iteration, total_cost, all_logs, task_mode, abort_event=None):
     """Pro 写 -> Pro 审 -> 修正 -> 再审（最多3轮）
     
     Returns:
@@ -354,7 +408,7 @@ def _run_review_cycle(model, messages, config, system_prompt, iteration, total_c
             ]
             
             try:
-                review_response = _call_llm(model, review_messages, [], config)
+                review_response = _call_llm(model, review_messages, [], config, abort_event=abort_event)
                 review_text = review_response.choices[0].message.content or ""
                 # Track cost
                 cost_val = track_cost_internal(
@@ -403,7 +457,7 @@ Instructions:
         messages.append({"role": "user", "content": fix_prompt})
         
         try:
-            fix_response = _call_llm(model, messages, [], config)
+            fix_response = _call_llm(model, messages, [], config, abort_event=abort_event)
             fix_text = fix_response.choices[0].message.content or ""
             cost_val = track_cost_internal(
                 model.get_api_name(),
@@ -440,7 +494,7 @@ Instructions:
     ]
     
     try:
-        final_response = _call_llm(model, final_check_messages, [], config)
+        final_response = _call_llm(model, final_check_messages, [], config, abort_event=abort_event)
         final_text = final_response.choices[0].message.content or ""
         cost_val = track_cost_internal(
             model.get_api_name(),
@@ -477,7 +531,7 @@ def run_agent_loop(
     system_prompt: str = "",
     tools: list = None,
     ctx: ConversationContext = None,
-    max_iterations: int = 300,
+    max_iterations: int = 1000,
     task_mode: str = "general",
     session_id: str = None,      # 兼容旧调用
     model_name: str = None,      # 兼容旧调用
@@ -553,6 +607,7 @@ def run_agent_loop(
         # 检查用户是否中止
         if abort_event and abort_event.is_set():
             logger.info(f"⏹ [Agent] 用户中止，会话: {session_id}")
+            _cleanup_ctx_on_abort(ctx, messages)
             return {
                 "success": False,
                 "result": "⏹ 用户已终止任务",
@@ -570,9 +625,21 @@ def run_agent_loop(
             except Exception:
                 pass
         
-        # 调用 LLM
+        # 调用 LLM（支持用户中止：abort_event 触发时立即抛 AgentAbortedError）
         try:
-            response = _call_llm(model, messages, tools, config)
+            response = _call_llm(model, messages, tools, config, abort_event=abort_event)
+        except AgentAbortedError:
+            logger.info(f"\u23f9 [Agent] 用户中止（LLM 调用中），会话: {session_id}")
+            _cleanup_ctx_on_abort(ctx, messages)
+            return {
+                "success": False,
+                "result": "\u23f9 用户已终止任务",
+                "iterations": iteration,
+                "cost": total_cost,
+                "total_tokens": total_tokens,
+                "logs": all_logs,
+                "reason": "user_aborted",
+            }
         except Exception as e:
             logger.error(f"❌ LLM 调用失败: {_fix_surrogates(str(e))}")
             return {
@@ -661,7 +728,8 @@ def run_agent_loop(
             if _has_file_modifications(messages, iteration):
                 review_outcome = _run_review_cycle(
                     model, messages, config,
-                    system_prompt + timeout_note, iteration, total_cost, all_logs, task_mode
+                    system_prompt + timeout_note, iteration, total_cost, all_logs, task_mode,
+                    abort_event=abort_event,
                 )
                 if review_outcome == "retry":
                     continue
@@ -732,6 +800,20 @@ def run_agent_loop(
                 except Exception:
                     pass
         
+        # \U0001f514 中止检查：工具执行前（避免用户终止后还继续跑工具）
+        if abort_event and abort_event.is_set():
+            logger.info(f"\u23f9 [Agent] 用户中止（工具执行前），会话: {session_id}")
+            _cleanup_ctx_on_abort(ctx, messages)
+            return {
+                "success": False,
+                "result": "\u23f9 用户已终止任务",
+                "iterations": iteration,
+                "cost": total_cost,
+                "total_tokens": total_tokens,
+                "logs": all_logs,
+                "reason": "user_aborted",
+            }
+
         tool_results = execute_tools_parallel(tc_dicts, _execute_tool_optimized)
         
         for tc, result in zip(tool_calls_raw, tool_results):
@@ -866,6 +948,17 @@ def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str 
         error_msg = result.get("result", result.get("error", "任务失败"))
         logger.error(f"💬 Agent: {error_msg}")
         yield {"type": "done", "success": False, "result": error_msg, "tokens": result.get("total_tokens", 0)}
+
+
+def _cleanup_ctx_on_abort(ctx, messages):
+    """中止时清理对话历史中的孤儿 tool_calls，防止下次 API 400"""
+    try:
+        repaired = _repair_messages(messages)
+        if ctx is not None and hasattr(ctx, "history"):
+            ctx.history = [m for m in repaired if m.get("role") != "system"]
+            ctx._total_tokens = sum(len(m.get("content", "")) // 2 for m in ctx.history)
+    except Exception:
+        pass
 
 
 def _repair_messages(messages: list) -> list:

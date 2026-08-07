@@ -3,7 +3,7 @@
 POST /api/chat/send    — 发送消息
 GET  /api/chat/history — 获取历史
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -167,7 +167,7 @@ def _get_executor():
 
 
 @router.post("/send/stream")
-async def send_message_stream(req: ChatRequest):
+async def send_message_stream(req: ChatRequest, request: Request):
     """SSE 流式发送对话消息 — 逐步返回思考过程和结果"""
     session_id = req.session_id or create_session()
     save_message(session_id, "user", req.message)
@@ -208,6 +208,14 @@ async def send_message_stream(req: ChatRequest):
         final_data = {}
         
         while True:
+            # \U0001f514 客户端断开（关窗/点终止）→ 自动中止服务端任务，防止后台空转
+            try:
+                if await request.is_disconnected():
+                    abort_event.set()
+                    logger.info(f"\u23f9 [API] 客户端断开连接，中止会话 {session_id}")
+                    break
+            except Exception:
+                pass
             try:
                 event = await asyncio.wait_for(queue.get(), timeout=300)
             except asyncio.TimeoutError:

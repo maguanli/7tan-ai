@@ -717,8 +717,7 @@ class StatCard(QFrame):
 # ============================================================
 
 
-# 插件市场地址（后续部署插件市场页面后修改）
-MARKET_URL = "https://www.7tan.com/plugins/"
+
 
 class Sidebar(QFrame):
 
@@ -1123,8 +1122,10 @@ class Sidebar(QFrame):
 
     def _on_click(self, key):
         if key == "market":
-            # 插件市场 → 打开网页（不切换本地页面）
-            self.open_url.emit(MARKET_URL)
+            # 插件市场 → 打开软件内嵌插件市场（设置页）
+            self.set_active(key)
+            self._session_sidebar.setVisible(False)
+            self.page_changed.emit(key)
             return
 
         self.set_active(key)
@@ -6048,6 +6049,12 @@ class SettingsPage(QWidget):
 
     # =================== 插件市场 Tab ===================
 
+    def show_plugin_tab(self):
+        """侧边栏「插件市场」入口 → 定位到插件市场 Tab"""
+        if hasattr(self, "_plugin_tab"):
+            self._tabs.setCurrentWidget(self._plugin_tab)
+
+
     def _build_plugin_tab(self):
 
         layout = QVBoxLayout(self._plugin_tab)
@@ -8510,6 +8517,14 @@ class MainWindow(QMainWindow):
 
 
     def _switch_page(self, key):
+
+        if key == "market":
+            # 插件市场 → 打开设置页并定位到插件市场 Tab
+            self._sidebar.set_active("settings")
+            self._stack.setCurrentWidget(self._pages["settings"])
+            self._pages["settings"].show_plugin_tab()
+            self._status.showMessage("🧩 插件市场")
+            return
 
         if key in self._pages:
 

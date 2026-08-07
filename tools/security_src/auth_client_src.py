@@ -147,7 +147,15 @@ def login(username: str, password: str, remember_me: bool = False, device_info: 
         raise NetworkError(f"网络连接失败: {e}")
 
     if resp.status_code != 200:
-        raise ServerError(f"服务器返回 {resp.status_code}")
+        # 尝试解析服务器返回的中文错误信息（401=凭据错误，如"账号或密码错误"）
+        try:
+            _raw = resp.json()
+            _msg = _raw.get("message", "") or ""
+        except Exception:
+            _msg = (resp.text or "")[:200]
+        if resp.status_code == 401:
+            raise LoginFailed(_msg or "账号或密码错误")
+        raise ServerError(_msg or f"服务器返回 {resp.status_code}")
 
     try:
         data = resp.json()

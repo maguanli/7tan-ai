@@ -1,0 +1,11 @@
+(function(){
+  var sel = document.querySelector('select');
+  if(!sel){ return 'NO_SELECT_FOUND'; }
+  var opts = Array.prototype.slice.call(sel.options);
+  var target = opts.filter(function(o){ return o.text.indexOf('Microsoft Defender Antivirus (Windows 10)') >= 0; })[0];
+  if(!target){ return 'OPTIONS:' + opts.map(function(o){return o.text;}).join('|'); }
+  sel.value = target.value;
+  sel.dispatchEvent(new Event('change', {bubbles:true}));
+  sel.dispatchEvent(new Event('input', {bubbles:true}));
+  return 'SELECTED:' + target.text;
+})();

@@ -555,3 +555,66 @@ def close_browser():
     from .browser_bridge import unregister_bridge
     unregister_bridge()
     logger.info("🔌 浏览器引用已释放")
+
+
+@register_tool(
+    name="browser_exec_js",
+    description="在当前浏览器页面执行任意 JavaScript 并返回结果。用于填表、读取DOM、触发事件等高级操作。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "js": {"type": "string", "description": "要执行的 JavaScript 代码"},
+        },
+        "required": ["js"]
+    },
+    category="browser",
+    requires_browser=True,
+)
+def browser_exec_js(js: str) -> str:
+    """执行 JS（线程安全）"""
+    if _source_view is None and _admin_view is None:
+        return "⚠️ 浏览器未打开"
+    bridge = _get_bridge()
+    if bridge is None:
+        return "⚠️ 浏览器桥接未初始化"
+    result = bridge.execute_js(js, timeout=10.0)
+    return result or "(空结果)"
+
+
+@register_tool(
+    name="browser_set_value",
+    description="设置浏览器页面上输入框的值（自动触发 input/change 事件，兼容 React 表单）。用于填写表单。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "selector": {"type": "string", "description": "CSS 选择器"},
+            "value": {"type": "string", "description": "要设置的值"},
+        },
+        "required": ["selector", "value"]
+    },
+    category="browser",
+    requires_browser=True,
+)
+def browser_set_value(selector: str, value: str) -> str:
+    """设置输入框值（React 兼容，使用原生 setter + 事件触发）"""
+    if _source_view is None and _admin_view is None:
+        return "⚠️ 浏览器未打开"
+    bridge = _get_bridge()
+    if bridge is None:
+        return "⚠️ 浏览器桥接未初始化"
+    js_selector = selector.replace("\\", "\\\\").replace("'", "\\'")
+    js_value = value.replace("\\", "\\\\").replace("'", "\\'")
+    js = f"""
+(function() {{
+    var el = document.querySelector('{js_selector}');
+    if (!el) return 'not_found: ' + '{js_selector}';
+    var proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    var setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+    setter.call(el, '{js_value}');
+    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+    return 'set_ok: ' + el.value;
+}})()
+"""
+    result = bridge.execute_js(js, timeout=10.0)
+    return result or "(空结果)"

@@ -37,7 +37,7 @@ a = Analysis(
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
-    noarchive=False,
+    noarchive=True,
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
@@ -59,6 +59,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=os.path.join(SPECPATH, 'data', 'logo', 'app_single.ico'),
+    version=os.path.join(SPECPATH, 'file_version_info.txt'),
 )
 
 coll = COLLECT(

@@ -641,7 +641,7 @@ class ChatPage(QWidget):
         bottom_row.addWidget(self._gender_btn)
 
         # ---- 语音模式切换按钮 ----
-        self._voice_btn = QPushButton("🎤 语音")
+        self._voice_btn = QPushButton("🔊 语音")
         self._voice_btn.setFixedHeight(30)
         self._voice_btn.setMinimumWidth(105)
         self._voice_btn.setMaximumWidth(160)
@@ -672,7 +672,7 @@ class ChatPage(QWidget):
         if self._voice_mode:
             self._voice_btn.blockSignals(True)
             self._voice_btn.setChecked(True)
-            self._voice_btn.setText("🎤 语音中")
+            self._voice_btn.setText("🔊 语音中")
             self._voice_btn.blockSignals(False)
             # 🎤 启动时恢复语音模式的 UI 和 Agent 回调
             self._input.setPlaceholderText("语音模式：点击录音按钮开始说话...")
@@ -681,7 +681,7 @@ class ChatPage(QWidget):
 
         self._send_btn = QPushButton("发送 ▲")
         if self._voice_mode:
-            self._send_btn.setText("🎤 录音发送")
+            self._send_btn.setText("🔊 录音发送")
         self._send_btn.setFixedHeight(30)
         self._send_btn.setMinimumWidth(90)
         self._send_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
@@ -1627,7 +1627,7 @@ class ChatPage(QWidget):
         """切换语音/文字模式"""
         self._voice_mode = self._voice_btn.isChecked()
         if self._voice_mode:
-            self._voice_btn.setText("🎤 语音中")
+            self._voice_btn.setText("🔊 语音中")
             self._set_send_button("voice")
             self._input.setPlaceholderText("语音模式：点击录音按钮开始说话...")
             # 🎤 打开语音模式：重置防重状态（防止上一轮残留标记拦截本轮朗读）
@@ -1639,7 +1639,7 @@ class ChatPage(QWidget):
             from ..agent.agent_loop import register_agent_speak_callback
             register_agent_speak_callback(self._speak_response)
         else:
-            self._voice_btn.setText("🎤 语音")
+            self._voice_btn.setText("🔊 语音")
             self._set_send_button("send")
             self._input.setPlaceholderText("输入消息... (Enter 发送, Shift+Enter 换行, 可拖拽文件)")
             # 🎤 注销本页面朗读回调（全局语音桥按 voice_mode 开关自行决定）
@@ -1665,7 +1665,7 @@ class ChatPage(QWidget):
                 }}
             """)
         elif state == "voice":
-            self._send_btn.setText("🎤 录音发送")
+            self._send_btn.setText("🔊 录音发送")
             self._send_btn.setStyleSheet(self._send_btn_normal_style)
         else:  # send
             self._send_btn.setText("发送 ▲")

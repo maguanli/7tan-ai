@@ -31,7 +31,7 @@ from PyQt6.QtGui import QTextCursor
 # 绝对路径锚定项目 data 目录（与 code_change_bus 一致，不依赖启动 CWD）
 _GEOMETRY_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "panel_geometry.json"
 
-from ..utils.code_change_bus import drain_changes, load_history
+from ..utils.code_change_bus import drain_changes, load_history, history_tail_size
 
 CHANGE_THEME = {
     "accent": "#7c3aed",
@@ -196,7 +196,10 @@ class CodeChangePanel(QWidget):
         # 守护定时器（隐藏期也运行，1.5s 一次极轻量）：只 stat jsonl 大小，
         # 有新增才小量读取 → 触发自动打开。修复【面板隐藏时不轮询 → 自动打开
         # 失效、与控制台文件操作不同步】问题。
-        self._guard_last_size = -1
+        # ⚠️ 启动时初始化为当前历史大小：历史记录是过去发生的修改，
+        #    不应触发自动弹出（否则每次启动 7Tan 都会弹出小窗口）。
+        #    只有本次运行中新增的修改事件（jsonl 变大）才会自动打开面板。
+        self._guard_last_size = history_tail_size()
         self._last_user_hide = 0.0
         self._guard_timer = QTimer(self)
         self._guard_timer.timeout.connect(self._guard_poll)

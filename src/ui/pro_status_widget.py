@@ -4,7 +4,6 @@
 
 安全原则：先验证后信任。RSA 验签优先，HMAC 次之，不信任裸 level 字段。
 """
-import webbrowser
 import time
 from datetime import datetime
 
@@ -109,25 +108,6 @@ class ProStatusWidget(QFrame):
         """)
         self._refresh_btn.clicked.connect(self._on_refresh)
 
-        self._upgrade_btn = QPushButton("⭐ 升级")
-        self._upgrade_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self._upgrade_btn.setFixedHeight(26)
-        self._upgrade_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {THEME['accent']};
-                color: #000;
-                border: none;
-                border-radius: 4px;
-                padding: 2px 4px;
-                font-size: 11px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: #f0c040;
-            }}
-        """)
-        self._upgrade_btn.clicked.connect(self._on_upgrade)
-
         self._logout_btn = QPushButton("🚪 退出")
         self._logout_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._logout_btn.setFixedHeight(26)
@@ -149,7 +129,6 @@ class ProStatusWidget(QFrame):
         self._logout_btn.clicked.connect(self._on_logout)
 
         btn_layout.addWidget(self._refresh_btn)
-        btn_layout.addWidget(self._upgrade_btn)
         btn_layout.addWidget(self._logout_btn)
         layout.addLayout(btn_layout)
 
@@ -249,7 +228,7 @@ class ProStatusWidget(QFrame):
             username = token_data.get("username", "") if token_data else ""
             if not username:
                 username = self._user_info.get("username", "")
-            self._level_text.setText(f"进化版  {username}" if username else "进化版")
+            self._level_text.setText(f"专业版  {username}" if username else "专业版")
 
             if pro_expires:
                 dt = datetime.fromtimestamp(pro_expires)
@@ -264,7 +243,6 @@ class ProStatusWidget(QFrame):
                     self._expiry_label.setText(f"📅 {dt.strftime('%Y-%m-%d')} 到期")
                     self._expiry_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px;")
             self._expiry_label.setVisible(True)
-            self._upgrade_btn.setText("⭐ 续费")
         else:
             self._level_badge.setText("[免费]")
             self._level_badge.setStyleSheet(f"""
@@ -282,7 +260,6 @@ class ProStatusWidget(QFrame):
                 username = self._user_info.get("username", "")
             self._level_text.setText(f"免费版  {username}" if username else "免费版")
             self._expiry_label.setVisible(False)
-            self._upgrade_btn.setText("⭐ 升级进化版")
 
         # 更新评分
         self._update_score()
@@ -361,12 +338,6 @@ class ProStatusWidget(QFrame):
                     self.logout_requested.emit()
             else:
                 QMessageBox.warning(self, "刷新失败", msg)
-
-    def _on_upgrade(self) -> None:
-        """打开 7tan.com 升级进化版页面（固定官网域名，避免配置域名错误）"""
-        url = "https://www.7tan.com/pro.php"
-        webbrowser.open(url)
-        logger.info("[ProStatus] 打开升级页面: https://www.7tan.com/pro.php")
 
     def _on_logout(self) -> None:
         """退出会员登录"""

@@ -5,13 +5,17 @@
   检查到新版本 → UpdateDialog(latest) 弹出
     → 用户点 [下载更新] → POST /api/update/download → 轮询 /api/update/progress
     → 下载完成 → [立即重启更新] → POST /api/update/apply → 退出主程序（update.bat 接管）
+
+线程说明:
+  所有 requests 均在 QThread 中执行，避免阻塞 UI 主线程；
+  服务端 apply 需解压更新包（可能>10s），超时放宽到 300s，避免误报"无法启动更新程序"。
 """
 import os
 import time
 
 import requests
 from loguru import logger
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import QThread, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QMessageBox,
     QProgressBar, QPushButton, QVBoxLayout,
@@ -20,6 +24,27 @@ from PyQt6.QtWidgets import (
 from .theme import THEME
 
 API_BASE = f"http://127.0.0.1:{os.environ.get('7TAN_PORT', '9800')}"
+
+
+class _ApiThread(QThread):
+    """后台执行 API 请求，避免阻塞 UI 主线程"""
+    success = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+    def __init__(self, method: str, url: str, timeout: int = 120, parent=None):
+        super().__init__(parent)
+        self._method = method
+        self._url = url
+        self._timeout = timeout
+
+    def run(self):
+        try:
+            resp = requests.request(self._method, self._url, timeout=self._timeout)
+            resp.raise_for_status()
+            self.success.emit(resp.json())
+        except Exception as exc:
+            logger.error(f"api request failed: {self._method} {self._url}: {exc}")
+            self.failed.emit(str(exc))
 
 
 def _fmt_size(n: int) -> str:
@@ -40,6 +65,7 @@ class UpdateDialog(QDialog):
         self._latest = latest or {}
         self._task_id = ""
         self._downloading = False
+        self._thread: _ApiThread | None = None
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(500)
         self._poll_timer.timeout.connect(self._poll_progress)
@@ -124,18 +150,27 @@ class UpdateDialog(QDialog):
         self._downloading = True
         self._dl_btn.setEnabled(False)
         self._cancel_btn.setEnabled(False)
-        self._progress.setFormat("正在下载 0%")
-        try:
-            resp = requests.post(f"{API_BASE}/api/update/download", timeout=10)
-            resp.raise_for_status()
-            self._task_id = resp.json().get("task_id", "")
+        self._progress.setFormat("正在连接更新服务器…")
+        # 后台线程执行：服务端会先联网检查更新（最长 10s），同步等待会卡 UI
+        self._thread = _ApiThread("POST", f"{API_BASE}/api/update/download", timeout=120, parent=self)
+        self._thread.success.connect(self._on_download_started)
+        self._thread.failed.connect(self._on_download_failed)
+        self._thread.start()
+
+    def _on_download_started(self, data: dict):
+        self._task_id = data.get("task_id", "")
+        if self._task_id:
+            self._progress.setFormat("正在下载 0%")
             self._poll_timer.start()
-        except Exception as exc:
-            logger.error(f"start download failed: {exc}")
-            self._downloading = False
-            self._dl_btn.setEnabled(True)
-            self._cancel_btn.setEnabled(True)
-            QMessageBox.warning(self, "下载失败", f"无法开始下载:\n{exc}")
+        else:
+            self._on_download_failed("服务器未返回下载任务 ID")
+
+    def _on_download_failed(self, msg: str):
+        self._downloading = False
+        self._dl_btn.setEnabled(True)
+        self._cancel_btn.setEnabled(True)
+        self._progress.setFormat("等待下载…")
+        QMessageBox.warning(self, "下载失败", f"无法开始下载:\n{msg}")
 
     def _poll_progress(self):
         if not self._task_id:
@@ -175,15 +210,19 @@ class UpdateDialog(QDialog):
 
     # ============ 应用更新 ============
     def _apply(self):
-        try:
-            resp = requests.post(f"{API_BASE}/api/update/apply", timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "更新失败", f"无法启动更新程序:\n{exc}")
-            return
+        self._dl_btn.setEnabled(False)
+        self._cancel_btn.setEnabled(False)
+        self._progress.setFormat("正在启动更新程序，请稍候…")
+        # 后台线程执行：服务端 apply 需解压更新包（可能>10s），
+        # 超时给 300s，避免误报"无法启动更新程序"
+        self._thread = _ApiThread("POST", f"{API_BASE}/api/update/apply", timeout=300, parent=self)
+        self._thread.success.connect(self._on_apply_done)
+        self._thread.failed.connect(self._on_apply_failed)
+        self._thread.start()
+
+    def _on_apply_done(self, data: dict):
         if not data.get("ok"):
-            QMessageBox.warning(self, "更新失败", data.get("message", "未知错误"))
+            self._on_apply_failed(data.get("message", "未知错误"))
             return
         # 更新脚本已启动 → 退出主程序，由 update.bat 接管替换与重启
         QMessageBox.information(self, "更新中", "软件将在 5 秒后自动关闭并完成更新，请稍候…")
@@ -193,3 +232,9 @@ class UpdateDialog(QDialog):
         except Exception:
             import os
             os._exit(0)
+
+    def _on_apply_failed(self, msg: str):
+        self._dl_btn.setEnabled(True)
+        self._cancel_btn.setEnabled(True)
+        self._progress.setFormat("等待下载…")
+        QMessageBox.warning(self, "更新失败", f"无法启动更新程序:\n{msg}")

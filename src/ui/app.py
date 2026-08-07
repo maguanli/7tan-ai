@@ -8437,6 +8437,9 @@ class MainWindow(QMainWindow):
 
         self._stack.setCurrentWidget(self._pages["workspace"])
 
+        # 对话列表跟随 AI 工作台一起显示（与点击侧边栏行为一致）
+        self._sidebar.session_sidebar.setVisible(True)
+
 
 
         # 🔄 启动后静默检查更新（延迟 8 秒，不阻塞启动）
@@ -8548,6 +8551,8 @@ class MainWindow(QMainWindow):
         self._sidebar.set_active("workspace")
 
         self._stack.setCurrentWidget(self._pages["workspace"])
+
+        self._sidebar.session_sidebar.setVisible(True)
 
         self._status.showMessage(f"🌐 正在打开 {url}...")
 

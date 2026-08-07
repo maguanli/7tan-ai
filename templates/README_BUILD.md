@@ -1,7 +1,10 @@
 # 7Tan 完整版 — 源码构建指南
 
-本目录（`7tan-src/`）包含 7Tan 的**完整源码与构建打包工具链**。
-使用本目录可以从零构建出与发布包一致的 `7tan-editor.exe`。
+本目录（`7tan-src/`）包含 7Tan 的**完整源码与构建工具链**。
+使用本目录可以自行构建出 `7tan-editor.exe`（构建产物仅供个人使用）。
+
+> ⚠️ **授权说明**：本软件版权归开发者所有。源码与构建产物**仅限个人学习/使用**，
+> **禁止**将构建产物打包再分发、转售或用于任何商业用途（含制作发布包销售）。
 
 ## 目录结构
 
@@ -9,20 +12,17 @@
 7tan-src/
 ├── main.py                      # 程序入口
 ├── build.spec                   # PyInstaller 构建配置
-├── build.bat                    # 构建 exe（旧版入口，需已建 .venv）
-├── build_and_sync.bat           # 一键构建 + 打包（推荐入口）
+├── build.bat                    # 构建 exe（推荐入口）
 ├── setup.bat                    # 一键环境准备（建 venv + 装依赖）
-├── package_release.py           # 发布打包脚本（生成发布 zip）
 ├── requirements.txt             # Python 依赖清单
 ├── src/                         # 全部源码
 ├── config/                      # 配置文件（密钥用环境变量占位）
 ├── data/
 │   ├── plugins/                 # 插件系统（44 个插件 + 白名单）
 │   └── logo/                    # 图标素材
-├── tools/
-│   ├── gen_plugin_hashes.py     # 插件白名单生成（构建链必需）
-│   └── security_src/            # 安全模块源码（.pyd 的 Python 源）
-└── templates/package_release.py # 打包脚本副本
+└── tools/
+    ├── gen_plugin_hashes.py     # 插件白名单生成（构建链必需）
+    └── security_src/            # 安全模块源码（.pyd 的 Python 源）
 ```
 
 ## 环境要求
@@ -33,17 +33,18 @@
 | Python | 3.12（3.11+ 亦可） [下载](https://www.python.org/downloads/) |
 | 磁盘 | 至少 5GB 可用空间（构建产物较大） |
 
-## 一键构建（推荐）
+## 构建 exe（推荐）
 
 ```bat
 :: 1. 首次使用：准备环境（创建 .venv 并安装全部依赖，约 2-5 分钟）
 setup.bat
 
-:: 2. 构建 + 打包（约 10-15 分钟）
-build_and_sync.bat -y
+:: 2. 构建 exe（约 10-15 分钟，输出到 dist\7tan-editor\）
+build.bat
 ```
 
-完成后发布包在 `dist\release\7tan-editor-v<版本>.zip`。
+构建完成后，`dist\7tan-editor\7tan-editor.exe` 即为可运行程序
+（需连同 `dist\7tan-editor\_internal` 目录一起使用）。
 
 ## 手动构建（进阶）
 
@@ -53,12 +54,6 @@ python -m venv .venv
 
 :: 构建 exe（输出到 dist\7tan-editor\）
 .venv\Scripts\python.exe -m PyInstaller build.spec --clean -y
-
-:: 打包发布 zip
-.venv\Scripts\python.exe templates\package_release.py --version 1.0.6 --out dist\release --free-dir dist\7tan-editor
-
-:: 带分发水印（正式发布用）
-.venv\Scripts\python.exe templates\package_release.py --uid UID-2026xxxx-xxxxx --version 1.0.6 --out dist\release --free-dir dist\7tan-editor
 ```
 
 ## 配置说明
@@ -77,6 +72,7 @@ python -m venv .venv
 
 - 软件本体免费分发
 - 付费插件（如「爆款写作」50 元/台，绑定设备永久授权）在软件内「设置 → 插件市场」购买激活
+- **本包不含发布打包脚本**，构建产物仅限个人使用，禁止再分发/转售
 
 ## 常见问题
 

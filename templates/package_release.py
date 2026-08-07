@@ -209,12 +209,10 @@ _SOURCE_FILES = [
     ("main.py",                      "7tan-src/main.py"),
     ("build.spec",                   "7tan-src/build.spec"),
     ("build.bat",                    "7tan-src/build.bat"),
-    ("build_and_sync.bat",           "7tan-src/build_and_sync.bat"),
     ("requirements.txt",             "7tan-src/requirements.txt"),
     ("setup_cython.py",              "7tan-src/setup_cython.py"),
     ("data/__init__.py",             "7tan-src/data/__init__.py"),
     ("tools/gen_plugin_hashes.py",   "7tan-src/tools/gen_plugin_hashes.py"),
-    ("templates/package_release.py", "7tan-src/templates/package_release.py"),
     ("templates/README_BUILD.md",    "7tan-src/README_BUILD.md"),
     ("templates/setup.bat",          "7tan-src/setup.bat"),
 ]
@@ -240,10 +238,10 @@ _SOURCE_EXCLUDE_DIRS = EXCLUDE_DIRS | {
 
 
 def add_source_bundle(zf: zipfile.ZipFile, project_root) -> int:
-    """把完整源码 + 构建打包工具链写入 zip 的 7tan-src/ 目录。
+    """把完整源码 + 构建工具链写入 zip 的 7tan-src/ 目录（仅构建 exe，不提供打包脚本）。
 
     只打包构建必需内容（main.py/src/config/data/plugins/data/logo/tools/security_src
-    + build.spec/build.bat/build_and_sync.bat/package_release.py/requirements.txt/
+    + build.spec/build.bat/requirements.txt/
     README_BUILD.md/setup.bat），绝不包含 .venv/dist/build/data 运行数据等。
     """
     root = Path(project_root)
@@ -331,7 +329,7 @@ def main() -> int:
                         "=====================\n"
                         "目录结构：\n"
                         "  7tan-editor/    免安装版，双击 7tan-editor.exe 即可运行\n"
-                        "  7tan-src/       完整源码 + 构建打包工具链（可自行构建）\n"
+                        "  7tan-src/       完整源码 + 构建工具链（可自行构建 exe）\n"
                         "\n"
                         "使用方式：\n"
                         "  解压后进入 7tan-editor/，双击 7tan-editor.exe 即可运行\n"
@@ -340,7 +338,11 @@ def main() -> int:
                         "自行构建：\n"
                         "  进入 7tan-src/，按 README_BUILD.md 说明操作：\n"
                         "    setup.bat                一键准备构建环境\n"
-                        "    build_and_sync.bat -y    一键构建 + 打包\n"
+                        "    build.bat                构建 exe（仅构建，不含打包）\n"
+                        "\n"
+                        "授权声明：\n"
+                        "  本软件版权归开发者所有，源码与构建产物仅限个人使用，\n"
+                        "  禁止打包再分发、转售或用于任何商业用途。\n"
                         "\n"
                         "系统要求：Windows 10/11 64 位\n"
                         "\n"

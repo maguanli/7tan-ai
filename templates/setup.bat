@@ -53,7 +53,7 @@ echo   [OK] PyInstaller 就绪
 echo.
 echo ================================================
 echo   [OK] 环境就绪！接下来运行:
-echo       build_and_sync.bat -y
-echo   即可一键构建 + 打包（约 10-15 分钟）
+echo       build.bat
+echo   即可构建 exe（约 10-15 分钟，不含打包）
 echo ================================================
 pause

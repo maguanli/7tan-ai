@@ -16,7 +16,7 @@ VSVersionInfo(
         StringTable(
           u'080404b0',
           [
-            StringStruct(u'CompanyName', u'7Tan Technology Co., Ltd.'),
+            StringStruct(u'CompanyName', u'7Tan'),
             StringStruct(u'FileDescription', u'7Tan AI 全功能助手'),
             StringStruct(u'FileVersion', u'1.0.6'),
             StringStruct(u'InternalName', u'7tan-editor'),

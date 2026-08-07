@@ -8519,8 +8519,8 @@ class MainWindow(QMainWindow):
     def _switch_page(self, key):
 
         if key == "market":
-            # 插件市场 → 打开设置页并定位到插件市场 Tab
-            self._sidebar.set_active("settings")
+            # 插件市场 → 打开设置页并定位到插件市场 Tab（高亮保持「插件市场」）
+            self._sidebar.set_active("market")
             self._stack.setCurrentWidget(self._pages["settings"])
             self._pages["settings"].show_plugin_tab()
             self._status.showMessage("🧩 插件市场")

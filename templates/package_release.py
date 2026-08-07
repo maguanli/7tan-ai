@@ -1,37 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-7Tan 发布打包工具 — 单包模式（2026-08-07 重构，替代原 3 包拆包）
+7Tan 发布打包工具 — 纯 exe 单包模式（2026-08-07 v2）
 
-生成 1 个全量发布 zip（免费版 exe + 专业版源码合体）：
-    7tan-all-v<VER>[-<BUILD_ID>].zip
+生成 1 个完整版发布 zip（免安装，双击即用）：
+    7tan-editor-v<VER>[-<BUILD_ID>].zip
 
 包内结构：
-    7tan-editor/            exe + _internal（免安装，双击直接运行）
-    7tan-pro/_build         完整源码（可用 rebuild.bat 自构建）
-    7tan-pro/_python        便携 Python 环境（自构建所需）
-    7tan-pro/rebuild.bat    一键重建脚本
-    7tan-pro/LICENSE.txt    授权协议
-    7tan-pro/BUILD_INFO.txt 构建水印（--uid 提供时写入，用于泄露溯源）
+    7tan-editor/            exe + _internal（全部功能，免安装直接运行）
+    BUILD_INFO.txt          构建水印（--uid 提供时写入，用于分发溯源）
     README.txt              使用说明
 
-水印格式：BUILD_ID = PRO-YYYYMMDD-HHMMSS-XXXX（每份唯一）
-水印写入：_build/src/config/build_info.py（随源码分发，并编译进用户自构建的 exe）
+商业模式：软件本体免费分发，付费插件（如爆款写作 50 元/台）收费使用。
 
 敏感数据剔除（P1-7 规则保留）：
   - 剔除 .encryption_key、games.db*、auth/、memory/ 等开发者本地数据
-  - 保留 logo/ prompts/ plugins/（build.spec 引用，剔除会导致买家自构建失败）
 
 用法（由 build_and_sync.bat 调用，也可手动执行）:
     python templates/package_release.py \
         --uid UID-20260801-00042 \
-        --version 1.0.0 \
+        --version 1.0.6 \
         --out dist/release \
-        --free-dir dist/7tan-editor \
-        --pro-build dist/_build \
-        --pro-python dist/_python \
-        --rebuild dist/rebuild.bat \
-        --license templates/LICENSE.txt
+        --free-dir dist/7tan-editor
 
     --uid 为空时：不带水印（仅内部测试用）
 """
@@ -43,7 +33,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-ZIP_LEVEL = 1  # _python 体量大且多为已压缩数据，用最快压缩级别
+ZIP_LEVEL = 6  # 纯 exe 包，用默认压缩级别平衡体积与速度
 
 # ============================================================
 # P1-7 敏感数据黑名单（开发者本地数据，绝不能进发布包）
@@ -105,23 +95,6 @@ def gen_build_id() -> str:
     return f"PRO-{now:%Y%m%d}-{now:%H%M%S}-{rand}"
 
 
-def write_build_info(build_id: str, build_user: str, out_path: Path) -> None:
-    """写入水印文件（专业源码内）"""
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    content = (
-        '"""\n'
-        "构建水印 — 由 package_release.py 自动生成，请勿手改\n"
-        "BUILD_ID 用于泄露溯源，绑定购买者账号，禁止转售/传播\n"
-        '"""\n'
-        f'BUILD_ID = "{build_id}"\n'
-        f'BUILD_TIME = "{now}"\n'
-        f'BUILD_USER = "{build_user}"\n'
-    )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(content, encoding="utf-8")
-    print(f"  [水印] {build_id} -> {out_path}")
-
-
 def zip_dir(zf: zipfile.ZipFile, src_dir, arc_root: str,
             exclude_dirs=(), exclude_files=()) -> int:
     """递归打包目录，返回文件数
@@ -151,95 +124,80 @@ def zip_dir(zf: zipfile.ZipFile, src_dir, arc_root: str,
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="7Tan 发布打包工具（单包模式）")
-    ap.add_argument("--uid", default="", help="购买者 UID（提供则带水印）")
+    ap = argparse.ArgumentParser(description="7Tan 发布打包工具（纯 exe 单包模式）")
+    ap.add_argument("--uid", default="", help="分发渠道 UID（提供则写水印说明，用于溯源）")
     ap.add_argument("--version", default="1.0.0", help="版本号")
     ap.add_argument("--out", default="dist/release", help="输出目录")
-    ap.add_argument("--free-dir", default="dist/7tan-editor", help="免费版 exe 目录")
-    ap.add_argument("--pro-build", default="dist/_build", help="专业版源码目录")
-    ap.add_argument("--pro-python", default="dist/_python", help="便携 Python 目录")
-    ap.add_argument("--rebuild", default="dist/rebuild.bat", help="rebuild.bat 路径")
-    ap.add_argument("--license", default="templates/LICENSE.txt", help="授权协议文件")
+    ap.add_argument("--free-dir", default="dist/7tan-editor", help="exe 目录（COLLECT 输出）")
     args = ap.parse_args()
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     ver = args.version
     free_dir = Path(args.free_dir)
-    pro_build = Path(args.pro_build)
-    pro_python = Path(args.pro_python)
 
     # ---- 0. 基础检查 ----
     if not free_dir.exists():
         print(f"[ERROR] exe 目录不存在: {free_dir}")
         return 1
+    exe_file = free_dir / "7tan-editor.exe"
+    if not exe_file.exists():
+        print(f"[ERROR] 未找到主程序: {exe_file}")
+        return 1
+    exe_size = exe_file.stat().st_size
+    if exe_size < 15000000:
+        print(f"[ERROR] exe 大小异常（{exe_size} 字节），构建不完整！")
+        return 1
+    print(f"[OK] 主程序检查通过: {exe_file} ({exe_size / 1048576:.1f} MB)")
 
-    # ---- 1. 水印注入（--uid 提供时）----
+    # ---- 1. 水印（--uid 提供时）----
     build_id = ""
     suffix = ""
     if args.uid:
         build_id = gen_build_id()
-        bi_path = pro_build / "src" / "config" / "build_info.py"
-        write_build_info(build_id, args.uid, bi_path)
         suffix = f"-{build_id}"
-        print(f"[OK] 水印注入: BUILD_ID={build_id}  BUILD_USER={args.uid}")
+        print(f"[OK] 分发水印: BUILD_ID={build_id}  渠道={args.uid}")
     else:
         print("[WARN] 未提供 --uid，不带水印（仅供内部测试）")
 
-    # ---- 2. 单全量包 ----
-    all_zip = out / f"7tan-all-v{ver}{suffix}.zip"
+    # ---- 2. 纯 exe 单包 ----
+    all_zip = out / f"7tan-editor-v{ver}{suffix}.zip"
     n_total = 0
     with zipfile.ZipFile(all_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=ZIP_LEVEL) as zf:
-        # 2.1 exe 目录（免安装直接运行）
+        # 2.1 exe 目录（免安装直接运行，全部功能）
         n1 = zip_dir(zf, free_dir, "7tan-editor",
                      exclude_dirs=EXCLUDE_DIRS,
                      exclude_files=EXCLUDE_FILE_PATTERNS)
         print(f"  [OK] 7tan-editor/  {n1} 文件")
         n_total += n1
 
-        # 2.2 专业源码
-        if pro_build.exists():
-            n2 = zip_dir(zf, pro_build, "7tan-pro/_build",
-                         exclude_dirs=EXCLUDE_DIRS,
-                         exclude_files=EXCLUDE_FILE_PATTERNS)
-            print(f"  [OK] 7tan-pro/_build  {n2} 文件")
-            n_total += n2
-        else:
-            print(f"  [WARN] 源码目录不存在，跳过: {pro_build}")
-
-        # 2.3 构建脚本 + 授权协议（便携 Python 不再打包：exe 自带运行时，
-        #     开发者自构建用系统 Python 3.12 + pip install -r requirements.txt）
-        if Path(args.rebuild).exists():
-            zf.write(args.rebuild, "7tan-pro/rebuild.bat")
-        if Path(args.license).exists():
-            zf.write(args.license, "7tan-pro/LICENSE.txt")
-
-        # 2.4 水印说明
+        # 2.2 水印说明
         if build_id:
-            zf.writestr("7tan-pro/BUILD_INFO.txt",
+            zf.writestr("BUILD_INFO.txt",
                         f"BUILD_ID   : {build_id}\n"
-                        f"BUILD_USER : {args.uid}\n"
-                        f"授权说明   : 本源码包绑定购买者账号，禁止转售/传播/公开。\n"
-                        f"            解压后双击 rebuild.bat 即可自构建 exe。\n")
+                        f"渠道       : {args.uid}\n"
+                        f"说明       : 本文件用于分发溯源，请勿删除。\n")
 
-        # 2.5 根 README 使用说明
+        # 2.3 根 README 使用说明
         zf.writestr("README.txt",
-                    "7Tan 发布包\n"
-                    "===========\n"
+                    "7Tan 编辑器（完整版）\n"
+                    "=====================\n"
                     "目录结构：\n"
                     "  7tan-editor/    免安装版，双击 7tan-editor.exe 即可运行\n"
-                    "  7tan-pro/       完整源码 + rebuild.bat\n"
                     "\n"
-                    "使用方式（二选一）：\n"
-                    "  A. 直接运行：进入 7tan-editor/，双击 7tan-editor.exe\n"
-                    "  B. 源码自构建：进入 7tan-pro/，双击 rebuild.bat\n"
-                    "     （需系统已装 Python 3.12，脚本会自动 pip 安装依赖）\n"
+                    "使用方式：\n"
+                    "  解压后进入 7tan-editor/，双击 7tan-editor.exe 即可运行\n"
+                    "  （无需安装 Python 或任何依赖，绿色免安装）\n"
                     "\n"
                     "系统要求：Windows 10/11 64 位\n"
-                    "授权说明：详见 7tan-pro/LICENSE.txt。\n")
+                    "\n"
+                    "功能说明：\n"
+                    "  本软件基础功能免费使用；部分插件为付费增值服务\n"
+                    "  （如「爆款写作」插件 50 元/台，永久授权，绑定当前设备）。\n"
+                    "  付费详情见软件内「设置 → 插件市场」。\n")
 
     size_mb = all_zip.stat().st_size / 1048576
-    print(f"\n[OK] 全量包: {all_zip}  ({size_mb:.1f} MB, {n_total} 文件)")
+    print(f"\n[OK] 发布包: {all_zip}  ({size_mb:.1f} MB, {n_total} 文件)")
 
     print("\n[DONE] 发布包已生成到:", out.resolve())
     return 0

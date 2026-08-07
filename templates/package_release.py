@@ -84,6 +84,7 @@ EXCLUDE_FILE_PATTERNS = {
     "*.db-wal",
     "*.db-shm",
     "*.bak",
+    "*.broken_*",
     "*.tmp",
     "test_*.py",
     "_check_*.py",
@@ -198,6 +199,74 @@ def _safe_cleanup(path: Path) -> None:
         pass
 
 
+# ============================================================
+# 源码构建工具链打包（7tan-src/）
+# 完整版 = exe（免安装运行） + 源码（可自行构建打包）
+# ============================================================
+
+# 显式文件清单：(项目内相对路径, zip 内路径)
+_SOURCE_FILES = [
+    ("main.py",                      "7tan-src/main.py"),
+    ("build.spec",                   "7tan-src/build.spec"),
+    ("build.bat",                    "7tan-src/build.bat"),
+    ("build_and_sync.bat",           "7tan-src/build_and_sync.bat"),
+    ("requirements.txt",             "7tan-src/requirements.txt"),
+    ("setup_cython.py",              "7tan-src/setup_cython.py"),
+    ("data/__init__.py",             "7tan-src/data/__init__.py"),
+    ("tools/gen_plugin_hashes.py",   "7tan-src/tools/gen_plugin_hashes.py"),
+    ("templates/package_release.py", "7tan-src/templates/package_release.py"),
+    ("templates/README_BUILD.md",    "7tan-src/README_BUILD.md"),
+    ("templates/setup.bat",          "7tan-src/setup.bat"),
+]
+
+# 目录清单：(项目内相对路径, zip 内路径)
+_SOURCE_DIRS = [
+    ("src",                "7tan-src/src"),
+    ("config",             "7tan-src/config"),
+    ("data/plugins",       "7tan-src/data/plugins"),
+    ("data/logo",          "7tan-src/data/logo"),
+    ("tools/security_src", "7tan-src/tools/security_src"),
+]
+
+# 源码包额外排除（构建产物/运行数据/仓库杂物）
+_SOURCE_EXCLUDE_DIRS = EXCLUDE_DIRS | {
+    "__pycache__", ".venv", ".git", ".pytest_cache",
+    "dist", "build", "logs", "downloads", "output", "recordings",
+    "backups", "temp", "tmp", "designs", "article_images",
+    "extensions", "mini_rts", "server", "website", "www",
+    "vscode-extension", "scripts", "tests", "docs",
+    "browser_profile", "prompts", "users",
+}
+
+
+def add_source_bundle(zf: zipfile.ZipFile, project_root) -> int:
+    """把完整源码 + 构建打包工具链写入 zip 的 7tan-src/ 目录。
+
+    只打包构建必需内容（main.py/src/config/data/plugins/data/logo/tools/security_src
+    + build.spec/build.bat/build_and_sync.bat/package_release.py/requirements.txt/
+    README_BUILD.md/setup.bat），绝不包含 .venv/dist/build/data 运行数据等。
+    """
+    root = Path(project_root)
+    count = 0
+    for rel, arc in _SOURCE_FILES:
+        src = root / rel
+        if not src.exists():
+            print(f"  [WARN] 源码包缺少文件（跳过）: {rel}")
+            continue
+        _safe_write(zf, src, arc)
+        count += 1
+    for rel, arc in _SOURCE_DIRS:
+        src = root / rel
+        if not src.exists():
+            print(f"  [WARN] 源码包缺少目录（跳过）: {rel}")
+            continue
+        n = zip_dir(zf, src, arc,
+                    exclude_dirs=_SOURCE_EXCLUDE_DIRS,
+                    exclude_files=EXCLUDE_FILE_PATTERNS)
+        count += n
+    return count
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="7Tan 发布打包工具（纯 exe 单包模式）")
     ap.add_argument("--uid", default="", help="分发渠道 UID（提供则写水印说明，用于溯源）")
@@ -262,10 +331,16 @@ def main() -> int:
                         "=====================\n"
                         "目录结构：\n"
                         "  7tan-editor/    免安装版，双击 7tan-editor.exe 即可运行\n"
+                        "  7tan-src/       完整源码 + 构建打包工具链（可自行构建）\n"
                         "\n"
                         "使用方式：\n"
                         "  解压后进入 7tan-editor/，双击 7tan-editor.exe 即可运行\n"
                         "  （无需安装 Python 或任何依赖，绿色免安装）\n"
+                        "\n"
+                        "自行构建：\n"
+                        "  进入 7tan-src/，按 README_BUILD.md 说明操作：\n"
+                        "    setup.bat                一键准备构建环境\n"
+                        "    build_and_sync.bat -y    一键构建 + 打包\n"
                         "\n"
                         "系统要求：Windows 10/11 64 位\n"
                         "\n"
@@ -273,6 +348,11 @@ def main() -> int:
                         "  本软件基础功能免费使用；部分插件为付费增值服务\n"
                         "  （如「爆款写作」插件 50 元/台，永久授权，绑定当前设备）。\n"
                         "  付费详情见软件内「设置 → 插件市场」。\n")
+
+            # 2.4 完整源码 + 构建工具链（7tan-src/，让"完整版"可自行构建）
+            n_src = add_source_bundle(zf, Path(__file__).resolve().parent.parent)
+            print(f"  [OK] 7tan-src/  {n_src} 文件")
+            n_total += n_src
 
         # 临时包写完后，原子替换目标（旧包被占用也能覆盖；实在占用则重试）
         _atomic_replace(tmp_zip, all_zip)

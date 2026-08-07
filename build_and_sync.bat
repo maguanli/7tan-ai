@@ -150,6 +150,27 @@ if exist "dist\_python\python.exe" (
     if exist "dist\_python\pyvenv.cfg" del /q "dist\_python\pyvenv.cfg"
     echo   [OK] _python created
 )
+REM ===== Step 4.5: Slim _python (remove heavy unused libs) =====
+echo [4.5/6] Slimming _python (removing unused heavy libs)...
+if exist "dist\_python\Lib\site-packages" (
+    for %%P in (torch torchvision torchaudio torchtext playwright cv2 ddddocr ctranslate2 winsdk winrt moviepy pydub av speech_recognition selenium faster_whisper whisper) do (
+        if exist "dist\_python\Lib\site-packages\%%P" (
+            echo   [DEL] %%P
+            rmdir /S /Q "dist\_python\Lib\site-packages\%%P"
+        )
+        if exist "dist\_python\Lib\site-packages\%%P-*.dist-info" (
+            for /D %%D in ("dist\_python\Lib\site-packages\%%P-*.dist-info") do (
+                echo   [DEL] %%~nxD
+                rmdir /S /Q "%%D"
+            )
+        )
+    )
+    echo   [OK] _python slimmed
+) else (
+    echo   [SKIP] site-packages not found
+)
+echo.
+
 "dist\_python\python.exe" -c "import sys, PyInstaller, PyQt6; print('   _python OK:', sys.version.split()[0], '| PyInstaller', PyInstaller.__version__)"
 if errorlevel 1 (
     echo [ERROR] _python verification failed.

@@ -24,6 +24,23 @@ ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(ROOT))
 from src.tools.registry import register_tool
 
+# ─── 付费授权模块（license.py 按文件加载，避免包结构依赖）───
+def _load_license_mod():
+    import importlib.util
+    _lic_path = Path(__file__).resolve().parent / "license.py"
+    spec = importlib.util.spec_from_file_location("viral_writer_license", _lic_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+_LIC = _load_license_mod()
+
+
+def _gate():
+    """付费闸门：已激活 / 试用中放行，否则返回购买引导"""
+    allowed, msg = _LIC.check_access()
+    return allowed, msg
+
 # ─── 爆款方法论系统提示词 ───
 SYSTEM_PROMPT = """你是公众号爆款文章专家，深谙新媒体传播规律，写过大量10w+文章。
 铁律：
@@ -80,6 +97,9 @@ def _llm(system_prompt: str, user_prompt: str, max_tokens: int = 2500,
 )
 def viral_topic(keyword: str = "", audience: str = "普通大众", count: int = 10) -> str:
     """爆款选题生成"""
+    _gate_ok, _gate_msg = _gate()
+    if not _gate_ok:
+        return _gate_msg
     if not keyword.strip():
         return "请提供主题/关键词，例如 viral_topic(keyword='中年人的体面')"
     prompt = (f"围绕「{keyword}」为目标人群「{audience}」生成 {count} 个公众号爆款选题。\n"
@@ -126,6 +146,9 @@ def viral_topic(keyword: str = "", audience: str = "普通大众", count: int = 
 )
 def viral_title(theme: str = "", count: int = 10) -> str:
     """爆款标题生成"""
+    _gate_ok, _gate_msg = _gate()
+    if not _gate_ok:
+        return _gate_msg
     if not theme.strip():
         return "请提供文章主题，例如 viral_title(theme='中年人的体面和面子')"
     prompt = (f"根据主题「{theme}」生成 {count} 个公众号爆款标题。\n"
@@ -169,6 +192,9 @@ def viral_title(theme: str = "", count: int = 10) -> str:
 )
 def viral_outline(topic: str = "") -> str:
     """爆款大纲生成"""
+    _gate_ok, _gate_msg = _gate()
+    if not _gate_ok:
+        return _gate_msg
     if not topic.strip():
         return "请提供选题，例如 viral_outline(topic='40岁才明白，人生最好的活法是这四个字')"
     prompt = (f"为选题「{topic}」生成爆款五段式大纲。\n"
@@ -207,6 +233,9 @@ def viral_outline(topic: str = "") -> str:
 )
 def viral_write(topic: str = "", outline: str = "", word_count: int = 1200) -> str:
     """爆款正文撰写"""
+    _gate_ok, _gate_msg = _gate()
+    if not _gate_ok:
+        return _gate_msg
     if not topic.strip():
         return "请提供选题，例如 viral_write(topic='40岁才明白，人生最好的活法是这四个字')"
     prompt = (f"根据选题「{topic}」写一篇 {word_count} 字左右的公众号爆款文章正文。\n"
@@ -244,6 +273,9 @@ def viral_write(topic: str = "", outline: str = "", word_count: int = 1200) -> s
 )
 def viral_quotes(article: str = "") -> str:
     """金句卡片文案"""
+    _gate_ok, _gate_msg = _gate()
+    if not _gate_ok:
+        return _gate_msg
     if not article.strip():
         return "请提供文章内容或主题，例如 viral_quotes(article='40岁才明白，人生最好的活法是……')"
     prompt = (f"从以下文章/主题中提取并润色 6 条金句，每条 ≤ 20 字，适合做成金句卡片配图。\n"
@@ -280,6 +312,9 @@ def viral_quotes(article: str = "") -> str:
 )
 def viral_check(title: str = "", content: str = "") -> str:
     """发布前质量检查（本地规则，无需 LLM）"""
+    _gate_ok, _gate_msg = _gate()
+    if not _gate_ok:
+        return _gate_msg
     issues, ok = [], []
 
     # 标题检查
@@ -336,3 +371,42 @@ def viral_check(title: str = "", content: str = "") -> str:
     score = max(0, 100 - len(issues) * 12)
     report.append(f"\n📊 综合评分：{score}/100" + ("（建议修改后发布）" if issues else "（可以发布！）"))
     return "\n".join(report)
+
+
+# ─────────────────── 7. 激活 / 状态（免费工具）───────────────────
+@register_tool(
+    name="viral_activate",
+    description="激活爆款写作插件：输入购买获得的授权码，激活后永久解锁全部功能（激活、状态查询不消耗试用次数）。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "license_key": {"type": "string", "description": "购买获得的授权码", "default": ""},
+        },
+        "required": ["license_key"],
+    },
+    category="viral",
+)
+def viral_activate(license_key: str = "") -> str:
+    """激活爆款写作插件"""
+    if not license_key.strip():
+        return (
+            "请提供授权码，例如 viral_activate(license_key='xxxxxxxx.xxxxxxxx')\n\n"
+            + _LIC.status_text()
+        )
+    ok, msg = _LIC.activate(license_key.strip())
+    return msg
+
+
+@register_tool(
+    name="viral_status",
+    description="查看爆款写作插件激活状态、免费试用剩余次数、本机指纹与购买方式。",
+    parameters={
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+    category="viral",
+)
+def viral_status() -> str:
+    """查看激活状态与购买信息"""
+    return _LIC.status_text()

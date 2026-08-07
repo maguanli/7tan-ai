@@ -172,7 +172,7 @@ def _diff_to_html(diff_text: str) -> str:
 class CodeChangePanel(QWidget):
     """代码修改实时面板（独立窗口：监控 AI 偷偷改了哪些文件）"""
 
-    def __init__(self, parent=None, auto_open: bool = True):
+    def __init__(self, parent=None, auto_open: bool = False):
         super().__init__(parent)
         self.setWindowTitle("🔧 代码修改实时 — 监控 AI 改文件")
         self.setWindowFlag(Qt.WindowType.Window, True)
@@ -200,7 +200,7 @@ class CodeChangePanel(QWidget):
         #    不应触发自动弹出（否则每次启动 7Tan 都会弹出小窗口）。
         #    只有本次运行中新增的修改事件（jsonl 变大）才会自动打开面板。
         self._guard_last_size = history_tail_size()
-        self._last_user_hide = 0.0
+        self._last_user_hide = time.time()  # 初始=当前时间：启动阶段不触发自动弹出（防止启动即弹窗）
         self._guard_timer = QTimer(self)
         self._guard_timer.timeout.connect(self._guard_poll)
         self._guard_timer.start(1500)

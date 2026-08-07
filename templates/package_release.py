@@ -64,6 +64,10 @@ EXCLUDE_DIRS = {
 EXCLUDE_FILE_PATTERNS = {
     ".encryption_key",
     ".encryption_salt",
+    "private_key.pem",
+    "*.key",
+    "*.p12",
+    "*.pfx",
     "*.db",
     "*.db-wal",
     "*.db-shm",

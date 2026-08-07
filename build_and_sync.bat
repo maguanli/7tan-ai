@@ -87,6 +87,11 @@ REM ===== Step 2: Verify build output =====
 echo [2/4] Verifying artifacts...
 set EXE_SIZE=0
 if exist "dist\7tan-editor\7tan-editor.exe" for %%A in ("dist\7tan-editor\7tan-editor.exe") do set EXE_SIZE=%%~zA
+if "%EXE_SIZE%"=="0" (
+    echo [ERROR] dist\7tan-editor\7tan-editor.exe not found! Please build first or check --no-build precondition.
+    if not defined SKIP_PAUSE pause
+    exit /b 1
+)
 if %EXE_SIZE% LSS 15000000 (
     echo [ERROR] exe size abnormal %EXE_SIZE% bytes, build incomplete!
     if not defined SKIP_PAUSE pause
@@ -110,13 +115,20 @@ echo [2/4] Verification done
 echo.
 
 REM ===== Step 3: Package release zip =====
+REM 旧 zip 不再预先 del：package_release.py 用临时包+原子替换覆盖，天然防占用冲突
 echo [3/4] Packaging release zip (single full exe package)...
 if not exist "dist\release" mkdir "dist\release"
-del /Q "dist\release\*.zip" 2>nul
 "%ROOT%.venv\Scripts\python.exe" "templates\package_release.py" --uid "%WM_UID%" --version "%WM_VER%" --out "dist\release" --free-dir "dist\7tan-editor"
+if errorlevel 2 (
+    echo.
+    echo [ERROR] Release packaging failed: file locked / antivirus scanning.
+    echo         Close opened zip in dist\release, or whitelist dist in antivirus, then retry.
+    if not defined SKIP_PAUSE pause
+    exit /b 2
+)
 if errorlevel 1 (
     echo.
-    echo [ERROR] Release packaging failed.
+    echo [ERROR] Release packaging failed. Check log above for details.
     if not defined SKIP_PAUSE pause
     exit /b 1
 )

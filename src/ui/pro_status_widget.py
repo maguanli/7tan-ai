@@ -70,20 +70,23 @@ class ProStatusWidget(QFrame):
 
         level_layout.addWidget(self._level_badge)
         level_layout.addWidget(self._level_text, 1)
-        layout.addLayout(level_layout)
+        # 等级行（专业版/免费版+用户名）已按需求隐藏，不加入布局
+        # layout.addLayout(level_layout)
 
         # --- 第二行：到期时间（仅专业版可见）---
         self._expiry_label = QLabel()
         self._expiry_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px;")
         self._expiry_label.setVisible(False)
 
-        layout.addWidget(self._expiry_label)
+        # 到期时间行已按需求隐藏，不加入布局
+        # layout.addWidget(self._expiry_label)
 
         # --- 评分行 ---
         self._score_label = QLabel()
         self._score_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px;")
         self._score_label.setVisible(False)
-        layout.addWidget(self._score_label)
+        # 评分行（能力值）已按需求隐藏，不加入布局
+        # layout.addWidget(self._score_label)
 
         # --- 第三行：按钮 ---
         btn_layout = QHBoxLayout()

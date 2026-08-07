@@ -244,7 +244,9 @@ class ProStatusWidget(QFrame):
                 else:
                     self._expiry_label.setText(f"📅 {dt.strftime('%Y-%m-%d')} 到期")
                     self._expiry_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px;")
-            self._expiry_label.setVisible(True)
+            # 到期时间已按需求隐藏：不加入布局 + 不 setVisible(True)，
+            # 否则无父 QLabel 会弹成独立小窗口（PRO 用户启动时必现）
+            self._expiry_label.setVisible(False)
         else:
             self._level_badge.setText("[免费]")
             self._level_badge.setStyleSheet(f"""

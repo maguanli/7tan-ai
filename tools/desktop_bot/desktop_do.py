@@ -398,6 +398,9 @@ def _screenshot(save=None, region=None):
     img = Image.frombytes('RGB', shot.size, shot.rgb)
     if not save:
         save = os.path.join(SHOTS, f'desktop_{time.strftime("%Y%m%d_%H%M%S")}.png')
+    elif os.path.dirname(save) == '':
+        # 纯文件名（未带目录）时自动归档到 data/screenshots，防止污染根目录
+        save = os.path.join(SHOTS, save)
     img.save(save)
     return True, save
 
@@ -531,6 +534,28 @@ def cmd_uia(title=None, depth=4, top=80):
 
     优先 pywinauto(UIA backend)，失败回退 uiautomation 库。输出 JSON：控件类型/名称/坐标。
     """
+    # ---- 当前环境缺 UIA 库时，自动用系统 Python 重新执行（7Tan 内置 Python 无 uiautomation） ----
+    import importlib.util
+    if importlib.util.find_spec('uiautomation') is None and importlib.util.find_spec('pywinauto') is None:
+        import shutil
+        candidates = [
+            r'C:\Program Files\Python312\python.exe',
+            r'C:\Python312\python.exe',
+        ]
+        for cand in candidates:
+            if os.path.exists(cand):
+                try:
+                    r = subprocess.run(
+                        [cand, os.path.abspath(__file__), 'uia',
+                         '--title', title or '', '--depth', str(depth), '--top', str(top)],
+                        capture_output=True, text=True, encoding='utf-8', errors='replace',
+                        timeout=60, creationflags=CREATE_NO_WINDOW)
+                    out = r.stdout or ''
+                    if r.returncode != 0 and r.stderr:
+                        out += '\n[stderr] ' + r.stderr[-500:]
+                    return out.strip() or f'（系统 Python 执行无输出，exit={r.returncode}）'
+                except Exception as e:
+                    return f'❌ 系统 Python 执行失败: {e}'
     import json
     hwnd = None
     if title:
@@ -675,6 +700,8 @@ def cmd_tmatch(template, region=None, threshold=0.8, max_matches=5, save=None):
             'score': round(float(res[py, px]), 3),
         } for px, py in picks]
         if save and matches:
+            if os.path.dirname(save) == '':
+                save = os.path.join(SHOTS, save)
             vis = screen.copy()
             for m in matches:
                 cv2.rectangle(vis, (m['x'] - ox, m['y'] - oy),

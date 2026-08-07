@@ -1,7 +1,0 @@
-Traceback (most recent call last):
-  File "<frozen runpy>", line 198, in _run_module_as_main
-  File "<frozen runpy>", line 88, in _run_code
-  File "C:\Program Files\Python312\Scripts\piper.exe\__main__.py", line 7, in <module>
-  File "C:\Program Files\Python312\Lib\site-packages\piper\__main__.py", line 143, in main
-    raise ValueError(
-ValueError: Unable to find voice: voices\zh_CN-huayan-medium.onnx (use piper.download_voices)

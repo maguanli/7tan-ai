@@ -93,3 +93,32 @@ data/panel_geometry.json
 tmp/
 data/tasklist_check.txt
 src/security/auth_client_new.pyd  
+
+# 根目录调试垃圾（微信调试/临时脚本/截图）— 防止再次误提交
+/click_*.py
+/ocr_*.txt
+/verify_*.py
+/wechat_*.py
+/check_wechat*.py
+/find_wechat*.py
+/temp_*
+/test_*.py
+/_audit*.py
+/_test*.py
+/_screen*.png
+/_sidebar*.png
+/_crop*.py
+/_extract*.py
+/_fix*.py
+/_proc*.txt
+/analyze_layout.py
+/layout*.py
+/ocr_file.py
+/*.ps1
+# 调试用 bat（正式构建脚本 build.bat/rebuild.bat/start.bat 仍跟踪）
+/run_check.bat
+/test_debug.bat
+/output.txt
+/tracked_list.txt
+# 根目录数据库（敏感数据不入库）
+/games.db

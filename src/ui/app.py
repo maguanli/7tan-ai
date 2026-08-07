@@ -1118,6 +1118,12 @@ class Sidebar(QFrame):
 
         layout.addWidget(version)
 
+        # 底部版权信息
+        copyright_label = QLabel("© 7坛版权所有")
+        copyright_label.setStyleSheet(f"color: {THEME['text_muted']}; font-size: 11px; padding: 0 10px 6px 10px;")
+        copyright_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(copyright_label)
+
 
 
     def _on_click(self, key):

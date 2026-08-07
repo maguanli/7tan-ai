@@ -44,8 +44,8 @@ from pathlib import Path
 ZIP_LEVEL = 6        # 纯 exe 包，用默认压缩级别平衡体积与速度
 WRITE_RETRY = 3      # 单文件写入失败重试次数（杀软瞬态锁）
 WRITE_RETRY_DELAY = 0.5
-REPLACE_RETRY = 3    # 最终替换目标失败重试次数（目标被占用）
-REPLACE_RETRY_DELAY = 1.0
+REPLACE_RETRY = 12   # 最终替换目标失败重试次数（杀软扫描 300MB+ zip 可达十几秒）
+REPLACE_RETRY_DELAY = 2.0
 
 # ============================================================
 # P1-7 敏感数据黑名单（开发者本地数据，绝不能进发布包）
@@ -154,9 +154,24 @@ def zip_dir(zf: zipfile.ZipFile, src_dir, arc_root: str,
 
 
 def _atomic_replace(tmp: Path, dst: Path) -> None:
-    """原子替换目标。目标被占用（杀软/资源管理器）时等待重试"""
+    """原子替换目标。目标被占用（杀软扫描/资源管理器）时等待重试。
+
+    策略：
+      1. 先探测目标锁（可写则锁已释放），避免无谓等待
+      2. os.replace 失败按 REPLACE_RETRY×DELAY 重试（最长约 24s，覆盖杀软大文件扫描）
+      3. 兜底：若目标允许删除，走「先删后改」双保险
+    """
     last_err = None
     for i in range(REPLACE_RETRY + 1):
+        # 探测目标锁：能打开说明扫描/占用已结束
+        if dst.exists():
+            try:
+                with open(dst, "r+b"):
+                    pass
+            except PermissionError:
+                last_err = PermissionError(f"目标文件被占用: {dst}")
+                time.sleep(REPLACE_RETRY_DELAY)
+                continue
         try:
             os.replace(tmp, dst)
             return
@@ -164,7 +179,14 @@ def _atomic_replace(tmp: Path, dst: Path) -> None:
             last_err = e
             if i < REPLACE_RETRY:
                 time.sleep(REPLACE_RETRY_DELAY)
-    raise last_err
+    # 兜底：目标允许删除时，先删后改（应对「禁替换但允许删除」的锁）
+    try:
+        if dst.exists():
+            dst.unlink()
+        os.replace(tmp, dst)
+        return
+    except (PermissionError, OSError):
+        raise last_err
 
 
 def _safe_cleanup(path: Path) -> None:

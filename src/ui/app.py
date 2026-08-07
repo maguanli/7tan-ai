@@ -1024,6 +1024,28 @@ class Sidebar(QFrame):
 
 
 
+        # --- 顶部链接：7坛社区 | 现金任务（并排，问题求助上方） ---
+
+        links_row_top = QWidget()
+
+        links_row_top.setObjectName("sidebar_links")
+
+        links_layout_top = QHBoxLayout(links_row_top)
+
+        links_layout_top.setContentsMargins(0, 0, 0, 0)
+
+        links_layout_top.setSpacing(4)
+
+        links_layout_top.addWidget(_make_side_link("🌐 7坛社区", "https://www.7tan.com/bbs/"), 1)
+
+        links_layout_top.addWidget(_make_side_link("💰 现金任务", "https://www.7tan.com/bbs/board/3/"), 1)
+
+        layout.addWidget(links_row_top)
+
+        layout.addSpacing(4)
+
+
+
         links_layout.addWidget(_make_side_link("🙋 问题求助", "https://www.7tan.com/bbs/board/25/"), 1)
 
         links_layout.addWidget(_make_side_link("📮 投诉建议", "https://www.7tan.com/bbs/board/26/"), 1)

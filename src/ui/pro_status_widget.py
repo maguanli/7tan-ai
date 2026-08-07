@@ -68,10 +68,9 @@ class ProStatusWidget(QFrame):
         self._level_text = QLabel()
         self._level_text.setStyleSheet(f"color: {THEME['text_primary']}; font-size: 12px;")
 
-        level_layout.addWidget(self._level_badge)
+        # 只显示用户名（账号信息），不显示 [PRO]/[免费] 等级徽章
         level_layout.addWidget(self._level_text, 1)
-        # 等级行（专业版/免费版+用户名）已按需求隐藏，不加入布局
-        # layout.addLayout(level_layout)
+        layout.addLayout(level_layout)
 
         # --- 第二行：到期时间（仅专业版可见）---
         self._expiry_label = QLabel()
@@ -231,7 +230,7 @@ class ProStatusWidget(QFrame):
             username = token_data.get("username", "") if token_data else ""
             if not username:
                 username = self._user_info.get("username", "")
-            self._level_text.setText(f"专业版  {username}" if username else "专业版")
+            self._level_text.setText(f"👤 {username}" if username else "👤 未登录")
 
             if pro_expires:
                 dt = datetime.fromtimestamp(pro_expires)
@@ -261,7 +260,7 @@ class ProStatusWidget(QFrame):
             username = token_data.get("username", "") if token_data else ""
             if not username:
                 username = self._user_info.get("username", "")
-            self._level_text.setText(f"免费版  {username}" if username else "免费版")
+            self._level_text.setText(f"👤 {username}" if username else "👤 未登录")
             self._expiry_label.setVisible(False)
 
         # 更新评分

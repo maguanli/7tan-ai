@@ -85,8 +85,8 @@ class ProStatusWidget(QFrame):
         self._score_label = QLabel()
         self._score_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px;")
         self._score_label.setVisible(False)
-        # 评分行（能力值）已按需求隐藏，不加入布局
-        # layout.addWidget(self._score_label)
+        # 评分行（能力值）保留显示
+        layout.addWidget(self._score_label)
 
         # --- 第三行：按钮 ---
         btn_layout = QHBoxLayout()

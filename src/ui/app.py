@@ -716,6 +716,10 @@ class StatCard(QFrame):
 
 # ============================================================
 
+
+# 插件市场地址（后续部署插件市场页面后修改）
+MARKET_URL = "https://www.7tan.com/plugins/"
+
 class Sidebar(QFrame):
 
     page_changed = pyqtSignal(str)
@@ -900,9 +904,9 @@ class Sidebar(QFrame):
 
         nav_items = [
 
-            ("dashboard", "📊", "仪表盘"),
 
             ("workspace", "💬", "AI 工作台"),
+            ("market", "🛒", "插件市场"),
 
             ("resources", "📦", "资源管理"),
 
@@ -1118,6 +1122,10 @@ class Sidebar(QFrame):
 
 
     def _on_click(self, key):
+        if key == "market":
+            # 插件市场 → 打开网页（不切换本地页面）
+            self.open_url.emit(MARKET_URL)
+            return
 
         self.set_active(key)
 
@@ -8409,11 +8417,11 @@ class MainWindow(QMainWindow):
 
 
 
-        # 默认显示仪表盘
+        # 默认显示 AI 工作台
 
-        self._sidebar.set_active("dashboard")
+        self._sidebar.set_active("workspace")
 
-        self._stack.setCurrentWidget(self._pages["dashboard"])
+        self._stack.setCurrentWidget(self._pages["workspace"])
 
 
 

@@ -207,23 +207,14 @@ def main() -> int:
         else:
             print(f"  [WARN] 源码目录不存在，跳过: {pro_build}")
 
-        # 2.3 便携 Python（自构建环境）
-        if pro_python.exists():
-            n3 = zip_dir(zf, pro_python, "7tan-pro/_python",
-                         exclude_dirs={"__pycache__", "_source_backup"},
-                         exclude_files=())
-            print(f"  [OK] 7tan-pro/_python  {n3} 文件")
-            n_total += n3
-        else:
-            print(f"  [WARN] 便携 Python 不存在，跳过: {pro_python}")
-
-        # 2.4 构建脚本 + 授权协议
+        # 2.3 构建脚本 + 授权协议（便携 Python 不再打包：exe 自带运行时，
+        #     开发者自构建用系统 Python 3.12 + pip install -r requirements.txt）
         if Path(args.rebuild).exists():
             zf.write(args.rebuild, "7tan-pro/rebuild.bat")
         if Path(args.license).exists():
             zf.write(args.license, "7tan-pro/LICENSE.txt")
 
-        # 2.5 水印说明
+        # 2.4 水印说明
         if build_id:
             zf.writestr("7tan-pro/BUILD_INFO.txt",
                         f"BUILD_ID   : {build_id}\n"
@@ -231,20 +222,21 @@ def main() -> int:
                         f"授权说明   : 本源码包绑定购买者账号，禁止转售/传播/公开。\n"
                         f"            解压后双击 rebuild.bat 即可自构建 exe。\n")
 
-        # 2.6 根 README 使用说明
+        # 2.5 根 README 使用说明
         zf.writestr("README.txt",
-                    "7Tan 全量包（免费版 + 专业源码）\n"
-                    "================================\n"
+                    "7Tan 发布包\n"
+                    "===========\n"
                     "目录结构：\n"
                     "  7tan-editor/    免安装版，双击 7tan-editor.exe 即可运行\n"
-                    "  7tan-pro/       专业源码 + 便携 Python + rebuild.bat\n"
+                    "  7tan-pro/       完整源码 + rebuild.bat\n"
                     "\n"
                     "使用方式（二选一）：\n"
                     "  A. 直接运行：进入 7tan-editor/，双击 7tan-editor.exe\n"
                     "  B. 源码自构建：进入 7tan-pro/，双击 rebuild.bat\n"
+                    "     （需系统已装 Python 3.12，脚本会自动 pip 安装依赖）\n"
                     "\n"
                     "系统要求：Windows 10/11 64 位\n"
-                    "授权说明：详见 7tan-pro/LICENSE.txt；源码绑定购买者账号，禁止转售/传播。\n")
+                    "授权说明：详见 7tan-pro/LICENSE.txt。\n")
 
     size_mb = all_zip.stat().st_size / 1048576
     print(f"\n[OK] 全量包: {all_zip}  ({size_mb:.1f} MB, {n_total} 文件)")

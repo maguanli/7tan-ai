@@ -14,7 +14,7 @@ a = Analysis(
     pathex=[SPECPATH, os.path.join(SPECPATH, 'src')],
     binaries=[],
     datas=[(os.path.join(SPECPATH, 'config'), 'config'), (os.path.join(SPECPATH, 'data/plugins'), 'data/plugins'), (os.path.join(SPECPATH, 'data/logo'), 'data/logo'), (os.path.join(SPECPATH, 'data/__init__.py'), 'data/')],
-    hiddenimports=['sqlalchemy', 'sqlalchemy.pool', 'sqlalchemy.ext.declarative', 'fastapi', 'uvicorn', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.websockets', 'websockets', 'websockets.legacy', 'playwright', 'playwright.async_api', 'openai', 'httpx', 'yaml', 'apscheduler', 'loguru', 'pydantic', 'cryptography', 'PyQt6', 'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebEngineCore', 'PyQt6.QtWebChannel', 'PyQt6.QtCharts', 'unidecode', 'slugify', 'mss', 'numpy', 'src.security', 'src.security.rsa_verify', 'src.security.license_verify', 'src.security.safe_modify', 'src.security.strings', 'src.security.auth_client', 'src.security.token_store', 'src.security.trial_store', 'src.security.integrity', 'src.security.sec_config', 'src.security.device_fingerprint', 'src.security.entry_auth', 'src.security.plugin_guard', 'src.core.updater', 'src.agent.prompts', 'src.ui.login_dialog', 'src.ui.theme', 'src.ui.update_dialog', 'src.ui.welcome_wizard', 'src.ui.onboarding', 'src.ui.pro_status_widget', 'src.config.loader',
+    hiddenimports=['sqlalchemy', 'sqlalchemy.pool', 'sqlalchemy.ext.declarative', 'fastapi', 'uvicorn', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.websockets', 'websockets', 'websockets.legacy', 'openai', 'httpx', 'yaml', 'apscheduler', 'loguru', 'pydantic', 'cryptography', 'PyQt6', 'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebEngineCore', 'PyQt6.QtWebChannel', 'PyQt6.QtCharts', 'unidecode', 'slugify', 'mss', 'numpy', 'src.security', 'src.security.rsa_verify', 'src.security.license_verify', 'src.security.safe_modify', 'src.security.strings', 'src.security.auth_client', 'src.security.token_store', 'src.security.trial_store', 'src.security.integrity', 'src.security.sec_config', 'src.security.device_fingerprint', 'src.security.entry_auth', 'src.security.plugin_guard', 'src.core.updater', 'src.agent.prompts', 'src.ui.login_dialog', 'src.ui.theme', 'src.ui.update_dialog', 'src.ui.welcome_wizard', 'src.ui.onboarding', 'src.ui.pro_status_widget', 'src.config.loader',
         'piper', 'piper.voice', 'edge_tts', 'onnxruntime',
         'data.plugins.tts_piper.tools',
         *_crypto_submods],
@@ -27,6 +27,9 @@ a = Analysis(
         'matplotlib', 'pandas',
         # --- 鎺掗櫎 ML/AI 鍖咃紙椤圭洰涓嶄娇鐢紝torch c10.dll 鎹熷潖瀵艰嚧鏋勫缓澶辫触锛?--
         'torch', 'torchvision', 'torchaudio', 'torchtext',
+        # --- 排除代码中零引用的重型库（瘦身：playwright/cv2/ddddocr 等）---
+        'playwright', 'cv2', 'ddddocr', 'ctranslate2', 'winsdk', 'winrt',
+        'moviepy', 'pydub', 'av', 'speech_recognition', 'selenium',
         'onnx', 'onnxconverter_common',
         'huggingface_hub', 'transformers', 'sentencepiece', 'tokenizers',
         'safetensors',

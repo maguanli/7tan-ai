@@ -4,9 +4,9 @@
       "version": "1.0.9",
       "channel": "stable",
       "platform": "windows",
-      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.9.zip",
-      "md5": "351e022cba085d6227add49c5e9b365d",
-      "size": 416414613,
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.9-r3.zip",
+      "md5": "0eef96bc556525b60630474d90b46236",
+      "size": 416414183,
       "notes": "1.0.9 更新：《7Tan使用说明书》新增「版本历史（更新记录）」章节——如何查看当前版本、v1.0.7~v1.0.9 更新记录一览；说明书完善「自我进化」说明（软件可修改自己进行升级进化）与版本说明；编程写代码仍为首要章节；绝大多数功能免费，个别高级插件需付费解锁。",
       "release_date": "2026-08-08"
     },

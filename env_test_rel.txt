@@ -1,0 +1,4 @@
+cwd=D:\7tan\7tanAI
+python=C:\Program Files\Python312\python.exe
+platform=Windows-10-10.0.19045-SP0
+time=2026-08-08 20:29:15

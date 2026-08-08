@@ -6399,6 +6399,140 @@ class SettingsPage(QWidget):
 
 
 
+        # ── 授权管理（付费插件激活）──
+
+        self._license_group = QGroupBox("🔑 授权管理（付费插件）")
+
+        self._license_group.setStyleSheet(f"""
+
+            QGroupBox {{ color: {THEME['text_primary']}; font-weight: bold; font-size: 13px;
+
+                border: 1px solid {THEME['border']}; border-radius: 8px; margin-top: 8px; padding-top: 18px; }}
+
+            QGroupBox::title {{ subcontrol-origin: margin; left: 14px; padding: 0 8px; }}
+
+        """)
+
+        license_layout = QVBoxLayout(self._license_group)
+
+        license_layout.setSpacing(8)
+
+        license_layout.setContentsMargins(12, 12, 12, 12)
+
+
+
+        self._license_status_label = QLabel("")
+
+        self._license_status_label.setWordWrap(True)
+
+        self._license_status_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
+
+        license_layout.addWidget(self._license_status_label)
+
+
+
+        license_input_row = QHBoxLayout()
+
+        license_input_row.setSpacing(8)
+
+        self._license_input = QLineEdit()
+
+        self._license_input.setPlaceholderText("粘贴购买获得的授权码（指纹.签名）")
+
+        self._license_input.setStyleSheet(f"""
+
+            QLineEdit {{ background: {THEME['bg_input']}; color: {THEME['text_primary']};
+
+                border: 1px solid {THEME['border']}; border-radius: 6px; padding: 6px 10px; font-size: 12px; }}
+
+        """)
+
+        license_input_row.addWidget(self._license_input, 1)
+
+
+
+        self._license_activate_btn = QPushButton("✅ 激活")
+
+        self._license_activate_btn.setFixedHeight(32)
+
+        self._license_activate_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+
+        self._license_activate_btn.clicked.connect(self._activate_plugin_license)
+
+        self._license_activate_btn.setStyleSheet(f"""
+
+            QPushButton {{ background: {THEME['success']}; color: #fff; border: none;
+
+                border-radius: 6px; padding: 4px 18px; font-size: 13px; font-weight: bold; }}
+
+            QPushButton:hover {{ background: #059669; }}
+
+        """)
+
+        license_input_row.addWidget(self._license_activate_btn)
+
+        license_layout.addLayout(license_input_row)
+
+
+
+        license_btn_row = QHBoxLayout()
+
+        license_btn_row.setSpacing(8)
+
+        self._license_copy_fp_btn = QPushButton("📋 复制本机指纹")
+
+        self._license_copy_fp_btn.setFixedHeight(30)
+
+        self._license_copy_fp_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+
+        self._license_copy_fp_btn.clicked.connect(self._copy_plugin_fingerprint)
+
+        self._license_copy_fp_btn.setStyleSheet(f"""
+
+            QPushButton {{ background: {THEME['hover']}; color: {THEME['text_primary']};
+
+                border: 1px solid {THEME['border']}; border-radius: 6px; padding: 2px 12px; font-size: 12px; }}
+
+            QPushButton:hover {{ background: {THEME['accent']}33; }}
+
+        """)
+
+        license_btn_row.addWidget(self._license_copy_fp_btn)
+
+
+
+        self._license_buy_btn = QPushButton("🛒 在线购买")
+
+        self._license_buy_btn.setFixedHeight(30)
+
+        self._license_buy_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+
+        self._license_buy_btn.clicked.connect(self._open_plugin_buy_page)
+
+        self._license_buy_btn.setStyleSheet(f"""
+
+            QPushButton {{ background: {THEME['accent2']}; color: #fff; border: none;
+
+                border-radius: 6px; padding: 2px 12px; font-size: 12px; font-weight: bold; }}
+
+            QPushButton:hover {{ background: {THEME['accent2']}dd; }}
+
+        """)
+
+        license_btn_row.addWidget(self._license_buy_btn)
+
+        license_btn_row.addStretch()
+
+        license_layout.addLayout(license_btn_row)
+
+
+
+        self._license_group.setVisible(False)
+
+        layout.addWidget(self._license_group)
+
+
+
         # 初始加载
 
         self._refresh_plugins()
@@ -8109,6 +8243,214 @@ class SettingsPage(QWidget):
         self._install_btn.setEnabled(not is_installed)
 
         self._uninstall_btn.setEnabled(is_installed)
+
+        self._update_license_panel()
+
+
+
+    # =================== 付费插件授权管理 ===================
+
+    def _plugin_license_module(self, plugin_id: str):
+
+        """动态加载插件目录下的 license.py（无则返回 None）"""
+
+        try:
+
+            from src.plugins.manager import PLUGIN_DIR
+
+            license_path = PLUGIN_DIR / plugin_id / "license.py"
+
+            if not license_path.exists():
+
+                return None
+
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(f"{plugin_id}_license_ui", license_path)
+
+            mod = importlib.util.module_from_spec(spec)
+
+            spec.loader.exec_module(mod)
+
+            return mod
+
+        except Exception:
+
+            return None
+
+
+
+    def _current_license_plugin_id(self) -> str:
+
+        """当前选中插件的 id（仅付费插件）"""
+
+        row = self._plugin_list.currentRow()
+
+        if row < 0:
+
+            return ""
+
+        item = self._plugin_list.item(row)
+
+        if not item:
+
+            return ""
+
+        info = item.data(Qt.ItemDataRole.UserRole + 1) or {}
+
+        if not (info.get("paid") or info.get("type") == "paid"):
+
+            return ""
+
+        return info.get("id", "")
+
+
+
+    def _update_license_panel(self):
+
+        """根据当前选中的插件刷新授权面板"""
+
+        pid = self._current_license_plugin_id()
+
+        if not pid:
+
+            self._license_group.setVisible(False)
+
+            return
+
+        self._license_group.setVisible(True)
+
+        self._license_input.clear()
+
+        mod = self._plugin_license_module(pid)
+
+        if mod is None:
+
+            self._license_status_label.setText("⚠️ 该付费插件尚未安装，请先点击「📥 安装」后再激活。")
+
+            self._license_activate_btn.setEnabled(False)
+
+            return
+
+        self._license_activate_btn.setEnabled(True)
+
+        try:
+
+            if mod.is_activated():
+
+                self._license_status_label.setText("✅ 本插件已激活，永久授权，全部功能可用！")
+
+            elif hasattr(mod, "status_text"):
+
+                self._license_status_label.setText(mod.status_text())
+
+            else:
+
+                self._license_status_label.setText("🔑 输入授权码并点击「激活」解锁本插件。")
+
+        except Exception as e:
+
+            self._license_status_label.setText(f"⚠️ 读取授权状态失败: {e}")
+
+
+
+    def _activate_plugin_license(self):
+
+        """激活当前付费插件"""
+
+        pid = self._current_license_plugin_id()
+
+        key = self._license_input.text().strip()
+
+        if not pid:
+
+            return
+
+        if not key:
+
+            self._license_status_label.setText("⚠️ 请先粘贴授权码再点击激活。")
+
+            return
+
+        mod = self._plugin_license_module(pid)
+
+        if mod is None:
+
+            self._license_status_label.setText("⚠️ 授权模块不可用，请先安装插件。")
+
+            return
+
+        try:
+
+            ok, msg = mod.activate(key)
+
+            if ok:
+
+                self._license_input.clear()
+
+                self._license_status_label.setText("🎉 激活成功！" + (msg or "全部功能已解锁"))
+
+            else:
+
+                self._license_status_label.setText(msg or "❌ 激活失败")
+
+        except Exception as e:
+
+            self._license_status_label.setText(f"❌ 激活异常: {e}")
+
+
+
+    def _copy_plugin_fingerprint(self):
+
+        """复制本机指纹，供购买页面使用"""
+
+        pid = self._current_license_plugin_id()
+
+        mod = self._plugin_license_module(pid) if pid else None
+
+        fp = ""
+
+        if mod is not None and hasattr(mod, "get_fingerprint"):
+
+            try:
+
+                fp = mod.get_fingerprint()
+
+            except Exception:
+
+                fp = ""
+
+        if not fp:
+
+            try:
+
+                from data.plugins.viral_writer import license as _vlic
+
+                fp = _vlic.get_fingerprint()
+
+            except Exception:
+
+                fp = ""
+
+        if fp:
+
+            QApplication.clipboard().setText(fp)
+
+            self._license_status_label.setText(f"📋 本机指纹已复制：{fp}\n购买时在插件中心粘贴此指纹，付款后即可获得授权码。")
+
+        else:
+
+            self._license_status_label.setText("⚠️ 获取本机指纹失败，请稍后重试。")
+
+
+
+    def _open_plugin_buy_page(self):
+
+        """打开在线购买页面"""
+
+        QDesktopServices.openUrl(QUrl("https://www.7tan.com/pro.php"))
+
+        self._license_status_label.setText("🛒 已打开在线购买页面（https://www.7tan.com/pro.php），登录后粘贴指纹即可购买。")
 
 
 

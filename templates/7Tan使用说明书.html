@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7Tan 软件使用说明书 v1.0.9</title>
+<style>
+  :root{
+    --bg:#0f1420; --card:#171f31; --card2:#1d2740; --line:#2a3654;
+    --txt:#e8edf7; --sub:#9aa7c4; --acc:#4f8cff; --acc2:#22d3ee;
+    --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--txt); font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif; line-height:1.75; padding-bottom:80px;}
+  .wrap{max-width:1000px; margin:0 auto; padding:0 20px;}
+  /* 封面 */
+  .hero{background:linear-gradient(135deg,#0d1b3e 0%,#122a5e 55%,#0b3b52 100%); padding:70px 20px 50px; text-align:center; border-bottom:1px solid var(--line);}
+  .hero h1{font-size:42px; background:linear-gradient(90deg,#fff,#8fc3ff); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; letter-spacing:4px;}
+  .hero .sub{margin-top:14px; color:var(--sub); font-size:17px;}
+  .hero .meta{margin-top:22px; display:inline-flex; gap:10px; flex-wrap:wrap; justify-content:center;}
+  .hero .meta span{background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.15); border-radius:20px; padding:4px 16px; font-size:13px; color:#cfe0ff;}
+  /* 目录 */
+  .toc{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:26px 30px; margin:36px 0;}
+  .toc h2{margin-bottom:14px; color:var(--acc2); font-size:20px;}
+  .toc ol{padding-left:22px; columns:2; column-gap:40px;}
+  .toc li{margin:5px 0; font-size:14.5px;}
+  .toc a{color:var(--txt); text-decoration:none;}
+  .toc a:hover{color:var(--acc);}
+  /* 章节 */
+  section{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:30px 32px; margin:26px 0;}
+  h2.sec{font-size:24px; color:var(--acc2); border-left:5px solid var(--acc2); padding-left:14px; margin-bottom:18px;}
+  h3{font-size:18px; color:#cfe0ff; margin:22px 0 10px;}
+  h4{font-size:15.5px; color:var(--acc); margin:16px 0 8px;}
+  p{margin:8px 0; color:var(--txt); font-size:14.5px;}
+  .sub{color:var(--sub);}
+  ul,ol{padding-left:24px; margin:8px 0;}
+  li{margin:4px 0; font-size:14.5px;}
+  /* 表格 */
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:13.5px;}
+  th{background:var(--card2); color:#cfe0ff; text-align:left; padding:9px 12px; border:1px solid var(--line);}
+  td{padding:8px 12px; border:1px solid var(--line); color:var(--txt); vertical-align:top;}
+  tr:nth-child(even) td{background:rgba(255,255,255,.02);}
+  /* 代码块 */
+  pre{background:#0a0f1c; border:1px solid var(--line); border-radius:10px; padding:14px 18px; overflow-x:auto; font-size:13px; line-height:1.6; color:#a5f3fc; margin:12px 0;}
+  code{background:#0a0f1c; color:#7dd3fc; padding:1px 7px; border-radius:5px; font-size:13px;}
+  /* 提示框 */
+  .tip,.warn,.ok{ border-radius:10px; padding:12px 16px; margin:12px 0; font-size:14px; border:1px solid;}
+  .tip{background:rgba(79,140,255,.08); border-color:rgba(79,140,255,.35); color:#cfe0ff;}
+  .warn{background:rgba(251,191,36,.08); border-color:rgba(251,191,36,.4); color:#fde68a;}
+  .ok{background:rgba(52,211,153,.08); border-color:rgba(52,211,153,.4); color:#a7f3d0;}
+  /* 图标卡片 */
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin:16px 0;}
+  .card{background:var(--card2); border:1px solid var(--line); border-radius:12px; padding:16px;}
+  .card b{color:var(--acc2); font-size:15px;}
+  .card p{font-size:13px; color:var(--sub); margin-top:6px;}
+  /* SVG 容器 */
+  .fig{background:#0a0f1c; border:1px solid var(--line); border-radius:12px; padding:14px; margin:14px 0; overflow-x:auto;}
+  .fig svg{display:block; max-width:100%; height:auto; margin:0 auto;}
+  .figcap{text-align:center; color:var(--sub); font-size:12.5px; margin-top:8px;}
+  /* 页脚 */
+  footer{text-align:center; color:var(--sub); font-size:13px; margin-top:40px;}
+  @media print{ body{background:#fff;color:#111;} section{break-inside:avoid;} }
+</style>
+</head>
+<body>
+
+<!-- ================= 封面 ================= -->
+<div class="hero">
+  <h1>7Tan 使用说明书</h1>
+  <div class="sub">7坛 AI 小编「盘古」· 游戏内容自动化发布平台</div>
+  <div class="meta">
+    <span>版本 v1.0.9</span><span>Windows 10/11</span><span>2026-08-08</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ================= 目录 ================= -->
+<div class="toc">
+  <h2>📑 目录</h2>
+  <ol>
+    <li><a href="#s1">软件简介</a></li>
+    <li><a href="#s2">系统要求与安装</a></li>
+    <li><a href="#s3">快速上手（5 分钟）</a></li>
+    <li><a href="#s4">主界面指南</a></li>
+    <li><a href="#s5">核心功能详解</a></li>
+    <li><a href="#s6">设置详解</a></li>
+    <li><a href="#s7">完整版说明</a></li>
+    <li><a href="#s8">常见问题 FAQ</a></li>
+    <li><a href="#s9">注意事项与技术支持</a></li>
+  </ol>
+</div>
+
+<!-- ================= 1 简介 ================= -->
+<section id="s1">
+  <h2 class="sec">一、软件简介</h2>
+  <p><b>7Tan</b>（7坛 AI 小编「盘古」）是一款集 <b>AI 对话、游戏采集、内容创作、一键发布、代码开发</b> 于一体的智能工作台，核心使命是<b>把「找游戏资料 → 写简介 → 传图片 → 后台发布」的重复劳动，变成一句话指令</b>。</p>
+
+  <h3>1.1 核心能力总览</h3>
+  <div class="fig">
+    <svg viewBox="0 0 900 190" xmlns="http://www.w3.org/2000/svg" font-family="Microsoft YaHei">
+      <defs>
+        <linearGradient id="gb" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#4f8cff"/><stop offset="1" stop-color="#22d3ee"/>
+        </linearGradient>
+      </defs>
+      <rect x="330" y="20" width="240" height="54" rx="12" fill="url(#gb)"/>
+      <text x="450" y="54" text-anchor="middle" fill="#fff" font-size="19" font-weight="bold">7Tan 智能工作台</text>
+      <!-- 分支 -->
+      <line x1="450" y1="74" x2="450" y2="98" stroke="#3b5a9e" stroke-width="2"/>
+      <line x1="100" y1="98" x2="800" y2="98" stroke="#3b5a9e" stroke-width="2"/>
+      <line x1="100" y1="98" x2="100" y2="120" stroke="#3b5a9e" stroke-width="2"/>
+      <line x1="300" y1="98" x2="300" y2="120" stroke="#3b5a9e" stroke-width="2"/>
+      <line x1="500" y1="98" x2="500" y2="120" stroke="#3b5a9e" stroke-width="2"/>
+      <line x1="700" y1="98" x2="700" y2="120" stroke="#3b5a9e" stroke-width="2"/>
+      <g font-size="13" text-anchor="middle">
+        <rect x="20"  y="120" width="160" height="46" rx="10" fill="#171f31" stroke="#2a3654"/>
+        <text x="100" y="139" fill="#8fc3ff" font-weight="bold">🌐 智能采集</text>
+        <text x="100" y="157" fill="#9aa7c4" font-size="11">浏览源站·提取素材</text>
+        <rect x="220" y="120" width="160" height="46" rx="10" fill="#171f31" stroke="#2a3654"/>
+        <text x="300" y="139" fill="#8fc3ff" font-weight="bold">✍️ AI 撰写</text>
+        <text x="300" y="157" fill="#9aa7c4" font-size="11">评测·翻译·简介</text>
+        <rect x="420" y="120" width="160" height="46" rx="10" fill="#171f31" stroke="#2a3654"/>
+        <text x="500" y="139" fill="#8fc3ff" font-weight="bold">📤 一键发布</text>
+        <text x="500" y="157" fill="#9aa7c4" font-size="11">OSS+后台自动发布</text>
+        <rect x="620" y="120" width="160" height="46" rx="10" fill="#171f31" stroke="#2a3654"/>
+        <text x="700" y="139" fill="#8fc3ff" font-weight="bold">🧩 插件进化</text>
+        <text x="700" y="157" fill="#9aa7c4" font-size="11">35+插件·自我升级</text>
+      </g>
+    </svg>
+    <div class="figcap">图 1：7Tan 核心能力架构</div>
+  </div>
+
+  <h3>1.2 典型使用场景</h3>
+  <div class="cards">
+    <div class="card"><b>🎮 游戏编辑</b><p>把整理好的游戏资料（LOGO、截图、简介）一句话发布到 7坛 后台，自动压缩图片、上传、填表、验证。</p></div>
+    <div class="card"><b>🔎 内容采集</b><p>从 TapTap / 9game / Steam 等源站自动抓取新游详情、截图、下载链接。</p></div>
+    <div class="card"><b>💻 全栈开发</b><p>写代码、改代码、跑测试、Git 提交、Docker/K8s 部署、服务器运维。</p></div>
+    <div class="card"><b>📰 内容创作</b><p>公众号爆款文章、封面图、金句卡片、AI 视频配音、智能翻译。</p></div>
+    <div class="card"><b>☯️ 生活娱乐</b><p>易经占卦、孙子兵法决策推演、每日一卦。</p></div>
+  </div>
+</section>
+
+<!-- ================= 2 安装 ================= -->
+<section id="s2">
+  <h2 class="sec">二、系统要求与安装</h2>
+  <table>
+    <tr><th style="width:120px">项目</th><th>要求</th></tr>
+    <tr><td>操作系统</td><td>Windows 10 / 11（64 位）</td></tr>
+    <tr><td>内存</td><td>建议 4GB 及以上</td></tr>
+    <tr><td>磁盘</td><td>安装约 500MB，另需素材/下载缓存空间</td></tr>
+    <tr><td>网络</td><td>需要联网（AI 对话、发布、更新）</td></tr>
+  </table>
+  <h3>2.1 安装步骤</h3>
+  <ol>
+    <li>解压 <code>7tan-editor-free-v1.0.9.zip</code> 到任意目录（<b>路径建议纯英文</b>，如 <code>D:\7tan-editor</code>）；</li>
+    <li>进入解压后的 <code>7tan-editor</code> 文件夹；</li>
+    <li>双击 <b><code>7tan-editor.exe</code></b> 启动；</li>
+    <li>首次启动进入<b>欢迎向导</b>，按提示完成基础配置。</li>
+  </ol>
+  <div class="tip">💡 建议右键 exe → 发送到 → 桌面快捷方式，方便日常启动。</div>
+  <h3>2.2 目录结构</h3>
+  <pre>7tan-editor/
+├── 7tan-editor.exe        # 主程序（双击运行）
+├── _internal/             # 运行所需内置文件（请勿删除）
+└── 运行后自动生成
+    ├── data/              # 数据目录（数据库、日志、插件）
+    ├── logs/              # 运行日志（排障用）
+    ├── downloads/         # 下载缓存
+    └── config.yaml        # 全局配置文件</pre>
+</section>
+
+<!-- ================= 3 快速上手 ================= -->
+<section id="s3">
+  <h2 class="sec">三、快速上手（5 分钟）</h2>
+  <h3>3.1 启动与登录</h3>
+  <ol>
+    <li>双击 <code>7tan-editor.exe</code> 启动；</li>
+    <li>弹出<b>登录窗口</b>：已有账号直接登录；没有账号点「注册」；想先体验点「免费试用」；</li>
+    <li>登录后进入主界面。</li>
+  </ol>
+  <h3>3.2 欢迎向导配置（首次）</h3>
+  <table>
+    <tr><th>步骤</th><th>内容</th><th>说明</th></tr>
+    <tr><td>①</td><td>AI 模型</td><td>默认 DeepSeek，可填 API Key 或选择已保存模型</td></tr>
+    <tr><td>②</td><td>站点设置</td><td>7坛 管理后台地址、用户名、发布间隔</td></tr>
+    <tr><td>③</td><td>OSS 云存储</td><td>阿里云 / 腾讯云 / 七牛 任选，用于存放图片与安装包</td></tr>
+    <tr><td>④</td><td>完成</td><td>保存后进入对话界面</td></tr>
+  </table>
+  <div class="tip">💡 以上设置之后都可随时在「🔧 设置」里修改。</div>
+  <h3>3.3 第一条指令</h3>
+  <p>在底部输入框输入（示例）：</p>
+  <pre>帮我发布《超能机器人》：资料在 D:\用户目录\下载\新建文件夹 123\11，
+LOGO 和截图都在里面，游戏简介不用改，下载包不用下载，
+直接把下载链接加上发布。</pre>
+  <p class="sub">AI 会自动完成：读资料 → 压缩图片 → 登录后台 → 上传 LOGO/截图 → 填表 → 发布 → 验证 → 汇报结果。</p>
+</section>
+
+<!-- ================= 4 主界面 ================= -->
+<section id="s4">
+  <h2 class="sec">四、主界面指南</h2>
+  <div class="fig">
+    <svg viewBox="0 0 900 430" xmlns="http://www.w3.org/2000/svg" font-family="Microsoft YaHei">
+      <rect x="10" y="10" width="880" height="410" rx="12" fill="#171f31" stroke="#2a3654"/>
+      <text x="30" y="40" fill="#e8edf7" font-size="15" font-weight="bold">● 7Tan AI 小编「盘古」</text>
+      <text x="820" y="40" fill="#9aa7c4" font-size="14">─  □  ✕</text>
+      <line x1="10" y1="52" x2="890" y2="52" stroke="#2a3654"/>
+      <!-- 左侧 -->
+      <rect x="14" y="56" width="170" height="330" rx="8" fill="#1d2740" stroke="#2a3654"/>
+      <rect x="26" y="68" width="146" height="26" rx="6" fill="#4f8cff"/>
+      <text x="99" y="86" text-anchor="middle" fill="#fff" font-size="12">➕ 新对话</text>
+      <rect x="26" y="104" width="146" height="22" rx="5" fill="#0f1420"/>
+      <text x="36" y="120" fill="#cfe0ff" font-size="11">💬 历史会话 1</text>
+      <rect x="26" y="130" width="146" height="22" rx="5" fill="#0f1420"/>
+      <text x="36" y="146" fill="#9aa7c4" font-size="11">💬 历史会话 2</text>
+      <rect x="26" y="156" width="146" height="22" rx="5" fill="#0f1420"/>
+      <text x="36" y="172" fill="#9aa7c4" font-size="11">💬 历史会话 3</text>
+      <text x="36" y="200" fill="#5b6b8f" font-size="11">…</text>
+      <rect x="26" y="216" width="146" height="22" rx="5" fill="#0f1420"/>
+      <text x="36" y="232" fill="#9aa7c4" font-size="11">🔍 搜索历史</text>
+      <rect x="26" y="248" width="146" height="24" rx="5" fill="#0f1420"/>
+      <text x="36" y="264" fill="#9aa7c4" font-size="11">🧩 插件市场</text>
+      <rect x="26" y="278" width="146" height="24" rx="5" fill="#0f1420"/>
+      <text x="36" y="294" fill="#9aa7c4" font-size="11">🔧 设置</text>
+      <rect x="26" y="308" width="146" height="24" rx="5" fill="#0f1420"/>
+      <text x="36" y="324" fill="#9aa7c4" font-size="11">ℹ️ 关于 7Tan</text>
+      <line x1="14" y1="344" x2="184" y2="344" stroke="#2a3654"/>
+      <rect x="26" y="352" width="146" height="26" rx="6" fill="#123a2e" stroke="#34d399"/>
+      <text x="99" y="369" text-anchor="middle" fill="#34d399" font-size="11">⭐ 完整版 · wapli7723</text>
+      <!-- 中间对话区 -->
+      <rect x="190" y="56" width="506" height="330" rx="8" fill="#0f1420" stroke="#2a3654"/>
+      <rect x="206" y="74" width="240" height="74" rx="8" fill="#1d2740"/>
+      <text x="216" y="94" fill="#e8edf7" font-size="12" font-weight="bold">🤖 盘古</text>
+      <text x="216" y="116" fill="#9aa7c4" font-size="11">✅ 发布成功！标题《鬼魂》ID 994…</text>
+      <text x="216" y="134" fill="#9aa7c4" font-size="11">前台链接：https://www.7tan.com/game/994/</text>
+      <rect x="606" y="160" width="80" height="40" rx="8" fill="#1d2740"/>
+      <text x="616" y="180" fill="#e8edf7" font-size="11" font-weight="bold">🙋 用户</text>
+      <text x="616" y="194" fill="#9aa7c4" font-size="10">帮我发布《鬼魂》…</text>
+      <rect x="206" y="216" width="260" height="50" rx="8" fill="#1d2740"/>
+      <text x="216" y="236" fill="#e8edf7" font-size="11">💡 思考过程：读取资料→查重→压缩…</text>
+      <text x="216" y="254" fill="#9aa7c4" font-size="10">正在登录后台… 已上传 LOGO…</text>
+      <!-- 输入区 -->
+      <rect x="206" y="330" width="474" height="38" rx="19" fill="#1d2740" stroke="#4f8cff"/>
+      <text x="222" y="354" fill="#5b6b8f" font-size="11">输入指令，回车发送…</text>
+      <rect x="648" y="330" width="32" height="38" rx="10" fill="none"/>
+      <text x="650" y="354" fill="#9aa7c4" font-size="11">📎🎤🎬</text>
+      <circle cx="676" cy="349" r="14" fill="#4f8cff"/>
+      <text x="676" y="354" text-anchor="middle" fill="#fff" font-size="11">➤</text>
+      <!-- 右侧 -->
+      <rect x="702" y="56" width="184" height="330" rx="8" fill="#1d2740" stroke="#2a3654"/>
+      <text x="716" y="82" fill="#cfe0ff" font-size="12" font-weight="bold">⚙ 快捷面板</text>
+      <rect x="714" y="96" width="160" height="30" rx="6" fill="#0f1420"/>
+      <text x="724" y="115" fill="#9aa7c4" font-size="11">AI 模型：DeepSeek-V4-Flash</text>
+      <rect x="714" y="134" width="160" height="30" rx="6" fill="#0f1420"/>
+      <text x="724" y="153" fill="#9aa7c4" font-size="11">后台：img.7tan.cn ✅</text>
+      <rect x="714" y="172" width="160" height="30" rx="6" fill="#0f1420"/>
+      <text x="724" y="191" fill="#9aa7c4" font-size="11">OSS：已配置 ✅</text>
+      <rect x="714" y="210" width="160" height="30" rx="6" fill="#0f1420"/>
+      <text x="724" y="229" fill="#9aa7c4" font-size="11">更新：1.0.9 最新 ✅</text>
+      <rect x="714" y="248" width="160" height="30" rx="6" fill="#0f1420"/>
+      <text x="724" y="267" fill="#9aa7c4" font-size="11">任务：待机中</text>
+      <rect x="714" y="286" width="160" height="30" rx="6" fill="#0f1420"/>
+      <text x="724" y="305" fill="#9aa7c4" font-size="11">🎬 录屏　🔄 刷新</text>
+    </svg>
+    <div class="figcap">图 2：主界面布局示意（实际界面以软件为准）</div>
+  </div>
+  <table>
+    <tr><th style="width:110px">区域</th><th>功能</th></tr>
+    <tr><td>标题栏</td><td>软件名、最小化 / 最大化 / 关闭</td></tr>
+    <tr><td>左侧会话栏</td><td>新建对话、历史会话列表（点击切换）、搜索历史</td></tr>
+    <tr><td>对话区</td><td>AI 回复内容，支持 Markdown 表格 / 代码块 / 图片 / 思考过程展开</td></tr>
+    <tr><td>输入框</td><td>输入指令回车发送；附件、语音、录屏、发送按钮</td></tr>
+    <tr><td>左侧底部</td><td>会员等级（完整版）、账号、🔄 刷新、🎬 录屏快捷按钮</td></tr>
+    <tr><td>功能入口</td><td>插件市场、设置、关于 7Tan</td></tr>
+  </table>
+</section>
+
+<!-- ================= 5 核心功能 ================= -->
+<section id="s5">
+  <h2 class="sec">五、核心功能详解</h2>
+
+  <h3>5.1 💬 AI 对话</h3>
+  <ul>
+    <li><b>输入方式</b>：底部输入框输入自然语言指令，回车发送；</li>
+    <li><b>Markdown 渲染</b>：标题、列表、表格、代码块自动美化；</li>
+    <li><b>流式输出</b>：AI 回复逐字显示，随时可见进度；</li>
+    <li><b>思考过程</b>：可展开查看 AI 的推理步骤；</li>
+    <li><b>历史会话</b>：左侧列表切换，支持重命名、删除、搜索；</li>
+    <li><b>Token 显示</b>：对话右上角显示本次消耗 Token 数。</li>
+  </ul>
+  <h4>常用指令示例</h4>
+  <pre>帮我发布《XX游戏》：资料在 D:\...\11，LOGO 截图都在里面
+抓取 TapTap 首页新游
+对比《A》和《B》两款游戏
+把这段英文介绍翻译成中文
+检查 7Tan 后台今天发布了几款游戏</pre>
+
+  <h3>5.2 🎮 游戏采集与发布（核心）</h3>
+  <h4>第一步：准备资料文件夹</h4>
+  <pre>D:\用户目录\下载\新建文件夹 123\11\
+├── 游戏资料.txt      # 标题、简介、开发商、备案号、下载链接等
+├── logo.png          # 游戏 LOGO
+└── 1.jpg 2.jpg ...   # 游戏截图（2~5 张）</pre>
+  <h4>第二步：一句话指令</h4>
+  <pre>我已经把《鬼魂》的资料整理到 D:\用户目录\下载\新建文件夹 123\11，
+请帮我到管理后台发布，LOGO 与截图都在里面，其他资料在游戏资料.txt，
+简介不用修改，安装包不用下载，把下载链接加上发布。</pre>
+  <h4>第三步：AI 自动执行全流程</h4>
+  <div class="fig">
+    <svg viewBox="0 0 900 120" xmlns="http://www.w3.org/2000/svg" font-family="Microsoft YaHei">
+      <g font-size="12" text-anchor="middle">
+        <rect x="10"  y="30" width="120" height="46" rx="9" fill="#1d2740" stroke="#4f8cff"/>
+        <text x="70"  y="49" fill="#8fc3ff">📖 读资料</text>
+        <text x="70"  y="65" fill="#9aa7c4" font-size="10">GBK/UTF-8</text>
+        <rect x="150" y="30" width="120" height="46" rx="9" fill="#1d2740" stroke="#4f8cff"/>
+        <text x="210" y="49" fill="#8fc3ff">🔍 查重</text>
+        <text x="210" y="65" fill="#9aa7c4" font-size="10">不重复发布</text>
+        <rect x="290" y="30" width="120" height="46" rx="9" fill="#1d2740" stroke="#4f8cff"/>
+        <text x="350" y="49" fill="#8fc3ff">🗜 压缩图片</text>
+        <text x="350" y="65" fill="#9aa7c4" font-size="10">LOGO+截图</text>
+        <rect x="430" y="30" width="120" height="46" rx="9" fill="#1d2740" stroke="#4f8cff"/>
+        <text x="490" y="49" fill="#8fc3ff">🔐 登录后台</text>
+        <text x="490" y="65" fill="#9aa7c4" font-size="10">7坛 管理后台</text>
+        <rect x="570" y="30" width="120" height="46" rx="9" fill="#1d2740" stroke="#4f8cff"/>
+        <text x="630" y="49" fill="#8fc3ff">📤 上传+填表</text>
+        <text x="630" y="65" fill="#9aa7c4" font-size="10">LOGO/截图/表单</text>
+        <rect x="710" y="30" width="120" height="46" rx="9" fill="#123a2e" stroke="#34d399"/>
+        <text x="770" y="49" fill="#34d399">✅ 发布+验证</text>
+        <text x="770" y="65" fill="#9aa7c4" font-size="10">列表/质量/入库</text>
+        <g stroke="#3b5a9e" stroke-width="2">
+          <line x1="130" y1="53" x2="148" y2="53"/><polygon points="150,53 144,49 144,57" fill="#3b5a9e"/>
+          <line x1="270" y1="53" x2="288" y2="53"/><polygon points="290,53 284,49 284,57" fill="#3b5a9e"/>
+          <line x1="410" y1="53" x2="428" y2="53"/><polygon points="430,53 424,49 424,57" fill="#3b5a9e"/>
+          <line x1="550" y1="53" x2="568" y2="53"/><polygon points="570,53 564,49 564,57" fill="#3b5a9e"/>
+          <line x1="690" y1="53" x2="708" y2="53"/><polygon points="710,53 704,49 704,57" fill="#3b5a9e"/>
+        </g>
+      </g>
+    </svg>
+    <div class="figcap">图 3：游戏发布全流程</div>
+  </div>
+  <h4>发布结果示例（AI 汇报）</h4>
+  <pre>✅ 发布成功！
+标题：鬼魂（ID 994）   栏目：冒险解密
+开发商：海南星空跳动科技有限公司   系统要求：5.0
+LOGO：已上传（512x512）  截图：5 张
+前台链接：https://www.7tan.com/game/994/</pre>
+  <div class="warn">⚠️ 重要：请明确告诉 AI <b>「是发布，不是替换其他游戏」</b>，防止 AI 误操作覆盖已有游戏。</div>
+
+  <h3>5.3 🌐 浏览器与素材工具</h3>
+  <ul>
+    <li><b>内置浏览器</b>：软件内置 Chromium，AI 可自动浏览游戏源站；</li>
+    <li><b>提取 LOGO / 截图</b>：自动识别页面图片并下载；</li>
+    <li><b>自动截图</b>：对页面自动截取多张高质量预览图；</li>
+    <li><b>OCR 识别</b>：从截图 / 图片中识别文字；</li>
+    <li><b>图片压缩</b>：发布前自动压缩，节省云存储空间。</li>
+  </ul>
+
+  <h3>5.4 ☁️ 云存储 OSS</h3>
+  <p>用于存放游戏 LOGO、截图、安装包，生成外链供后台引用。</p>
+  <ul>
+    <li>支持 <b>阿里云 OSS / 腾讯云 COS / 七牛 Kodo</b>；</li>
+    <li>在「🔧 设置 → OSS 设置」填写 AccessKey、Bucket、域名等；</li>
+    <li>AI 发布游戏时会自动上传并获取外链。</li>
+  </ul>
+
+  <h3>5.5 🎬 录屏</h3>
+  <ul>
+    <li>点击「🎬 录屏」开始录制；再次点击停止并保存；</li>
+    <li>设置中可选择<b>音频设备</b>（麦克风 / 立体声混音）；</li>
+    <li>输出格式：MP4（含音轨）。</li>
+  </ul>
+  <div class="tip">💡 录不到声音？→ 见 FAQ 第 2 条。</div>
+
+  <h3>5.6 🔊 语音（TTS）</h3>
+  <ul>
+    <li>支持 AI 语音朗读回复内容；</li>
+    <li>设置中可选音色（女声 / 男声）；</li>
+    <li>依赖系统 TTS 中文语音包；提示「语音引擎未就绪」见 FAQ 第 8 条。</li>
+  </ul>
+
+  <h3>5.7 🔄 自动更新</h3>
+  <ol>
+    <li>启动时自动检查更新（也可在「ℹ️ 关于」页点「检查更新」）；</li>
+    <li>发现新版本提示下载；</li>
+    <li>下载完成后校验 <b>MD5 + RSA 数字签名</b>（防篡改）；</li>
+    <li>校验通过后提示重启更新，自动完成替换。</li>
+  </ol>
+
+  <h3>5.8 🧩 插件系统</h3>
+  <p>入口：左侧「🧩 插件市场」。支持：<b>刷新插件列表 / 安装选中插件 / 一键安装全部 / 卸载插件</b>。</p>
+  <table>
+    <tr><th style="width:110px">分类</th><th>插件</th></tr>
+    <tr><td>内容创作</td><td>爆款写作、金句卡片、智能翻译、AI 视频工厂、自动配图</td></tr>
+    <tr><td>代码开发</td><td>代码补全、代码审查、代码搜索、代码结构、LSP 桥接、重构工具、差异工具、调试助手、性能分析、依赖分析</td></tr>
+    <tr><td>工程协作</td><td>Git 操作、Git 高级、CI/CD 助手、Docker &amp; K8s、远程部署、项目脚手架、测试运行器、终端运行器</td></tr>
+    <tr><td>数据处理</td><td>数据库探索、HTTP 客户端、配置管理、记忆增强、代码片段管理、文档生成</td></tr>
+    <tr><td>自动化</td><td>桌面机器人、公众号发布、表单增强、OCR 阅读器、录屏</td></tr>
+    <tr><td>传统文化</td><td>易经占卦、孙子兵法</td></tr>
+    <tr><td>自我进化</td><td>自我进化、自我重启</td></tr>
+  </table>
+
+  <h3>5.9 ⏰ 定时任务（调度器）</h3>
+  <ul>
+    <li>内置任务：<b>每日早间更新（08:00）/ 午间更新（12:00）/ 晚间更新（18:00）</b>；</li>
+    <li>设置中可开启 / 关闭、修改时间、调整每次采集数量；</li>
+    <li>适合定时自动采集与发布新游。</li>
+  </ul>
+
+  <h3>5.10 🤖 桌面自动化</h3>
+  <ul>
+    <li>支持控制微信 / QQ 等桌面软件自动发送消息；</li>
+    <li><b>内置防发错机制</b>：发送前搜索目标 → 验证聊天窗口 → 确认后发送；</li>
+    <li>使用场景：定时给粉丝群发游戏资讯、自动回复。</li>
+  </ul>
+
+  <h3>5.11 📰 公众号发布</h3>
+  <ul>
+    <li>一键完成微信公众号图文：填标题 / 作者 → 粘贴正文 → 填摘要 → 上传封面 → 原创声明 → 保存草稿 / 发表；</li>
+    <li>支持图文混排序列（文字 + 图片自动排版）。</li>
+  </ul>
+
+  <h3>5.12 💻 代码助手全家桶</h3>
+  <table>
+    <tr><th style="width:140px">能力</th><th>说明</th></tr>
+    <tr><td>AI 代码补全</td><td>启动本地补全服务（端口 17890），配合 VS Code 扩展使用</td></tr>
+    <tr><td>代码审查</td><td>静态分析、安全检查、规范检查</td></tr>
+    <tr><td>代码搜索</td><td>项目级 grep / 文件查找 / 引用查找</td></tr>
+    <tr><td>重构</td><td>符号重命名、函数提取、导入整理、格式化</td></tr>
+    <tr><td>Git</td><td>status / diff / commit / push / pull / branch / log / stash / tag</td></tr>
+    <tr><td>Docker / K8s</td><td>容器管理、镜像构建、K8s 资源操作</td></tr>
+    <tr><td>CI/CD</td><td>生成 GitHub Actions / GitLab CI 配置</td></tr>
+  </table>
+
+  <h3>5.13 ✒️ 内容创作工具</h3>
+  <ul>
+    <li><b>爆款写作</b>：选题生成 → 爆款标题 → 五段式大纲 → 正文撰写 → 金句卡片 → 发布前质检；</li>
+    <li><b>易经占卦</b>：金钱卦 / 数字卦 / 时间卦，附卦辞爻辞与白话解读；每日一卦；</li>
+    <li><b>孙子兵法</b>：兵法问答、决策推演、篇章查询、每日兵法；</li>
+    <li><b>智能翻译</b>：中英文互译。</li>
+  </ul>
+
+  <h3>5.14 🧠 记忆系统</h3>
+  <ul>
+    <li>AI 可将重要信息（经验、配置、知识点）存入<b>持久化记忆</b>；</li>
+    <li>重启后依然保留；支持分类（游戏 / 技能 / 配置 / 通用）、搜索、概览；</li>
+    <li>例如 AI 会记住「上次开发商填错的教训」，下次自动避免。</li>
+  </ul>
+
+  <h3>5.15 🚀 自我进化（完整版）</h3>
+  <ul>
+    <li><b>自我修改</b>：AI 可安全地修改自身代码、配置，实现自我升级；</li>
+    <li><b>创建插件</b>：AI 可动态编写并注册新插件，扩展能力；</li>
+    <li><b>自我重启</b>：修改代码后自动重启生效；</li>
+    <li><b>完整性校验</b>：自动检测核心文件是否被篡改，保证安全。</li>
+  </ul>
+</section>
+
+<!-- ================= 6 设置 ================= -->
+<section id="s6">
+  <h2 class="sec">六、设置详解</h2>
+  <p class="sub">入口：左侧「🔧 设置」。</p>
+
+  <h3>6.1 AI 模型</h3>
+  <ul>
+    <li>选择已保存的模型配置，或新建（填写 API Key、Base URL、模型名）；</li>
+    <li>支持 DeepSeek / OpenAI 兼容接口；</li>
+    <li>保存后生效，可在对话中直接使用。</li>
+  </ul>
+
+  <h3>6.2 站点设置</h3>
+  <table>
+    <tr><th style="width:130px">项</th><th>说明</th></tr>
+    <tr><td>后台地址</td><td>7坛 管理后台域名</td></tr>
+    <tr><td>用户名 / 密码</td><td>后台登录账号</td></tr>
+    <tr><td>发布间隔</td><td>两次发布之间随机延迟（防风控），默认 30~120 秒</td></tr>
+    <tr><td>每日任务</td><td>早 / 午 / 晚定时发布开关与时间</td></tr>
+  </table>
+
+  <h3>6.3 OSS 设置</h3>
+  <ul>
+    <li>云服务商：阿里云 OSS / 腾讯云 COS / 七牛 Kodo；</li>
+    <li>AccessKey / SecretKey / Bucket / Region / 外链域名；</li>
+    <li>可测试连通性，保存后 AI 发布自动使用。</li>
+  </ul>
+
+  <h3>6.4 浏览器设置</h3>
+  <ul>
+    <li>浏览器类型（默认 Chromium）、是否无头模式；</li>
+    <li>HTTP / HTTPS 代理（需要时填写）；</li>
+    <li>下载超时、蜘蛛伪装下载开关。</li>
+  </ul>
+
+  <h3>6.5 更新设置</h3>
+  <ul>
+    <li>自动检查更新开关；更新通道（stable 稳定版）；</li>
+    <li>更新包下载与签名校验策略。</li>
+  </ul>
+
+  <h3>6.6 安全设置</h3>
+  <table>
+    <tr><th style="width:130px">项</th><th>说明</th></tr>
+    <tr><td>完整性校验</td><td>核心文件篡改检测（默认开启）</td></tr>
+    <tr><td>敏感词过滤</td><td>发布内容自动过滤敏感词（默认开启）</td></tr>
+    <tr><td>自我修改确认</td><td>重要修改需人工确认</td></tr>
+    <tr><td>开发者模式</td><td>高级用户可开启（谨慎）</td></tr>
+  </table>
+
+  <h3>6.7 Web 服务</h3>
+  <ul>
+    <li>软件内置本地 API 服务（<code>127.0.0.1:9800</code>），供浏览器 / 扩展联动；</li>
+    <li>默认开机自动打开，可关闭。</li>
+  </ul>
+</section>
+
+<!-- ================= 7 完整版 ================= -->
+<section id="s7">
+  <h2 class="sec">七、完整版说明</h2>
+  <div class="ok">📌 2026-08 起，原「专业版 / 进化版」权益统一更名为 <b>「完整版」</b>。</div>
+
+  <h3>7.1 什么是完整版</h3>
+  <p><b>完整版</b>是 7Tan 的付费权益版本：解锁<b>全部 AI 功能</b>、效率翻倍，并支持<b>软件自我修改、自我升级进化</b>，功能强大。</p>
+
+  <h3>7.2 如何激活 / 续费</h3>
+  <ol>
+    <li>软件登录页或左侧底部点击「升级 / 续费」；</li>
+    <li>自动打开官网：<b>https://www.7tan.com/pro.php</b>；</li>
+    <li>按页面提示完成购买；</li>
+    <li>购买后在软件内点「🔄 刷新」即可生效。</li>
+  </ol>
+
+  <h3>7.3 完整版权益</h3>
+  <table>
+    <tr><th style="width:140px">权益</th><th>说明</th></tr>
+    <tr><td>全部 AI 功能</td><td>解锁全部插件与工具（142+）</td></tr>
+    <tr><td>自我进化</td><td>自我修改代码、创建插件、自我升级</td></tr>
+    <tr><td>发布额度</td><td>无限制游戏发布</td></tr>
+    <tr><td>优先支持</td><td>专属技术支持</td></tr>
+  </table>
+</section>
+
+<!-- ================= 8 FAQ ================= -->
+<section id="s8">
+  <h2 class="sec">八、常见问题 FAQ</h2>
+
+  <h3>1️⃣ 更新时提示「无法启动更新程序: Read timed out」？</h3>
+  <p>旧版本（≤1.0.7）已知问题：更新解压会卡住本地服务导致超时。<b>升级到 1.0.8 及以上已修复</b>。请手动下载新版安装包升级一次。</p>
+
+  <h3>2️⃣ 录屏没有声音？</h3>
+  <p>检查「设置 → 录屏 → 音频设备」是否选择了正确的录音设备（如「立体声混音」或麦克风）。若设备不可用软件会提示，请先在 Windows 声音设置中启用录音设备。</p>
+
+  <h3>3️⃣ 点击历史对话时鼠标变圈圈、界面卡顿？</h3>
+  <p>旧版本加载大量历史消息时性能不佳。<b>1.0.8 已优化</b>（渐进渲染 + 高度同步节流）。若仍卡顿请升级到最新版。</p>
+
+  <h3>4️⃣ 登录页点「忘记密码」没反应？</h3>
+  <p>1.0.8 已修复（旧版点击会静默报错）。升级后会自动打开浏览器访问：<code>https://www.7tan.com/bbs/77562/</code></p>
+
+  <h3>5️⃣ 左侧底部点「刷新」报 404？</h3>
+  <p>1.0.8 已修复 API 域名错误（图片服务器 vs 主站）。升级后刷新会正常返回「会员状态已更新」。</p>
+
+  <h3>6️⃣ 软件闪退 / 崩溃怎么办？</h3>
+  <ol>
+    <li>找到 <code>logs\crash_*.txt</code>（记录崩溃原因）；</li>
+    <li>查看 <code>logs\app_日期.log</code> 最近报错；</li>
+    <li>把两个文件发给技术支持，便于定位修复；</li>
+    <li>常见崩溃（浏览器控件被销毁等）已在后续版本修复，请保持更新。</li>
+  </ol>
+
+  <h3>7️⃣ 登录提示「账号或密码错误」？</h3>
+  <p>1.0.7 已修复错误提示不准确问题。请确认账号密码无误；忘记密码可用登录页「忘记密码」链接找回。</p>
+
+  <h3>8️⃣ 语音提示「语音引擎未就绪：请检查手机TTS中文语音包」？</h3>
+  <p>该提示来自 <b>易经 AI 占卦 APP（安卓端）</b>，不是 7Tan 桌面版。原因是手机系统缺少 TTS 中文语音包。解决：安装 v0.10.0+ 版 APP（已内置离线语音引擎），或给手机安装中文语音包。</p>
+
+  <h3>9️⃣ 杀毒软件 / Windows Defender 拦截软件？</h3>
+  <p>软件为正规开发，但因包含自动更新、自我修改能力，个别杀软可能误报。请添加信任 / 允许运行；如有疑问请联系官方。</p>
+
+  <h3>🔟 忘记后台密码 / 发布时提示登录失败？</h3>
+  <p>检查「设置 → 站点设置」中的后台用户名密码；确认网络可访问后台域名；发布间隔建议保持 30 秒以上。</p>
+
+  <h3>1️⃣1️⃣ 如何反馈问题 / 求助？</h3>
+  <p>软件左侧底部提供「问题求助 / 投诉建议」入口，或联系官网 https://www.7tan.com 客服。</p>
+</section>
+
+<!-- ================= 9 注意事项 ================= -->
+<section id="s9">
+  <h2 class="sec">九、注意事项与技术支持</h2>
+  <h3>注意事项</h3>
+  <ul>
+    <li>请勿删除 <code>_internal</code>、<code>logs</code>、<code>data</code> 中的文件，可能导致软件异常；</li>
+    <li>重要资料（后台账号、OSS 密钥）请妥善保管；</li>
+    <li>发布游戏请确保资料真实合法，遵守平台规则；</li>
+    <li>更新时保持网络通畅，不要中途关闭；</li>
+    <li>路径建议使用英文，避免中文路径导致个别功能异常。</li>
+  </ul>
+  <h3>技术支持</h3>
+  <table>
+    <tr><th style="width:130px">项目</th><th>地址</th></tr>
+    <tr><td>官网</td><td>https://www.7tan.com</td></tr>
+    <tr><td>更新包</td><td>https://www.7tan.com/updates/</td></tr>
+    <tr><td>用户协议</td><td>https://www.7tan.com/agreement.php</td></tr>
+    <tr><td>隐私政策</td><td>https://www.7tan.com/privacy.php</td></tr>
+    <tr><td>完整版购买</td><td>https://www.7tan.com/pro.php</td></tr>
+  </table>
+</section>
+
+<footer>Made with ❤️ by 7Tan AI 小编「盘古」 · 7Tan 软件使用说明书 v1.0.9</footer>
+</div>
+</body>
+</html>

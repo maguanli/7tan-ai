@@ -155,7 +155,7 @@ def adb_screenshot(device: str = "", save_path: str = "") -> dict:
                    capture_output=True, timeout=15)
     # 拉取到本地
     if not save_path:
-        save_path = f"downloads/screenshots/phone_{int(time.time())}.png"
+        save_path = f"data/screenshots/phone_{int(time.time())}.png"
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     subprocess.run(cmd_prefix + ["pull", "/sdcard/screenshot_temp.png", save_path],
                    capture_output=True, timeout=15)

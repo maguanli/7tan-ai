@@ -266,7 +266,7 @@ def main():
     parser.add_argument("--lang", default="", help="识别语言：windows 用 zh-CN，tesseract 用 chi_sim")
     parser.add_argument("--loop", type=int, default=1, help="识别次数，0=无限循环（默认1次）")
     parser.add_argument("--interval", type=float, default=2.0, help="循环间隔秒数（默认2）")
-    parser.add_argument("--save-dir", default="", help="保存区域截图目录（默认不保存）")
+    parser.add_argument("--save-dir", default="", help="保存区域截图目录（默认 data/screenshots）")
     parser.add_argument("--save-text", default="", help="识别文本追加保存到文件")
     parser.add_argument("--debug", action="store_true", help="打印调试信息")
     args = parser.parse_args()
@@ -295,6 +295,8 @@ def main():
         parser.error("--loop 不能为负数")
 
     # ---- 初始化引擎（只一次，复用）----
+    if not args.save_dir:
+        args.save_dir = str(Path(__file__).resolve().parent.parent.parent / "data" / "screenshots")
     engine = create_engine(args.engine, args.lang, args.debug)
     if args.save_dir:
         Path(args.save_dir).mkdir(parents=True, exist_ok=True)

@@ -29,7 +29,7 @@ def auto_screenshot(count: int = 3) -> str:
         return "❌ 浏览器未就绪"
 
     import os
-    save_dir = Path(ROOT) / "downloads" / "screenshots"
+    save_dir = Path(ROOT) / "data" / "screenshots"
     save_dir.mkdir(parents=True, exist_ok=True)
 
     results = []

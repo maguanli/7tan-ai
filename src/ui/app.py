@@ -1059,7 +1059,7 @@ class Sidebar(QFrame):
 
 
 
-        # --- 专业版状态组件 ---
+        # --- 完整版状态组件 ---
 
         from .pro_status_widget import ProStatusWidget
 

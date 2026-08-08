@@ -1,6 +1,7 @@
 <?php
+header('Content-Type: text/html; charset=UTF-8');
 // ============================================================
-// 购买进化版页面
+// 购买完整版页面
 // 位置: /pro.php
 // 前端 JS 驱动验证，支持 BBS 登录 + auth_token Cookie 双通道
 // ============================================================
@@ -9,7 +10,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>7Tan 进化版 - 7坛游戏社区</title>
+    <title>7Tan 完整版 - 7坛游戏社区</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
@@ -26,163 +27,77 @@
         .login-prompt h2 { margin-bottom: 12px; color: #ff6b35; }
         .login-prompt p { color: #888; margin-bottom: 16px; }
         .login-prompt a { display: inline-block; padding: 12px 32px; background: #ff6b35; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; }
-        .login-prompt a:hover { background: #e85d2c; }
-        .status-card { background: #16213e; border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
-        .status-badge { padding: 4px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; }
-        .status-pro { background: #ff6b35; color: #fff; }
-        .status-free { background: #333; color: #aaa; }
-        .status-info { color: #888; font-size: 14px; }
-        .plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
-        .plan-card { background: #16213e; border-radius: 12px; padding: 24px; text-align: center; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; position: relative; }
-        .plan-card:hover { border-color: #444; }
-        .plan-card.selected { border-color: #ff6b35; background: #1e2a4a; }
-        .plan-badge { position: absolute; top: -10px; right: -10px; background: #ff6b35; color: #fff; font-size: 12px; padding: 3px 10px; border-radius: 12px; font-weight: 600; }
-        .plan-name { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
-        .plan-months { color: #888; font-size: 13px; margin-bottom: 12px; }
-        .plan-price { font-size: 32px; font-weight: bold; color: #ff6b35; }
-        .plan-price sub { font-size: 16px; color: #888; }
-        .plan-per-month { color: #666; font-size: 12px; margin-top: 4px; }
-        .buy-btn { width: 100%; padding: 14px; background: #ff6b35; color: #fff; border: none; border-radius: 10px; font-size: 18px; font-weight: 600; cursor: pointer; }
+        .login-prompt a:hover { background: #e55a2b; }
+        .plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .plan-card { background: #16213e; border: 2px solid transparent; border-radius: 12px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; }
+        .plan-card:hover { border-color: #ff6b3540; }
+        .plan-card.selected { border-color: #ff6b35; background: #1a2744; }
+        .plan-card .plan-name { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+        .plan-card .plan-price { font-size: 28px; color: #ff6b35; font-weight: bold; margin-bottom: 8px; }
+        .plan-card .plan-price small { font-size: 14px; color: #888; }
+        .plan-card .plan-desc { color: #888; font-size: 13px; }
+        .buy-btn { width: 100%; padding: 16px; background: #ff6b35; color: #fff; border: none; border-radius: 10px; font-size: 18px; font-weight: 600; cursor: pointer; }
+        .buy-btn:hover { background: #e55a2b; }
         .buy-btn:disabled { background: #555; cursor: not-allowed; }
-        .buy-btn:hover:not(:disabled) { background: #e85d2c; }
-        .msg { margin-top: 12px; padding: 12px; border-radius: 8px; display: none; }
-        .msg-success { background: #0d3b1a; color: #4ade80; }
-        .msg-error { background: #3b0d0d; color: #f87171; }
-        .loading { text-align: center; padding: 60px; color: #888; }
-        .loading .spinner { display: inline-block; width: 36px; height: 36px; border: 3px solid #333; border-top-color: #ff6b35; border-radius: 50%; animation: spin 0.8s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        .msg { text-align: center; padding: 12px; margin-top: 12px; border-radius: 8px; display: none; }
+        .msg.success { background: #1b5e20; color: #a5d6a7; display: block; }
+        .msg.error { background: #5e1b1b; color: #ef9a9a; display: block; }
+        .status-card { background: #16213e; border-radius: 12px; padding: 24px; margin-bottom: 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .status-badge { display: inline-block; padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; }
+        .status-pro { background: #ff6b3520; color: #ff6b35; }
+        .status-free { background: #8883; color: #aaa; }
+        .toggle-renew-btn { background: transparent; border: 2px solid #ff6b35; color: #ff6b35; padding: 10px 24px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; width: 100%; }
+        .toggle-renew-btn:hover { background: #ff6b3520; }
+        .renew-section { background: #16213e; border-radius: 12px; padding: 20px; margin-top: 16px; }
+        .charge-btn { display: inline-block; padding: 8px 18px; background: #ff6b35; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; margin-right: 12px; }
+        .charge-btn:hover { background: #e55a2b; }
     </style>
 </head>
 <body>
-
-<div class="navbar">
-    <div class="nav-logo">7<span>坛</span>游戏社区</div>
-    <div class="nav-links">
-        <a href="https://www.7tan.com/">首页</a>
-        <a href="https://www.7tan.com/android/">安卓游戏</a>
-        <a href="https://www.7tan.com/bbs/">社区</a>
-    </div>
+<div style="border-bottom:1px solid #ffffff0a;">
+    <nav class="navbar">
+        <a href="/" class="nav-logo" style="text-decoration:none;">7Tan<span>.com</span></a>
+        <div class="nav-links">
+            <a href="/">首页</a>
+            <a href="/game/">安卓游戏</a>
+            <a href="/bbs/">社区</a>
+            <a href="/pro.php" style="color:#ff6b35;font-weight:600;">💰 完整版</a>
+        </div>
+    </nav>
 </div>
-
 <div class="container">
-    <div id="app">
-        <div class="loading"><div class="spinner"></div><p style="margin-top:16px;">加载中...</p></div>
-    </div>
+    <h1 class="page-title">🚀 7Tan 完整版</h1>
+    <p class="page-subtitle">解锁全部 AI 功能，效率翻倍，软件可以修改自己进行升级进化，功能强大。</p>
+    <div id="app"></div>
 </div>
-
 <script>
-// ============================================================
-// 全局状态
-// ============================================================
-let userData = null;
-let selectedPlan = 'semi_annual';
-let selectedMonths = 6;
-let selectedPrice = 99;
-let purchasing = false;
-
-const plans = [
-    { key: 'monthly',     name: '月度',    months: 1,  price: 19,  perMonth: 19,  badge: '' },
-    { key: 'quarterly',   name: '季度',    months: 3,  price: 49,  perMonth: 16, badge: '' },
-    { key: 'semi_annual', name: '半年',    months: 6,  price: 99,  perMonth: 17, badge: '🔥推荐' },
-    { key: 'annual',      name: '年度',    months: 12, price: 179, perMonth: 15, badge: '💎超值' },
+// ========== 配置 ==========
+const PLANS = [
+    { id: 'monthly', name: '月付', price: 50, months: 1, label: '',      desc: '适合短期使用' },
+    { id: 'quarterly', name: '季付', price: 120, months: 3, label: '⭐ 推荐', desc: '平均每月仅 ¥40，省 20%' },
+    { id: 'semi_annual', name: '半年付', price: 200, months: 6, label: '🔥 最火', desc: '平均每月仅 ¥33.3，省 33%' },
+    { id: 'annual', name: '年付', price: 350, months: 12, label: '👑 最省', desc: '平均每月仅 ¥29.2，省 42%' }
 ];
 
-// ============================================================
-// 初始化
-// ============================================================
-async function init() {
-    try {
-        const resp = await fetch('/api/auth/verify.php', { credentials: 'include' });
-        const data = await resp.json();
+let selectedPlan = PLANS[0].id;
+let selectedMonths = PLANS[0].months;
+let selectedPrice = PLANS[0].price;
+let purchasing = false;
 
-        if (data.code === 0 && data.data) {
-            userData = data.data;
-            // 如果服务器返回了 token，写入 Cookie
-            if (data.data.token) {
-                document.cookie = 'auth_token=' + data.data.token + '; path=/; max-age=2592000; SameSite=Lax';
-            }
-            renderLoggedIn();
-        } else {
-            renderLoginPrompt();
-        }
-    } catch (e) {
-        renderLoginPrompt();
-    }
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ============================================================
-// 渲染：已登录
-// ============================================================
-function renderLoggedIn() {
-    const u = userData;
-    const isPro = u.level === 'pro';
-    const expiresDate = u.pro_expires > 0 ? new Date(u.pro_expires * 1000).toLocaleString('zh-CN') : '';
-    const remainingDays = u.pro_expires > 0 ? Math.ceil((u.pro_expires - u.server_time) / 86400) : 0;
-
-    let plansHtml = plans.map((p, i) => `
-        <div class="plan-card ${p.key === selectedPlan ? 'selected' : ''}"
-             data-plan="${p.key}" data-months="${p.months}" data-price="${p.price}"
-             onclick="selectPlan(this)">
-            ${p.badge ? '<div class="plan-badge">' + p.badge + '</div>' : ''}
-            <div class="plan-name">${p.name}</div>
-            <div class="plan-months">${p.months} 个月</div>
-            <div class="plan-price">¥${p.price}<sub>.00</sub></div>
-            <div class="plan-per-month">≈ ¥${p.perMonth}/月</div>
+function renderPlans() {
+    return PLANS.map((p, i) => `
+        <div class="plan-card${i === 0 ? ' selected' : ''}" data-plan="${p.id}" data-months="${p.months}" data-price="${p.price}" onclick="selectPlan(this)">
+            <div class="plan-name">${p.name} ${p.label}</div>
+            <div class="plan-price">¥${p.price}<small>/${p.months}个月</small></div>
+            <div class="plan-desc">${p.desc}</div>
         </div>
     `).join('');
-
-    let statusHtml;
-    if (isPro) {
-        statusHtml = `
-            <div class="status-card">
-                <div>
-                    <span class="status-badge status-pro">✅ 进化版</span>
-                    <span style="margin-left:12px;color:#ccc;">${escHtml(u.username)}</span>
-                </div>
-                <div class="status-info">
-                    到期时间：<strong>${expiresDate}</strong>
-                    &nbsp;(剩余 <strong>${remainingDays}</strong> 天)
-                </div>
-            </div>
-            <p style="text-align:center;color:#888;padding:20px;">🎉 你已是进化版用户，享受全部 AI 功能</p>`;
-    } else {
-        statusHtml = `
-            <div class="status-card">
-                <div>
-                    <span class="status-badge status-free">🆓 免费版</span>
-                    <span style="margin-left:12px;color:#ccc;">${escHtml(u.username)}</span>
-                </div>
-                <div class="status-info">当前为免费版，购买后解锁全部功能</div>
-            </div>
-            <div class="plan-grid" id="planGrid">${plansHtml}</div>
-            <button class="buy-btn" id="buyBtn" onclick="doPurchase()">💳 立即购买 ¥${selectedPrice}</button>
-            <div class="msg" id="msg"></div>`;
-    }
-
-    document.getElementById('app').innerHTML = `
-        <h1 class="page-title">🚀 7Tan 进化版</h1>
-        <p class="page-subtitle">解锁全部 AI 功能，效率翻倍，软件可以修改自己进行升级进化，功能强大。</p>
-        ${statusHtml}
-    `;
 }
 
-// ============================================================
-// 渲染：未登录
-// ============================================================
-function renderLoginPrompt() {
-    document.getElementById('app').innerHTML = `
-        <div class="login-prompt">
-            <h2>🔐 请先登录</h2>
-            <p>登录后才能查看和购买进化版</p>
-            <a href="/bbs/login.php?redirect=/pro.php">点击登录</a>
-            <p style="margin-top:12px;font-size:12px;color:#666;">登录后自动返回此页面</p>
-        </div>
-    `;
-}
-
-// ============================================================
-// 选择套餐
-// ============================================================
 function selectPlan(el) {
     document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
     el.classList.add('selected');
@@ -190,58 +105,132 @@ function selectPlan(el) {
     selectedMonths = parseInt(el.dataset.months);
     selectedPrice = parseInt(el.dataset.price);
     const btn = document.getElementById('buyBtn');
-    if (btn) btn.textContent = '💳 立即购买 ¥' + selectedPrice;
+    if (btn) btn.textContent = '💰 立即购买 ¥' + selectedPrice;
+    const renewBtn = document.getElementById('renewBtn');
+    if (renewBtn) renewBtn.textContent = '🔄 续费会员 ¥' + selectedPrice;
 }
 
-// ============================================================
-// 购买
-// ============================================================
-async function doPurchase() {
+async function doBuy() {
     if (purchasing) return;
-    const btn = document.getElementById('buyBtn');
     const msg = document.getElementById('msg');
-    if (!btn || !msg) return;
-
+    const btn = document.getElementById('buyBtn');
+    if (!msg || !btn) return;
     purchasing = true;
     btn.disabled = true;
     btn.textContent = '处理中...';
+    msg.className = 'msg';
     msg.style.display = 'none';
-
     try {
+        const body = JSON.stringify({ action: 'buy', plan: selectedPlan, months: selectedMonths });
         const resp = await fetch('/api/pro/purchase.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ plan: selectedPlan, months: selectedMonths, price: selectedPrice }),
+            body
         });
         const data = await resp.json();
-        msg.style.display = 'block';
         if (data.code === 0) {
-            msg.className = 'msg msg-success';
+            msg.style.display = '';
+            msg.className = 'msg success';
             msg.textContent = '✅ ' + (data.message || '购买成功') + '，页面即将刷新...';
             setTimeout(() => location.reload(), 2000);
         } else {
-            msg.className = 'msg msg-error';
-            msg.textContent = '❌ ' + (data.message || '购买失败');
+            msg.style.display = '';
+            msg.className = 'msg error';
+            if (data.recharge_url) {
+                msg.innerHTML = '❌ ' + escHtml(data.message || '购买失败') + '<br><br><a href="' + escHtml(data.recharge_url) + '" style="display:inline-block;padding:10px 24px;background:#ff6b35;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;">💰 去充值</a>';
+            } else {
+                msg.textContent = '❌ ' + (data.message || '购买失败');
+            }
         }
     } catch (e) {
-        msg.style.display = 'block';
-        msg.className = 'msg msg-error';
-        msg.textContent = '❌ 网络错误：' + e.message;
+        msg.style.display = '';
+        msg.className = 'msg error';
+        msg.textContent = '网络错误：' + e.message;
     } finally {
         purchasing = false;
         btn.disabled = false;
-        btn.textContent = '💳 立即购买 ¥' + selectedPrice;
+        btn.textContent = '💰 立即购买 ¥' + selectedPrice;
     }
 }
 
-function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function toggleRenew() {
+    const section = document.getElementById('renewSection');
+    const toggleBtn = document.getElementById('toggleRenewBtn');
+    if (!section || !toggleBtn) return;
+    if (section.style.display === 'none' || section.style.display === '') {
+        section.style.display = 'block';
+        toggleBtn.textContent = '🔽 收起续费';
+    } else {
+        section.style.display = 'none';
+        toggleBtn.textContent = '💳 续费会员';
+    }
 }
 
-// 启动
+async function doRenew() {
+    if (purchasing) return;
+    const msg = document.getElementById('msg');
+    const btn = document.getElementById('renewBtn');
+    if (!msg || !btn) return;
+    purchasing = true;
+    btn.disabled = true;
+    btn.textContent = '处理中...';
+    msg.className = 'msg';
+    msg.style.display = 'none';
+    try {
+        const body = JSON.stringify({ action: 'renew', plan: selectedPlan, months: selectedMonths });
+        const resp = await fetch('/api/pro/purchase.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body
+        });
+        const data = await resp.json();
+        if (data.code === 0) {
+            msg.style.display = '';
+            msg.className = 'msg success';
+            msg.textContent = '✅ ' + (data.message || '续费成功') + '，页面即将刷新...';
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            msg.style.display = '';
+            msg.className = 'msg error';
+            if (data.recharge_url) {
+                msg.innerHTML = '❌ ' + escHtml(data.message || '续费失败') + '<br><br><a href="' + escHtml(data.recharge_url) + '" style="display:inline-block;padding:10px 24px;background:#ff6b35;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;">💰 去充值</a>';
+            } else {
+                msg.textContent = '❌ ' + (data.message || '续费失败');
+            }
+        }
+    } catch (e) {
+        msg.style.display = '';
+        msg.className = 'msg error';
+        msg.textContent = '网络错误：' + e.message;
+    } finally {
+        purchasing = false;
+        btn.disabled = false;
+        btn.textContent = '🔄 续费会员 ¥' + selectedPrice;
+    }
+}
+
+async function init() {
+    const app = document.getElementById('app');
+    const plansHtml = renderPlans();
+
+    try {
+        const resp = await fetch('/api/pro/status.php', { credentials: 'include' });
+        const json = await resp.json();
+        const d = json.data || {};
+
+        if (json.code === 0 && d.pro_activated === 1) {
+            app.innerHTML = '<div class="status-card"><span class="status-badge status-pro">✅ 完整版</span><span style="color:#aaa;">' + escHtml(d.username || '') + '</span><span style="margin-left:auto;display:flex;align-items:center;gap:8px;"><a href="https://www.7tan.com/task/wallet.php" class="charge-btn">💰 充值</a>到期时间：' + escHtml(d.pro_expires_at || '') + ' (剩余 ' + (d.remaining_days || 0) + ' 天)</span></div><div class="renew-section" id="renewSection" style="display:none;"><h3 style="text-align:center;margin:16px 0 12px;color:#ff6b35;">🔄 续费会员</h3><p style="text-align:center;color:#888;font-size:13px;margin-bottom:16px;">续费时长将叠加到现有到期时间上</p><div class="plan-grid" id="planGrid">' + plansHtml + '</div><button class="buy-btn" id="renewBtn" onclick="doRenew()">🔄 续费会员 ¥' + selectedPrice + '</button></div><div class="msg" id="msg"></div><div style="text-align:center;padding:16px;"><button class="toggle-renew-btn" id="toggleRenewBtn" onclick="toggleRenew()">💳 续费会员</button></div><p style="text-align:center;color:#888;padding:10px;">🎉 您已是完整版用户，享受全部 AI 功能</p>';
+        } else if (json.code === 0) {
+            app.innerHTML = '<p style="text-align:center;color:#888;padding:16px;">登录身份：' + escHtml(d.username || '') + ' | <a href="/api/logout.php" style="color:#ff6b35;">退出</a></p><div class="plan-grid">' + plansHtml + '</div><div class="msg" id="msg"></div><button class="buy-btn" id="buyBtn" onclick="doBuy()">💰 立即购买 ¥' + selectedPrice + '</button>';
+        } else {
+            app.innerHTML = '<div class="login-prompt"><h2>请先登录</h2><p>登录后才能查看完整版方案</p><a href="/bbs/login.php?redirect=/pro.php">立即登录</a></div>';
+        }
+    } catch (e) {
+        app.innerHTML = '<div class="login-prompt"><h2>加载失败</h2><p>' + escHtml(e.message) + '</p><a href="javascript:location.reload()">重试</a></div>';
+    }
+}
+
 init();
 </script>
-
 </body>
 </html>

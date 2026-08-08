@@ -39,7 +39,7 @@ NEW_VER = "1.0.8"
 NOTES = ("1.0.8 更新：修复点击「立即重启更新」报「无法启动更新程序: Read timed out」"
          "（更新下载/应用不再卡死 API 服务）；历史对话加载流畅性优化；"
          "修复忘记密码按钮点击无反应、左侧底部刷新报 404（API 域名修正 www.7tan.com）；"
-         "界面文案「专业版」统一改为「进化版」。")
+         "界面文案「完整版」统一改为「完整版」。")
 LOG = RELEASE / "publish_108_log.txt"
 BUILD_LOG = ROOT / "build_publish_108.log"
 

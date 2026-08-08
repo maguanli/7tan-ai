@@ -1,7 +1,7 @@
 """
 工具注册中心 — 统一管理和注册 AI 可调用的工具
 
-Pro 等级门控：self_modify 类工具仅专业版（pro）用户可调用。
+Pro 等级门控：self_modify 类工具仅完整版（pro）用户可调用。
 基础版（free）用户调用时会被拦截并返回提示。
 """
 from dataclasses import dataclass, field
@@ -21,7 +21,7 @@ class Tool:
     dangerous: bool = False
     requires_browser: bool = False
     requires_db: bool = False
-    pro_only: bool = False       # 仅专业版可用（self_modify 类自动设为 True）
+    pro_only: bool = False       # 仅完整版可用（self_modify 类自动设为 True）
 
 
 # 全局注册表
@@ -35,7 +35,7 @@ _gate_cache: dict = {"checked": False, "is_pro": False, "pro_license": ""}
 
 
 def _check_pro_status() -> bool:
-    """检查当前用户是否为专业版（带缓存）。"""
+    """检查当前用户是否为完整版（带缓存）。"""
     global _gate_cache
 
     # 每次重新检查，最多缓存 60 秒
@@ -139,7 +139,7 @@ def get_all_tools(include_pro_only: bool = None) -> list[dict]:
     """返回 OpenAI 兼容的 tools 数组。
     
     Args:
-        include_pro_only: 是否包含专业版专属工具。
+        include_pro_only: 是否包含完整版专属工具。
             None (默认): 自动检测当前用户等级
             True: 始终包含
             False: 始终排除
@@ -212,7 +212,7 @@ def get_tool(name: str) -> Tool:
 def execute_tool(name: str, args: dict) -> str:
     """执行工具并返回结果字符串。
     
-    Pro 门控：self_modify 类工具仅专业版用户可调用。
+    Pro 门控：self_modify 类工具仅完整版用户可调用。
     """
     tool = TOOL_REGISTRY.get(name)
     if not tool:
@@ -223,13 +223,13 @@ def execute_tool(name: str, args: dict) -> str:
     is_pro_only = getattr(tool, 'pro_only', False) or getattr(tool, 'category', '') == 'self_modify'
 
     if is_pro_only and not _check_pro_status():
-        logger.warning(f"🔒 [ProGate] 拦截 free 用户调用专业版工具: {name}")
+        logger.warning(f"🔒 [ProGate] 拦截 free 用户调用完整版工具: {name}")
         return (
-            f"🔒 权限不足：`{name}` 是专业版专属功能。\n\n"
+            f"🔒 权限不足：`{name}` 是完整版专属功能。\n\n"
             "基础版（free）用户无法使用自修改类工具（self_modify_config / sandbox_execute / "
             "self_rebuild / self_update_prompt 等）。\n\n"
-            "💡 **升级到专业版**即可解锁：https://www.7tan.com/pro.php\n"
-            "专业版权益：自我修改、自定义提示词、自动重建、优先支持。"
+            "💡 **升级到完整版**即可解锁：https://www.7tan.com/pro.php\n"
+            "完整版权益：自我修改、自定义提示词、自动重建、优先支持。"
         )
 
     # 兼容 dict 类型 — 现在理论上不会出现，但保留兜底

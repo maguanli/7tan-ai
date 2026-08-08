@@ -5,8 +5,8 @@
 维度：
   - AI 模型 (25%): 根据当前配置的模型提供商、模型等级评估
   - 账号等级 (20%): free/pro/enterprise 对应的得分
-    - 专业版（pro）对能力值影响固定 ±20 分：
-      基础版→升级专业版 = +20，专业版过期 = -20
+    - 完整版（pro）对能力值影响固定 ±20 分：
+      基础版→升级完整版 = +20，完整版过期 = -20
   - 插件/工具 (45%): 已安装插件数量、工具注册数量、品类覆盖度
   - 系统健康 (10%): 磁盘、数据库、网络等
 
@@ -176,7 +176,7 @@ def evaluate_account_level() -> float:
 
     free=0, pro=100, enterprise=100
     差异 100 分 × 权重 0.20 = 能力值 ±20 分。
-    即：基础版→升级专业版 = +20，专业版过期 = -20。
+    即：基础版→升级完整版 = +20，完整版过期 = -20。
     RSA 验签用于安全验证（防伪造），过期/验签失败则降为 free。
     HMAC 验证加分保留（防篡改奖励）。
     Token 有效期检查基于 saved_at + expires_in。
@@ -212,7 +212,7 @@ def evaluate_account_level() -> float:
                     logger.warning("[Score] 声称 pro 但无 license 且 HMAC 失败，降级为 free")
                     level = "free"
 
-        # 专业版对能力值影响固定 ±20 分（权重 0.20 × raw_score 差值 100 = 20）
+        # 完整版对能力值影响固定 ±20 分（权重 0.20 × raw_score 差值 100 = 20）
         # free=0, pro/enterprise=100，差异正好 100，加权后 = 20 分
         base_scores = {
             "enterprise": 100,

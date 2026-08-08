@@ -1,5 +1,5 @@
 """
-专业版状态组件
+完整版状态组件
 显示在侧边栏底部：当前等级、到期时间、刷新/续费按钮。
 
 安全原则：先验证后信任。RSA 验签优先，HMAC 次之，不信任裸 level 字段。
@@ -25,7 +25,7 @@ from .theme import THEME
 
 
 class ProStatusWidget(QFrame):
-    """专业版状态指示器（侧边栏底部）"""
+    """完整版状态指示器（侧边栏底部）"""
 
     # 刷新完成后通知外部
     status_updated = pyqtSignal(dict)
@@ -72,7 +72,7 @@ class ProStatusWidget(QFrame):
         level_layout.addWidget(self._level_text, 1)
         layout.addLayout(level_layout)
 
-        # --- 第二行：到期时间（仅专业版可见）---
+        # --- 第二行：到期时间（仅完整版可见）---
         self._expiry_label = QLabel()
         self._expiry_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 11px;")
         self._expiry_label.setVisible(False)

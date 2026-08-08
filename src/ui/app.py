@@ -8584,7 +8584,25 @@ class SettingsPage(QWidget):
 
             is_paid = p.get("paid") or p.get("type") == "paid"
             paid_flag = " 💰付费" if is_paid else ""
-            item_text = f"{icon} {name}  v{ver}  [{status}]{paid_flag}\n     {desc}\n     👤 {author} | 🔧 {', '.join(tools)}"
+            lic_tag = ""
+            lic_color = None
+            if is_paid and is_installed:
+                mod = self._plugin_license_module(pid)
+                if mod is not None:
+                    try:
+                        if mod.is_activated():
+                            lic_tag = " ✅已激活"
+                        else:
+                            left = int(mod.trial_left())
+                            if left > 0:
+                                lic_tag = f" 🔓试用剩{left}次"
+                                lic_color = QColor("#F59E0B")
+                            else:
+                                lic_tag = " 🚫试用已用完·需购买激活"
+                                lic_color = QColor("#EF4444")
+                    except Exception:
+                        lic_tag = ""
+            item_text = f"{icon} {name}  v{ver}  [{status}]{paid_flag}{lic_tag}\n     {desc}\n     👤 {author} | 🔧 {', '.join(tools)}"
 
 
 
@@ -8596,12 +8614,11 @@ class SettingsPage(QWidget):
 
             item.setData(Qt.ItemDataRole.UserRole + 2, is_installed)
 
-            if is_installed:
-
+            if lic_color is not None:
+                item.setForeground(lic_color)
+            elif is_installed:
                 item.setForeground(QColor(THEME['success']))
-
             elif source == "remote":
-
                 item.setForeground(QColor(THEME['accent2']))
 
             self._plugin_list.addItem(item)

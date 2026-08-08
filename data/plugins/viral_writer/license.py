@@ -56,6 +56,13 @@ PURCHASE_INFO = (
 
 # ─── 状态文件（激活状态 + 试用计数）───
 _STATE_FILE = Path(__file__).resolve().parent / "state.json"
+# ─── 激活凭证双保险备份 ───
+# ① 同目录备份：防 state.json 被误删/损坏
+_BACKUP_FILE = Path(__file__).resolve().parent / "state_backup.json"
+# ② 全局备份：防整个插件目录被清理/重装（cwd 为项目根时有效）
+_GLOBAL_BACKUP_FILE = (
+    Path.cwd() / "data" / "backups" / "plugin_states" / "viral_writer_state.json"
+)
 _PRIVATE_KEY_FILE = Path(__file__).resolve().parent / "private_key.pem"
 
 # ─── 工具函数 ───
@@ -134,23 +141,40 @@ def verify_key(license_key: str):
 
 # ─── 状态管理 ───
 
-def _load_state() -> dict:
+def _write_state_file(path: Path, data: str):
+    """安全写状态文件（目录不存在自动创建，失败静默）"""
     try:
-        if _STATE_FILE.exists():
-            return json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(data, encoding="utf-8")
     except Exception:
         pass
-    return {"activated": False, "license": "", "activated_at": "", "trial_used": 0}
+
+
+def _load_state() -> dict:
+    default = {"activated": False, "license": "", "activated_at": "", "trial_used": 0}
+    candidates = [_STATE_FILE, _BACKUP_FILE, _GLOBAL_BACKUP_FILE]
+    for f in candidates:
+        try:
+            if f.exists():
+                st = json.loads(f.read_text(encoding="utf-8"))
+                if isinstance(st, dict):
+                    # 从任一位置读到有效状态 → 自动恢复/同步到所有位置
+                    _save_state(st)
+                    return st
+        except Exception:
+            continue
+    return default
 
 
 def _save_state(state: dict):
-    try:
-        _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _STATE_FILE.write_text(
-            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-    except Exception:
-        pass
+    data = json.dumps(state, ensure_ascii=False, indent=2)
+    # ① 主文件
+    _write_state_file(_STATE_FILE, data)
+    # ② 同目录备份（防主文件误删/损坏）
+    _write_state_file(_BACKUP_FILE, data)
+    # ③ 全局备份（防整个插件目录被清理/重装；cwd 下无 data 目录则跳过）
+    if Path.cwd().joinpath("data").is_dir():
+        _write_state_file(_GLOBAL_BACKUP_FILE, data)
 
 
 def is_activated() -> bool:

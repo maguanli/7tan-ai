@@ -58,6 +58,7 @@ PyQt6-Charts>=6.5  # QtCharts 图表扩展
 
 # === Screen Recording ===
 mss>=9.0
+pywin32>=306  # Windows 剪贴板/窗口（desktop_do.py 依赖，缺失时降级 PowerShell）
 pyaudio>=0.2
 imageio-ffmpeg>=0.5
 numpy>=1.24

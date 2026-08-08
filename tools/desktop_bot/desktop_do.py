@@ -333,7 +333,7 @@ def _set_clipboard_text(text):
             cmd = ['powershell', '-NoProfile', '-Command',
                    f'Set-Clipboard -Value (Get-Content -Raw -Encoding UTF8 -LiteralPath -)'] if False else \
                   ['powershell', '-NoProfile', '-Command',
-                   f"[System.Windows.Forms.Clipboard]::SetText('{esc}')"]
+                   f"Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetText('{esc}')"]
             r = subprocess.run(cmd, capture_output=True, timeout=15,
                                creationflags=CREATE_NO_WINDOW)
             if r.returncode == 0:

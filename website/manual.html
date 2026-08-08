@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>7Tan 软件使用说明书 v1.0.9（完全免费）</title>
+<title>7Tan 软件使用说明书 v1.0.9（免费）</title>
 <style>
   :root{
     --bg:#0f1420; --card:#171f31; --card2:#1d2740; --line:#2a3654;
@@ -62,6 +62,12 @@
   .figcap{text-align:center; color:var(--sub); font-size:12.5px; margin-top:8px;}
   /* 页脚 */
   footer{text-align:center; color:var(--sub); font-size:13px; margin-top:40px;}
+  /* 链接样式 */
+  a{color:#7dd3fc; text-decoration:underline;}
+  a:hover{color:var(--acc2);}
+  /* 返回顶部按钮 */
+  #backTop{position:fixed; right:22px; bottom:64px; z-index:999; background:var(--acc); color:#fff; border:none; border-radius:50%; width:58px; height:58px; font-size:13px; font-weight:bold; cursor:pointer; box-shadow:0 4px 18px rgba(0,0,0,.45); opacity:.9; display:none; transition:opacity .2s;}
+  #backTop:hover{opacity:1; background:var(--acc2); color:#0b1426;}
   @media print{ body{background:#fff;color:#111;} section{break-inside:avoid;} }
 </style>
 </head>
@@ -71,7 +77,7 @@
 <div class="hero">
   <h1>7Tan 使用说明书</h1>
   <div class="sub">7坛 AI 小编「盘古」· 免费 AI 智能工作台 · 编程写代码 / AI 对话 / 游戏发布</div>
-  <div class="free">💚 软件完全免费 · 全部功能开放</div>
+  <div class="free">💚 软件免费 · 绝大多数功能开放（个别高级插件需付费）</div>
   <div class="meta">
     <span>版本 v1.0.9</span><span>Windows 10/11</span><span>2026-08-08</span>
   </div>
@@ -84,21 +90,22 @@
   <h2>📑 目录</h2>
   <ol>
     <li><a href="#s1">软件简介</a></li>
-    <li><a href="#s2">系统要求与安装</a></li>
-    <li><a href="#s3">快速上手（5 分钟）</a></li>
-    <li><a href="#s4">主界面指南</a></li>
-    <li><a href="#s5">核心功能详解</a></li>
-    <li><a href="#s6">设置详解</a></li>
-    <li><a href="#s7">版本说明（完全免费）</a></li>
-    <li><a href="#s8">常见问题 FAQ</a></li>
-    <li><a href="#s9">注意事项与技术支持</a></li>
+    <li><a href="#s2">💻 编程写代码（首要功能）</a></li>
+    <li><a href="#s3">系统要求与安装</a></li>
+    <li><a href="#s4">快速上手（5 分钟）</a></li>
+    <li><a href="#s5">主界面指南</a></li>
+    <li><a href="#s6">核心功能详解（AI 对话 / 游戏发布 / 自动化）</a></li>
+    <li><a href="#s7">设置详解</a></li>
+    <li><a href="#s8">版本说明（免费）</a></li>
+    <li><a href="#s9">常见问题 FAQ</a></li>
+    <li><a href="#s10">注意事项与技术支持</a></li>
   </ol>
 </div>
 
 <!-- ================= 1 简介 ================= -->
 <section id="s1">
   <h2 class="sec">一、软件简介</h2>
-  <p><b>7Tan</b>（7坛 AI 小编「盘古」）是一款<b>完全免费</b>的 AI 智能工作台，把<b>编程写代码、AI 对话、游戏采集发布、内容创作</b>整合在一起，让重复劳动变成一句话指令。<b>编程写代码是全软件的首要能力</b>——从写代码、改代码到测试、部署、上线，AI 全程帮你完成。</p>
+  <p><b>7Tan</b>（7坛 AI 小编「盘古」）是一款<b>免费</b>的 AI 智能工作台，把<b>编程写代码、AI 对话、游戏采集发布、内容创作</b>整合在一起，让重复劳动变成一句话指令。<b>编程写代码是全软件的首要能力</b>——从写代码、改代码到测试、部署、上线，AI 全程帮你完成。</p>
 
   <h3>1.1 核心能力总览</h3>
   <div class="fig">
@@ -145,10 +152,44 @@
   </div>
 </section>
 
-<!-- ================= 2 系统要求 ================= -->
+<!-- ================= 2 编程写代码 ================= -->
 <section id="s2">
-  <h2 class="sec">二、系统要求与安装</h2>
-  <h3>2.1 系统要求</h3>
+  <h2 class="sec">二、💻 编程写代码（首要功能）</h2>
+  <p>7Tan 将<b>编程写代码</b>放在<b>首要位置</b>——这是一款以「AI 全栈开发」为核心能力的智能工作台：用自然语言描述需求，AI 就能帮你<b>写代码、改代码、查代码、测试、构建、部署上线</b>，从需求到交付全流程覆盖。</p>
+  
+  <p>让 AI 直接帮你<b>写代码、改代码、查代码、部署上线</b>，从需求到交付全流程覆盖。</p>
+  <table>
+    <tr><th style="width:140px">能力</th><th>说明</th></tr>
+    <tr><td>AI 写代码</td><td>自然语言描述需求，AI 直接生成 / 修改代码文件，支持 Python / JS / TS / Go / Java / C++ 等</td></tr>
+    <tr><td>AI 代码补全</td><td>启动本地补全服务（端口 17890），配合 VS Code 扩展实时智能补全</td></tr>
+    <tr><td>代码审查</td><td>静态分析、安全扫描、规范检查、依赖漏洞检测</td></tr>
+    <tr><td>代码搜索</td><td>项目级 grep、文件查找、引用查找、函数定位</td></tr>
+    <tr><td>重构</td><td>符号重命名、函数提取、导入整理、代码格式化</td></tr>
+    <tr><td>Git 全家桶</td><td>status / diff / commit / push / pull / branch / log / stash / tag / 冲突解决</td></tr>
+    <tr><td>Docker / K8s</td><td>容器管理、镜像构建、K8s 资源操作、Helm</td></tr>
+    <tr><td>CI/CD</td><td>生成 GitHub Actions / GitLab CI 配置</td></tr>
+    <tr><td>测试</td><td>自动检测测试框架并运行（pytest / unittest / jest / go test），生成覆盖率报告</td></tr>
+    <tr><td>构建部署</td><td>项目构建、Android 打包、远程 SSH / SCP / rsync 部署</td></tr>
+    <tr><td>调试诊断</td><td>错误堆栈分析、日志分析、崩溃诊断、性能分析</td></tr>
+    <tr><td>数据库</td><td>数据库探索、SQL 查询、ORM 模型生成、API 接口测试</td></tr>
+  </table>
+  <h4>常用指令示例</h4>
+  <pre>帮我写一个 Python 脚本：批量重命名文件夹里的图片
+审查一下 D:\project\main.py 有没有问题，并修复
+给下面的函数加上类型注解和 docstring
+查看当前 Git 仓库状态，然后把修改提交了
+为这个 Flask 项目生成 GitHub Actions CI 配置
+写一个 pytest 测试用例并运行
+分析这段报错堆栈，告诉我原因和修法</pre>
+
+
+  <div class="tip">💡 编程写代码、代码补全、代码审查、Git、Docker/K8s、CI/CD、测试、部署等能力绝大多数免费开放（个别高级插件需付费解锁）。</div>
+</section>
+
+<!-- ================= 3 系统要求 ================= -->
+<section id="s3">
+  <h2 class="sec">三、系统要求与安装</h2>
+  <h3>3.1 系统要求</h3>
   <table>
     <tr><th style="width:110px">项目</th><th>要求</th></tr>
     <tr><td>操作系统</td><td>Windows 10 / 11（64 位）</td></tr>
@@ -157,7 +198,7 @@
     <tr><td>网络</td><td>需要联网（AI 对话、发布、更新）</td></tr>
   </table>
 
-  <h3>2.2 安装步骤</h3>
+  <h3>3.2 安装步骤</h3>
   <ol>
     <li>解压 <code>7tan-editor-free-v1.0.9.zip</code> 到任意目录（<b>路径不要包含中文和空格</b>，如 <code>D:\7tan-editor</code>）；</li>
     <li>进入解压后的 <code>7tan-editor</code> 文件夹；</li>
@@ -166,7 +207,7 @@
   </ol>
   <div class="tip">💡 建议右键 exe → 发送到 → 桌面快捷方式，方便日常启动。</div>
 
-  <h3>2.3 目录结构说明</h3>
+  <h3>3.3 目录结构说明</h3>
   <pre>7tan-editor/
 ├── 7tan-editor.exe        # 主程序（双击运行）
 ├── _internal/             # 运行所需的内置文件（请勿删除）
@@ -179,18 +220,18 @@
     └── config.yaml        # 全局配置文件</pre>
 </section>
 
-<!-- ================= 3 快速上手 ================= -->
-<section id="s3">
-  <h2 class="sec">三、快速上手（5 分钟）</h2>
-  <h3>3.1 启动与登录</h3>
+<!-- ================= 4 快速上手 ================= -->
+<section id="s4">
+  <h2 class="sec">四、快速上手（5 分钟）</h2>
+  <h3>4.1 启动与登录</h3>
   <ol>
     <li>双击 <code>7tan-editor.exe</code> 启动；</li>
-    <li>弹出<b>登录窗口</b>：已有账号直接登录；没有账号点「注册」，注册即免费使用全部功能；</li>
+    <li>弹出<b>登录窗口</b>：已有账号直接登录；没有账号点「注册」，注册即可免费使用绝大多数功能（个别高级插件需付费解锁）；</li>
     <li>登录后进入主界面。</li>
   </ol>
-  <div class="ok">💚 7Tan <b>完全免费</b>：登录后即可使用全部功能，无需任何付费激活。</div>
+  <div class="ok">💚 7Tan <b>免费</b>：登录后即可使用绝大多数功能，个别高级插件需付费解锁。</div>
 
-  <h3>3.2 欢迎向导配置（首次）</h3>
+  <h3>4.2 欢迎向导配置（首次）</h3>
   <table>
     <tr><th style="width:60px">步骤</th><th style="width:110px">内容</th><th>说明</th></tr>
     <tr><td>①</td><td>AI 模型</td><td>选择 / 填写 AI 模型（默认 DeepSeek，可填 API Key）</td></tr>
@@ -200,7 +241,7 @@
   </table>
   <div class="tip">这些设置之后都可以在「🔧 设置」里随时修改。</div>
 
-  <h3>3.3 第一条指令</h3>
+  <h3>4.3 第一条指令</h3>
   <p>在底部输入框输入，例如：</p>
   <pre>帮我写一个 Python 脚本：把 D:\图片 文件夹里所有 jpg 重命名为 日期_序号.jpg</pre>
   <p>或：</p>
@@ -209,9 +250,9 @@
   <p>AI 会自动完成：读资料 → 压缩图片 → 登录后台 → 上传 LOGO/截图 → 填表 → 发布 → 验证。</p>
 </section>
 
-<!-- ================= 4 主界面 ================= -->
-<section id="s4">
-  <h2 class="sec">四、主界面指南</h2>
+<!-- ================= 5 主界面 ================= -->
+<section id="s5">
+  <h2 class="sec">五、主界面指南</h2>
   <div class="fig">
     <svg viewBox="0 0 900 430" xmlns="http://www.w3.org/2000/svg" font-family="Microsoft YaHei">
       <rect x="10" y="10" width="880" height="410" rx="12" fill="#171f31" stroke="#2a3654"/>
@@ -288,37 +329,12 @@
   </table>
 </section>
 
-<!-- ================= 5 核心功能 ================= -->
-<section id="s5">
-  <h2 class="sec">五、核心功能详解</h2>
+<!-- ================= 6 核心功能 ================= -->
+<section id="s6">
+  <h2 class="sec">六、核心功能详解（AI 对话 / 游戏发布 / 自动化）</h2>
+  <div class="tip">💻 <b>编程写代码</b>是 7Tan 的首要能力，完整说明见<b>第二章</b>。</div>
 
-  <h3>5.1 💻 编程写代码（全栈开发 · 首要功能）</h3>
-  <p>让 AI 直接帮你<b>写代码、改代码、查代码、部署上线</b>，从需求到交付全流程覆盖。</p>
-  <table>
-    <tr><th style="width:140px">能力</th><th>说明</th></tr>
-    <tr><td>AI 写代码</td><td>自然语言描述需求，AI 直接生成 / 修改代码文件，支持 Python / JS / TS / Go / Java / C++ 等</td></tr>
-    <tr><td>AI 代码补全</td><td>启动本地补全服务（端口 17890），配合 VS Code 扩展实时智能补全</td></tr>
-    <tr><td>代码审查</td><td>静态分析、安全扫描、规范检查、依赖漏洞检测</td></tr>
-    <tr><td>代码搜索</td><td>项目级 grep、文件查找、引用查找、函数定位</td></tr>
-    <tr><td>重构</td><td>符号重命名、函数提取、导入整理、代码格式化</td></tr>
-    <tr><td>Git 全家桶</td><td>status / diff / commit / push / pull / branch / log / stash / tag / 冲突解决</td></tr>
-    <tr><td>Docker / K8s</td><td>容器管理、镜像构建、K8s 资源操作、Helm</td></tr>
-    <tr><td>CI/CD</td><td>生成 GitHub Actions / GitLab CI 配置</td></tr>
-    <tr><td>测试</td><td>自动检测测试框架并运行（pytest / unittest / jest / go test），生成覆盖率报告</td></tr>
-    <tr><td>构建部署</td><td>项目构建、Android 打包、远程 SSH / SCP / rsync 部署</td></tr>
-    <tr><td>调试诊断</td><td>错误堆栈分析、日志分析、崩溃诊断、性能分析</td></tr>
-    <tr><td>数据库</td><td>数据库探索、SQL 查询、ORM 模型生成、API 接口测试</td></tr>
-  </table>
-  <h4>常用指令示例</h4>
-  <pre>帮我写一个 Python 脚本：批量重命名文件夹里的图片
-审查一下 D:\project\main.py 有没有问题，并修复
-给下面的函数加上类型注解和 docstring
-查看当前 Git 仓库状态，然后把修改提交了
-为这个 Flask 项目生成 GitHub Actions CI 配置
-写一个 pytest 测试用例并运行
-分析这段报错堆栈，告诉我原因和修法</pre>
-
-  <h3>5.2 💬 AI 对话</h3>
+  <h3>6.1 💬 AI 对话</h3>
   <ul>
     <li><b>输入方式</b>：底部输入框输入自然语言指令，回车发送；</li>
     <li><b>Markdown 渲染</b>：标题、列表、表格、代码块自动美化；</li>
@@ -334,7 +350,7 @@
 把这段英文介绍翻译成中文
 检查 7Tan 后台今天发布了几款游戏</pre>
 
-  <h3>5.3 🎮 游戏采集与发布（核心）</h3>
+  <h3>6.2 🎮 游戏采集与发布（核心）</h3>
   <h4>第一步：准备资料文件夹</h4>
   <pre>D:\用户目录\下载\新建文件夹 123\11\
 ├── 游戏资料.txt      # 标题、简介、开发商、备案号、下载链接等
@@ -378,7 +394,7 @@ LOGO：已上传（512x512）  截图：5 张
 前台链接：https://www.7tan.com/game/994/</pre>
   <div class="warn">⚠️ 重要：请明确告诉 AI <b>「是发布，不是替换其他游戏」</b>，防止 AI 误操作覆盖已有游戏。</div>
 
-  <h3>5.4 🌐 浏览器与素材工具</h3>
+  <h3>6.3 🌐 浏览器与素材工具</h3>
   <ul>
     <li><b>内置浏览器</b>：软件内置 Chromium，AI 可自动浏览游戏源站；</li>
     <li><b>提取 LOGO / 截图</b>：自动识别页面图片并下载；</li>
@@ -387,7 +403,7 @@ LOGO：已上传（512x512）  截图：5 张
     <li><b>图片压缩</b>：发布前自动压缩，节省云存储空间。</li>
   </ul>
 
-  <h3>5.5 ☁️ 云存储 OSS</h3>
+  <h3>6.4 ☁️ 云存储 OSS</h3>
   <p>用于存放游戏 LOGO、截图、安装包，生成外链供后台引用。</p>
   <ul>
     <li>支持 <b>阿里云 OSS / 腾讯云 COS / 七牛 Kodo</b>；</li>
@@ -395,7 +411,7 @@ LOGO：已上传（512x512）  截图：5 张
     <li>AI 发布游戏时会自动上传并获取外链。</li>
   </ul>
 
-  <h3>5.6 🎬 录屏</h3>
+  <h3>6.5 🎬 录屏</h3>
   <ul>
     <li>点击「🎬 录屏」开始录制；再次点击停止并保存；</li>
     <li>设置中可选择<b>音频设备</b>（麦克风 / 立体声混音）；</li>
@@ -403,14 +419,14 @@ LOGO：已上传（512x512）  截图：5 张
   </ul>
   <div class="tip">💡 录不到声音？→ 见 FAQ 第 2 条。</div>
 
-  <h3>5.7 🔊 语音（TTS）</h3>
+  <h3>6.6 🔊 语音（TTS）</h3>
   <ul>
     <li>支持 AI 语音朗读回复内容；</li>
     <li>设置中可选音色（女声 / 男声）；</li>
     <li>依赖系统 TTS 中文语音包；提示「语音引擎未就绪」见 FAQ 第 8 条。</li>
   </ul>
 
-  <h3>5.8 🔄 自动更新</h3>
+  <h3>6.7 🔄 自动更新</h3>
   <ol>
     <li>启动时自动检查更新（也可在「ℹ️ 关于」页点「检查更新」）；</li>
     <li>发现新版本提示下载；</li>
@@ -418,7 +434,7 @@ LOGO：已上传（512x512）  截图：5 张
     <li>校验通过后提示重启更新，自动完成替换。</li>
   </ol>
 
-  <h3>5.9 🧩 插件系统</h3>
+  <h3>6.8 🧩 插件系统</h3>
   <p>入口：左侧「🧩 插件市场」。支持：<b>刷新插件列表 / 安装选中插件 / 一键安装全部 / 卸载插件</b>。</p>
   <table>
     <tr><th style="width:110px">分类</th><th>插件</th></tr>
@@ -431,27 +447,27 @@ LOGO：已上传（512x512）  截图：5 张
     <tr><td>自我进化</td><td>自我进化、自我重启</td></tr>
   </table>
 
-  <h3>5.10 ⏰ 定时任务（调度器）</h3>
+  <h3>6.9 ⏰ 定时任务（调度器）</h3>
   <ul>
     <li>内置任务：<b>每日早间更新（08:00）/ 午间更新（12:00）/ 晚间更新（18:00）</b>；</li>
     <li>设置中可开启 / 关闭、修改时间、调整每次采集数量；</li>
     <li>适合定时自动采集与发布新游。</li>
   </ul>
 
-  <h3>5.11 🖥️ 桌面自动化</h3>
+  <h3>6.10 🖥️ 桌面自动化</h3>
   <ul>
     <li>支持控制微信 / QQ 等桌面软件自动发送消息；</li>
     <li><b>内置防发错机制</b>：发送前搜索目标 → 验证聊天窗口 → 确认后发送；</li>
     <li>使用场景：定时给粉丝群发游戏资讯、自动回复。</li>
   </ul>
 
-  <h3>5.12 📰 公众号发布</h3>
+  <h3>6.11 📰 公众号发布</h3>
   <ul>
     <li>一键完成微信公众号图文：填标题 / 作者 → 粘贴正文 → 填摘要 → 上传封面 → 原创声明 → 保存草稿 / 发表；</li>
     <li>支持图文混排序列（文字 + 图片自动排版）。</li>
   </ul>
 
-  <h3>5.13 ✒️ 内容创作工具</h3>
+  <h3>6.12 ✒️ 内容创作工具</h3>
   <ul>
     <li><b>爆款写作</b>：选题生成 → 爆款标题 → 五段式大纲 → 正文撰写 → 金句卡片 → 发布前质检；</li>
     <li><b>易经占卦</b>：金钱卦 / 数字卦 / 时间卦，附卦辞爻辞与白话解读；每日一卦；</li>
@@ -459,14 +475,14 @@ LOGO：已上传（512x512）  截图：5 张
     <li><b>智能翻译</b>：中英文互译。</li>
   </ul>
 
-  <h3>5.14 🧠 记忆系统</h3>
+  <h3>6.13 🧠 记忆系统</h3>
   <ul>
     <li>AI 可将重要信息（经验、配置、知识点）存入<b>持久化记忆</b>；</li>
     <li>重启后依然保留；支持分类（游戏 / 技能 / 配置 / 通用）、搜索、概览；</li>
     <li>例如 AI 会记住「上次开发商填错的教训」，下次自动避免。</li>
   </ul>
 
-  <h3>5.15 🚀 自我进化</h3>
+  <h3>6.14 🚀 自我进化</h3>
   <ul>
     <li><b>自我修改</b>：AI 可安全地修改自身代码、配置，实现自我升级；</li>
     <li><b>创建插件</b>：AI 可动态编写并注册新插件，扩展能力；</li>
@@ -475,19 +491,19 @@ LOGO：已上传（512x512）  截图：5 张
   </ul>
 </section>
 
-<!-- ================= 6 设置 ================= -->
-<section id="s6">
-  <h2 class="sec">六、设置详解</h2>
+<!-- ================= 7 设置 ================= -->
+<section id="s7">
+  <h2 class="sec">七、设置详解</h2>
   <p class="sub">入口：左侧「🔧 设置」。</p>
 
-  <h3>6.1 AI 模型</h3>
+  <h3>7.1 AI 模型</h3>
   <ul>
     <li>选择已保存的模型配置，或新建（填写 API Key、Base URL、模型名）；</li>
     <li>支持 DeepSeek / OpenAI 兼容接口；</li>
     <li>保存后生效，可在对话中直接使用。</li>
   </ul>
 
-  <h3>6.2 站点设置</h3>
+  <h3>7.2 站点设置</h3>
   <table>
     <tr><th style="width:130px">项</th><th>说明</th></tr>
     <tr><td>后台地址</td><td>7坛 管理后台域名</td></tr>
@@ -496,27 +512,27 @@ LOGO：已上传（512x512）  截图：5 张
     <tr><td>每日任务</td><td>早 / 午 / 晚定时发布开关与时间</td></tr>
   </table>
 
-  <h3>6.3 OSS 设置</h3>
+  <h3>7.3 OSS 设置</h3>
   <ul>
     <li>云服务商：阿里云 OSS / 腾讯云 COS / 七牛 Kodo；</li>
     <li>AccessKey / SecretKey / Bucket / Region / 外链域名；</li>
     <li>可测试连通性，保存后 AI 发布自动使用。</li>
   </ul>
 
-  <h3>6.4 浏览器设置</h3>
+  <h3>7.4 浏览器设置</h3>
   <ul>
     <li>浏览器类型（默认 Chromium）、是否无头模式；</li>
     <li>HTTP / HTTPS 代理（需要时填写）；</li>
     <li>下载超时、蜘蛛伪装下载开关。</li>
   </ul>
 
-  <h3>6.5 更新设置</h3>
+  <h3>7.5 更新设置</h3>
   <ul>
     <li>自动检查更新开关；更新通道（stable 稳定版）；</li>
     <li>更新包下载与签名校验策略。</li>
   </ul>
 
-  <h3>6.6 安全设置</h3>
+  <h3>7.6 安全设置</h3>
   <table>
     <tr><th style="width:130px">项</th><th>说明</th></tr>
     <tr><td>完整性校验</td><td>核心文件篡改检测（默认开启）</td></tr>
@@ -525,25 +541,25 @@ LOGO：已上传（512x512）  截图：5 张
     <tr><td>开发者模式</td><td>高级用户可开启（谨慎）</td></tr>
   </table>
 
-  <h3>6.7 Web 服务</h3>
+  <h3>7.7 Web 服务</h3>
   <ul>
     <li>软件内置本地 API 服务（<code>127.0.0.1:9800</code>），供浏览器 / 扩展联动；</li>
     <li>默认开机自动打开，可关闭。</li>
   </ul>
 </section>
 
-<!-- ================= 7 版本说明（完全免费） ================= -->
-<section id="s7">
-  <h2 class="sec">七、版本说明（完全免费）</h2>
-  <div class="ok">🎉 7Tan 软件<b>完全免费</b>：全部功能开放使用，无任何收费项目。</div>
+<!-- ================= 8 版本说明（免费） ================= -->
+<section id="s8">
+  <h2 class="sec">八、版本说明（免费）</h2>
+  <div class="ok">🎉 7Tan 软件<b>免费</b>：绝大多数功能开放使用，登录即可；个别高级插件需付费解锁。</div>
 
-  <h3>7.1 关于「完整版」</h3>
-  <p>「完整版」即 7Tan 的<b>全部功能版本</b>。软件免费开放所有能力——<b>编程写代码、AI 对话、游戏发布、内容创作、自我进化</b>等全部功能，<b>无需付费、无需激活、无需续费</b>，登录即可使用。</p>
+  <h3>8.1 关于「完整版」</h3>
+  <p>「完整版」即 7Tan 的<b>全部功能版本</b>。软件免费开放绝大多数能力——<b>编程写代码、AI 对话、游戏发布、内容创作、自我进化</b>等核心功能，<b>登录即可直接使用</b>；个别高级插件需付费解锁后使用。</p>
 
-  <h3>7.2 完整功能一览</h3>
+  <h3>8.2 完整功能一览</h3>
   <table>
     <tr><th style="width:140px">功能</th><th>说明</th></tr>
-    <tr><td>全部 AI 功能</td><td>全部插件与工具（142+）免费使用</td></tr>
+    <tr><td>全部 AI 功能</td><td>142+ 插件与工具，绝大多数免费使用，<b>个别高级插件需付费解锁</b></td></tr>
     <tr><td>编程写代码</td><td>AI 写代码、补全、审查、Git、Docker/K8s、CI/CD 全免费</td></tr>
     <tr><td>自我进化</td><td>自我修改代码、创建插件、自我升级</td></tr>
     <tr><td>游戏发布</td><td>无限制游戏发布</td></tr>
@@ -552,9 +568,9 @@ LOGO：已上传（512x512）  截图：5 张
   <div class="tip">💡 软件内左侧底部显示的「完整版」即表示你正在使用全部功能，无需任何额外操作。</div>
 </section>
 
-<!-- ================= 8 FAQ ================= -->
-<section id="s8">
-  <h2 class="sec">八、常见问题 FAQ</h2>
+<!-- ================= 9 FAQ ================= -->
+<section id="s9">
+  <h2 class="sec">九、常见问题 FAQ</h2>
 
   <h3>1️⃣ 更新时提示「无法启动更新程序: Read timed out」？</h3>
   <p>旧版本（≤1.0.7）已知问题：更新解压会卡住本地服务导致超时。<b>升级到 1.0.8 及以上已修复</b>。请手动下载新版安装包升级一次。</p>
@@ -566,7 +582,7 @@ LOGO：已上传（512x512）  截图：5 张
   <p>旧版本加载大量历史消息时性能不佳。<b>1.0.8 已优化</b>（渐进渲染 + 高度同步节流）。若仍卡顿请升级到最新版。</p>
 
   <h3>4️⃣ 登录页点「忘记密码」没反应？</h3>
-  <p>1.0.8 已修复（旧版点击会静默报错）。升级后会自动打开浏览器访问：<code>https://www.7tan.com/bbs/77562/</code></p>
+  <p>1.0.8 已修复（旧版点击会静默报错）。升级后会自动打开浏览器访问：<a href="https://www.7tan.com/bbs/77562/" target="_blank" rel="noopener">https://www.7tan.com/bbs/77562/</a></p>
 
   <h3>5️⃣ 左侧底部点「刷新」报 404？</h3>
   <p>1.0.8 已修复 API 域名错误（图片服务器 vs 主站）。升级后刷新会正常返回「会员状态已更新」。</p>
@@ -592,12 +608,12 @@ LOGO：已上传（512x512）  截图：5 张
   <p>检查「设置 → 站点设置」中的后台用户名密码；确认网络可访问后台域名；发布间隔建议保持 30 秒以上。</p>
 
   <h3>1️⃣1️⃣ 如何反馈问题 / 求助？</h3>
-  <p>软件左侧底部提供「问题求助 / 投诉建议」入口，或联系官网 https://www.7tan.com 客服。</p>
+  <p>软件左侧底部提供「问题求助 / 投诉建议」入口，或联系官网 <a href="https://www.7tan.com" target="_blank" rel="noopener">https://www.7tan.com</a> 客服。</p>
 </section>
 
-<!-- ================= 9 注意事项 ================= -->
-<section id="s9">
-  <h2 class="sec">九、注意事项与技术支持</h2>
+<!-- ================= 10 注意事项与技术支持 ================= -->
+<section id="s10">
+  <h2 class="sec">十、注意事项与技术支持</h2>
   <h3>注意事项</h3>
   <ul>
     <li>请勿删除 <code>_internal</code>、<code>logs</code>、<code>data</code> 中的文件，可能导致软件异常；</li>
@@ -609,15 +625,24 @@ LOGO：已上传（512x512）  截图：5 张
   <h3>技术支持</h3>
   <table>
     <tr><th style="width:130px">项目</th><th>地址</th></tr>
-    <tr><td>官网</td><td>https://www.7tan.com</td></tr>
-    <tr><td>在线说明书</td><td>https://www.7tan.com/manual.html</td></tr>
-    <tr><td>更新包</td><td>https://www.7tan.com/updates/</td></tr>
-    <tr><td>用户协议</td><td>https://www.7tan.com/agreement.php</td></tr>
-    <tr><td>隐私政策</td><td>https://www.7tan.com/privacy.php</td></tr>
+    <tr><td>官网</td><td><a href="https://www.7tan.com" target="_blank" rel="noopener">https://www.7tan.com</a></td></tr>
+    <tr><td>在线说明书</td><td><a href="https://www.7tan.com/manual.html" target="_blank" rel="noopener">https://www.7tan.com/manual.html</a></td></tr>
+    <tr><td>更新包</td><td><a href="https://www.7tan.com/updates/" target="_blank" rel="noopener">https://www.7tan.com/updates/</a></td></tr>
+    <tr><td>用户协议</td><td><a href="https://www.7tan.com/agreement.php" target="_blank" rel="noopener">https://www.7tan.com/agreement.php</a></td></tr>
+    <tr><td>隐私政策</td><td><a href="https://www.7tan.com/privacy.php" target="_blank" rel="noopener">https://www.7tan.com/privacy.php</a></td></tr>
   </table>
 </section>
 
-<footer>Made with ❤️ by 7Tan AI 小编「盘古」 · 7Tan 软件使用说明书 v1.0.9 · 完全免费</footer>
+<footer>Made with ❤️ by 7Tan AI 小编「盘古」 · 7Tan 软件使用说明书 v1.0.9 · 免费</footer>
 </div>
+
+<!-- 返回顶部按钮 -->
+<button id="backTop" title="返回顶部" onclick="window.scrollTo({top:0,behavior:'smooth'})">⬆ 顶部</button>
+<script>
+  (function(){
+    var bt=document.getElementById('backTop');
+    if(bt){ window.addEventListener('scroll',function(){ bt.style.display=(window.scrollY>300)?'block':'none'; }); }
+  })();
+</script>
 </body>
 </html>

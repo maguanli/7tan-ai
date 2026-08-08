@@ -349,7 +349,15 @@ def main() -> int:
                         "功能说明：\n"
                         "  本软件基础功能免费使用；部分插件为付费增值服务\n"
                         "  （如「爆款写作」插件 50 元/台，永久授权，绑定当前设备）。\n"
-                        "  付费详情见软件内「设置 → 插件市场」。\n")
+                        "  付费详情见软件内「设置 → 插件市场」。\n"
+                        "  详细使用说明见《7Tan使用说明书.md / .html》。\n")
+
+            # 2.3.1 使用说明书（完全免费版随包附带）
+            for _doc_name in ["7Tan使用说明书.md", "7Tan使用说明书.html"]:
+                _doc_src = Path(__file__).resolve().parent.parent / "templates" / _doc_name
+                if _doc_src.exists():
+                    _safe_write(zf, _doc_src, _doc_name)
+                    print(f"  [OK] {_doc_name} ({_doc_src.stat().st_size:,}B)")
 
             # 2.4 完整源码 + 构建工具链（7tan-src/，让"完整版"可自行构建）
             n_src = add_source_bundle(zf, Path(__file__).resolve().parent.parent)

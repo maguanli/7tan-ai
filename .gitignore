@@ -29,6 +29,9 @@ tools/*.exe
 # 沙盒临时文件
 data/sandbox/
 
+# 插件运行状态（含激活授权码等个人数据，禁止提交）
+data/plugins/*/state.json
+
 # 运行时数据与调试临时文件
 data/tmp/
 data/code_changes.jsonl

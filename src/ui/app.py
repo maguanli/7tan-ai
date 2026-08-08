@@ -5736,38 +5736,32 @@ class SettingsPage(QWidget):
 
 
     def _delete_config(self):
-
         item = self._config_list.currentItem()
-
         if not item:
-
             return
-
         key = item.data(Qt.ItemDataRole.UserRole)
-
         if len(self._ai_configs) <= 1:
-
             QMessageBox.warning(self, "无法删除", "至少保留一个 AI 配置！")
-
             return
-
         reply = QMessageBox.question(self, "确认删除", f"确定删除配置「{key}」吗？",
-
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-
         if reply != QMessageBox.StandardButton.Yes:
-
             return
-
         del self._ai_configs[key]
-
         if key == self._active_config:
-
             self._active_config = next(iter(self._ai_configs.keys()))
-
         self._refresh_config_list()
+        # 同步删除到后端数据库（否则重启后配置会从数据库恢复）
+        worker = ApiWorker("PUT", f"{API_BASE}/api/settings",
+                           {"ai": {"active": self._active_config, "deleted": [key]}})
+        worker.finished.connect(lambda d, k=key: QMessageBox.information(self, "成功", f"配置「{k}」已删除"))
+        worker.error.connect(lambda e, k=key: self._on_delete_config_error(e, k))
+        worker.start()
+        self._keep_worker(worker)
 
-
+    def _on_delete_config_error(self, error, key):
+        QMessageBox.warning(self, "错误", f"删除配置「{key}」失败: {error}\n已恢复原列表，请重试。")
+        self._load_settings()
 
     def _set_active_config(self):
 

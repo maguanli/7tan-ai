@@ -140,6 +140,37 @@ async def update_settings(updates: dict):
 
         # AI 配置单独处理：写入数据库
         ai_updates = updates.pop("ai", None)
+        if ai_updates:
+            # 🗑️ 删除 AI 配置（前端删除操作 → 同步数据库，否则重启后配置会恢复）
+            deleted_keys = ai_updates.get("deleted") or []
+            if deleted_keys:
+                from ...database.db import delete_ai_config, get_all_ai_configs, ensure_default_ai_config, set_active_ai_config, get_active_ai_config
+                for k in deleted_keys:
+                    try:
+                        delete_ai_config(k)
+                        logger.info(f"🗑️ 已删除 AI 配置: {k}")
+                    except Exception as e:
+                        logger.warning(f"删除 AI 配置 {k} 失败: {e}")
+                remaining = get_all_ai_configs(mask_secrets=False) or []
+                if not remaining:
+                    ensure_default_ai_config()
+                    remaining = get_all_ai_configs(mask_secrets=False) or []
+                valid = {c["config_key"] for c in remaining}
+                new_active = ai_updates.get("active", "") or ""
+                if new_active not in valid:
+                    new_active = remaining[0]["config_key"] if remaining else ""
+                if new_active:
+                    set_active_ai_config(new_active)
+                    try:
+                        active_cfg = get_active_ai_config(mask_secrets=False)
+                        if active_cfg:
+                            _update_env_model(new_active, active_cfg.get("model", ""))
+                    except Exception as e:
+                        logger.warning(f"同步 .env 模型变量失败: {e}")
+                # 修正 active，避免后续 elif 分支把 active 设置成已删除的 key
+                if ai_updates.get("active") not in valid:
+                    ai_updates["active"] = new_active
+                logger.info(f"🗑️ AI 配置删除完成: {deleted_keys} → 当前活跃: {new_active}")
         if ai_updates and "configs" in ai_updates:
             from ...database.db import save_ai_config, set_active_ai_config
             active_key = ai_updates.get("active", "")

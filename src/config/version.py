@@ -5,4 +5,4 @@
 - 打包构建: build_and_sync.bat 构建时通过 -v 参数注入 WM_VER
 """
 APP_NAME = "7tan-editor"
-APP_VERSION = "1.0.8"
+APP_VERSION = "1.0.9"

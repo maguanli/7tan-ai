@@ -1,16 +1,16 @@
 <?php
 header('Content-Type: text/html; charset=UTF-8');
 // ============================================================
-// 购买完整版页面
+// 插件购买页面（原完整版购买页升级为插件中心）
 // 位置: /pro.php
-// 前端 JS 驱动验证，支持 BBS 登录 + auth_token Cookie 双通道
+// 支持: BBS 登录会话 + 余额购买插件 + 自动签发授权码
 // ============================================================
 ?><!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>7Tan 完整版 - 7坛游戏社区</title>
+    <title>7Tan 插件中心 - 7坛游戏社区</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
@@ -20,7 +20,7 @@ header('Content-Type: text/html; charset=UTF-8');
         .nav-links { display: flex; gap: 20px; }
         .nav-links a { color: #aaa; text-decoration: none; font-size: 14px; }
         .nav-links a:hover { color: #ff6b35; }
-        .container { max-width: 900px; margin: 0 auto; padding: 20px 24px 60px; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 20px 24px 60px; }
         .page-title { font-size: 28px; margin-bottom: 6px; }
         .page-subtitle { color: #888; margin-bottom: 28px; }
         .login-prompt { text-align: center; padding: 60px 20px; background: #16213e; border-radius: 12px; }
@@ -28,29 +28,63 @@ header('Content-Type: text/html; charset=UTF-8');
         .login-prompt p { color: #888; margin-bottom: 16px; }
         .login-prompt a { display: inline-block; padding: 12px 32px; background: #ff6b35; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; }
         .login-prompt a:hover { background: #e55a2b; }
-        .plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px; }
-        .plan-card { background: #16213e; border: 2px solid transparent; border-radius: 12px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; }
-        .plan-card:hover { border-color: #ff6b3540; }
-        .plan-card.selected { border-color: #ff6b35; background: #1a2744; }
-        .plan-card .plan-name { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-        .plan-card .plan-price { font-size: 28px; color: #ff6b35; font-weight: bold; margin-bottom: 8px; }
-        .plan-card .plan-price small { font-size: 14px; color: #888; }
-        .plan-card .plan-desc { color: #888; font-size: 13px; }
-        .buy-btn { width: 100%; padding: 16px; background: #ff6b35; color: #fff; border: none; border-radius: 10px; font-size: 18px; font-weight: 600; cursor: pointer; }
+        /* 余额卡片 */
+        .balance-card { background: linear-gradient(135deg, #ff6b35 0%, #e0552a 100%); border-radius: 12px; padding: 20px 28px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+        .balance-card .b-label { font-size: 13px; opacity: .85; }
+        .balance-card .b-amount { font-size: 32px; font-weight: 800; }
+        .balance-card .b-amount small { font-size: 15px; font-weight: 400; opacity: .8; }
+        .balance-actions { display: flex; gap: 10px; }
+        .btn { display: inline-block; padding: 10px 22px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; cursor: pointer; border: none; transition: .2s; }
+        .btn-light { background: #fff; color: #ff6b35; }
+        .btn-light:hover { background: #f0f0f0; }
+        .btn-ghost { background: transparent; color: #fff; border: 2px solid #ffffff66; }
+        .btn-ghost:hover { background: #ffffff1a; }
+        .btn-primary { background: #ff6b35; color: #fff; }
+        .btn-primary:hover { background: #e55a2b; }
+        .btn-primary:disabled { background: #555; cursor: not-allowed; }
+        /* 插件卡片 */
+        .plugin-card { background: #16213e; border: 2px solid #ff6b3540; border-radius: 14px; padding: 26px; margin-bottom: 20px; }
+        .plugin-head { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+        .plugin-icon { font-size: 42px; }
+        .plugin-name { font-size: 22px; font-weight: 700; }
+        .plugin-tag { display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; background: #ff6b3520; color: #ff6b35; margin-left: 8px; }
+        .plugin-price { font-size: 26px; color: #ff6b35; font-weight: 800; margin-left: auto; }
+        .plugin-price small { font-size: 13px; color: #888; font-weight: 400; }
+        .plugin-desc { color: #aaa; font-size: 14px; margin-bottom: 14px; line-height: 1.7; }
+        .plugin-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px 20px; margin-bottom: 18px; }
+        .plugin-features li { list-style: none; color: #bbb; font-size: 13px; padding-left: 20px; position: relative; }
+        .plugin-features li::before { content: "✅"; position: absolute; left: 0; top: 0; font-size: 12px; }
+        .plugin-buy { background: #0f1a2e; border-radius: 10px; padding: 16px; }
+        .plugin-buy label { display: block; font-size: 13px; font-weight: 600; color: #aaa; margin-bottom: 8px; }
+        .fp-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .fp-input { flex: 1; min-width: 260px; padding: 12px 14px; border: 1px solid #ffffff22; border-radius: 8px; background: #1a2744; color: #eee; font-size: 14px; outline: none; font-family: monospace; }
+        .fp-input:focus { border-color: #ff6b35; }
+        .fp-input::placeholder { color: #666; font-family: inherit; }
+        .buy-btn { padding: 12px 32px; background: #ff6b35; color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; }
         .buy-btn:hover { background: #e55a2b; }
         .buy-btn:disabled { background: #555; cursor: not-allowed; }
+        /* 提示 */
+        .tips { background: #16213e; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; font-size: 13px; color: #999; line-height: 1.9; }
+        .tips b { color: #ff6b35; }
+        /* 消息 */
         .msg { text-align: center; padding: 12px; margin-top: 12px; border-radius: 8px; display: none; }
         .msg.success { background: #1b5e20; color: #a5d6a7; display: block; }
         .msg.error { background: #5e1b1b; color: #ef9a9a; display: block; }
-        .status-card { background: #16213e; border-radius: 12px; padding: 24px; margin-bottom: 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-        .status-badge { display: inline-block; padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; }
-        .status-pro { background: #ff6b3520; color: #ff6b35; }
-        .status-free { background: #8883; color: #aaa; }
-        .toggle-renew-btn { background: transparent; border: 2px solid #ff6b35; color: #ff6b35; padding: 10px 24px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; width: 100%; }
-        .toggle-renew-btn:hover { background: #ff6b3520; }
-        .renew-section { background: #16213e; border-radius: 12px; padding: 20px; margin-top: 16px; }
-        .charge-btn { display: inline-block; padding: 8px 18px; background: #ff6b35; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; margin-right: 12px; }
-        .charge-btn:hover { background: #e55a2b; }
+        /* 授权码结果 */
+        .license-result { background: #0f1a2e; border: 2px dashed #ff6b3580; border-radius: 10px; padding: 18px; margin-top: 16px; }
+        .license-result h4 { color: #ff6b35; margin-bottom: 10px; font-size: 15px; }
+        .license-box { background: #1a2744; border-radius: 8px; padding: 14px; font-family: monospace; font-size: 13px; word-break: break-all; color: #8be28b; user-select: all; margin-bottom: 12px; line-height: 1.8; }
+        .copy-btn { padding: 8px 20px; background: #ff6b35; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+        .copy-btn:hover { background: #e55a2b; }
+        .activate-steps { font-size: 13px; color: #bbb; line-height: 2; margin-top: 10px; }
+        /* 我的授权 */
+        .orders-section { margin-top: 24px; }
+        .orders-section h3 { font-size: 17px; margin-bottom: 12px; color: #ff6b35; }
+        .order-item { background: #16213e; border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+        .order-item .oi-name { font-weight: 600; font-size: 14px; }
+        .order-item .oi-meta { color: #888; font-size: 12px; }
+        .order-item .oi-license { font-family: monospace; font-size: 11px; color: #8be28b; word-break: break-all; flex: 1; min-width: 200px; }
+        .order-empty { color: #666; font-size: 13px; padding: 20px; text-align: center; }
     </style>
 </head>
 <body>
@@ -61,83 +95,114 @@ header('Content-Type: text/html; charset=UTF-8');
             <a href="/">首页</a>
             <a href="/game/">安卓游戏</a>
             <a href="/bbs/">社区</a>
-            <a href="/pro.php" style="color:#ff6b35;font-weight:600;">💰 完整版</a>
+            <a href="/pro.php" style="color:#ff6b35;font-weight:600;">🧩 插件</a>
         </div>
     </nav>
 </div>
 <div class="container">
-    <h1 class="page-title">🚀 7Tan 完整版</h1>
-    <p class="page-subtitle">解锁全部 AI 功能，效率翻倍，软件可以修改自己进行升级进化，功能强大。</p>
-    <div id="app"></div>
+    <h1 class="page-title">🧩 7Tan 插件中心</h1>
+    <p class="page-subtitle">软件本体完全免费，个别高级插件需付费解锁（永久授权，绑定购买时电脑）。</p>
+    <div id="app"><p style="text-align:center;color:#888;padding:40px;">加载中...</p></div>
 </div>
+
 <script>
-// ========== 配置 ==========
-const PLANS = [
-    { id: 'monthly', name: '月付', price: 50, months: 1, label: '',      desc: '适合短期使用' },
-    { id: 'quarterly', name: '季付', price: 120, months: 3, label: '⭐ 推荐', desc: '平均每月仅 ¥40，省 20%' },
-    { id: 'semi_annual', name: '半年付', price: 200, months: 6, label: '🔥 最火', desc: '平均每月仅 ¥33.3，省 33%' },
-    { id: 'annual', name: '年付', price: 350, months: 12, label: '👑 最省', desc: '平均每月仅 ¥29.2，省 42%' }
-];
-
-let selectedPlan = PLANS[0].id;
-let selectedMonths = PLANS[0].months;
-let selectedPrice = PLANS[0].price;
-let purchasing = false;
-
 function escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function renderPlans() {
-    return PLANS.map((p, i) => `
-        <div class="plan-card${i === 0 ? ' selected' : ''}" data-plan="${p.id}" data-months="${p.months}" data-price="${p.price}" onclick="selectPlan(this)">
-            <div class="plan-name">${p.name} ${p.label}</div>
-            <div class="plan-price">¥${p.price}<small>/${p.months}个月</small></div>
-            <div class="plan-desc">${p.desc}</div>
+function fmtYuan(cents) {
+    return (Number(cents) / 100).toFixed(2);
+}
+
+function renderPlugin(p) {
+    return `
+    <div class="plugin-card">
+        <div class="plugin-head">
+            <span class="plugin-icon">${p.icon}</span>
+            <div>
+                <span class="plugin-name">${escHtml(p.name)}</span>
+                <span class="plugin-tag">${p.type === 'per_device' ? '按台永久授权' : '订阅'}</span>
+            </div>
+            <div class="plugin-price">¥${p.price_yuan}<small> / 台 永久</small></div>
         </div>
-    `).join('');
+        <p class="plugin-desc">${escHtml(p.desc)}</p>
+        <ul class="plugin-features">${(p.features||[]).map(f => '<li>'+escHtml(f)+'</li>').join('')}</ul>
+        <div class="plugin-buy">
+            <label>🖥️ 机器指纹（32 位，在软件「爆款写作」插件状态页点击复制）</label>
+            <div class="fp-row">
+                <input class="fp-input" id="fpInput" placeholder="例如：a1b2c3d4e5f60718293a4b5c6d7e8f90" autocomplete="off">
+                <button class="buy-btn" id="buyBtn" onclick="doBuy('${p.id}')">💰 余额购买 ¥${p.price_yuan}</button>
+            </div>
+            <div class="msg" id="msg"></div>
+            <div id="result"></div>
+        </div>
+    </div>`;
 }
 
-function selectPlan(el) {
-    document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
-    el.classList.add('selected');
-    selectedPlan = el.dataset.plan;
-    selectedMonths = parseInt(el.dataset.months);
-    selectedPrice = parseInt(el.dataset.price);
-    const btn = document.getElementById('buyBtn');
-    if (btn) btn.textContent = '💰 立即购买 ¥' + selectedPrice;
-    const renewBtn = document.getElementById('renewBtn');
-    if (renewBtn) renewBtn.textContent = '🔄 续费会员 ¥' + selectedPrice;
+function renderOrders(orders) {
+    if (!orders || !orders.length) return '<div class="order-empty">暂无购买记录</div>';
+    return orders.map(o => `
+        <div class="order-item">
+            <span class="oi-name">${escHtml(o.plugin_name)}</span>
+            <span class="oi-meta">${escHtml(o.fingerprint.slice(0,8))}… · ${escHtml(o.created_at)}</span>
+            <span class="oi-license">${escHtml(o.license_key)}</span>
+            <button class="copy-btn" onclick="copyText(this, '${escHtml(o.license_key).replace(/'/g, "\\'")}')">复制</button>
+        </div>`).join('');
 }
 
-async function doBuy() {
-    if (purchasing) return;
+async function copyText(btn, text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = '✅ 已复制';
+        setTimeout(() => btn.textContent = '复制', 1500);
+    } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); ta.remove();
+        btn.textContent = '✅ 已复制';
+        setTimeout(() => btn.textContent = '复制', 1500);
+    }
+}
+
+async function doBuy(pluginId) {
     const msg = document.getElementById('msg');
     const btn = document.getElementById('buyBtn');
-    if (!msg || !btn) return;
-    purchasing = true;
-    btn.disabled = true;
-    btn.textContent = '处理中...';
-    msg.className = 'msg';
-    msg.style.display = 'none';
+    const fp = (document.getElementById('fpInput').value || '').trim().toLowerCase();
+    if (!fp) { msg.className = 'msg error'; msg.style.display = ''; msg.textContent = '❌ 请先填写机器指纹'; return; }
+    if (!/^[0-9a-f]{32}$/.test(fp)) { msg.className = 'msg error'; msg.style.display = ''; msg.textContent = '❌ 指纹格式不正确（应为 32 位十六进制）'; return; }
+    btn.disabled = true; btn.textContent = '处理中...';
+    msg.className = 'msg'; msg.style.display = 'none';
+    document.getElementById('result').innerHTML = '';
     try {
-        const body = JSON.stringify({ action: 'buy', plan: selectedPlan, months: selectedMonths });
-        const resp = await fetch('/api/pro/purchase.php', {
+        const resp = await fetch('/api/plugin/purchase.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body
+            credentials: 'include',
+            body: JSON.stringify({ plugin_id: pluginId, fingerprint: fp })
         });
         const data = await resp.json();
         if (data.code === 0) {
             msg.style.display = '';
             msg.className = 'msg success';
-            msg.textContent = '✅ ' + (data.message || '购买成功') + '，页面即将刷新...';
-            setTimeout(() => location.reload(), 2000);
+            msg.textContent = '✅ ' + (data.message || '购买成功');
+            document.getElementById('result').innerHTML = `
+                <div class="license-result">
+                    <h4>🔑 授权码（复制后在软件中激活）</h4>
+                    <div class="license-box">${escHtml(data.data.license_key)}</div>
+                    <button class="copy-btn" onclick="copyText(this, '${escHtml(data.data.license_key).replace(/'/g, "\\'")}')">📋 复制授权码</button>
+                    <div class="activate-steps">
+                        <b>激活步骤：</b><br>
+                        ① 打开 7Tan 软件 → 插件市场 → 爆款写作<br>
+                        ② 输入命令 <b>viral_activate</b>，粘贴授权码回车<br>
+                        ③ 激活成功，永久使用全部功能 ✅
+                    </div>
+                </div>`;
+            setTimeout(() => location.reload(), 4000);
         } else {
             msg.style.display = '';
             msg.className = 'msg error';
             if (data.recharge_url) {
-                msg.innerHTML = '❌ ' + escHtml(data.message || '购买失败') + '<br><br><a href="' + escHtml(data.recharge_url) + '" style="display:inline-block;padding:10px 24px;background:#ff6b35;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;">💰 去充值</a>';
+                msg.innerHTML = '❌ ' + escHtml(data.message) + '<br><br><a href="' + escHtml(data.recharge_url) + '" style="display:inline-block;padding:10px 24px;background:#ff6b35;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;">💰 去充值</a>';
             } else {
                 msg.textContent = '❌ ' + (data.message || '购买失败');
             }
@@ -147,84 +212,47 @@ async function doBuy() {
         msg.className = 'msg error';
         msg.textContent = '网络错误：' + e.message;
     } finally {
-        purchasing = false;
-        btn.disabled = false;
-        btn.textContent = '💰 立即购买 ¥' + selectedPrice;
-    }
-}
-
-function toggleRenew() {
-    const section = document.getElementById('renewSection');
-    const toggleBtn = document.getElementById('toggleRenewBtn');
-    if (!section || !toggleBtn) return;
-    if (section.style.display === 'none' || section.style.display === '') {
-        section.style.display = 'block';
-        toggleBtn.textContent = '🔽 收起续费';
-    } else {
-        section.style.display = 'none';
-        toggleBtn.textContent = '💳 续费会员';
-    }
-}
-
-async function doRenew() {
-    if (purchasing) return;
-    const msg = document.getElementById('msg');
-    const btn = document.getElementById('renewBtn');
-    if (!msg || !btn) return;
-    purchasing = true;
-    btn.disabled = true;
-    btn.textContent = '处理中...';
-    msg.className = 'msg';
-    msg.style.display = 'none';
-    try {
-        const body = JSON.stringify({ action: 'renew', plan: selectedPlan, months: selectedMonths });
-        const resp = await fetch('/api/pro/purchase.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body
-        });
-        const data = await resp.json();
-        if (data.code === 0) {
-            msg.style.display = '';
-            msg.className = 'msg success';
-            msg.textContent = '✅ ' + (data.message || '续费成功') + '，页面即将刷新...';
-            setTimeout(() => location.reload(), 2000);
-        } else {
-            msg.style.display = '';
-            msg.className = 'msg error';
-            if (data.recharge_url) {
-                msg.innerHTML = '❌ ' + escHtml(data.message || '续费失败') + '<br><br><a href="' + escHtml(data.recharge_url) + '" style="display:inline-block;padding:10px 24px;background:#ff6b35;color:#fff;border-radius:6px;text-decoration:none;font-weight:600;">💰 去充值</a>';
-            } else {
-                msg.textContent = '❌ ' + (data.message || '续费失败');
-            }
-        }
-    } catch (e) {
-        msg.style.display = '';
-        msg.className = 'msg error';
-        msg.textContent = '网络错误：' + e.message;
-    } finally {
-        purchasing = false;
-        btn.disabled = false;
-        btn.textContent = '🔄 续费会员 ¥' + selectedPrice;
+        btn.disabled = false; btn.textContent = '💰 余额购买 ¥' + (window.CURRENT_PRICE || 50);
     }
 }
 
 async function init() {
     const app = document.getElementById('app');
-    const plansHtml = renderPlans();
-
     try {
-        const resp = await fetch('/api/pro/status.php', { credentials: 'include' });
+        const resp = await fetch('/api/plugin/list.php', { credentials: 'include' });
         const json = await resp.json();
-        const d = json.data || {};
-
-        if (json.code === 0 && d.pro_activated === 1) {
-            app.innerHTML = '<div class="status-card"><span class="status-badge status-pro">✅ 完整版</span><span style="color:#aaa;">' + escHtml(d.username || '') + '</span><span style="margin-left:auto;display:flex;align-items:center;gap:8px;"><a href="https://www.7tan.com/task/wallet.php" class="charge-btn">💰 充值</a>到期时间：' + escHtml(d.pro_expires_at || '') + ' (剩余 ' + (d.remaining_days || 0) + ' 天)</span></div><div class="renew-section" id="renewSection" style="display:none;"><h3 style="text-align:center;margin:16px 0 12px;color:#ff6b35;">🔄 续费会员</h3><p style="text-align:center;color:#888;font-size:13px;margin-bottom:16px;">续费时长将叠加到现有到期时间上</p><div class="plan-grid" id="planGrid">' + plansHtml + '</div><button class="buy-btn" id="renewBtn" onclick="doRenew()">🔄 续费会员 ¥' + selectedPrice + '</button></div><div class="msg" id="msg"></div><div style="text-align:center;padding:16px;"><button class="toggle-renew-btn" id="toggleRenewBtn" onclick="toggleRenew()">💳 续费会员</button></div><p style="text-align:center;color:#888;padding:10px;">🎉 您已是完整版用户，享受全部 AI 功能</p>';
-        } else if (json.code === 0) {
-            app.innerHTML = '<p style="text-align:center;color:#888;padding:16px;">登录身份：' + escHtml(d.username || '') + ' | <a href="/api/logout.php" style="color:#ff6b35;">退出</a></p><div class="plan-grid">' + plansHtml + '</div><div class="msg" id="msg"></div><button class="buy-btn" id="buyBtn" onclick="doBuy()">💰 立即购买 ¥' + selectedPrice + '</button>';
-        } else {
-            app.innerHTML = '<div class="login-prompt"><h2>请先登录</h2><p>登录后才能查看完整版方案</p><a href="/bbs/login.php?redirect=/pro.php">立即登录</a></div>';
+        if (json.code !== 0) {
+            if (json.need_login) {
+                app.innerHTML = '<div class="login-prompt"><h2>请先登录</h2><p>登录后即可使用余额购买插件</p><a href="/bbs/login.php?redirect=/pro.php">立即登录</a></div>';
+                return;
+            }
+            app.innerHTML = '<div class="login-prompt"><h2>加载失败</h2><p>' + escHtml(json.message || '') + '</p><a href="javascript:location.reload()">重试</a></div>';
+            return;
         }
+        const d = json.data || {};
+        const b = d.balance || {};
+        window.CURRENT_PRICE = (d.plugins && d.plugins[0]) ? d.plugins[0].price_yuan : 50;
+        const pluginsHtml = (d.plugins || []).map(renderPlugin).join('');
+        app.innerHTML = `
+            <div class="balance-card">
+                <div>
+                    <div class="b-label">💰 我的余额（可用）</div>
+                    <div class="b-amount">¥${Number(b.available_yuan || 0).toFixed(2)}<small> &nbsp;总余额 ¥${Number(b.balance_yuan || 0).toFixed(2)}</small></div>
+                </div>
+                <div class="balance-actions">
+                    <a href="/task/wallet.php" class="btn btn-light">💳 充值</a>
+                    <a href="/api/logout.php" class="btn btn-ghost">退出</a>
+                </div>
+            </div>
+            <div class="tips">
+                📌 <b>购买流程</b>：① 打开 7Tan 软件 → 插件市场 → 爆款写作 → 查看状态，复制「机器指纹」→ ② 粘贴到下方输入框 → ③ 点击「余额购买」，系统自动扣款并生成授权码 → ④ 复制授权码，在软件中运行 <b>viral_activate</b> 输入即可激活。<br>
+                💡 未购买用户可免费试用 5 次；授权码<b>绑定当前电脑</b>，换机/重装可联系作者免费补发。
+            </div>
+            ${pluginsHtml}
+            <div class="orders-section">
+                <h3>📦 我的授权</h3>
+                ${renderOrders(d.orders || [])}
+            </div>`;
     } catch (e) {
         app.innerHTML = '<div class="login-prompt"><h2>加载失败</h2><p>' + escHtml(e.message) + '</p><a href="javascript:location.reload()">重试</a></div>';
     }

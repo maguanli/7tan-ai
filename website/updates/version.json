@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "1.0.9",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.9.zip",
+      "md5": "1fb0742a6b0d267fcb381e56a34fc790",
+      "size": 416390415,
+      "notes": "1.0.9 更新：版本权益统一更名为「完整版」——左侧底部状态、升级/续费提示、新手引导、用户协议、隐私政策及官网 pro.php 等全部同步；此前「专业版/进化版」文案全部统一为「完整版」。",
+      "release_date": "2026-08-08"
+    },
+    {
       "version": "1.0.8",
       "channel": "stable",
       "platform": "windows",

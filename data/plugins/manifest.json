@@ -681,13 +681,17 @@
     "author": "7tanAI Team",
     "type": "custom",
     "category": "自动化",
-    "description": "通用桌面自动化：窗口激活/截图/OCR定位/按字点击/文本图片输入/组合键/聊天发送。基于 mss + Windows OCR + pyautogui + win32 剪贴板，可操作微信、QQ、任意桌面软件。",
+    "description": "通用桌面机器人：屏幕看懂(desktop_see/desktop_uia/desktop_tmatch)、键鼠操作、微信/QQ自动发消息。动态定位窗口，不依赖固定坐标。",
     "tools": [
       "desktop_env_check",
       "desktop_windows",
+      "desktop_snapshot",
       "desktop_activate",
       "desktop_screenshot",
       "desktop_ocr",
+      "desktop_see",
+      "desktop_uia",
+      "desktop_tmatch",
       "desktop_click_text",
       "desktop_click_pos",
       "desktop_type_text",
@@ -697,5 +701,22 @@
       "desktop_send_chat"
     ],
     "icon": "🤖"
+  },
+  {
+    "id": "camera_vision",
+    "name": "摄像头视觉",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "custom",
+    "category": "视觉",
+    "description": "摄像头拍照 + GLM-4V 视觉大模型理解画面（场景/物体/人物/文字/异常/建议）。无摄像头时自动降级为屏幕截图理解。",
+    "tools": [
+      "camera_list",
+      "camera_capture",
+      "camera_see",
+      "vision_analyze_image",
+      "camera_watch"
+    ],
+    "icon": "📸"
   }
 ]

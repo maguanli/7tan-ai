@@ -146,45 +146,54 @@ def desktop_screenshot(save: str = "", region: str = "") -> str:
 
 @register_tool(
     name="desktop_ocr",
-    description="对屏幕（全屏或指定区域）进行 OCR 文字识别，返回每行文字的坐标。用于了解屏幕上有哪些按钮/文字、定位元素。",
+    description="对屏幕（全屏或指定区域）进行 OCR 文字识别，返回每行文字的坐标。用于了解屏幕上有哪些按钮/文字、定位元素。engine 可选 smart（自适应：干净界面秒出，乱码界面自动双引擎融合）/auto（最快）/fusion（最准但慢，双引擎融合）/win/rapid。",
     parameters={
         "type": "object",
         "properties": {
             "region": {"type": "string", "description": "区域 x,y,w,h（留空=全屏）", "default": ""},
+            "engine": {"type": "string", "description": "OCR引擎: smart/auto/fusion/win/rapid，默认 auto（最快）", "default": "auto"},
         },
         "required": [],
     },
     category="desktop"
 )
-def desktop_ocr(region: str = "") -> str:
+def desktop_ocr(region: str = "", engine: str = "auto") -> str:
     """屏幕 OCR"""
     args = ['ocr']
     if region:
         args += ['--region', region]
-    return _run(args, timeout=60)
+    if engine and engine != 'auto':
+        args += ['--engine', engine]
+    return _run(args, timeout=120)
 
 
 @register_tool(
     name="desktop_see",
-    description="看懂屏幕（视觉理解·视力增强）：截图→本地画面分析（主色调/亮度/红绿告警块）+双引擎OCR全文（Windows OCR + RapidOCR 融合，中文识别率大幅提升）；已配置视觉模型(VISION_API_KEY)时调用多模态大模型理解画面语义，输出元素列表/状态/警告/操作建议。比 desktop_ocr 更全面——能看懂「画面里有什么、按钮是否可用、有没有弹窗」；看不清/识别不出时优先用这个。",
+    description="看懂屏幕（桌面视觉·快+准）：一次截图→本地画面分析（主色调/亮度/红绿告警块，毫秒级）+ OCR + 视觉大模型语义理解（GLM-4V）。已优化：①快：干净界面 OCR 秒出，一次截图全链路复用；②准：乱码界面自动切换双引擎融合(RapidOCR)，VLM 元素坐标已换算为真实屏幕像素可直接点击，JSON 容错解析；③VLM 输出画面摘要/元素列表/状态/警告/操作建议。比 desktop_ocr 更全面，能看懂「画面里有什么、按钮是否可用、有没有弹窗」；看不清/识别不出时优先用这个。engine 可选 smart（默认，自适应快+准）/auto（最快）/fusion（最准但慢）。",
     parameters={
         "type": "object",
         "properties": {
             "region": {"type": "string", "description": "区域 x,y,w,h（留空=全屏）", "default": ""},
             "save": {"type": "string", "description": "截图保存路径（留空自动保存到 data/screenshots）", "default": ""},
+            "engine": {"type": "string", "description": "OCR引擎: smart(默认,自适应)/auto(最快)/fusion(最准但慢)/win/rapid", "default": "smart"},
+            "vlm": {"type": "boolean", "description": "是否调用视觉大模型理解画面（默认 true；false 更快）", "default": True},
         },
         "required": [],
     },
     category="desktop"
 )
-def desktop_see(region: str = "", save: str = "") -> str:
-    """看懂屏幕：本地画面分析 + 双引擎 OCR +（可选）多模态视觉理解"""
+def desktop_see(region: str = "", save: str = "", engine: str = "smart", vlm: bool = True) -> str:
+    """看懂屏幕：一次截图 + 本地分析 + 自适应OCR +（可选）多模态视觉理解"""
     args = ['see']
     if region:
         args += ['--region', region]
     if save:
         args += ['--save', save]
-    return _run(args, timeout=120)
+    if engine and engine != 'smart':
+        args += ['--engine', engine]
+    if not vlm:
+        args += ['--no-vlm']
+    return _run(args, timeout=180)
 
 
 @register_tool(

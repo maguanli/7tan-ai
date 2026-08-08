@@ -119,17 +119,31 @@ def _ocr_screen_rapid(region=None, scale=1.0):
         return []
 
 
+def _ocr_garbage_ratio(lines):
+    """估算 OCR 文本乱码比例（行级）：含异常字符（拉丁扩展符号 ø«Æﬂ©®、生僻扩展区、私用区、字母连字）
+    的行占比。深色UI/复杂界面 Windows OCR 常输出这类乱码符号，干净界面几乎为 0。"""
+    import re
+    if not lines:
+        return 1.0
+    # ø(\u00F8) «(\u00AB) Æ(\u00C6) ﬂ(\uFB02) ©(\u00A9) 等：正常中文界面不会出现
+    bad_pat = re.compile(r'[\u00A2-\u02AF\uFB00-\uFBFF\u3400-\u4DBF\uE000-\uF8FF\uF900-\uFAFF]')
+    bad_lines = sum(1 for ln in lines if bad_pat.search(ln['text']))
+    return bad_lines / len(lines)
+
+
 def _merge_ocr_lines(win_lines, rapid_lines):
-    """双引擎结果按中心点距离去重合并（距离<20px 视为同一行，保留文本更长者）。"""
+    """双引擎结果按中心点距离+文本相似度去重合并：距离<20px 且编辑距离≤2 视为同一行（保留更长者）；
+    距离近但文本完全不同（可能是相邻两行）则都保留，避免误合并丢字。"""
     merged = []
     for ln in (win_lines or []) + (rapid_lines or []):
         dup = False
         for m in merged:
             if abs(m['cx'] - ln['cx']) < 20 and abs(m['cy'] - ln['cy']) < 20:
-                if len(ln['text']) > len(m['text']):
-                    m['text'] = ln['text']
-                dup = True
-                break
+                if _edit_distance(m['text'], ln['text']) <= 2:
+                    if len(ln['text']) > len(m['text']):
+                        m['text'] = ln['text']
+                    dup = True
+                    break
         if not dup:
             merged.append(dict(ln))
     return merged
@@ -142,7 +156,19 @@ def _ocr_screen(region=None, engine='auto'):
         return _ocr_screen_rapid(region)
     if engine == 'fusion':
         win_lines = _ocr_screen(region, engine='win')
-        rapid_lines = _ocr_screen_rapid(region)
+        # RapidOCR 半分辨率识别：全屏 35s → ~25s，坐标已在 _ocr_screen_rapid 内按 scale 还原
+        rapid_lines = _ocr_screen_rapid(region, scale=0.5)
+        return _merge_ocr_lines(win_lines, rapid_lines)
+    if engine == 'smart':
+        # 自适应：仅当 Windows OCR 几乎完美（无坏字符、无碎片、行数充足）才直接用（秒出）；
+        # 否则自动融合 RapidOCR（准）。判定从严，宁可多花时间也要准确。
+        win_lines = _ocr_screen_win(region)
+        if win_lines and len(win_lines) >= 20:
+            ratio = _ocr_garbage_ratio(win_lines)
+            frag = sum(1 for ln in win_lines if len(ln['text']) <= 2) / len(win_lines)
+            if ratio < 0.06 and frag < 0.15:
+                return win_lines
+        rapid_lines = _ocr_screen_rapid(region, scale=0.5)
         return _merge_ocr_lines(win_lines, rapid_lines)
     if engine == 'win':
         return _ocr_screen_win(region)
@@ -642,23 +668,25 @@ def _vision_config():
     return cfg
 
 
-def _local_vision_summary(region=None):
-    """本地画面分析：主色调 / 红绿告警块 / 亮度。不依赖外部 API，毫秒级。"""
+def _local_vision_summary(region=None, img=None):
+    """本地画面分析：主色调 / 红绿告警块 / 亮度。不依赖外部 API，毫秒级。
+    img 可传入已截取图像（避免重复截图），未传时自行截屏。"""
     try:
-        import mss
         from PIL import Image
         import numpy as np
     except ImportError:
         return '（缺 mss/PIL/numpy，无法本地分析）'
     try:
-        with mss.mss() as sct:
-            if region:
-                x, y, w, h = [int(v) for v in region.split(',')]
-                shot = sct.grab({'left': x, 'top': y, 'width': w, 'height': h})
-            else:
-                shot = sct.grab(sct.monitors[0])
-        img = Image.frombytes('RGB', shot.size, shot.rgb)
-        small = img.resize((128, 72), Image.LANCZOS)
+        if img is None:
+            import mss
+            with mss.mss() as sct:
+                if region:
+                    x, y, w, h = [int(v) for v in region.split(',')]
+                    shot = sct.grab({'left': x, 'top': y, 'width': w, 'height': h})
+                else:
+                    shot = sct.grab(sct.monitors[0])
+            img = Image.frombytes('RGB', shot.size, shot.rgb)
+        small = img.resize((128, 72), Image.BILINEAR)
         arr = np.array(small).astype(np.float32)
         hsv = np.array(Image.fromarray(arr.astype(np.uint8)).convert('HSV'))
         h_, s_, v_ = hsv[..., 0].astype(np.float32), hsv[..., 1].astype(np.float32), hsv[..., 2].astype(np.float32)
@@ -676,7 +704,7 @@ def _local_vision_summary(region=None):
         red_ratio = float(red_mask.mean())
         green_ratio = float(green_mask.mean())
         bright = float(v_.mean())
-        out = [f'分辨率: {shot.size[0]}x{shot.size[1]}',
+        out = [f'分辨率: {img.width}x{img.height}',
                f'主色调: ' + ', '.join(colors),
                f'亮度: {bright:.0f}/255（{"明亮" if bright > 140 else "中等" if bright > 70 else "偏暗"}）',
                f'红色块占比: {red_ratio * 100:.1f}%（疑似警告/错误/红色按钮）',
@@ -720,16 +748,92 @@ def _call_vision_api(prompt, img_path, cfg):
     raise last_err
 
 
-def cmd_see(region=None, save=None):
-    """看懂屏幕：截图 → 本地画面分析 + 双引擎 OCR +（已配置时）多模态模型理解。"""
-    ok, path = _screenshot(save, region)
-    if not ok:
-        return f'❌ 截图失败: {path}'
+def _grab_screen(region=None):
+    """mss 单次截图，返回 (PIL.Image, 屏幕rect)。region: 'x,y,w,h'；全屏时 rect=(0,0,宽,高)。"""
+    import mss
+    from PIL import Image
+    with mss.mss() as sct:
+        if region:
+            x, y, w, h = [int(v) for v in region.split(',')]
+            shot = sct.grab({'left': x, 'top': y, 'width': w, 'height': h})
+            rect = (x, y, w, h)
+        else:
+            shot = sct.grab(sct.monitors[0])
+            rect = (0, 0, shot.width, shot.height)
+    img = Image.frombytes('RGB', shot.size, shot.rgb)
+    return img, rect
+
+
+def _parse_vlm_json(resp):
+    """容错解析视觉模型返回：剥离```json围栏/前后说明，json.loads 失败则正则提取关键字段。"""
+    import json
+    import re
+    if not resp:
+        return None
+    text = resp.strip()
+    m = re.search(r'```(?:json)?\s*(.*?)```', text, re.S)
+    if m:
+        text = m.group(1).strip()
+    else:
+        m = re.search(r'\{.*\}', text, re.S)
+        if m:
+            text = m.group(0)
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    out = {}
+    m = re.search(r'"summary"\s*:\s*"([^"]*)"', text)
+    if m:
+        out['summary'] = m.group(1)
+    els = re.findall(r'"text"\s*:\s*"([^"]*)"\s*,\s*"pos"\s*:\s*"([^"]*)"', text)
+    if els:
+        out['elements'] = [{'text': t, 'pos': p} for t, p in els]
+    warn = re.search(r'"warnings"\s*:\s*\[(.*?)\]', text, re.S)
+    if warn:
+        out['warnings'] = re.findall(r'"([^"]+)"', warn.group(1))
+    act = re.search(r'"actions"\s*:\s*\[(.*?)\]', text, re.S)
+    if act:
+        out['actions'] = re.findall(r'"([^"]+)"', act.group(1))
+    return out or None
+
+
+def cmd_see(region=None, save=None, engine='smart', vlm=True):
+    """看懂屏幕（快+准）：一次截图 → 本地分析(毫秒级) + OCR +（已配置时）多模态模型理解。
+
+    engine: smart=自适应（默认，干净界面秒出，乱码界面自动融合 RapidOCR）；auto=Windows OCR 优先、空则 RapidOCR 兜底（最快）；
+            fusion=双引擎强制融合（最准但慢）；win=仅 Windows OCR；rapid=仅 RapidOCR。
+    VLM 返回的元素坐标已换算为屏幕像素，可直接用于点击。
+    """
+    import time as _t
+    from PIL import Image
+    # 🔧 快看模式修复：vlm=False 时强制 auto 引擎，跳过 smart 融合（避免乱码界面触发 RapidOCR 25s+）
+    if not vlm and engine == 'smart':
+        engine = 'auto'
+    t0 = _t.time()
+    try:
+        img, rect = _grab_screen(region)
+    except Exception as e:
+        return f'❌ 截图失败: {e}'
+    ox, oy, sw, sh = rect
+    if not save:
+        save = os.path.join(SHOTS, f'desktop_{time.strftime("%Y%m%d_%H%M%S")}.png')
+    elif os.path.dirname(save) == '':
+        save = os.path.join(SHOTS, save)
+    try:
+        img.save(save)
+    except Exception as e:
+        return f'❌ 截图保存失败: {e}'
     out = []
     out.append('【画面信息】')
-    out.append(f'截图: {path}')
-    out.append(_local_vision_summary(region))
-    lines = _ocr_screen(region, engine='fusion')
+    out.append(f'截图: {save}')
+    out.append(f'区域: {ox},{oy},{sw},{sh}')
+    out.append(_local_vision_summary(region, img))
+    lines = _ocr_screen(region, engine=engine)
+    if not lines and not vlm:
+        # 🔧 纯本地快看：Windows OCR 全空时用半分辨率 RapidOCR 兜底（避免全分辨率 35s+）
+        lines = _ocr_screen_rapid(region, scale=0.5)
+    # vlm=True 且 OCR 空：不跑 RapidOCR 兜底，语义理解交给视觉大模型（快）
     if lines:
         out.append(f'【识别文字】{len(lines)} 行:')
         for ln in lines[:80]:
@@ -737,28 +841,52 @@ def cmd_see(region=None, save=None):
     else:
         out.append('【识别文字】未识别到文字')
     cfg = _vision_config()
-    if cfg.get('api_key'):
+    if vlm and cfg.get('api_key'):
         out.append('【视觉理解】')
         prompt = ('你是桌面自动化视觉助手。请仔细看这张屏幕截图，用中文JSON回答：'
                   '{"summary":"一句话描述当前画面",'
                   '"elements":[{"type":"按钮/输入框/弹窗/图标/文字/其他","text":"可见文字","pos":"x,y","state":"可用/禁用/高亮/普通"}],'
                   '"warnings":["发现的异常或需要注意的地方"],'
-                  '"actions":["建议下一步操作"]}。只输出JSON。')
+                  '"actions":["建议下一步操作"]}。'
+                  '注意：图片宽高为 {W}x{H}，元素位置请输出 0~1 归一化坐标（x=像素x/宽，y=像素y/高），'
+                  '最多列 8 个关键元素。只输出JSON，不要任何解释。')
         try:
-            from PIL import Image
-            im = Image.open(path)
-            if im.width > 1280:
-                im = im.resize((1280, int(im.height * 1280 / im.width)), Image.LANCZOS)
+            cimg = img
+            if cimg.width > 1280:
+                cimg = cimg.resize((1280, max(1, int(cimg.height * 1280 / cimg.width))), Image.BILINEAR)
             cpath = os.path.join(SHOTS, 'vision_tmp.jpg')
-            im.convert('RGB').save(cpath, 'JPEG', quality=82, optimize=True)
-            resp = _call_vision_api(prompt, cpath, cfg)
-            out.append(resp)
+            cimg.convert('RGB').save(cpath, 'JPEG', quality=85)
+            # 用 replace 而非 format：prompt 内含 JSON 花括号，format 会误解析报 KeyError
+            resp = _call_vision_api(
+                prompt.replace('{W}', str(cimg.width)).replace('{H}', str(cimg.height)),
+                cpath, cfg)
+            parsed = _parse_vlm_json(resp)
+            if parsed:
+                for el in parsed.get('elements') or []:
+                    p = el.get('pos', '')
+                    if ',' in p:
+                        try:
+                            px, py = [float(v) for v in p.split(',')[:2]]
+                            el['pos'] = f'{int(ox + px * sw)},{int(oy + py * sh)}'
+                        except Exception:
+                            pass
+                out.append('[结构化]')
+                out.append(f"  画面: {parsed.get('summary', '')}")
+                for el in (parsed.get('elements') or [])[:10]:
+                    out.append(f"  - {el.get('type', '?')}「{el.get('text', '')}」 pos=({el.get('pos', '?')}) {el.get('state', '')}")
+                if parsed.get('warnings'):
+                    out.append(f"  ⚠️ 注意: {'; '.join(parsed['warnings'])}")
+                if parsed.get('actions'):
+                    out.append(f"  ➡️ 建议: {'; '.join(parsed['actions'])}")
+            else:
+                out.append(resp)
         except Exception as e:
             out.append(f'（视觉模型调用失败: {e}）')
-    else:
-        out.append('【视觉理解】未配置视觉模型 → 仅本地分析。')
+    elif vlm:
+        out.append('【视觉理解】未配置视觉模型 → 仅本地分析+OCR。')
         out.append('  启用方法：在 .env 设置 VISION_API_KEY / VISION_BASE_URL / VISION_MODEL')
         out.append('  （如智谱 GLM-4V-Flash: base=https://open.bigmodel.cn/api/paas/v4 model=glm-4v-flash）')
+    out.append(f'⏱️ 耗时: {_t.time() - t0:.1f}s')
     return '\n'.join(out)
 
 
@@ -805,8 +933,8 @@ def cmd_screenshot(save, region):
     return ('✅ 截图已保存: ' if ok else '❌ ') + msg
 
 
-def cmd_ocr(region):
-    lines = _ocr_screen(region)
+def cmd_ocr(region, engine='auto'):
+    lines = _ocr_screen(region, engine=engine)
     if not lines:
         return '（屏幕上未识别到文字）'
     out = [f'识别到 {len(lines)} 行文字:']
@@ -1150,9 +1278,12 @@ def main():
     a = sub.add_parser('activate'); a.add_argument('--title', required=True)
     s = sub.add_parser('screenshot'); s.add_argument('--save', default=''); s.add_argument('--region', default='')
     o = sub.add_parser('ocr'); o.add_argument('--region', default='')
+    o.add_argument('--engine', default='auto', choices=['smart', 'auto', 'fusion', 'win', 'rapid'])
     see = sub.add_parser('see')
     see.add_argument('--region', default='')
     see.add_argument('--save', default='')
+    see.add_argument('--engine', default='smart', choices=['smart', 'auto', 'fusion', 'win', 'rapid'])
+    see.add_argument('--no-vlm', action='store_true')
     c = sub.add_parser('click'); c.add_argument('--text', required=True)
     c.add_argument('--exclude', default=''); c.add_argument('--region', default='')
     c.add_argument('--double', action='store_true')
@@ -1198,9 +1329,9 @@ def main():
         elif cmd == 'screenshot':
             print(cmd_screenshot(args.save, args.region or None))
         elif cmd == 'ocr':
-            print(cmd_ocr(args.region or None))
+            print(cmd_ocr(args.region or None, engine=args.engine))
         elif cmd == 'see':
-            print(cmd_see(args.region or None, args.save or None))
+            print(cmd_see(args.region or None, args.save or None, engine=args.engine, vlm=not args.no_vlm))
         elif cmd == 'click':
             print(cmd_click_text(args.text, args.exclude, args.region or None,
                                  args.double, args.window or None))

@@ -2,7 +2,8 @@
   "version": 1,
   "plugins": {
     "ai_video": "832d8c0a949ae13a30121b76f875f9486af762b36b3bc3ab3f7596b675caece8",
-    "auto_images": "5c50ef6eeef3be9e8a7691d656393dcd485ff11c9144f7192450837b1830aeca",
+    "auto_images": "9f482532fe47649ecdecdec56f589425175ec1da4841e901088b8eaa19a6af33",
+    "camera_vision": "58775c19ff6c6c3dab5671cda8b037004a6b5be70e045ad34d836bae419fb7c9",
     "ci_helper": "f53d07f9c6370723b011493a3b1f4a44b99dcadfd3fa49885a74ce0254c7595f",
     "cloud_ai": "187b4d8f7800c1609c19b7af41db68ec12d9732889ff0feadab999526aa5a001",
     "code_completion": "7a18cf4b8f9bf42404de7a1ed8e75b530b12ef2230208b2e13123120630bcab5",
@@ -14,7 +15,7 @@
     "debug_helper": "0dfdcf22f88ec8a2943618b3c7ba617477efabf335b244dec7251cfd78f5cf39",
     "deep_analysis": "641c90207d630675bd25e1c7e9e450bfb4697cef2156b7e6ab570b25bab6229d",
     "dependency_analyzer": "adbec7149edde719b72528ad63f109e225612d69833270eb94cfbc6fd821cd97",
-    "desktop_bot": "8b5caabde85082ec7f18d5b6301827f54b5db57e368d19f4889cbaf68f1ab600",
+    "desktop_bot": "24f2c894da33d44af3e4557163e7068816f5db4ad664693b92d94e060b16272b",
     "diff_tools": "a26f0d7d05f36fc6a432b58f341c72edde90c89334b2ab0aece51eaa81344e4e",
     "doc_generator": "37986f03872742255ac369ee15a2fe0a8049ac19fccd804835b25f3f60bcc16e",
     "docker_k8s": "2631f02dfa302732a5414fdc2e3ecba406e3e987a9327d9006c0248dae4d01fe",
@@ -31,7 +32,7 @@
     "ocr_reader": "6f5525a5ef7129002021d21fba816abd99cb5848136d219e3897745f410e0f81",
     "perf_tools": "b459752afe5020f053b06c4df0d15d975063ae8c59245d590bbe9a2abefa3d67",
     "refactor_tools": "6da9a77212f9ad3878a68cb40b2863cfbc309ee9c54818ff728604616b05a106",
-    "remote_deployer": "36405c7c23bb61beccb2d0cdea315b25804905194a2efec68a89ddebb114d3af",
+    "remote_deployer": "5eb35aa8f951143cd4c56578c8ef410d343cfee0ef3d194046feb7ba24c0640d",
     "self_evolution": "8b7e379d027d20e0347e2c24fabfaac020417b679a99cc59b5b58216568a34fa",
     "self_restart": "e14d33f2deb89226cc81177347d6ef4927c21853511d1fd636e593e50b7474c3",
     "smart_translate": "459c60285aef34a02f1db3d9457bcab0ee6cd1e25c5b01d5a2f684877cdbf3fb",
@@ -46,5 +47,5 @@
     "whisper_stt": "ba7805bce1a90b50d2d5557f5820e56cbc043b055a1417bb14c7fee6bec0d792",
     "zhanlizhi": "d25aca47c566fddb93ff6fc4251e9ec4ea89e4a79495fbc1ab30e9e82f68d0af"
   },
-  "sig": "92d616d73ef2e51e23d9a57ad11c38153c8478e841e2dc6549d34616973bb264"
+  "sig": "e4e2ae952e20750cc8c57c44aa404ad5d6a71485e6c15d40a8ec4a281d16e863"
 }

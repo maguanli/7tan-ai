@@ -291,8 +291,78 @@ def _ocr_screen_win(region=None):
         return []
 
 
-def _find_text(keywords, exclude=None, region=None, lines=None):
-    """在 OCR 结果中找关键词，返回 (cx, cy, 命中文本) 或 None。"""
+# ── OCR 相似字容错：编辑距离 ≤1 + 同音/形近字归一化 ──
+_OCR_CONFUSABLES = {
+    # 形近字（OCR 常见混淆，键=易错字，值=规范字）
+    '圪': '坛', '圢': '坛', '坥': '坛',
+    '汊': '汉', '汗': '汉',
+    '千': '干', '于': '干',
+    '太': '大', '犬': '大',
+    '入': '人', '八': '人',
+    '己': '已', '巳': '已',
+    '未': '末', '末': '未',
+    '晴': '睛', '睛': '晴',
+    '没': '设', '投': '设',
+    '乌': '鸟', '免': '兔',
+    '日': '曰', '目': '日',
+    '王': '玉', '主': '王',
+    '天': '夫', '夭': '天',
+    '午': '牛', '土': '士', '士': '土',
+    # 同音字（高频）
+    '谈': '坛', '谭': '坛', '弹': '坛', '潭': '坛',  # tán
+    '设': '社',  # shè
+    '驱': '区',  # qū
+    '尤': '游',  # yóu
+}
+
+
+def _norm_ocr_text(s):
+    """把 OCR 易错字归一化为规范字，提升模糊匹配命中率。"""
+    return ''.join(_OCR_CONFUSABLES.get(ch, ch) for ch in s)
+
+
+def _edit_distance(a, b):
+    """Levenshtein 编辑距离（DP，O(mn)）。"""
+    if a == b:
+        return 0
+    la, lb = len(a), len(b)
+    if la > lb:
+        a, b = b, a
+        la, lb = lb, la
+    if lb - la > 4:
+        return 99
+    prev = list(range(la + 1))
+    for j in range(1, lb + 1):
+        cur = [j] + [0] * la
+        cb = b[j - 1]
+        for i in range(1, la + 1):
+            cur[i] = min(prev[i] + 1, cur[i - 1] + 1, prev[i - 1] + (a[i - 1] != cb))
+        prev = cur
+    return prev[la]
+
+
+def _fuzzy_contains(k, t, max_dist=1):
+    """t 是否包含与 k 编辑距离 ≤ max_dist 的子串（仅 len(k)>=3 时启用，防短词误报）。"""
+    if len(k) < 3:
+        return False
+    if abs(len(t) - len(k)) <= max_dist and _edit_distance(k, t) <= max_dist:
+        return True
+    lk = len(k)
+    for i in range(len(t) - (lk - 1) + 1):
+        for wlen in (lk - 1, lk, lk + 1):
+            if wlen <= 0 or i + wlen > len(t):
+                continue
+            sub = t[i:i + wlen]
+            if _edit_distance(k, sub) <= max_dist:
+                return True
+    return False
+
+
+def _find_text(keywords, exclude=None, region=None, lines=None, fuzzy=True):
+    """在 OCR 结果中找关键词，返回 (cx, cy, 命中文本) 或 None。
+    - fuzzy=True（默认）：OCR 相似字容错 —— 精确子串优先；未命中时启用
+      编辑距离 ≤1 容错（关键词 ≥3 字）与同音/形近字归一化匹配，
+      解决「坛→圪」「你好→钧好」等 OCR 识别偏差导致的误拦截/误报。"""
     if lines is None:
         lines = _ocr_screen(region)
     if not lines:
@@ -304,7 +374,11 @@ def _find_text(keywords, exclude=None, region=None, lines=None):
             continue
         for ln in lines:
             t = ln['text']
-            if not (k in t or t in k):
+            matched = (k in t or t in k)
+            if not matched and fuzzy and len(k) >= 3:
+                matched = (_fuzzy_contains(k, t)
+                           or _fuzzy_contains(_norm_ocr_text(k), _norm_ocr_text(t)))
+            if not matched:
                 continue
             if exs and any(e in t or t in e for e in exs):
                 continue

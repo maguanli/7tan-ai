@@ -11,6 +11,51 @@ import os
 import platform
 
 
+# ─────────────────────────────────────────────────────────────
+# 🛡️ 命令护栏：防止 AI 把对话/文档/表格/说明文字当作 shell 命令执行
+# （历史事故：AI 曾把 markdown 表格粘贴内容直接交给 cmd /c 执行）
+# ─────────────────────────────────────────────────────────────
+_MD_SIGNS = ("**", "`", "###", "---", "✅", "❌", "⚠️", "🚫", "🔧", "🎯", "📋", "📦", "①", "②", "③", "→", "▶", "●", "•", "【", "】")
+_SAFE_CMD_PREFIXES = (
+    "echo", "dir", "cd", "cls", "type", "copy", "del", "mkdir", "rmdir", "move", "ren",
+    "python", "pip", "git", "npm", "node", "npx", "yarn", "pnpm", "go", "cargo", "rustc",
+    "mvn", "gradle", "make", "cmake", "powershell", "pwsh", "cmd", "start", "set", "for",
+    "if", "reg", "schtasks", "ping", "ipconfig", "net", "curl", "wget", "tasklist",
+    "taskkill", "find", "findstr", "where", "tree", "attrib", "xcopy", "robocopy", "pause",
+    "exit", "color", "title", "systeminfo", "ver", "whoami", "hostname", "date", "time",
+    "chkdsk", "sfc", "dism", "bcdedit", "notepad", "explorer", "calc", "py", "java",
+    "javac", "kotlin", "swift", "docker", "kubectl", "helm", "ssh", "scp", "rsync",
+)
+
+
+def _guard_command(command: str) -> tuple:
+    """命令护栏：返回 (是否允许, 拒绝原因)。拦截非命令文本被当作 shell 命令执行。"""
+    c = (command or "").strip()
+    if not c:
+        return False, "命令为空"
+    if len(c) > 2000:
+        return False, f"命令过长（{len(c)}字符，上限2000），疑似粘贴了整段内容"
+    # 1) markdown / 富文本 / 文档特征 → 拦截
+    for sign in _MD_SIGNS:
+        if sign in c:
+            return False, f"参数含富文本特征「{sign}」，疑似对话/文档/表格内容，不是 shell 命令"
+    # 2) 特殊符号开头 → 粘贴片段特征
+    if c[0] in "|&<>(){};!*?[]~%":
+        return False, f"命令以特殊字符「{c[0]}」开头，疑似文本片段"
+    # 3) 含竖线管道且夹杂中文 → 疑似表格行（合法纯 ASCII 管道命令不受影响）
+    if "|" in c:
+        cjk = sum(1 for ch in c if '\u4e00' <= ch <= '\u9fff')
+        if cjk > 0:
+            return False, "参数含竖线且夹杂中文，疑似表格/文档内容"
+    # 4) 中文占比过高且首词不是已知命令 → 疑似自然语言
+    first_word = c.split()[0].lower() if c.split() else ""
+    if first_word not in _SAFE_CMD_PREFIXES:
+        cjk = sum(1 for ch in c if '\u4e00' <= ch <= '\u9fff')
+        if len(c) > 0 and cjk / len(c) >= 0.3:
+            return False, "参数以中文为主，疑似自然语言/说明文字，不是 shell 命令"
+    return True, ""
+
+
 def _run_cmd(cmd: list, cwd: str = None, timeout: int = 120) -> str:
     """通用命令执行器"""
     try:
@@ -37,7 +82,7 @@ def _run_cmd(cmd: list, cwd: str = None, timeout: int = 120) -> str:
 
 @register_tool(
     name="run_command",
-    description="在项目目录中执行任意 shell 命令，返回标准输出和错误输出。适合运行构建脚本、脚本文件等。",
+    description="在项目目录中执行任意 shell 命令，返回标准输出和错误输出。适合运行构建脚本、脚本文件等。⚠️ 只允许真正的 shell 命令（如 dir / python script.py / git status）；严禁把对话内容、文档、表格或说明文字当作命令执行——此类参数会被命令护栏自动拒绝。",
     parameters={
         "type": "object",
         "properties": {
@@ -50,7 +95,12 @@ def _run_cmd(cmd: list, cwd: str = None, timeout: int = 120) -> str:
     category="terminal"
 )
 def run_command(command: str, cwd: str = ".", timeout: int = 120) -> str:
-    """执行 shell 命令"""
+    """执行 shell 命令（带命令护栏，拒绝非命令文本）"""
+    ok, reason = _guard_command(command)
+    if not ok:
+        return (f"🚫 已拒绝执行（命令护栏）: {reason}\n"
+                f"请只传入真正的 shell 命令（如 dir / python script.py / git status），"
+                f"不要把对话内容、文档、表格或说明文字当作命令执行。")
     if platform.system() == "Windows":
         cmd = ["cmd", "/c", command]
     else:

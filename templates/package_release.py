@@ -76,6 +76,8 @@ EXCLUDE_DIRS = {
 EXCLUDE_FILE_PATTERNS = {
     ".encryption_key",
     ".encryption_salt",
+    ".env",
+    ".env.*",
     "private_key.pem",
     "*.key",
     "*.p12",

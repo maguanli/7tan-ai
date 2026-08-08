@@ -55,6 +55,38 @@ def _update_env_model(ai_key: str, model: str):
         logger.warning(f"⚠️ .env 中未找到 DEEPSEEK_MODEL= 行，未更新")
 
 
+def _update_env_vision(vision: dict):
+    """同步 .env 中的视觉模型环境变量（VISION_API_KEY / VISION_BASE_URL / VISION_MODEL）"""
+    env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
+    updates = {}
+    for env_key, cfg_key in (("VISION_API_KEY", "api_key"), ("VISION_BASE_URL", "base_url"), ("VISION_MODEL", "model")):
+        v = vision.get(cfg_key)
+        if v and "••••" not in str(v) and "***" not in str(v):
+            updates[env_key] = str(v).strip()
+    if not updates:
+        return
+    lines = []
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    found = set()
+    with open(env_path, "w", encoding="utf-8") as f:
+        for line in lines:
+            matched = False
+            for env_key in updates:
+                if line.startswith(env_key + "="):
+                    f.write(f"{env_key}={updates[env_key]}\n")
+                    found.add(env_key)
+                    matched = True
+                    break
+            if not matched:
+                f.write(line)
+        for env_key, val in updates.items():
+            if env_key not in found:
+                f.write(f"{env_key}={val}\n")
+    logger.info(f"✅ .env 视觉模型变量已更新: {list(updates.keys())}")
+
+
 @router.get("")
 async def get_settings():
     """获取当前配置（敏感字段脱敏）"""
@@ -65,9 +97,14 @@ async def get_settings():
         from ...database.db import get_all_ai_configs, get_active_ai_config
         ai_configs = get_all_ai_configs(mask_secrets=True)
         active_cfg = get_active_ai_config(mask_secrets=True)
+        vision_cfg = (config.get("ai") or {}).get("vision") or {}
+        if vision_cfg.get("api_key"):
+            vision_cfg = dict(vision_cfg)
+            vision_cfg["api_key"] = _mask_secret(vision_cfg["api_key"])
         config["ai"] = {
             "active": active_cfg.get("config_key", "") if active_cfg else "",
             "configs": {c["config_key"]: c for c in ai_configs} if ai_configs else {},
+            "vision": vision_cfg,
         }
     except Exception as e:
         logger.warning(f"从数据库读取 AI 配置失败: {e}")
@@ -143,6 +180,23 @@ async def update_settings(updates: dict):
                     _update_env_model(ai_updates["active"], active_cfg.get("model", ""))
             except Exception as e:
                 logger.warning(f"同步 .env 模型变量失败: {e}")
+
+        # 👁️ 视觉AI模型配置：写入 YAML 的 ai.vision 段 + 同步 .env（VISION_*）
+        vision_updates = (ai_updates or {}).get("vision")
+        if isinstance(vision_updates, dict) and vision_updates:
+            vision_cfg = config.setdefault("ai", {}).setdefault("vision", {})
+            changed = False
+            for k in ("api_key", "base_url", "model"):
+                v = vision_updates.get(k)
+                if v is None or (isinstance(v, str) and ("••••" in v or "***" in v)):
+                    continue
+                v = str(v).strip()
+                if v:
+                    vision_cfg[k] = v
+                    changed = True
+            if changed:
+                _update_env_vision(vision_cfg)
+                logger.info("👁️ 视觉AI模型配置已更新")
 
         # 其余配置写入 YAML
         def deep_merge(base: dict, overlay: dict):

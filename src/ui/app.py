@@ -5144,7 +5144,72 @@ class SettingsPage(QWidget):
 
         outer.addLayout(split)
 
+        # ===== 视觉AI模型（增强桌面机器人视力）=====
+        vis_box = QFrame()
+        vis_box.setStyleSheet(f"QFrame {{ background: {THEME['bg_dark']}; border: 1px solid {THEME['border']}; border-radius: 8px; }}")
+        vis_lay = QVBoxLayout(vis_box)
+        vis_lay.setContentsMargins(14, 12, 14, 12)
+        vis_lay.setSpacing(8)
 
+        vis_title = QLabel("👁️ 视觉AI模型（增强桌面机器人视力）")
+        vis_title.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {THEME['accent']};")
+        vis_lay.addWidget(vis_title)
+
+        vis_hint = QLabel("为了增加软件的视觉功能（看懂屏幕·识别按钮·发现弹窗），请添加一个视觉AI模型，"
+                          "推荐「GLM-4V-Flash」（智谱AI，免费额度，国内直连）。"
+                          "未配置时桌面机器人自动使用本地离线识别（RapidOCR 双引擎）。")
+        vis_hint.setWordWrap(True)
+        vis_hint.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px; "
+                               f"background: {THEME['bg_input']}; border-radius: 6px; padding: 8px 10px;")
+        vis_lay.addWidget(vis_hint)
+
+        vis_form = QFormLayout()
+        vis_form.setSpacing(8)
+
+        self._vis_key = QLineEdit()
+        self._vis_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self._vis_key.setPlaceholderText("sk-...（智谱开放平台 open.bigmodel.cn 获取）")
+        self._vis_key.setMinimumHeight(32)
+
+        self._vis_key_toggle = QPushButton("显示")
+        self._vis_key_toggle.setFixedSize(42, 32)
+        self._vis_key_toggle.setToolTip("显示/隐藏视觉 API Key")
+        self._vis_key_toggle.setCheckable(True)
+        self._vis_key_toggle.clicked.connect(self._toggle_vision_key_visibility)
+        self._vis_key_toggle.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['bg_input']}; border: 1px solid {THEME['border']};
+                border-radius: 6px; color: {THEME['text_secondary']}; font-size: 11px; padding: 2px 6px; }}
+            QPushButton:checked {{ background: {THEME['accent']}; color: #000; font-weight: bold; }}
+            QPushButton:hover {{ border-color: {THEME['accent']}; }}
+        """)
+
+        vis_key_row = QHBoxLayout()
+        vis_key_row.setSpacing(6)
+        vis_key_row.addWidget(self._vis_key, 1)
+        vis_key_row.addWidget(self._vis_key_toggle)
+
+        self._vis_base = QLineEdit("https://open.bigmodel.cn/api/paas/v4")
+        self._vis_base.setMinimumHeight(32)
+
+        self._vis_model = QLineEdit("glm-4v-flash")
+        self._vis_model.setMinimumHeight(32)
+
+        vis_form.addRow("视觉 API Key:", vis_key_row)
+        vis_form.addRow("Base URL:", self._vis_base)
+        vis_form.addRow("模型名称:", self._vis_model)
+        vis_lay.addLayout(vis_form)
+
+        vis_save = QPushButton("💾 保存视觉模型")
+        vis_save.setFixedHeight(34)
+        vis_save.clicked.connect(self._save_vision_config)
+        vis_save.setStyleSheet(f"""
+            QPushButton {{ background: {THEME['accent2']}; color: white; border: none;
+                border-radius: 6px; font-size: 13px; font-weight: bold; }}
+            QPushButton:hover {{ background: {THEME['accent']}; color: #000; }}
+        """)
+        vis_lay.addWidget(vis_save)
+
+        outer.addWidget(vis_box)
 
         # 初始化默认 URL
 
@@ -5822,7 +5887,11 @@ class SettingsPage(QWidget):
 
         self._on_config_selected(0)
 
-
+        # 视觉AI模型（增强桌面机器人视力）
+        vision = (settings.get("ai") or {}).get("vision") or {}
+        self._vis_key.setText(vision.get("api_key", ""))
+        self._vis_base.setText(vision.get("base_url", "https://open.bigmodel.cn/api/paas/v4"))
+        self._vis_model.setText(vision.get("model", "glm-4v-flash"))
 
         site = settings.get("site_7tan", {})
 
@@ -5919,6 +5988,40 @@ class SettingsPage(QWidget):
         self._post_json("PUT", "/api/settings", payload, ok_msg=f"模型「{key}」已保存！")
 
 
+
+    def _toggle_vision_key_visibility(self, checked):
+        """切换视觉模型 API Key 显示/隐藏 — 显示时从本地配置加载真实密钥"""
+        if checked:
+            try:
+                from src.config.loader import load_config
+                config = load_config()
+                real_key = (config.get("ai") or {}).get("vision", {}).get("api_key", "")
+                if real_key:
+                    self._vis_key.setText(real_key)
+            except Exception:
+                pass
+            self._vis_key.setEchoMode(QLineEdit.EchoMode.Normal)
+            self._vis_key_toggle.setText("隐藏")
+        else:
+            self._vis_key.setEchoMode(QLineEdit.EchoMode.Password)
+            self._vis_key_toggle.setText("显示")
+
+    def _save_vision_config(self):
+        """保存视觉AI模型配置（GLM-4V-Flash 等），增强桌面机器人视力"""
+        vis = {}
+        key = self._vis_key.text().strip()
+        if key and "••" not in key and "***" not in key:
+            vis["api_key"] = key
+        base = self._vis_base.text().strip()
+        if base:
+            vis["base_url"] = base
+        model = self._vis_model.text().strip()
+        if model:
+            vis["model"] = model
+        if not vis:
+            QMessageBox.warning(self, "提示", "请填写视觉模型配置（API Key / Base URL / 模型名称至少一项）。")
+            return
+        self._post_json("PUT", "/api/settings", {"ai": {"vision": vis}}, ok_msg="视觉模型已保存！桌面机器人视力增强已生效。")
 
     def _toggle_site_pass_visibility(self, checked):
 

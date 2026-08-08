@@ -18,12 +18,12 @@ VSVersionInfo(
           [
             StringStruct(u'CompanyName', u'7Tan'),
             StringStruct(u'FileDescription', u'7Tan AI 全功能助手'),
-            StringStruct(u'FileVersion', u'1.0.9'),
+            StringStruct(u'FileVersion', u'1.0.10'),
             StringStruct(u'InternalName', u'7tan-editor'),
             StringStruct(u'LegalCopyright', u'\xa9 7\xe5\x9d\x9b\xe7\x89\x88\xe6\x9d\x83\xe6\x89\x80\xe6\x9c\x89'),
             StringStruct(u'OriginalFilename', u'7tan-editor.exe'),
             StringStruct(u'ProductName', u'7Tan Editor'),
-            StringStruct(u'ProductVersion', u'1.0.9'),
+            StringStruct(u'ProductVersion', u'1.0.10'),
             StringStruct(u'Comments', u'7Tan AI assistant tool')
           ]
         )

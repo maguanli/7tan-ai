@@ -729,7 +729,7 @@ def _call_vision_api(prompt, img_path, cfg):
             {'type': 'image_url', 'image_url': {'url': f'data:image/jpeg;base64,{b64}'}},
         ]}],
         'temperature': 0.2,
-        'max_tokens': 2048,  # 视觉输出上限（GLM-4.6V 支持更长输出）
+        'max_tokens': 1024,  # 视觉输出上限（GLM-4.6V API 限制 [1,1024]）
         # 关闭思考模式：加快响应、省 token（仅对支持思考的模型生效，旧模型自动忽略）
         'thinking': {'type': 'disabled'},
     }

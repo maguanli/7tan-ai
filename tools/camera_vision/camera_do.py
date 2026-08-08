@@ -188,7 +188,7 @@ def _vlm_analyze(image_path: str, prompt: str = "", timeout: int = 60) -> dict:
                 {"type": "image_url", "image_url": {"url": data_url}},
             ]
         }],
-        "max_tokens": 2048,
+        "max_tokens": 1024,
         "temperature": 0.3,
         # 关闭思考模式：加快响应、省 token（仅对支持思考的模型生效，旧模型自动忽略）
         "thinking": {"type": "disabled"},

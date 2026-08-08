@@ -508,26 +508,63 @@ def _screenshot(save=None, region=None):
 _VISION_ENV_KEYS = [('VISION_API_KEY', 'api_key'), ('VISION_BASE_URL', 'base_url'), ('VISION_MODEL', 'model')]
 
 
+def _load_env_file():
+    """解析项目根目录 .env（desktop_do.py 独立运行时也可靠）。"""
+    env = {}
+    try:
+        p = os.path.join(ROOT, '.env')
+        if os.path.exists(p):
+            with open(p, encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#') or '=' not in line:
+                        continue
+                    k, v = line.split('=', 1)
+                    env[k.strip()] = v.strip().strip('"').strip("'")
+    except Exception:
+        pass
+    return env
+
+
+def _expand_env_ref(val):
+    """展开 ${XXX} 引用：从 os.environ 或 .env 文件取值；无引用则原样返回。"""
+    if not val:
+        return val
+    import re
+    m = re.fullmatch(r'\$\{(\w+)\}', str(val).strip())
+    if not m:
+        return val
+    name = m.group(1)
+    v = os.environ.get(name)
+    if not v:
+        v = _load_env_file().get(name)
+    return v or val
+
+
 def _vision_config():
-    """读取视觉模型配置：优先环境变量，回退 config.yaml 的 ai.vision 段。"""
+    """读取视觉模型配置：优先环境变量/.env，回退 config.yaml 的 ai.vision 段，并展开 ${XXX} 引用。"""
     cfg = {}
+    envfile = _load_env_file()
     for env, key in _VISION_ENV_KEYS:
-        v = os.environ.get(env)
+        v = os.environ.get(env) or envfile.get(env)
         if v:
             cfg[key] = v
-    if not cfg.get('api_key'):
-        try:
-            import yaml
-            yp = os.path.join(ROOT, 'config', 'config.yaml')
-            if os.path.exists(yp):
-                with open(yp, encoding='utf-8') as f:
-                    d = yaml.safe_load(f) or {}
-                v = (d.get('ai') or {}).get('vision') or {}
-                for k in ('api_key', 'base_url', 'model'):
-                    if k not in cfg and v.get(k):
-                        cfg[k] = v[k]
-        except Exception:
-            pass
+    # 从 config.yaml 补齐缺失项（含 ${XXX} 引用展开）
+    try:
+        import yaml
+        yp = os.path.join(ROOT, 'config', 'config.yaml')
+        if os.path.exists(yp):
+            with open(yp, encoding='utf-8') as f:
+                d = yaml.safe_load(f) or {}
+            v = (d.get('ai') or {}).get('vision') or {}
+            for k in ('api_key', 'base_url', 'model'):
+                if k not in cfg and v.get(k):
+                    cfg[k] = _expand_env_ref(v[k])
+    except Exception:
+        pass
+    # 最终保险：api_key 若仍是 ${XXX} 占位符，尝试展开
+    if cfg.get('api_key'):
+        cfg['api_key'] = _expand_env_ref(cfg['api_key'])
     return cfg
 
 
@@ -590,14 +627,23 @@ def _call_vision_api(prompt, img_path, cfg):
             {'type': 'image_url', 'image_url': {'url': f'data:image/jpeg;base64,{b64}'}},
         ]}],
         'temperature': 0.2,
-        'max_tokens': 1600,
+        'max_tokens': 1024,  # 智谱 glm-4v-flash 上限 1024
     }
-    r = requests.post(url, json=body,
-                      headers={'Authorization': f"Bearer {cfg.get('api_key')}"},
-                      timeout=60)
-    r.raise_for_status()
-    data = r.json()
-    return data['choices'][0]['message']['content']
+    import time as _time
+    last_err = None
+    for attempt in range(2):  # 失败重试一次（偶发 RemoteDisconnected/网络抖动）
+        try:
+            r = requests.post(url, json=body,
+                              headers={'Authorization': f"Bearer {cfg.get('api_key')}"},
+                              timeout=60)
+            r.raise_for_status()
+            data = r.json()
+            return data['choices'][0]['message']['content']
+        except Exception as e:
+            last_err = e
+            if attempt == 0:
+                _time.sleep(1.2)
+    raise last_err
 
 
 def cmd_see(region=None, save=None):

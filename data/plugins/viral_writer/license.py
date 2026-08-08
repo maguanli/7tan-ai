@@ -46,9 +46,10 @@ PURCHASE_INFO = (
     "💳 爆款写作插件为付费插件\n"
     f"   • 免费试用 {TRIAL_LIMIT} 次，之后需要授权码激活\n"
     "   • 价格：50 元/台（永久授权，绑定当前电脑）\n"
-    "   • 购买方式：微信/支付宝转账后获取授权码\n"
-    "   • 联系作者：QQ：773178032  微信：wap801276\n"
-    "   • 充值页面：https://www.7tan.com/task/wallet.php\n"
+    "   • 购买方式：在线购买，余额付款秒发授权码\n"
+    "   • 购买页面：https://www.7tan.com/pro.php\n"
+    "   • 流程：登录 → 粘贴机器指纹 → 余额购买 → 复制授权码\n"
+    "   • 余额不足先去充值：https://www.7tan.com/task/wallet.php\n"
     "   • 换机 / 重装系统可联系作者免费补发\n"
     "   • 获取授权码后，用 viral_activate 输入即可激活\n"
 )

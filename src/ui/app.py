@@ -9310,9 +9310,29 @@ def launch_app():
 
         from .onboarding import show_onboarding
 
+        _ob_retry = {"count": 0}
+
         def _show_ob():
 
             try:
+
+                # 主窗口尚未可见时延迟重试（最多 5 次），避免遮罩显示在未就绪的窗口上
+
+                if not window.isVisible():
+
+                    _ob_retry["count"] += 1
+
+                    if _ob_retry["count"] <= 5:
+
+                        logger.info(f"[Onboarding] 主窗口尚未可见，{_ob_retry['count']} 次延迟重试")
+
+                        QTimer.singleShot(500, _show_ob)
+
+                        return
+
+                    logger.warning("[Onboarding] 主窗口长时间不可见，放弃显示引导遮罩")
+
+                    return
 
                 window._onboarding_overlay = show_onboarding(window, username=_cur_username)
 

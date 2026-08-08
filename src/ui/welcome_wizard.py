@@ -15,7 +15,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QFrame, QWidget, QStackedWidget, QGraphicsDropShadowEffect,
-    QSizePolicy, QCheckBox,
+    QSizePolicy, QCheckBox, QApplication,
 )
 from PyQt6.QtGui import (
     QFont, QColor, QPainter, QPixmap, QLinearGradient,
@@ -823,11 +823,20 @@ def show_welcome_wizard(parent=None, username: str | None = None) -> str | None:
     """
     显示新手引导向导。
 
+    修复(2026-08-09): exec() 前先 show/raise_/activateWindow 并处理事件，
+    确保向导窗口一定可见且在最前，避免用户看不到窗口导致"卡住无响应"。
+
     Returns:
         用户输入的 API Key（可能为空）
         None 表示用户关闭窗口取消
     """
     wizard = WelcomeWizard(parent, username=username)
+    # 确保向导窗口显示在最前并被激活（防止窗口在后台/未聚焦，用户以为程序卡死）
+    wizard.show()
+    wizard.raise_()
+    wizard.activateWindow()
+    QApplication.processEvents()
+
     result = wizard.exec()
 
     if result == QDialog.DialogCode.Accepted:

@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "1.0.7",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.7.zip",
+      "md5": "acf225b7543f285facb9d6180116db00",
+      "size": 416392297,
+      "notes": "1.0.7 更新：修复登录错误提示——账号或密码错误时正确显示「账号或密码错误」，不再显示「服务器返回 401」；exe 版本信息同步更新。",
+      "release_date": "2026-08-08"
+    },
+    {
       "version": "1.0.6",
       "channel": "stable",
       "platform": "windows",

@@ -134,28 +134,32 @@ class SessionSidebar(QFrame):
     def load_sessions(self, sessions: list):
         logger.info(f"[SessionSidebar] load_sessions 被调用, {len(sessions)} 个会话")
         self._list.blockSignals(True)
+        self._list.setUpdatesEnabled(False)  # 批量添加期间抑制逐项重绘，避免列表卡顿
         self._list.clear()
         self._sessions = sessions
-        for s in sessions:
-            title = s.get("title", "对话")
-            if len(title) > 20:
-                title = title[:20] + ".."
-            sid = s.get("session_id", "")
-            updated = s.get("last_activity") or s.get("updated_at", "")
-            if updated:
-                updated = _fmt_sidebar_time(updated)
-            msg_count = s.get("message_count", 0)
-            display = f"💬 {title}"
-            if msg_count:
-                display += f"  ⟨{msg_count}⟩"
-            if updated:
-                display += f"  {updated}"
-            item = QListWidgetItem(display)
-            item.setData(Qt.ItemDataRole.UserRole, sid)
-            item.setData(Qt.ItemDataRole.UserRole + 1, updated)
-            item.setToolTip(f"{title}\n{msg_count} 条消息\n{updated}")
-            self._list.addItem(item)
-        self._list.blockSignals(False)
+        try:
+            for s in sessions:
+                title = s.get("title", "对话")
+                if len(title) > 20:
+                    title = title[:20] + ".."
+                sid = s.get("session_id", "")
+                updated = s.get("last_activity") or s.get("updated_at", "")
+                if updated:
+                    updated = _fmt_sidebar_time(updated)
+                msg_count = s.get("message_count", 0)
+                display = f"💬 {title}"
+                if msg_count:
+                    display += f"  ⟨{msg_count}⟩"
+                if updated:
+                    display += f"  {updated}"
+                item = QListWidgetItem(display)
+                item.setData(Qt.ItemDataRole.UserRole, sid)
+                item.setData(Qt.ItemDataRole.UserRole + 1, updated)
+                item.setToolTip(f"{title}\n{msg_count} 条消息\n{updated}")
+                self._list.addItem(item)
+        finally:
+            self._list.setUpdatesEnabled(True)  # 恢复重绘，一次性刷新
+            self._list.blockSignals(False)
         self._count_label.setText(f"{len(sessions)} 条对话")
 
     def select_session(self, session_id: str):

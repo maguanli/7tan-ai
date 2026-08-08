@@ -19,10 +19,40 @@ from pygments.util import ClassNotFound
 from ._theme import THEME
 
 
+# ── 批量高度同步（性能优化，防主线程卡顿光标转圈）──────────────────
+# 历史会话批量渲染时，若每条消息都用 QTimer.singleShot(0) 同步高度，
+# 会形成 0ms 定时器风暴：全部在事件循环里连发，每个都触发 QTextDocument
+# 全量布局（doc.size()），主线程被长时间占满 → 界面假死、光标变圈圈。
+# 改为：合并到单个 60ms 定时器批次，逐条处理并在每条之间让出事件循环。
+_pending_height_sync: list = []
+
+
+def _drain_height_sync():
+    """逐个处理待同步的气泡；每条之间让出事件循环，保证界面可响应。"""
+    global _pending_height_sync
+    if not _pending_height_sync:
+        return
+    bubble = _pending_height_sync.pop(0)
+    try:
+        bubble._sync_content_height()
+    except Exception:
+        pass  # 气泡可能已被删除（RuntimeError），忽略
+    if _pending_height_sync:
+        QTimer.singleShot(0, _drain_height_sync)  # 处理下一条前让事件循环喘息
+
+
 class MessageBubble(QFrame):
     """单条消息的气泡组件，支持 Markdown、复制、重试"""
 
     retry_requested = pyqtSignal(str)  # 触发重试
+
+    @classmethod
+    def _schedule_height_sync(cls, bubble):
+        """延迟批量同步气泡高度（合并 0ms 定时器风暴，防主线程卡顿光标转圈）。"""
+        global _pending_height_sync
+        _pending_height_sync.append(bubble)
+        if len(_pending_height_sync) == 1:
+            QTimer.singleShot(60, _drain_height_sync)  # 合并窗口：60ms 内入队的全部合并
 
     @staticmethod
     def _format_timestamp(ts: str) -> str:
@@ -197,8 +227,7 @@ class MessageBubble(QFrame):
             html = self._md_to_html(content, text_color)
 
         self._content_label.setHtml(html)
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(0, self._sync_content_height)  # 布局完成后一次性同步高度（替代 contentsChanged 风暴）
+        MessageBubble._schedule_height_sync(self)  # 批量分片同步高度（替代 0ms 定时器风暴，防主线程卡顿光标转圈）
         logger.debug("[MessageBubble] setText done")
 
         self.setStyleSheet(f"""

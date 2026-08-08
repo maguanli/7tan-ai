@@ -993,7 +993,9 @@ class ChatPage(QWidget):
             while self._messages_layout.count() > 0:
                 item = self._messages_layout.takeAt(0)
                 if item.widget():
-                    item.widget().deleteLater()
+                    w = item.widget()
+                    w.setParent(None)  # 先脱离布局，避免逐个删除时反复触发全量重排（防主线程卡顿）
+                    w.deleteLater()
             self._messages.clear()
             self._message_data.clear()
             self._current_parsed_data.clear()

@@ -126,3 +126,4 @@ src/security/auth_client_new.pyd
 /tracked_list.txt
 # 根目录数据库（敏感数据不入库）
 /games.db
+mobile/  

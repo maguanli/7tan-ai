@@ -8233,6 +8233,11 @@ class SettingsPage(QWidget):
 
 
 状态: {'✅ 已安装（重启后可用）' if is_installed else '⬇️ 未安装'}"""
+        # ── 付费插件：授权状态醒目提示 ──
+        if info.get('paid') or info.get('type') == 'paid':
+            lic_html = self._plugin_license_status_html(info.get('id', ''))
+            if lic_html:
+                detail += f"\n\n🔑 授权状态: {lic_html}"
 
         if info.get('source') == 'remote' and not is_installed:
 
@@ -8249,6 +8254,21 @@ class SettingsPage(QWidget):
 
 
     # =================== 付费插件授权管理 ===================
+
+    def _plugin_license_status_html(self, plugin_id: str) -> str:
+        """付费插件授权状态（HTML 彩色，供详情区显示）"""
+        mod = self._plugin_license_module(plugin_id)
+        if mod is None:
+            return '<span style="color:#EF4444;font-weight:bold;">⚠️ 付费插件未安装，需先安装</span>'
+        try:
+            if mod.is_activated():
+                return '<span style="color:#10B981;font-weight:bold;">✅ 已激活（永久授权，全部功能可用）</span>'
+            left = mod.trial_left()
+            if left > 0:
+                return f'<span style="color:#F59E0B;font-weight:bold;">🔓 未激活 · 免费试用剩余 {left} 次</span>'
+            return '<span style="color:#EF4444;font-weight:bold;">🚫 免费试用已用完，无法继续使用，请购买激活！</span>'
+        except Exception:
+            return ''
 
     def _plugin_license_module(self, plugin_id: str):
 
@@ -8336,19 +8356,57 @@ class SettingsPage(QWidget):
 
         try:
 
+            color = THEME['text_secondary']
+
+            font_size = '12px'
+
             if mod.is_activated():
 
-                self._license_status_label.setText("✅ 本插件已激活，永久授权，全部功能可用！")
+                text = "✅ 本插件已激活，永久授权，全部功能可用！"
+
+                color = THEME['success']
+
+                font_size = '13px'
 
             elif hasattr(mod, "status_text"):
 
-                self._license_status_label.setText(mod.status_text())
+                text = mod.status_text()
+
+                try:
+
+                    left = mod.trial_left()
+
+                except Exception:
+
+                    left = 1
+
+                if left <= 0:
+
+                    color = '#EF4444'
+
+                    font_size = '13px'
+
+                else:
+
+                    color = '#F59E0B'
+
+                    font_size = '13px'
 
             else:
 
-                self._license_status_label.setText("🔑 输入授权码并点击「激活」解锁本插件。")
+                text = "🔑 输入授权码并点击「激活」解锁本插件。"
+
+            self._license_status_label.setStyleSheet(
+
+                f"color: {color}; font-size: {font_size}; font-weight: bold;")
+
+            self._license_status_label.setText(text)
 
         except Exception as e:
+
+            self._license_status_label.setStyleSheet(
+
+                f"color: {THEME['text_secondary']}; font-size: 12px;")
 
             self._license_status_label.setText(f"⚠️ 读取授权状态失败: {e}")
 
@@ -8524,7 +8582,9 @@ class SettingsPage(QWidget):
 
 
 
-            item_text = f"{icon} {name}  v{ver}  [{status}]\n     {desc}\n     👤 {author} | 🔧 {', '.join(tools)}"
+            is_paid = p.get("paid") or p.get("type") == "paid"
+            paid_flag = " 💰付费" if is_paid else ""
+            item_text = f"{icon} {name}  v{ver}  [{status}]{paid_flag}\n     {desc}\n     👤 {author} | 🔧 {', '.join(tools)}"
 
 
 

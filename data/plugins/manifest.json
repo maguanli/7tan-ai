@@ -653,12 +653,12 @@
   },
   {
     "id": "viral_writer",
-    "name": "爆款文章工坊",
+    "name": "爆款写作",
     "version": "2.1.0",
     "author": "7Tan",
     "type": "paid",
     "category": "写作",
-    "description": "爆款文章工坊（付费插件）：爆款选题/标题/大纲/正文/金句/发布前检查，DeepSeek 深度推理一站式产出高传播公众号文章。免费试用5次，viral_activate 输入授权码激活。",
+    "description": "爆款写作（付费插件）：爆款选题/标题/大纲/正文/金句/发布前检查，DeepSeek 深度推理一站式产出高传播公众号文章。免费试用5次，viral_activate 输入授权码激活。",
     "tools": [
       "viral_topic",
       "viral_title",
@@ -671,7 +671,7 @@
     ],
     "icon": "🚀",
     "paid": true,
-    "price": "XX元/台（永久）",
+    "price": "50元/台（永久）",
     "trial": 5
   },
   {

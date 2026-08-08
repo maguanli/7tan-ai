@@ -827,7 +827,19 @@ def run_agent_loop(
                 # 截断过长结果
                 if len(result_str) > 8000:
                     result_str = result_str[:8000] + "\n...(truncated)"
-                
+
+                # ⚠️ 插件AI失败标记（如 [PLUGIN_ERROR]）→ 主动识别，注入给 AI + 事件层
+                plugin_err = ""
+                if "[PLUGIN_ERROR]" in result_str:
+                    m = re.search(r"\[PLUGIN_ERROR\]\s*code=(\S+)\s*msg=(.+)", result_str, re.S)
+                    if m:
+                        plugin_err = m.group(2).strip().splitlines()[0][:160]
+                if plugin_err:
+                    result_str = (f"【插件AI深度生成失败】{plugin_err}\n"
+                                  f"处理要求：告知用户失败原因；建议检查 设置→AI设置 中的模型配置（API Key/模型名/网络）；"
+                                  f"询问是否重试或切换模型；不要把模板兜底内容当作 AI 深度生成结果推荐。\n"
+                                  f"---\n{result_str}")
+
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_id,
@@ -841,7 +853,8 @@ def run_agent_loop(
                 # 🔔 流式事件：工具结果
                 if event_callback:
                     try:
-                        event_callback({"type": "tool_result", "tool_name": tool_name, "summary": result_preview, "error": "error" in result_str[:50].lower()})
+                        is_err = ("error" in result_str[:50].lower()) or bool(plugin_err)
+                        event_callback({"type": "tool_result", "tool_name": tool_name, "summary": result_preview, "error": is_err, "plugin_error": plugin_err})
                     except Exception:
                         pass
                 

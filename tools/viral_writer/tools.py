@@ -50,9 +50,10 @@ SYSTEM_PROMPT = """你是公众号爆款文章专家，深谙新媒体传播规�
 12. 只输出中文结果，直接给干货，不要解释方法论"""
 
 
-def _llm(system_prompt: str, user_prompt: str, max_tokens: int = 2500,
-         temperature: float = 0.9) -> str:
-    """调用当前活跃 AI 模型（复用软件配置，零额外配置）；失败返回 None"""
+def _llm_ex(system_prompt: str, user_prompt: str, max_tokens: int = 2500,
+             temperature: float = 0.9):
+    """调用当前活跃 AI 模型（复用软件配置）。返回 (text, err)：
+    text 不为 None 表示成功；失败时 text=None，err 为可读失败原因。"""
     try:
         from openai import OpenAI
         from src.config.loader import get_active_ai_config
@@ -61,7 +62,9 @@ def _llm(system_prompt: str, user_prompt: str, max_tokens: int = 2500,
         url = cfg.get("base_url", "https://api.deepseek.com/v1")
         model = cfg.get("model", "")
         if not key:
-            return None
+            return None, "未配置 AI 模型 API Key（请到 设置→AI设置 配置）"
+        if not model:
+            return None, "未配置 AI 模型名称（请到 设置→AI设置 配置）"
         client = OpenAI(api_key=key, base_url=url, timeout=90)
         resp = client.chat.completions.create(
             model=model,
@@ -72,9 +75,22 @@ def _llm(system_prompt: str, user_prompt: str, max_tokens: int = 2500,
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        return resp.choices[0].message.content.strip()
-    except Exception:
-        return None
+        return resp.choices[0].message.content.strip(), None
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+
+
+def _llm(system_prompt: str, user_prompt: str, max_tokens: int = 2500,
+         temperature: float = 0.9) -> str:
+    """兼容旧调用：成功返回文本，失败返回 None（错误详情用 _llm_ex 获取）"""
+    text, _ = _llm_ex(system_prompt, user_prompt, max_tokens, temperature)
+    return text
+
+
+def _llm_fail_text(err: str) -> str:
+    """结构化失败标记：供 AI 大脑与 UI 层 100% 识别，附带可读原因"""
+    _safe = (err or "未知错误").replace("\n", " ").replace("\r", " ")[:200]
+    return f"⚠️ AI 深度生成失败：{_safe}\n[PLUGIN_ERROR] code=llm_failed msg={_safe}"
 
 
 # ─────────────────── 1. 爆款选题 ───────────────────
@@ -105,7 +121,7 @@ def viral_topic(keyword: str = "", audience: str = "普通大众", count: int = 
               f"    目标人群: xxx\n"
               f"    爆款潜力: x.x/10（并一句话说明理由）\n"
               f"选题要覆盖不同情绪类型，避免同质化，优先选能引发争议和转发的角度。")
-    text = _llm(SYSTEM_PROMPT, prompt, max_tokens=3500, temperature=1.0)
+    text, _err = _llm_ex(SYSTEM_PROMPT, prompt, max_tokens=3500, temperature=1.0)
     if text:
         return f"🔥 爆款选题 {count} 个（面向：{audience}）\n\n{text}\n\n💡 提示：选题分最高的 2-3 个优先写，可继续用 viral_title 生成标题。"
     # LLM 失败兜底：通用选题模板
@@ -121,9 +137,9 @@ def viral_topic(keyword: str = "", audience: str = "普通大众", count: int = 
         f"《{keyword}，才是成年人最大的体面》",
         f"《关于{keyword}，这是我听过最好的答案》",
     ][:count]
-    return (f"🔥 爆款选题 {count} 个（AI 深度生成暂不可用，给出通用模板）\n\n"
+    return (_llm_fail_text(_err) + f"\n\n🔥 爆款选题 {count} 个（模板兜底）\n\n"
             + "\n".join(f"{i+1}. {t}" for i, t in enumerate(base))
-            + "\n\n💡 提示：可重试获取 AI 深度选题，或直接继续用 viral_title 生成标题。")
+            + "\n\n💡 提示：请检查 AI 模型配置后重试获取深度选题，或直接继续用 viral_title 生成标题。")
 
 
 # ─────────────────── 2. 爆款标题 ───────────────────
@@ -154,7 +170,7 @@ def viral_title(theme: str = "", count: int = 10) -> str:
               f"[序号] 标题\n"
               f"    类型: 数字/悬念/身份/场景/对比/话题/痛点/热点/反常\n"
               f"    打开率预测: 高/中高/中 + 一句话说明为什么吸引人")
-    text = _llm(SYSTEM_PROMPT, prompt, max_tokens=3000, temperature=1.0)
+    text, _err = _llm_ex(SYSTEM_PROMPT, prompt, max_tokens=3000, temperature=1.0)
     if text:
         return f"✍️ 爆款标题 {count} 个\n\n{text}\n\n💡 建议：打开率预测最高的 3 个 A/B 测试，或选最贴合内容的一个。"
     # 兜底模板（9宫格招式全覆盖）
@@ -173,7 +189,7 @@ def viral_title(theme: str = "", count: int = 10) -> str:
     for i in range(min(count, len(bases))):
         t, s = bases[i]
         out.append(f"{i+1}. {s}\n    类型: {t}\n    打开率预测: 中高")
-    return f"✍️ 爆款标题 {count} 个（AI 深度生成暂不可用，通用模板）\n\n" + "\n".join(out)
+    return _llm_fail_text(_err) + f"\n\n✍️ 爆款标题 {count} 个（模板兜底）\n\n" + "\n".join(out)
 
 
 # ─────────────────── 3. 爆款大纲 ───────────────────
@@ -212,17 +228,17 @@ def viral_outline(topic: str = "", structure: str = "五段式") -> str:
                   f"③ 观点金句: 2-3个核心观点+对应金句（标注用了哪种金句技法）\n"
                   f"④ 情绪升华: 如何拔高到人生/价值层面，让人想转发\n"
                   f"⑤ 互动引导: 结尾如何引导点赞/在看/评论/转发")
-    text = _llm(SYSTEM_PROMPT, prompt, max_tokens=2800, temperature=0.85)
+    text, _err = _llm_ex(SYSTEM_PROMPT, prompt, max_tokens=2800, temperature=0.85)
     if text:
         return f"📐 爆款大纲：「{topic}」（{structure}）\n\n{text}\n\n💡 大纲确认后可继续用 viral_write 生成完整正文。"
     if "SCQA" in structure.upper():
-        return (f"📐 爆款大纲：「{topic}」（SCQA，AI 深度生成暂不可用）\n\n"
+        return (_llm_fail_text(_err) + f"\n\n📐 爆款大纲：「{topic}」（SCQA，模板兜底）\n\n"
                 f"① S 情景：写出读者熟悉的日常场景，让人对号入座\n"
                 f"② C 冲突：制造一个矛盾/痛点/转折，打破平静\n"
                 f"③ Q 疑问：提出读者心里的问题，引发好奇\n"
                 f"④ A 回答：给出观点+故事+方案，金句收尾\n"
                 f"⑤ 互动：结尾提问/求点赞在看")
-    return (f"📐 爆款大纲：「{topic}」（AI 深度生成暂不可用，标准五段式）\n\n"
+    return (_llm_fail_text(_err) + f"\n\n📐 爆款大纲：「{topic}」（模板兜底·标准五段式）\n\n"
             f"① 钩子开头：反常识/扎心提问/场景代入，3秒留住读者\n"
             f"② 故事推进：讲 1-2 个身边人的具体故事，有细节有画面\n"
             f"③ 观点金句：提炼 2-3 个观点，每个配一句金句\n"
@@ -260,10 +276,10 @@ def viral_write(topic: str = "", outline: str = "", word_count: int = 1200) -> s
               f"6. 有具体人物故事细节，不要空谈道理；写故事用「我朋友/同事/同学」增加真实感\n"
               f"7. 正文用 ## 作为小标题分隔，段落之间用空行\n"
               f"8. 结尾用四法之一或组合：总结升华/金句收尾/互动引导/留白余味，并引导点赞/在看/评论/转发")
-    text = _llm(SYSTEM_PROMPT, prompt, max_tokens=4000, temperature=0.95)
+    text, _err = _llm_ex(SYSTEM_PROMPT, prompt, max_tokens=4000, temperature=0.95)
     if text:
         return f"📝 爆款正文：「{topic}」（约{word_count}字）\n\n{text}"
-    return (f"📝 爆款正文：「{topic}」（AI 深度生成暂不可用，请稍后重试或用 viral_outline 先出大纲）\n\n"
+    return (_llm_fail_text(_err) + f"\n\n📝 爆款正文：「{topic}」（模板兜底，请修复 AI 配置后重试）\n\n"
             f"① 钩子：{topic}，这个问题的答案，藏在我两个朋友的故事里。\n\n"
             f"② 故事：发小的故事（细节+转折+感悟）……\n\n"
             f"③ 观点：**{topic}，才是成年人最大的清醒。**\n\n"
@@ -297,10 +313,10 @@ def viral_quotes(article: str = "") -> str:
               f"    卡片标题: 2-4字（如：体面/清醒/活着）\n"
               f"    场景: 放文章开头/结尾/第几段后\n\n"
               f"文章：\n{article[:3000]}")
-    text = _llm(SYSTEM_PROMPT, prompt, max_tokens=1800, temperature=0.9)
+    text, _err = _llm_ex(SYSTEM_PROMPT, prompt, max_tokens=1800, temperature=0.9)
     if text:
         return f"💬 金句卡片文案 6 条\n\n{text}\n\n💡 可继续用配图工具把金句做成 1080x608 卡片插入文章。"
-    return ("💬 金句卡片文案 6 条（AI 深度生成暂不可用，通用模板）\n\n"
+    return (_llm_fail_text(_err) + "\n\n💬 金句卡片文案 6 条（模板兜底）\n\n"
             "[1] 人生没有白走的路，每一步都算数。\n    技法: 仿写\n    卡片标题: 路\n    场景: 结尾\n"
             "[2] 真正成熟，是学会和自己和解。\n    技法: 反常\n    卡片标题: 和解\n    场景: 第2段后\n"
             "[3] 你羡慕的生活，都是别人熬出来的。\n    技法: 对比\n    卡片标题: 熬\n    场景: 第3段后\n"

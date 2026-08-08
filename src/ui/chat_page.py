@@ -176,6 +176,7 @@ class ChatPage(QWidget):
         self.tts_notice_signal.connect(self._on_tts_notice)
         self.tts_speak_signal.connect(self._on_tts_speak)
         self._tts_toast = None  # 朗读提示 Toast（懒创建，不写入聊天记录）
+        self._plugin_err_toast = None  # 插件AI失败 Toast（懒创建，不写入聊天记录）
 
         # 🎤 注册 TTS 朗读开始回调 → Toast 显示「正在说」（跨线程经信号）
         try:
@@ -2075,6 +2076,8 @@ class ChatPage(QWidget):
 
             summary = event.get("summary", "")
 
+            plugin_err = event.get("plugin_error", "")
+
             for tc in self._streaming_tool_calls:
 
                 if tc.get("tool") == tool_name and tc.get("status") == "running":
@@ -2084,6 +2087,12 @@ class ChatPage(QWidget):
                     tc["summary"] = summary
 
             self._update_streaming_display()
+
+            # ⚠️ 插件AI深度生成失败 → 红色 Toast 主动通知（不依赖 AI 自觉）
+
+            if plugin_err:
+
+                self._show_plugin_error_toast(tool_name, plugin_err)
 
 
 
@@ -2532,6 +2541,43 @@ class ChatPage(QWidget):
         try:
             if self._tts_toast is not None:
                 self._tts_toast.hide()
+        except Exception:
+            pass
+
+    def _show_plugin_error_toast(self, tool_name: str, err: str) -> None:
+        """插件 AI 深度生成失败 → 红色 Toast（5 秒），主动提示检查 AI 设置。"""
+        try:
+            if self._plugin_err_toast is None:
+                self._plugin_err_toast = QLabel(self)
+                self._plugin_err_toast.setStyleSheet(
+                    "background-color: rgba(127,29,29,240);"
+                    "color: #ffe4e4;"
+                    "border: 1px solid #dc2626;"
+                    "border-radius: 14px;"
+                    "padding: 10px 16px;"
+                    "font-size: 13px;"
+                )
+                self._plugin_err_toast.setWordWrap(True)
+                self._plugin_err_toast.setMaximumWidth(620)
+                self._plugin_err_toast.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+                self._plugin_err_toast.hide()
+            shown = err if len(err) <= 100 else err[:100] + "…"
+            self._plugin_err_toast.setText(
+                f"⚠️ 插件「{tool_name}」AI 深度生成失败：{shown}\n请在 设置→AI设置 检查模型配置后重试")
+            self._plugin_err_toast.adjustSize()
+            x = max(8, self.width() - self._plugin_err_toast.width() - 16)
+            self._plugin_err_toast.move(x, 16)
+            self._plugin_err_toast.show()
+            self._plugin_err_toast.raise_()
+            QTimer.singleShot(5000, self._hide_plugin_err_toast)
+        except Exception as e:
+            logger.warning(f"[Plugin] 错误 Toast 显示失败: {e}")
+
+    def _hide_plugin_err_toast(self) -> None:
+        """隐藏插件失败 Toast（QTimer 到期回调，组件可能已销毁需容错）。"""
+        try:
+            if self._plugin_err_toast is not None:
+                self._plugin_err_toast.hide()
         except Exception:
             pass
 

@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "1.0.10",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.10.zip",
+      "md5": "1ae31293f978ed0c238483e6a54e6e1b",
+      "size": 416753390,
+      "notes": "1.0.10 更新：桌面视觉增强——新增「看懂屏幕」desktop_see（快速模式约1.4秒，含视觉大模型深度理解约8秒），屏幕截图+本地分析+OCR+视觉大模型一次截图全链路复用；新增摄像头视觉插件（camera_see/camera_watch 等，无摄像头自动降级为看屏幕）；修复插件白名单哈希导致 desktop_bot/camera_vision 插件未加载问题；插件设置界面新增 desktop_see/desktop_uia/desktop_snapshot 等16个桌面工具；微信自动发消息视觉验证链路优化（动态定位窗口与输入框，输入前+发送后双重视觉验证）。",
+      "release_date": "2026-08-08"
+    },
+    {
       "version": "1.0.9",
       "channel": "stable",
       "platform": "windows",

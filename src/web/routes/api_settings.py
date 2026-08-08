@@ -97,7 +97,17 @@ async def get_settings():
         from ...database.db import get_all_ai_configs, get_active_ai_config
         ai_configs = get_all_ai_configs(mask_secrets=True)
         active_cfg = get_active_ai_config(mask_secrets=True)
-        vision_cfg = (config.get("ai") or {}).get("vision") or {}
+        # 视觉模型配置优先从数据库读取（脱敏），回退 config.yaml
+        vision_cfg = {}
+        try:
+            from ...database.db import get_vision_config
+            db_vision = get_vision_config(mask_secrets=True)
+            if db_vision:
+                vision_cfg = db_vision
+        except Exception as e:
+            logger.warning(f"从数据库读取视觉AI配置失败: {e}")
+        if not vision_cfg:
+            vision_cfg = (config.get("ai") or {}).get("vision") or {}
         if vision_cfg.get("api_key"):
             vision_cfg = dict(vision_cfg)
             vision_cfg["api_key"] = _mask_secret(vision_cfg["api_key"])
@@ -181,22 +191,21 @@ async def update_settings(updates: dict):
             except Exception as e:
                 logger.warning(f"同步 .env 模型变量失败: {e}")
 
-        # 👁️ 视觉AI模型配置：写入 YAML 的 ai.vision 段 + 同步 .env（VISION_*）
+        # 👁️ 视觉AI模型配置：写入数据库（加密）+ 同步 .env（VISION_*）+ 同步 config.yaml（ai.vision）
         vision_updates = (ai_updates or {}).get("vision")
         if isinstance(vision_updates, dict) and vision_updates:
-            vision_cfg = config.setdefault("ai", {}).setdefault("vision", {})
-            changed = False
-            for k in ("api_key", "base_url", "model"):
-                v = vision_updates.get(k)
-                if v is None or (isinstance(v, str) and ("••••" in v or "***" in v)):
-                    continue
-                v = str(v).strip()
-                if v:
-                    vision_cfg[k] = v
-                    changed = True
-            if changed:
-                _update_env_vision(vision_cfg)
-                logger.info("👁️ 视觉AI模型配置已更新")
+            from ...database.db import get_vision_config, save_vision_config
+            existing = get_vision_config(mask_secrets=False) or {}
+            api_key = str(vision_updates.get("api_key", "") or "").strip()
+            if not api_key or "••" in api_key or "***" in api_key:
+                api_key = existing.get("api_key", "")
+            base_url = str(vision_updates.get("base_url", "") or "").strip() or existing.get("base_url", "") or "https://open.bigmodel.cn/api/paas/v4"
+            model = str(vision_updates.get("model", "") or "").strip() or existing.get("model", "") or "glm-4v-flash"
+            save_vision_config(api_key=api_key, base_url=base_url, model=model)
+            vision_cfg = {"api_key": api_key, "base_url": base_url, "model": model}
+            config.setdefault("ai", {})["vision"] = vision_cfg
+            _update_env_vision(vision_cfg)
+            logger.info("👁️ 视觉AI模型配置已写入数据库")
 
         # 其余配置写入 YAML
         def deep_merge(base: dict, overlay: dict):

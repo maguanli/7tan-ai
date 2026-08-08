@@ -353,6 +353,39 @@ class AiConfig(Base):
         self.api_key = encrypt_password(plaintext) if plaintext else ""
 
 
+class AiVisionConfig(Base):
+    """视觉 AI 模型配置表 — 桌面机器人视力增强（GLM-4V-Flash 等）"""
+    __tablename__ = "ai_vision_config"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    api_key = Column(String)  # 加密存储
+    base_url = Column(String, default="https://open.bigmodel.cn/api/paas/v4")
+    model = Column(String, default="glm-4v-flash")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self, mask_secrets: bool = False) -> dict:
+        plain_key = self.get_api_key()
+        if mask_secrets and len(plain_key) > 6:
+            display_key = plain_key[:3] + "••••" + plain_key[-3:]
+        else:
+            display_key = plain_key
+        return {
+            "id": self.id, "api_key": display_key,
+            "base_url": self.base_url, "model": self.model,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def get_api_key(self) -> str:
+        """解密获取 API Key"""
+        return decrypt_password(self.api_key or "")
+
+    def set_api_key(self, plaintext: str):
+        """加密存储 API Key"""
+        self.api_key = encrypt_password(plaintext) if plaintext else ""
+
+
 class ConversationHistory(Base):
     """对话历史表"""
     __tablename__ = "conversation_history"
@@ -434,6 +467,11 @@ def init_db(db_path: str = None):
         ensure_default_ai_config()
     except Exception as e:
         logger.warning(f"AI 配置迁移跳过: {e}")
+    # 从 YAML/.env 迁移视觉模型配置到数据库（仅首次）
+    try:
+        migrate_vision_config_to_db()
+    except Exception as e:
+        logger.warning(f"视觉模型配置迁移跳过: {e}")
     # 从 JSON/TXT 迁移记忆和提示词到数据库（仅首次）
     try:
         migrate_memory_json_to_db()
@@ -552,6 +590,114 @@ def delete_ai_config(config_key: str) -> bool:
         session.rollback()
         logger.error(f"删除 AI 配置失败: {e}")
         return False
+    finally:
+        session.close()
+
+
+# ===== 视觉 AI 模型配置管理（数据库存储） =====
+
+def get_vision_config(mask_secrets: bool = True) -> dict | None:
+    """获取视觉 AI 模型配置（单行）"""
+    session = get_session()
+    try:
+        cfg = session.query(AiVisionConfig).order_by(AiVisionConfig.id).first()
+        return cfg.to_dict(mask_secrets=mask_secrets) if cfg else None
+    finally:
+        session.close()
+
+
+def save_vision_config(api_key: str = "", base_url: str = "",
+                       model: str = "glm-4v-flash") -> dict:
+    """保存视觉 AI 模型配置（单行 upsert，API Key 加密存储）"""
+    session = get_session()
+    try:
+        cfg = session.query(AiVisionConfig).order_by(AiVisionConfig.id).first()
+        if cfg is None:
+            cfg = AiVisionConfig()
+            session.add(cfg)
+        if api_key and "••" not in api_key and "***" not in api_key:
+            cfg.set_api_key(api_key)
+        if base_url:
+            cfg.base_url = base_url
+        if model:
+            cfg.model = model
+        session.commit()
+        logger.info(f"💾 视觉AI模型配置已保存到数据库: model={cfg.model}")
+        return cfg.to_dict(mask_secrets=True)
+    except Exception as e:
+        session.rollback()
+        logger.error(f"保存视觉AI模型配置失败: {e}")
+        raise
+    finally:
+        session.close()
+
+
+def delete_vision_config() -> bool:
+    """删除视觉 AI 模型配置"""
+    session = get_session()
+    try:
+        result = session.query(AiVisionConfig).delete()
+        session.commit()
+        if result:
+            logger.info("🗑️ 已删除视觉AI模型配置")
+        return result > 0
+    except Exception as e:
+        session.rollback()
+        logger.error(f"删除视觉AI模型配置失败: {e}")
+        return False
+    finally:
+        session.close()
+
+
+def _read_project_env() -> dict:
+    """读取项目根目录 .env 文件（键值对）"""
+    env_path = Path(__file__).resolve().parents[2] / ".env"
+    result = {}
+    if not env_path.exists():
+        return result
+    try:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            result[k.strip()] = v.strip()
+    except Exception:
+        pass
+    return result
+
+
+def migrate_vision_config_to_db():
+    """将 YAML/.env 中的视觉模型配置迁移到数据库（仅当数据库无记录且存在配置时）"""
+    session = get_session()
+    try:
+        if session.query(AiVisionConfig).count() > 0:
+            return
+        api_key = base_url = model = ""
+        try:
+            from ..config.loader import load_config
+            vision = (load_config().get("ai") or {}).get("vision") or {}
+            api_key = str(vision.get("api_key", "") or "")
+            base_url = str(vision.get("base_url", "") or "")
+            model = str(vision.get("model", "") or "")
+        except Exception:
+            pass
+        if not api_key or "${" in api_key:
+            env = _read_project_env()
+            api_key = api_key if api_key and "${" not in api_key else env.get("VISION_API_KEY", "")
+            base_url = base_url or env.get("VISION_BASE_URL", "")
+            model = model or env.get("VISION_MODEL", "")
+        if api_key and "${" not in api_key:
+            cfg = AiVisionConfig()
+            cfg.set_api_key(api_key)
+            cfg.base_url = base_url or "https://open.bigmodel.cn/api/paas/v4"
+            cfg.model = model or "glm-4v-flash"
+            session.add(cfg)
+            session.commit()
+            logger.info("👁️ 已从 YAML/.env 迁移视觉AI模型配置到数据库")
+    except Exception as e:
+        session.rollback()
+        logger.warning(f"视觉AI模型配置迁移跳过: {e}")
     finally:
         session.close()
 

@@ -41,7 +41,7 @@ def _load_vision_config():
     load_dotenv(ROOT / '.env')
     api_key = os.environ.get('VISION_API_KEY', '')
     base_url = os.environ.get('VISION_BASE_URL', 'https://open.bigmodel.cn/api/paas/v4')
-    model = os.environ.get('VISION_MODEL', 'glm-4v-flash')
+    model = os.environ.get('VISION_MODEL', 'glm-4.6V')
     # 兜底：从 config.yaml 读
     if not api_key:
         try:
@@ -188,8 +188,10 @@ def _vlm_analyze(image_path: str, prompt: str = "", timeout: int = 60) -> dict:
                 {"type": "image_url", "image_url": {"url": data_url}},
             ]
         }],
-        "max_tokens": 1000,
+        "max_tokens": 2048,
         "temperature": 0.3,
+        # 关闭思考模式：加快响应、省 token（仅对支持思考的模型生效，旧模型自动忽略）
+        "thinking": {"type": "disabled"},
     }
 
     import requests

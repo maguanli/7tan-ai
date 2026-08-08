@@ -723,13 +723,15 @@ def _call_vision_api(prompt, img_path, cfg):
     with open(img_path, 'rb') as f:
         b64 = base64.b64encode(f.read()).decode()
     body = {
-        'model': cfg.get('model') or 'glm-4v-flash',
+        'model': cfg.get('model') or 'glm-4.6V',
         'messages': [{'role': 'user', 'content': [
             {'type': 'text', 'text': prompt},
             {'type': 'image_url', 'image_url': {'url': f'data:image/jpeg;base64,{b64}'}},
         ]}],
         'temperature': 0.2,
-        'max_tokens': 1024,  # 智谱 glm-4v-flash 上限 1024
+        'max_tokens': 2048,  # 视觉输出上限（GLM-4.6V 支持更长输出）
+        # 关闭思考模式：加快响应、省 token（仅对支持思考的模型生效，旧模型自动忽略）
+        'thinking': {'type': 'disabled'},
     }
     import time as _time
     last_err = None

@@ -55,6 +55,103 @@ _ocr_cache = {'ts': 0.0, 'lines': []}
 _OCR_CACHE_TTL = 3.0
 _OCR_SCALE = 0.75
 
+# ---------------------------------------------------------------
+# RapidOCR 离线引擎（PP-OCRv4，中文识别精度高，作为 Windows OCR 的补充/兜底）
+# ---------------------------------------------------------------
+_rapid_engine = None
+
+
+def _get_rapid_engine():
+    """懒加载 RapidOCR 单例（onnxruntime 离线推理，无需联网）"""
+    global _rapid_engine
+    if _rapid_engine is not None:
+        return _rapid_engine
+    try:
+        from rapidocr_onnxruntime import RapidOCR
+        _rapid_engine = RapidOCR()
+        return _rapid_engine
+    except Exception as e:
+        print(f'  ⚠️ RapidOCR 不可用: {e}')
+        return None
+
+
+def _ocr_screen_rapid(region=None, scale=1.0):
+    """RapidOCR 识别屏幕，返回 [{text, cx, cy}]（屏幕坐标）。离线、中文精度高。"""
+    eng = _get_rapid_engine()
+    if eng is None:
+        return []
+    try:
+        import mss
+        from PIL import Image
+        import numpy as np
+    except ImportError:
+        return []
+    try:
+        with mss.mss() as sct:
+            if region:
+                x, y, w, h = [int(v) for v in region.split(',')]
+                shot = sct.grab({'left': x, 'top': y, 'width': w, 'height': h})
+            else:
+                shot = sct.grab(sct.monitors[0])
+        img = Image.frombytes('RGB', shot.size, shot.rgb)
+        if scale != 1.0:
+            img = img.resize((max(1, int(img.width * scale)),
+                              max(1, int(img.height * scale))), Image.LANCZOS)
+        arr = np.array(img.convert('RGB'))
+        result, _ = eng(arr)
+        ox, oy = (0, 0)
+        if region:
+            ox, oy = int(region.split(',')[0]), int(region.split(',')[1])
+        lines = []
+        if result:
+            for box, text, score in result:
+                if not text or not str(text).strip():
+                    continue
+                t = str(text).strip()
+                xs = [p[0] for p in box]
+                ys = [p[1] for p in box]
+                cx = (min(xs) + max(xs)) / 2 / scale + ox
+                cy = (min(ys) + max(ys)) / 2 / scale + oy
+                lines.append({'text': t, 'cx': cx, 'cy': cy, 'engine': 'rapid'})
+        return lines
+    except Exception as e:
+        print(f'  ⚠️ RapidOCR 出错: {e}')
+        return []
+
+
+def _merge_ocr_lines(win_lines, rapid_lines):
+    """双引擎结果按中心点距离去重合并（距离<20px 视为同一行，保留文本更长者）。"""
+    merged = []
+    for ln in (win_lines or []) + (rapid_lines or []):
+        dup = False
+        for m in merged:
+            if abs(m['cx'] - ln['cx']) < 20 and abs(m['cy'] - ln['cy']) < 20:
+                if len(ln['text']) > len(m['text']):
+                    m['text'] = ln['text']
+                dup = True
+                break
+        if not dup:
+            merged.append(dict(ln))
+    return merged
+
+
+def _ocr_screen(region=None, engine='auto'):
+    """全屏/区域 OCR 入口：auto=Windows OCR 优先、空则 RapidOCR 兜底；
+    win=仅 Windows OCR；rapid=仅 RapidOCR；fusion=双引擎融合去重。"""
+    if engine == 'rapid':
+        return _ocr_screen_rapid(region)
+    if engine == 'fusion':
+        win_lines = _ocr_screen(region, engine='win')
+        rapid_lines = _ocr_screen_rapid(region)
+        return _merge_ocr_lines(win_lines, rapid_lines)
+    if engine == 'win':
+        return _ocr_screen_win(region)
+    # auto：Windows OCR 优先，识别为空时 RapidOCR 兜底（不缓存 rapid 结果）
+    lines = _ocr_screen_win(region)
+    if not lines:
+        lines = _ocr_screen_rapid(region)
+    return lines
+
 
 def _wait_async(op):
     """等待 WinRT 异步操作完成，兼容 winrt/winsdk 新旧版本。
@@ -124,8 +221,8 @@ def _get_ocr_engine():
     return _ocr_engine
 
 
-def _ocr_screen(region=None):
-    """全屏/区域截图+OCR，返回 [{text, cx, cy}]（屏幕坐标）。3 秒缓存。"""
+def _ocr_screen_win(region=None):
+    """Windows OCR 全屏/区域识别，返回 [{text, cx, cy}]（屏幕坐标）。3 秒缓存。"""
     if region is None and _ocr_cache['lines'] and time.time() - _ocr_cache['ts'] < _OCR_CACHE_TTL:
         return _ocr_cache['lines']
     eng = _get_ocr_engine()
@@ -406,6 +503,146 @@ def _screenshot(save=None, region=None):
 
 
 # ---------------------------------------------------------------
+# 视觉理解（desktop_see）：本地画面分析 + 可选多模态大模型
+# ---------------------------------------------------------------
+_VISION_ENV_KEYS = [('VISION_API_KEY', 'api_key'), ('VISION_BASE_URL', 'base_url'), ('VISION_MODEL', 'model')]
+
+
+def _vision_config():
+    """读取视觉模型配置：优先环境变量，回退 config.yaml 的 ai.vision 段。"""
+    cfg = {}
+    for env, key in _VISION_ENV_KEYS:
+        v = os.environ.get(env)
+        if v:
+            cfg[key] = v
+    if not cfg.get('api_key'):
+        try:
+            import yaml
+            yp = os.path.join(ROOT, 'config', 'config.yaml')
+            if os.path.exists(yp):
+                with open(yp, encoding='utf-8') as f:
+                    d = yaml.safe_load(f) or {}
+                v = (d.get('ai') or {}).get('vision') or {}
+                for k in ('api_key', 'base_url', 'model'):
+                    if k not in cfg and v.get(k):
+                        cfg[k] = v[k]
+        except Exception:
+            pass
+    return cfg
+
+
+def _local_vision_summary(region=None):
+    """本地画面分析：主色调 / 红绿告警块 / 亮度。不依赖外部 API，毫秒级。"""
+    try:
+        import mss
+        from PIL import Image
+        import numpy as np
+    except ImportError:
+        return '（缺 mss/PIL/numpy，无法本地分析）'
+    try:
+        with mss.mss() as sct:
+            if region:
+                x, y, w, h = [int(v) for v in region.split(',')]
+                shot = sct.grab({'left': x, 'top': y, 'width': w, 'height': h})
+            else:
+                shot = sct.grab(sct.monitors[0])
+        img = Image.frombytes('RGB', shot.size, shot.rgb)
+        small = img.resize((128, 72), Image.LANCZOS)
+        arr = np.array(small).astype(np.float32)
+        hsv = np.array(Image.fromarray(arr.astype(np.uint8)).convert('HSV'))
+        h_, s_, v_ = hsv[..., 0].astype(np.float32), hsv[..., 1].astype(np.float32), hsv[..., 2].astype(np.float32)
+        # 主色调（量化统计）
+        q = small.quantize(colors=6)
+        pal = q.getpalette() or []
+        counts = sorted(q.getcolors(), reverse=True)[:4]
+        colors = []
+        for cnt, idx in counts:
+            rgb = pal[idx * 3: idx * 3 + 3]
+            colors.append(f'#{rgb[0]:02X}{rgb[1]:02X}{rgb[2]:02X}({cnt * 100 // (128 * 72)}%)')
+        # 红/绿告警块（HSV 色域）
+        red_mask = ((h_ > 235) | (h_ < 12)) & (s_ > 100) & (v_ > 90)
+        green_mask = (h_ > 55) & (h_ < 100) & (s_ > 90) & (v_ > 90)
+        red_ratio = float(red_mask.mean())
+        green_ratio = float(green_mask.mean())
+        bright = float(v_.mean())
+        out = [f'分辨率: {shot.size[0]}x{shot.size[1]}',
+               f'主色调: ' + ', '.join(colors),
+               f'亮度: {bright:.0f}/255（{"明亮" if bright > 140 else "中等" if bright > 70 else "偏暗"}）',
+               f'红色块占比: {red_ratio * 100:.1f}%（疑似警告/错误/红色按钮）',
+               f'绿色块占比: {green_ratio * 100:.1f}%（疑似成功/可用状态）']
+        return '\n'.join(out)
+    except Exception as e:
+        return f'（本地分析出错: {e}）'
+
+
+def _call_vision_api(prompt, img_path, cfg):
+    """调用 OpenAI 兼容视觉模型接口（如 GLM-4V / Qwen-VL / GPT-4o），返回文本。"""
+    import base64
+    import requests
+    base = (cfg.get('base_url') or 'https://api.deepseek.com/v1').rstrip('/')
+    url = base + '/chat/completions'
+    with open(img_path, 'rb') as f:
+        b64 = base64.b64encode(f.read()).decode()
+    body = {
+        'model': cfg.get('model') or 'glm-4v-flash',
+        'messages': [{'role': 'user', 'content': [
+            {'type': 'text', 'text': prompt},
+            {'type': 'image_url', 'image_url': {'url': f'data:image/jpeg;base64,{b64}'}},
+        ]}],
+        'temperature': 0.2,
+        'max_tokens': 1600,
+    }
+    r = requests.post(url, json=body,
+                      headers={'Authorization': f"Bearer {cfg.get('api_key')}"},
+                      timeout=60)
+    r.raise_for_status()
+    data = r.json()
+    return data['choices'][0]['message']['content']
+
+
+def cmd_see(region=None, save=None):
+    """看懂屏幕：截图 → 本地画面分析 + 双引擎 OCR +（已配置时）多模态模型理解。"""
+    ok, path = _screenshot(save, region)
+    if not ok:
+        return f'❌ 截图失败: {path}'
+    out = []
+    out.append('【画面信息】')
+    out.append(f'截图: {path}')
+    out.append(_local_vision_summary(region))
+    lines = _ocr_screen(region, engine='fusion')
+    if lines:
+        out.append(f'【识别文字】{len(lines)} 行:')
+        for ln in lines[:80]:
+            out.append(f'  ({int(ln["cx"])},{int(ln["cy"])}) {ln["text"]}')
+    else:
+        out.append('【识别文字】未识别到文字')
+    cfg = _vision_config()
+    if cfg.get('api_key'):
+        out.append('【视觉理解】')
+        prompt = ('你是桌面自动化视觉助手。请仔细看这张屏幕截图，用中文JSON回答：'
+                  '{"summary":"一句话描述当前画面",'
+                  '"elements":[{"type":"按钮/输入框/弹窗/图标/文字/其他","text":"可见文字","pos":"x,y","state":"可用/禁用/高亮/普通"}],'
+                  '"warnings":["发现的异常或需要注意的地方"],'
+                  '"actions":["建议下一步操作"]}。只输出JSON。')
+        try:
+            from PIL import Image
+            im = Image.open(path)
+            if im.width > 1280:
+                im = im.resize((1280, int(im.height * 1280 / im.width)), Image.LANCZOS)
+            cpath = os.path.join(SHOTS, 'vision_tmp.jpg')
+            im.convert('RGB').save(cpath, 'JPEG', quality=82, optimize=True)
+            resp = _call_vision_api(prompt, cpath, cfg)
+            out.append(resp)
+        except Exception as e:
+            out.append(f'（视觉模型调用失败: {e}）')
+    else:
+        out.append('【视觉理解】未配置视觉模型 → 仅本地分析。')
+        out.append('  启用方法：在 .env 设置 VISION_API_KEY / VISION_BASE_URL / VISION_MODEL')
+        out.append('  （如智谱 GLM-4V-Flash: base=https://open.bigmodel.cn/api/paas/v4 model=glm-4v-flash）')
+    return '\n'.join(out)
+
+
+# ---------------------------------------------------------------
 # 命令实现
 # ---------------------------------------------------------------
 def cmd_check_env():
@@ -420,6 +657,11 @@ def cmd_check_env():
         out.append('  ✅ Windows OCR 引擎（zh-Hans-CN）')
     else:
         out.append('  ⚠️ Windows OCR 引擎不可用')
+    try:
+        __import__('rapidocr_onnxruntime')
+        out.append('  ✅ RapidOCR 离线引擎（中文识别增强，双引擎兜底）')
+    except ImportError:
+        out.append('  ⚠️ rapidocr_onnxruntime（未安装，中文增强不可用；pip install rapidocr_onnxruntime）')
     wins = _list_windows('微信')
     out.append(f'  📱 可见窗口总数: {len(_list_windows())}，含「微信」的窗口: {len(wins)}')
     return '环境检查:\n' + '\n'.join(out)
@@ -788,6 +1030,9 @@ def main():
     a = sub.add_parser('activate'); a.add_argument('--title', required=True)
     s = sub.add_parser('screenshot'); s.add_argument('--save', default=''); s.add_argument('--region', default='')
     o = sub.add_parser('ocr'); o.add_argument('--region', default='')
+    see = sub.add_parser('see')
+    see.add_argument('--region', default='')
+    see.add_argument('--save', default='')
     c = sub.add_parser('click'); c.add_argument('--text', required=True)
     c.add_argument('--exclude', default=''); c.add_argument('--region', default='')
     c.add_argument('--double', action='store_true')
@@ -834,6 +1079,8 @@ def main():
             print(cmd_screenshot(args.save, args.region or None))
         elif cmd == 'ocr':
             print(cmd_ocr(args.region or None))
+        elif cmd == 'see':
+            print(cmd_see(args.region or None, args.save or None))
         elif cmd == 'click':
             print(cmd_click_text(args.text, args.exclude, args.region or None,
                                  args.double, args.window or None))

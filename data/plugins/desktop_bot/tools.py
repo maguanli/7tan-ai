@@ -165,6 +165,29 @@ def desktop_ocr(region: str = "") -> str:
 
 
 @register_tool(
+    name="desktop_see",
+    description="看懂屏幕（视觉理解·视力增强）：截图→本地画面分析（主色调/亮度/红绿告警块）+双引擎OCR全文（Windows OCR + RapidOCR 融合，中文识别率大幅提升）；已配置视觉模型(VISION_API_KEY)时调用多模态大模型理解画面语义，输出元素列表/状态/警告/操作建议。比 desktop_ocr 更全面——能看懂「画面里有什么、按钮是否可用、有没有弹窗」；看不清/识别不出时优先用这个。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "region": {"type": "string", "description": "区域 x,y,w,h（留空=全屏）", "default": ""},
+            "save": {"type": "string", "description": "截图保存路径（留空自动保存到 data/screenshots）", "default": ""},
+        },
+        "required": [],
+    },
+    category="desktop"
+)
+def desktop_see(region: str = "", save: str = "") -> str:
+    """看懂屏幕：本地画面分析 + 双引擎 OCR +（可选）多模态视觉理解"""
+    args = ['see']
+    if region:
+        args += ['--region', region]
+    if save:
+        args += ['--save', save]
+    return _run(args, timeout=120)
+
+
+@register_tool(
     name="desktop_uia",
     description="UI Automation 控件树：直接读取目标窗口的原生控件（按钮/输入框/文本/列表项），带控件类型/名称/坐标。比 OCR 快 10 倍且零乱码（不依赖图像识别）。适合：找微信发送按钮、输入框、菜单项等原生控件。优先 pywinauto，自动回退 uiautomation。",
     parameters={

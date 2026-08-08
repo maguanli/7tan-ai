@@ -462,6 +462,13 @@ LOGO：已上传（512x512）  截图：5 张
     <li><b>内置防发错机制</b>：发送前搜索目标 → 验证聊天窗口 → 确认后发送；</li>
     <li>使用场景：定时给粉丝群发游戏资讯、自动回复。</li>
   </ul>
+  <p><b>👁️ 视力增强（看懂屏幕）</b>：</p>
+  <ul>
+    <li><code>desktop_see</code> 看懂屏幕：截图 → 本地画面分析（主色调 / 亮度 / 红绿告警块）→ 双引擎 OCR 全文（Windows OCR + RapidOCR 离线融合，中文识别率大幅提升）→ 输出元素坐标；</li>
+    <li><b>RapidOCR 离线引擎</b>：PP-OCRv4 中文模型，不联网、毫秒级，小字 / 游戏界面 / 复杂背景识别更强，作为 Windows OCR 的自动兜底与融合引擎；</li>
+    <li><b>视觉模型深度理解（可选）</b>：在 <code>.env</code> 配置 <code>VISION_API_KEY / VISION_BASE_URL / VISION_MODEL</code>（如智谱 GLM-4V-Flash）后，<code>desktop_see</code> 自动调用多模态大模型，输出「画面描述 / 元素列表（按钮·输入框·弹窗）/ 状态（可用·禁用）/ 警告 / 操作建议」；</li>
+    <li>配合 UIA 控件树与模板匹配，实现「看得见、读得懂、点得准」的完整视觉闭环。</li>
+  </ul>
 
   <h3>6.11 📰 公众号发布</h3>
   <ul>

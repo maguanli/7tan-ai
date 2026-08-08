@@ -1,8 +1,1 @@
-fix(ui): 修复打开历史对话主线程卡顿光标转圈
-
-- message_bubble: 批量高度同步改为合并队列+逐条分片drain，
-  消除每条消息 QTimer.singleShot(0) 形成的定时器风暴
-  （每个都触发 QTextDocument 全量布局，主线程被占满导致光标转圈）
-- chat_page: _clear_messages 先 setParent(None) 再 deleteLater，
-  避免逐个删除时反复触发全量重排
-- session_sidebar: 批量加载会话列表时抑制逐项重绘，结束一次性刷新
+chore: 清理残留临时测试文件

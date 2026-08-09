@@ -236,7 +236,7 @@ class ChatPage(QWidget):
         self._all_rendered = True
         self._lazy_loading = False
         self._batch_rendering = False  # suppress _scroll_to_bottom during batch
-        self._HISTORY_CHUNK = 15
+        self._HISTORY_CHUNK = 10
         self._LAZY_CHUNK = 10
         self._voice_mode = False  # 语音模式开关
         self._voice_gender = "female"  # 语音性别: female(花颜) / male(云希)
@@ -767,8 +767,13 @@ class ChatPage(QWidget):
             html = html.replace('<hr>', '<hr style="border-color:#1e293b;margin:8px 0;">')
             html = html.replace('<hr/>', '<hr style="border-color:#1e293b;margin:8px 0;">')
             return f'<div style="color:{text_color};font-size:13px;line-height:1.6;word-break:break-word;overflow-wrap:break-word;max-width:100%;">{html}</div>'
-        except ImportError:
-            esc = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        except Exception as _parse_err:
+            # [修复] 任何解析异常都降级为纯文本，绝不中断后台解析线程（防止 UI 永久卡在"正在准备"）
+            try:
+                from html import escape as _esc
+                esc = _esc(content)
+            except Exception:
+                esc = str(content).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             return f'<div style="color:{text_color};font-size:13px;line-height:1.6;white-space:pre-wrap;max-width:100%;">{esc}</div>'
 
     @staticmethod
@@ -784,6 +789,19 @@ class ChatPage(QWidget):
             except IndexError:
                 lang = "text"
             code = match.group(2)
+            # [优化] 超长代码块跳过 pygments 高亮（pygments 对大代码块很慢）
+            if len(code) > 5000:
+                from html import escape as _esc
+                return (
+                    '<div style="position:relative;margin:8px 0;border-radius:6px;overflow:hidden;border:1px solid #3e3d32;">'
+                    '<div style="background:#272822;color:#75715e;font-size:11px;padding:4px 14px;'
+                    'display:flex;justify-content:space-between;align-items:center;">'
+                    '<span style="font-weight:bold;color:#a6e22e;">' + lang + '（超长代码）</span>'
+                    '<span style="color:#75715e;font-size:10px;">[Ctrl+C 复制]</span>'
+                    '</div>'
+                    '<pre style="background:#272822;padding:12px;margin:0;overflow-x:auto;font-size:12px;line-height:1.5;border-radius:0 0 6px 6px;color:#f8f8f2;white-space:pre-wrap;">' + _esc(code) + '</pre>'
+                    '</div>'
+                )
             try:
                 lexer = get_lexer_by_name(lang, stripall=True)
             except Exception:
@@ -1203,21 +1221,41 @@ class ChatPage(QWidget):
         import threading
         def do_parse():
             parsed = []
-            for msg in batch:
-                role = msg.get("role", "system")
-                content = msg.get("content", "")
-                html = self._pre_parse_single(content, role) if content else None
-                parsed.append({
-                    "role": role, "content": content,
-                    "html": html,
-                    "timestamp": msg.get("timestamp") or msg.get("created_at", ""),
-                    "cost": msg.get("cost", 0),
-                    "tool_calls": msg.get("tool_calls"),
-                    "model": msg.get("model", ""),
-                })
+            try:
+                for msg in batch:
+                    role = msg.get("role", "system")
+                    content = msg.get("content", "")
+                    try:
+                        html = self._pre_parse_single(content, role) if content else None
+                    except Exception as _e:
+                        # [修复] 单条解析失败绝不中断整个线程：降级为纯文本 HTML
+                        from html import escape as _esc2
+                        try:
+                            esc_txt = _esc2(content) if content else ""
+                        except Exception:
+                            esc_txt = ""
+                        if role == "user":
+                            _tc = "#000000"
+                        elif role == "error":
+                            _tc = THEME["danger"]
+                        else:
+                            _tc = THEME["text_primary"]
+                        html = f'<div style="color:{_tc};font-size:13px;line-height:1.6;white-space:pre-wrap;max-width:100%;">{esc_txt}</div>' if content else None
+                    parsed.append({
+                        "role": role, "content": content,
+                        "html": html,
+                        "timestamp": msg.get("timestamp") or msg.get("created_at", ""),
+                        "cost": msg.get("cost", 0),
+                        "tool_calls": msg.get("tool_calls"),
+                        "model": msg.get("model", ""),
+                    })
+            except Exception as _parse_thread_err:
+                # [修复] 最后防线：解析线程整体异常也绝不卡死 UI（发空结果，界面至少能响应）
+                parsed = []
             self.messages_parsed_signal.emit(session_id, parsed, start_idx, total)
 
         threading.Thread(target=do_parse, daemon=True).start()
+
 
     def _on_messages_parsed(self, session_id: str, parsed: list, start_idx: int, total: int):
         """后台解析完成后，在主线程渐进渲染（先秒出5条，再逐条渲染）"""

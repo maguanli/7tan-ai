@@ -462,6 +462,15 @@ def init_db(db_path: str = None):
                 logger.info("✅ 数据库迁移：conversation_history 增加 model 列")
     except Exception as e:
         logger.warning(f"数据库迁移(model列)跳过: {e}")
+    # [优化] 为 conversation_history 添加复合索引（会话多时按 session 查询加速）
+    try:
+        from sqlalchemy import text as _sa_text2
+        with engine.connect() as conn:
+            conn.execute(_sa_text2("CREATE INDEX IF NOT EXISTS idx_conversation_session_created ON conversation_history (session_id, created_at)"))
+            conn.commit()
+            logger.info("✅ 数据库优化：conversation_history 增加 (session_id, created_at) 索引")
+    except Exception as e:
+        logger.warning(f"数据库索引创建跳过: {e}")
     # 从 YAML 迁移 AI 配置到数据库（仅首次）
     try:
         ensure_default_ai_config()

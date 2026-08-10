@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "1.0.11",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.11.zip",
+      "md5": "db2bf7e9222f0277146a1cfafaef08c1",
+      "size": 416815850,
+      "notes": "1.0.11 更新：资源数据库更新（新增游戏/软件收录）；插件白名单刷新（45个插件全部通过 SHA-256+HMAC 校验）；热点文章素材与发布工具链完善；若干数据与稳定性优化。",
+      "release_date": "2026-08-10"
+    },
+    {
       "version": "1.0.10",
       "channel": "stable",
       "platform": "windows",

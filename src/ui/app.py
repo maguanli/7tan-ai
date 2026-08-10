@@ -8542,7 +8542,7 @@ class SettingsPage(QWidget):
 
             icon = p.get("icon", "📦")
 
-            desc = p.get("description", "")[:60]
+            desc = p.get("description", "")[:40]
 
             ver = p.get("version", "")
 
@@ -8601,6 +8601,7 @@ class SettingsPage(QWidget):
 
 
             item = QListWidgetItem(item_text)
+            item.setSizeHint(QSize(0, 92))
 
             item.setData(Qt.ItemDataRole.UserRole, pid)
 

@@ -719,5 +719,19 @@
       "camera_watch"
     ],
     "icon": "📸"
+  },
+  {
+    "id": "novel_writer",
+    "name": "小说写作工坊（番茄方向）",
+    "version": "0.1.0",
+    "author": "AI Self-Evolution",
+    "type": "custom",
+    "category": "写作",
+    "description": "按《番茄官方写作方法论手册》实现的高质量小说写作套件：①质检引擎 novel_quality_check（8大维度：章节长度/章末钩子/AI痕迹/对话比例/段落节奏/系统面板/引号规范/敏感词）；②章节生成器 novel_chapter_blueprint（黄金节奏点5拍骨架+章末钩子公式）。支持生成→质检→修改闭环。",
+    "tools": [
+      "novel_quality_check",
+      "novel_chapter_blueprint"
+    ],
+    "icon": "📖"
   }
 ]

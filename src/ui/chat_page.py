@@ -1355,6 +1355,26 @@ class ChatPage(QWidget):
             self._scroll.verticalScrollBar().valueChanged.connect(
                 self._on_history_scroll)
         self._update_context_indicator()
+        # [修复] 内容不足一屏（无滚动条）时无法靠滚动触发懒加载 → 自动补历史
+        if not self._all_rendered:
+            QTimer.singleShot(80, self._auto_fill_history)
+
+
+    def _auto_fill_history(self):
+        """内容不足一屏时自动加载更多历史，直到可滚动或全部加载"""
+        try:
+            if self._all_rendered or self._lazy_loading:
+                return
+            sb = self._scroll.verticalScrollBar()
+            if sb.maximum() > 0:
+                return
+            self._lazy_loading = True
+            self._load_more_history()
+            # 若仍然不足一屏且未加载完，继续下一批
+            if not self._all_rendered and sb.maximum() <= 0:
+                QTimer.singleShot(80, self._auto_fill_history)
+        except Exception:
+            pass
 
     def _on_history_scroll(self, value: int):
         """滚动到顶部时自动加载更多历史消息"""
@@ -1375,30 +1395,31 @@ class ChatPage(QWidget):
         chunk = self._LAZY_CHUNK
         new_start = max(0, self._rendered_start - chunk)
 
-        # 1) 优先从预解析缓存读取
-        parsed_slice = self._current_parsed_data[new_start:self._rendered_start] if self._current_parsed_data else []
+        # 从完整历史列表取缺失的一段（绝对下标，保持升序）
         old_messages = []
-        for msg in reversed(parsed_slice):
-            md = {"role": msg["role"], "content": msg["content"], "timestamp": msg.get("timestamp") or msg.get("created_at", ""), "cost": msg.get("cost", 0), "tool_calls": msg.get("tool_calls"), "html": msg.get("html")}
-            old_messages.append(md)
-            self._message_data.insert(new_start, md)
-
-        # 2) 缓存不够？从完整历史列表实时解析
-        if not old_messages and self._full_history_messages:
+        if self._full_history_messages:
             raw_slice = self._full_history_messages[new_start:self._rendered_start]
-            for msg in reversed(raw_slice):
+            for msg in raw_slice:
                 role = msg.get("role", "system")
                 content = msg.get("content", "")
-                html = self._pre_parse_single(content, role) if content else None
-                md = {"role": role, "content": content, "timestamp": msg.get("timestamp") or msg.get("created_at", ""), "cost": msg.get("cost", 0), "tool_calls": msg.get("tool_calls"), "html": html}
+                try:
+                    html = self._pre_parse_single(content, role) if content else None
+                except Exception:
+                    html = None
+                md = {"role": role, "content": content,
+                      "timestamp": msg.get("timestamp") or msg.get("created_at", ""),
+                      "cost": msg.get("cost", 0), "tool_calls": msg.get("tool_calls"),
+                      "html": html}
                 old_messages.append(md)
-                self._message_data.insert(new_start, md)
 
-        # 3) 仍为空则放弃
+        # 为空则放弃（历史缺失）
         if not old_messages:
             self._all_rendered = True
             self._lazy_loading = False
             return
+
+        # 同步数据列表：在 new_start 处整体插入（保持升序，修复重复/缺漏）
+        self._message_data[new_start:new_start] = old_messages
 
         # 记录当前滚动位置，用于加载后恢复
         sb = self._scroll.verticalScrollBar()
@@ -1406,11 +1427,11 @@ class ChatPage(QWidget):
 
         self._scroll.setUpdatesEnabled(False)
         try:
-            # 插入到布局顶部（old_messages 已是旧→新顺序）
             for md in old_messages:
                 self._insert_message_at_top(md)
 
             self._rendered_start = new_start
+            self._rendered_end = len(self._message_data)
             if new_start <= 0:
                 self._all_rendered = True
                 # 移除"加载更多"提示
@@ -1435,9 +1456,13 @@ class ChatPage(QWidget):
             self._messages_container.updateGeometry()
 
         # 恢复滚动位置（新消息在老消息之上，需要补偿偏移）
-        new_max = sb.maximum()
-        delta = new_max - old_max
-        QTimer.singleShot(50, lambda: sb.setValue(sb.value() + delta))
+        try:
+            new_max = sb.maximum()
+            delta = max(0, new_max - old_max)
+            cur = sb.value()
+            QTimer.singleShot(50, lambda: sb.setValue(min(sb.maximum(), cur + delta)))
+        except Exception:
+            pass
         self._lazy_loading = False
 
     def _insert_message_at_top(self, md: dict):

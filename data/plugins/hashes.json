@@ -29,6 +29,7 @@
     "ide_integration": "fdf6cc1ecb5826a49f2af2554e8d08a8d4d74d20c4a0ebbba22b89a75f92bdf8",
     "lsp_bridge": "f8a7a56102ac057beb76b452f8b99bd2224cbe8e9d0c2bced1e928069897cd27",
     "memory_enhance": "3cbc19f2a7ada2ae61c8d01e0e15a3d7f82cc1a4a03aa5b153be0ea10f0e8c80",
+    "novel_writer": "77938293701be1e9087d39c9b48d94d42a25361282bad5036d73b17476b38eb2",
     "ocr_reader": "6f5525a5ef7129002021d21fba816abd99cb5848136d219e3897745f410e0f81",
     "perf_tools": "b459752afe5020f053b06c4df0d15d975063ae8c59245d590bbe9a2abefa3d67",
     "refactor_tools": "6da9a77212f9ad3878a68cb40b2863cfbc309ee9c54818ff728604616b05a106",
@@ -47,5 +48,5 @@
     "whisper_stt": "ba7805bce1a90b50d2d5557f5820e56cbc043b055a1417bb14c7fee6bec0d792",
     "zhanlizhi": "d25aca47c566fddb93ff6fc4251e9ec4ea89e4a79495fbc1ab30e9e82f68d0af"
   },
-  "sig": "f14c84e1299e23e4685721bea9aaf9ad973cbe8bd83e17db43ea4a1dce6c7460"
+  "sig": "2b2ee986445971e18516cd5d43c1036768f919052e6e2e684d6514e8893b1eae"
 }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-08-14T04:34:25.175667",
+  "generated_at": "2026-08-14T05:56:05.140298",
   "generated_by": "7tan-updater build v5.1.0",
   "algorithm": "sha256",
   "scope": "full",
@@ -48,5 +48,5 @@
     "backup/**",
     "*.log"
   ],
-  "manifest_hmac": "af9e8c023949e89656894dd606210ace09d584719270f34db311ab7ecd766837"
+  "manifest_hmac": "46c900e784b63512280a0f3606e70561be254245afc3b69a1b512cf71b099ef9"
 }

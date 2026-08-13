@@ -1,0 +1,7 @@
+fix: compress app.py redundant blank lines (55.3% -> 19.6%)
+
+app.py 曾被 auto-save (fea1ff0) 机械插入空行，9380 行中 55.3% 为空行。
+本提交压缩多余空行：仅保留 def/class 前空行(<=2)，三引号字符串内空行原样保留。
+验证：ast.parse 通过(29240 nodes)；去空行后与 HEAD 逐行完全一致(4193 lines, zero code loss)。
+行数: 9380 -> 5218, 空行率: 55.3% -> 19.6%。
+同时更新 integrity.json (31 files)。

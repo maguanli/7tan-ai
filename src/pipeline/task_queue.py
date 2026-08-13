@@ -3,6 +3,7 @@
 每个资源使用独立的 Agent 实例，通过全局锁控制并发数量
 详见架构文档 §10
 """
+import time
 import threading
 import queue
 import uuid

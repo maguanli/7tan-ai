@@ -951,7 +951,7 @@ def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str 
     if result is None:
         error_msg = result_holder.get("error", "任务失败")
         logger.error(f"💬 Agent: {error_msg}")
-        yield {"type": "done", "success": False, "result": error_msg, "tokens": result.get("total_tokens", 0)}
+        yield {"type": "done", "success": False, "result": error_msg, "tokens": 0}
     elif result.get("success"):
         content = result.get("result", "")
         if content:

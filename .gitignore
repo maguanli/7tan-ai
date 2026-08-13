@@ -141,10 +141,3 @@ filterbranch.log
 # 根目录数据库（敏感数据不入库）
 /games.db
 mobile/  
-
-# ==== 补充忽略：用户/记忆/状态数据 + 编译产物（2026-08-14 二次加固） ====
-data/users/
-data/memory/
-data/state.json
-data/plugins/tts_piper/models/
-*.pyd

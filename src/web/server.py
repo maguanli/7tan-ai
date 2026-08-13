@@ -93,6 +93,29 @@ async def health_check():
 # ===== WebSocket 端点 =====
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
+    # ===== WebSocket 握手鉴权（防跨站 WebSocket 劫持 CSWSH）=====
+    # HTTP 中间件不经过 WS 握手，因此这里必须单独校验：
+    # 1) 浏览器发起的连接必带 Origin 头 → 只允许本地页面
+    # 2) 无 Origin 的客户端（桌面端/Python websockets 等）→ 放行
+    # 3) 若配置了 7TAN_API_TOKEN，本地页面也需携带 ?token=xxx
+    origin = ws.headers.get("origin", "")
+    if origin:
+        allowed_origin = (
+            origin.startswith("http://127.0.0.1")
+            or origin.startswith("http://localhost")
+            or origin.startswith("http://[::1]")
+        )
+        if not allowed_origin:
+            logger.warning(f"🚫 拒绝跨站 WebSocket 连接: origin={origin}")
+            await ws.close(code=1008, reason="origin not allowed")
+            return
+    if API_TOKEN:
+        query_token = ws.query_params.get("token", "")
+        if query_token != API_TOKEN:
+            logger.warning("🚫 拒绝未授权 WebSocket 连接: token 不匹配")
+            await ws.close(code=1008, reason="unauthorized")
+            return
+
     client_id = await ws_manager.connect(ws)
     try:
         while True:

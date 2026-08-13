@@ -13,6 +13,42 @@ from loguru import logger
 router = APIRouter(prefix="/api/terminal", tags=["terminal"])
 
 
+# ===== 终端命令白名单（安全防护）=====
+# 只允许编译/构建/查询类安全命令；白名单外一律拒绝
+ALLOWED_PREFIXES = (
+    "python ", "python3 ", "pip ", "pip3 ", "py ",
+    "node ", "npm ", "pnpm ", "yarn ", "npx ",
+    "git status", "git log", "git diff", "git branch", "git remote", "git tag",
+    "git add", "git commit", "git stash", "git show", "git blame",
+    "dir", "ls", "cd ", "echo ", "type ", "where ", "findstr ", "cls", "ver",
+    "javac ", "java -version", "gradle ", "mvn ", "go ", "cargo ", "rustc ",
+    "flutter ", "dart ", "adb ", "tasklist", "systeminfo",
+    "cmake ", "make ", "ninja ", "cl ", "gcc ", "g++ ", "mingw32-make ",
+    "powershell -", "cmd /c ",
+)
+# 危险命令黑名单（无论前缀，命中即拒绝）
+BLOCKED_KEYWORDS = (
+    "rm -rf", "del /s", "format ", "taskkill", "shutdown", "reg delete",
+    "rd /s", "rmdir /s", "powershell -enc", "certutil", "bitsadmin",
+    "wget ", "curl -o", "net user", "net localgroup", "sc delete",
+    "attrib -r -s -h", "cipher /w", "fsutil", "diskpart", "vssadmin",
+)
+
+
+def _is_allowed_command(command: str) -> bool:
+    """校验终端命令是否在白名单内"""
+    cmd = command.strip().lower()
+    if not cmd:
+        return False
+    for kw in BLOCKED_KEYWORDS:
+        if kw in cmd:
+            return False
+    for prefix in ALLOWED_PREFIXES:
+        if cmd.startswith(prefix):
+            return True
+    return False
+
+
 class TerminalExecuteRequest(BaseModel):
     command: str
     cwd: Optional[str] = None
@@ -21,6 +57,13 @@ class TerminalExecuteRequest(BaseModel):
 @router.post("/execute")
 async def execute_command(req: TerminalExecuteRequest):
     """执行终端命令并返回输出"""
+    if not _is_allowed_command(req.command):
+        logger.warning(f"🚫 终端命令不在白名单，已拒绝: {req.command}")
+        return {
+            "success": False,
+            "output": "❌ 命令不在白名单，已拒绝执行（仅允许编译/构建/查询类命令）",
+            "exit_code": -1,
+        }
     logger.info(f"🖥️ 执行命令: {req.command}")
 
     try:

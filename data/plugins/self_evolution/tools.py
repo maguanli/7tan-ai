@@ -105,6 +105,17 @@ def self_diagnose() -> str:
 )
 def create_plugin(plugin_id: str, plugin_name: str, description: str, tools_code: str, icon: str = "🔧") -> str:
     """动态创建插件 — 同时写两份：dist（立即生效）和源码（构建后保留）"""
+    # 安全审计：记录插件创建操作
+    try:
+        audit_dir = _REAL_ROOT / "logs" / "audit"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        entry = {"ts": datetime.now().isoformat(), "tool": "create_plugin",
+                 "params": {"plugin_id": plugin_id, "plugin_name": plugin_name,
+                             "description": str(description)[:200], "tools_code_len": len(tools_code)}}
+        with open(audit_dir / f"audit_{datetime.now():%Y%m%d}.log", "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
     import re
     tool_names = re.findall(r'name="([^"]+)"', tools_code)
     if not tool_names:

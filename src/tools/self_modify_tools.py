@@ -18,6 +18,29 @@ from loguru import logger
 from .registry import register_tool
 from ..utils.retry import retry, RETRY_POLICIES
 
+
+# ===== 自修改审计日志 =====
+def _audit_log(tool_name: str, params: dict, result: str):
+    """记录自修改操作审计（谁/何时/改了什么），写入 logs/audit/"""
+    try:
+        root = Path(__file__).resolve().parent.parent.parent
+        if not (root / "build.bat").exists():
+            root = Path(sys.executable).parent
+        audit_dir = root / "logs" / "audit"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        safe_params = {k: (str(v)[:300] if v is not None else v) for k, v in params.items()}
+        entry = {
+            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "tool": tool_name,
+            "params": safe_params,
+            "result": str(result)[:500],
+        }
+        with open(audit_dir / f"audit_{time.strftime('%Y%m%d')}.log", "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        logger.info(f"📝 自修改审计: {tool_name}")
+    except Exception as e:
+        logger.debug(f"审计日志写入失败: {e}")
+
 # 自修改沙盒配置
 def _get_project_root():
     """获取可靠的项目根目录 — 兼容 PyInstaller 打包和开发模式"""
@@ -160,6 +183,7 @@ def self_modify_config(key_path: str, new_value: str, reason: str) -> str:
         save_config(config)
 
         logger.info(f"✅ 配置已更新: {key_path}")
+        _audit_log("self_modify_config", {"key_path": key_path, "new_value": new_value[:200], "reason": reason}, "ok")
         return f"✅ 配置已更新\n  路径: {key_path}\n  旧值: {old_value}\n  新值: {new_value}"
     except Exception as e:
         logger.error(f"❌ 配置修改失败: {e}")
@@ -383,6 +407,7 @@ def self_rebuild(build_script: str = "rebuild.bat", timeout: int = 900) -> str:
             return f"❌ 找不到构建脚本: {build_script}\n  已搜索:\n    - {PROJECT_ROOT / build_script}\n    - {Path(build_script).absolute()}"
 
     logger.warning(f"🔨 开始重新构建: {build_path}")
+    _audit_log("self_rebuild", {"build_script": build_script, "timeout": timeout}, "started")
 
     try:
         result = subprocess.run(
@@ -426,6 +451,7 @@ def self_rebuild(build_script: str = "rebuild.bat", timeout: int = 900) -> str:
 def self_update_prompt(prompt_type: str, new_template: str, reason: str) -> str:
     """更新系统提示词"""
     from ..agent.prompts import update_prompt
+    _audit_log("self_update_prompt", {"prompt_type": prompt_type, "reason": reason, "template_head": new_template[:200]}, "started")
     try:
         update_prompt(prompt_type, new_template, reason)
         return f"✅ 提示词已更新: {prompt_type}\n原因: {reason}"
@@ -465,5 +491,6 @@ def self_restart(delay_seconds: int = 2) -> str:
     """重启应用程序 — AI 工具调用入口，委托给 daemon.py:graceful_restart()"""
     from ..scheduler.daemon import graceful_restart
     logger.warning("🔄 正在重启（AI 工具触发）...")
+    _audit_log("self_restart", {"delay_seconds": delay_seconds}, "started")
     graceful_restart(delay_seconds=delay_seconds, close_browser_flag=False)
     return "🔄 正在重启..."

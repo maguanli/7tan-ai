@@ -1,16 +1,16 @@
 {
   "version": 1,
-  "generated_at": "2026-08-14T05:56:05.140298",
+  "generated_at": "2026-08-14T06:24:40.039427",
   "generated_by": "7tan-updater build v5.1.0",
   "algorithm": "sha256",
   "scope": "full",
   "files": {
     "main.py": "f8ecb8d4eceefa12145217de277d31c5f4dd0e2dc10bad2e5f2a9f77a1a9c42d",
-    "src/agent/agent_loop.py": "20001c0fff1eb81ee8077a8283ed39ef5d1da2c3207f7f7204beb7ab1e9f33c4",
+    "src/agent/agent_loop.py": "c06c9aef07ff259379182dcd94c9308b06b9e5127647d6fccd95f7276111c6b1",
     "src/agent/model_manager.py": "d35f7e5521b911a79581f89a872000347571e7de93aa251192536ad200471d05",
-    "src/agent/context_manager.py": "c81b74d1a03a3c68c2b264f05bf00f1ed80e99a3c7af85e15147539f93017072",
+    "src/agent/context_manager.py": "e5148ccf03dd653b835c5db9fd7de0dd398ba746849b9deabe458de85cf7f742",
     "src/agent/conversation.py": "50cffde39e57672fbdc0a314aafe7d4fd943199a1f7bf45e623ac39d464bbe71",
-    "src/tools/registry.py": "6ed92ea70f208889c89d62e038860e532d4d37acaeab4c68516a137674d2dfba",
+    "src/tools/registry.py": "0c94ded6135cde52836b9002c341dd16bcb7cfa994e8fbd6ab5748c32272f551",
     "src/tools/browser_tools.py": "3e55e7609eff12d4e767d7245760fd14115ba686217fbf4ac43cfb2553cf24dc",
     "src/tools/download_tools.py": "0fa7c75e2c66a8714b51b3179daec6dbcae5427669ba0a48a1b4626f1196e947",
     "src/tools/db_tools.py": "6c2697ad51a95daeb1ba36ae0468e9756c3dd10da676ee8ec6b1611b7044d919",
@@ -19,7 +19,7 @@
     "src/tools/image_tools.py": "3ff95d1dd4dccb43b5d202b048c757ea97b1b9df48949abd8e90c16cf98ae624",
     "src/tools/file_tools.py": "27e308e00cf53495f2ea5cd6d35dcaeecba54a833f6617d9d00e9228193a1f81",
     "src/tools/publish_tools.py": "a6b5ec00152ac335ac63c41a9a68d322c9bfe0eb246321abfc0c08ed9b52b6c0",
-    "src/tools/self_modify_tools.py": "d2adbc3de74b84d2f9c81d717ea9e41a70b9498c6cee73bb90c195ceb887757e",
+    "src/tools/self_modify_tools.py": "16903cf505a62e367f87b6a94e51ee83de6b479c6637277771ba4cfe054e88ca",
     "src/tools/monitor_tools.py": "53851f31f3b23ca543ab81af3110d5e0887aae406c6053f7ca3472e2a3bee1c9",
     "src/database/db.py": "5b6ac8505fd942ebb141f86921ef8ae4c195c2db5fe059c425de80b80d9c02c2",
     "src/config/loader.py": "9c7c91b77a92355abcfb787ff179a3f91b5acf84406f5564f7e808b83f155c9a",
@@ -28,7 +28,7 @@
     "src/scheduler/scheduler.py": "64aea0de60a4f0bb37da655a195aa1c7b14de3767903bfabf675f5f04dfa9fbc",
     "src/scheduler/jobs.py": "81c4f6bc8c33e89fb09f30eb7858f9fd885d06656e3a93efa8d37cf3f65c9ea3",
     "src/scheduler/daemon.py": "91e87d1297aea2791ddb4d33fb91b2ca3f1e3260cb1c8acef1101e0afa16b87b",
-    "src/web/server.py": "827978aaa5fd6107ba192a3f91f06b4b96fafc97a01a4abd170ab2175c04a2b1",
+    "src/web/server.py": "d594ad81a67384ae61ac8fc52e62d96ba74cb50686a950d8bd9e00004864d3ef",
     "src/web/ws.py": "767e16b7122bbcdbf8550270b7b7cbc3371720f2353b37f66d8a8b778b745b0a",
     "src/cli.py": "5d37ad31fe4a350c101eb7a87f48715ea0b2036a0d10c56ac79e1ff46e1ba495",
     "src/security/manifest_template.py": "a3b1ddf9914fe3e10e21c9eb04baef4f815614d7e4c44644d956b4289e09cffd",
@@ -48,5 +48,5 @@
     "backup/**",
     "*.log"
   ],
-  "manifest_hmac": "46c900e784b63512280a0f3606e70561be254245afc3b69a1b512cf71b099ef9"
+  "manifest_hmac": "21791264145f4f4ad9091fbfca369686b95506238e7486c4d8788b253a6701bd"
 }

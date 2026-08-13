@@ -46,10 +46,11 @@ class ContextManager:
 
     def add_tool_result(self, tool_call_id: str, content: str):
         """添加工具调用结果"""
+        wrapped = f"[TOOL_RESULT]\n{content[:100000]}\n[/TOOL_RESULT]"
         self.history.append({
             "role": "tool",
             "tool_call_id": tool_call_id,
-            "content": content[:100000],  # 硬保护，极高上限
+            "content": wrapped,  # 硬保护，极高上限
         })
         self._total_tokens += len(content) // 2
         self._trim_if_needed()

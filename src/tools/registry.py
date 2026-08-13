@@ -60,10 +60,8 @@ def _check_pro_status() -> bool:
             except LicenseError:
                 pass
 
-        # 回退：检查 token 中的 level 字段（不可信但作为 fallback）
-        if token_data and token_data.get("level") == "pro":
-            _gate_cache = {"checked": True, "is_pro": True, "pro_license": "", "ts": now}
-            return True
+        # ⚠️ 安全修复：不再信任 token 中的本地 level 字段（可被本地文件篡改伪造 Pro）
+        # 仅接受 license 验签结果；验签失败一律按非 Pro 处理
 
         _gate_cache = {"checked": True, "is_pro": False, "pro_license": "", "ts": now}
         return False

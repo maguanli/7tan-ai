@@ -13,6 +13,11 @@ data/games.db-shm
 data/games.db-wal
 data/*.db
 
+# 用户数据与记忆（敏感个人数据，禁止提交）
+data/users/
+data/memory/
+data/state.json
+
 # 配置文件（含 API Key）
 config/config.yaml
 
@@ -25,6 +30,13 @@ data/screenshots/
 
 # 大型安装文件
 tools/*.exe
+
+# 编译产物 .pyd（授权/安全组件，通过发布包分发，不入库）
+*.pyd
+!src/**/*.py
+
+# 语音模型大文件
+data/plugins/tts_piper/models/
 
 # 沙盒临时文件
 data/sandbox/
@@ -96,7 +108,9 @@ data/panel_geometry.json
 # 调试临时脚本与运行时检查文件
 tmp/
 data/tasklist_check.txt
-src/security/auth_client_new.pyd  
+src/security/auth_client_new.pyd
+filterrepo.log
+filterbranch.log  
 
 # 根目录调试垃圾（微信调试/临时脚本/截图）— 防止再次误提交
 /click_*.py

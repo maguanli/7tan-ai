@@ -7,7 +7,18 @@ from typing import Any
 
 from loguru import logger
 
-from ..utils.retry import retry, is_retryable_error, classify_policy, RETRY_POLICIES
+from ..utils.retry import retry, is_retryable_error, classify_policy, RETRY_POLICIES, RetryConfig
+
+
+# LLM 调用重试策略（统一走 utils/retry.py，避免手写重试循环）
+_LLM_RETRY_CFG = RetryConfig(
+    max_retries=5,
+    base_delay=2.0,
+    max_delay=120.0,
+    backoff=2.0,
+    jitter=True,
+    name="LLM调用",
+)
 
 
 def _fix_surrogates(s: str) -> str:
@@ -304,108 +315,17 @@ class ModelManager:
             return "<无法序列化的错误对象>"
 
     def _chat_with_retry(self, client, **kwargs):
-        """带智能重试的 chat 调用"""
-        import time
-        import random
-        from openai import (
-            APIError, APITimeoutError, APIConnectionError,
-            RateLimitError, InternalServerError, BadRequestError
-        )
-
+        """带智能重试的 chat 调用（重试统一走 utils/retry.py 装饰器）"""
         # Clean surrogate chars before API call
         kwargs = self._sanitize_surrogates(kwargs)
+        return self._chat_once(client, **kwargs)
 
-        last_error = None
-
-        # 针对不同错误类型的重试次数：通用错误10次，限流错误15次
-        max_retries = 10
-        max_rate_limit_retries = 15
-        for attempt in range(max_retries + 1):  # 0~5
-            try:
-                return client.chat.completions.create(**kwargs)
-            except BadRequestError as e:
-                # 400 错误不重试（参数/格式问题）
-                logger.error(f"❌ API 请求参数错误 (400): {_fix_surrogates(str(e))}")
-                raise
-            except RateLimitError as e:
-                last_error = e
-                if attempt >= max_rate_limit_retries:
-                    break
-                delay = min(30 * (2 ** attempt), 300) * (0.5 + random.random())
-                logger.warning(
-                    f"⏳ API 限流 (尝试 {attempt+1}/{max_rate_limit_retries+1})，{delay:.1f}s 后重试..."
-                )
-                time.sleep(delay)
-            except APITimeoutError as e:
-                last_error = e
-                if attempt >= max_retries:
-                    break
-                delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
-                logger.warning(
-                    f"⏱️ API 超时 (尝试 {attempt+1}/{max_retries+1})，{delay:.1f}s 后重试..."
-                )
-                time.sleep(delay)
-            except APIConnectionError as e:
-                last_error = e
-                if attempt >= max_retries:
-                    break
-                delay = min(1 * (2 ** attempt), 30) * (0.5 + random.random())
-                logger.warning(
-                    f"🔌 API 连接错误 (尝试 {attempt+1}/{max_retries+1})，{delay:.1f}s 后重试..."
-                )
-                time.sleep(delay)
-            except InternalServerError as e:
-                last_error = e
-                if attempt >= max_retries:
-                    break
-                delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
-                logger.warning(
-                    f"🔥 API 服务器错误 (尝试 {attempt+1}/{max_retries+1})，{delay:.1f}s 后重试..."
-                )
-                time.sleep(delay)
-            except APIError as e:
-                last_error = e
-                err_str = str(e).lower()
-                # 检查是否是 HTTP 状态码错误
-                if "502" in err_str or "503" in err_str or "504" in err_str:
-                    if attempt >= max_retries:
-                        break
-                    delay = min(3 * (2 ** attempt), 60) * (0.5 + random.random())
-                    logger.warning(
-                        f"🌐 API 网关错误 (尝试 {attempt+1}/{max_retries+1})，{delay:.1f}s 后重试..."
-                    )
-                    time.sleep(delay)
-                elif "429" in err_str:
-                    if attempt >= max_retries:
-                        break
-                    delay = min(30 * (2 ** attempt), 300) * (0.5 + random.random())
-                    logger.warning(
-                        f"⏳ API 限流 (尝试 {attempt+1}/{max_retries+1})，{delay:.1f}s 后重试..."
-                    )
-                    time.sleep(delay)
-                else:
-                    # 未知 API 错误也重试
-                    if attempt >= max_retries:
-                        break
-                    delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
-                    logger.warning(
-                        f"⚠️ API 错误 (尝试 {attempt+1}/{max_retries+1}): {self._safe_str(e)} — {delay:.1f}s 后重试"
-                    )
-                    time.sleep(delay)
-            except Exception as e:
-                # 其他未知错误（如网络波动导致的底层异常）
-                last_error = e
-                err_str = str(e).lower()
-                if attempt >= max_retries:
-                    break
-                delay = min(2 * (2 ** attempt), 60) * (0.5 + random.random())
-                logger.warning(
-                    f"⚠️ 未知错误 (尝试 {attempt+1}/{max_retries+1}): {self._safe_str(e)} — {delay:.1f}s 后重试"
-                )
-                time.sleep(delay)
-
-        # 所有重试都失败
-        raise RuntimeError(f"LLM 调用失败（已重试 {max_retries} 次），最后错误: {self._safe_str(last_error)}")
+    @retry(policy=_LLM_RETRY_CFG, auto_classify=False)
+    def _chat_once(self, client, **kwargs):
+        """单次 chat.completions.create 调用。
+        由 @retry 统一处理：指数退避 + 抖动 + 错误分类（400 等不可重试错误直接抛出）。
+        """
+        return client.chat.completions.create(**kwargs)
 
     def _get_client(self):
         """懒加载创建 OpenAI 客户端（优先用数据库配置，回退 YAML）"""

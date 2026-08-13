@@ -1,6 +1,11 @@
 """
-完整性检查工具 — 命令行入口
+完整性检查工具 - 命令行入口
 用于生成和验证 SHA-256 清单文件
+
+用法:
+  python tools/check_integrity.py check           # 校验完整性
+  python tools/check_integrity.py generate        # 重新生成清单
+  python tools/check_integrity.py update --file src/xxx.py   # 更新单文件哈希
 """
 import sys
 from pathlib import Path
@@ -13,35 +18,39 @@ from src.security.integrity import IntegrityChecker
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="7坛AI小编 完整性检查")
+    parser = argparse.ArgumentParser(description="7tanAI 完整性检查")
     parser.add_argument("action", choices=["check", "generate", "update"],
                         default="check", nargs="?",
                         help="check: 验证, generate: 生成清单, update: 更新文件哈希")
-    parser.add_argument("--level", choices=["critical", "standard", "loose", "full"],
-                        default="critical", help="检查级别 (默认: critical)")
+    parser.add_argument("--level", choices=["core", "full"],
+                        default="full", help="检查范围 (默认: full)")
     parser.add_argument("--file", help="更新单个文件哈希 (与 update 配合使用)")
     parser.add_argument("--manifest", default="integrity.json", help="清单文件路径")
 
     args = parser.parse_args()
 
     root = Path(__file__).parent.parent
-    checker = IntegrityChecker(root=root)
+    checker = IntegrityChecker(manifest_path=str(root / args.manifest), mode=args.level)
 
     if args.action == "generate":
-        report = checker.generate_manifest(args.manifest, level=args.level)
-        print(report)
+        checker.save_manifest(str(root / args.manifest))
+        print("[OK] manifest generated: %s" % args.manifest)
     elif args.action == "check":
-        ok = checker.check_all(level=args.level)
-        report = checker._report
-        if report:
-            print(report)
-        sys.exit(0 if ok else 1)
+        report = checker.check_all()
+        print("healthy: %s | tampered: %s" % (report.healthy, report.tampered_count))
+        for f in (getattr(report, "missing", None) or []):
+            print("  MISSING: %s" % f)
+        for f, exp, act in (getattr(report, "modified", None) or []):
+            print("  MODIFIED: %s (expect %s... actual %s...)" % (f, exp[:12], act[:12]))
+        if report.healthy:
+            print("[OK] integrity check passed")
+        sys.exit(0 if report.healthy else 1)
     elif args.action == "update":
         if not args.file:
-            print("❌ update 需要 --file 参数")
+            print("ERROR: update needs --file")
             sys.exit(1)
-        checker.update_file_hash(args.manifest, args.file)
-        print(f"✅ 已更新 {args.file} 的哈希值")
+        checker.update_file_hash(args.file)
+        print("[OK] hash updated: %s" % args.file)
 
 
 if __name__ == "__main__":

@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "generated_at": "2026-08-13T10:33:28.707379",
+  "generated_at": "2026-08-14T04:34:25.175667",
   "generated_by": "7tan-updater build v5.1.0",
   "algorithm": "sha256",
-  "scope": "core",
+  "scope": "full",
   "files": {
     "main.py": "f8ecb8d4eceefa12145217de277d31c5f4dd0e2dc10bad2e5f2a9f77a1a9c42d",
-    "src/agent/agent_loop.py": "8be44c6f4cc0d774a121f9395a0ca8acd860a5d001c53b9286ffc81e9282cadd",
-    "src/agent/model_manager.py": "555a5beefda3afa28a7a8e192051f2bd75d1d80b23053e84dd486f4564f9284e",
+    "src/agent/agent_loop.py": "20001c0fff1eb81ee8077a8283ed39ef5d1da2c3207f7f7204beb7ab1e9f33c4",
+    "src/agent/model_manager.py": "d35f7e5521b911a79581f89a872000347571e7de93aa251192536ad200471d05",
     "src/agent/context_manager.py": "c81b74d1a03a3c68c2b264f05bf00f1ed80e99a3c7af85e15147539f93017072",
     "src/agent/conversation.py": "50cffde39e57672fbdc0a314aafe7d4fd943199a1f7bf45e623ac39d464bbe71",
     "src/tools/registry.py": "6ed92ea70f208889c89d62e038860e532d4d37acaeab4c68516a137674d2dfba",
@@ -24,7 +24,7 @@
     "src/database/db.py": "5b6ac8505fd942ebb141f86921ef8ae4c195c2db5fe059c425de80b80d9c02c2",
     "src/config/loader.py": "9c7c91b77a92355abcfb787ff179a3f91b5acf84406f5564f7e808b83f155c9a",
     "src/pipeline/pipeline.py": "af7339f149c2bd6def523366d589bffc72615dd2430214463ae7d74883fb358a",
-    "src/pipeline/task_queue.py": "17c6c2591ff259829484f8bbdb1040192711a3cfc0fbff0a1e06b85814df8c7a",
+    "src/pipeline/task_queue.py": "b7e6ded83618a63b980c177f2a885047b6f4e6d37009d83a4730ff2618353117",
     "src/scheduler/scheduler.py": "64aea0de60a4f0bb37da655a195aa1c7b14de3767903bfabf675f5f04dfa9fbc",
     "src/scheduler/jobs.py": "81c4f6bc8c33e89fb09f30eb7858f9fd885d06656e3a93efa8d37cf3f65c9ea3",
     "src/scheduler/daemon.py": "91e87d1297aea2791ddb4d33fb91b2ca3f1e3260cb1c8acef1101e0afa16b87b",
@@ -48,5 +48,5 @@
     "backup/**",
     "*.log"
   ],
-  "manifest_hmac": "7e72d47410d6c8ea69913e9e89dc083fa1a72185f9980f52d84882107abb42d7"
+  "manifest_hmac": "af9e8c023949e89656894dd606210ace09d584719270f34db311ab7ecd766837"
 }

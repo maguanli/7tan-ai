@@ -21,6 +21,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from ..utils.retry import is_retryable_error
 from .model_manager import track_cost_internal, _fix_surrogates
 from .tool_executor import execute_tools_parallel, _execute_tool_optimized
 from .context_manager import (
@@ -37,7 +38,7 @@ class AgentAbortedError(Exception):
     pass
 
 # ── 重试与超时 ───────────────────────────────────────────
-MAX_RETRIES = 5           # 总共最多 5 次重试（含首次）
+MAX_RETRIES = 3           # 顶层兜底重试（底层 model.call_with_retry 已含 5 次，避免 5x11 嵌套爆炸）
 BASE_DELAY = 2.0          # 指数退避基数（秒）
 API_TIMEOUT = 120.0       # 单次 API 调用超时（秒）
 
@@ -216,6 +217,10 @@ def _call_llm(model, messages, tools, config, timeout=API_TIMEOUT, abort_event=N
                     last_error = TimeoutError(f"API 调用超时 ({timeout}s)")
                     logger.warning(f"\u23f0 API 超时 (attempt {attempt}/{MAX_RETRIES})")
                 except Exception as e:
+                    if not is_retryable_error(e):
+                        # 不可重试错误（如 400 参数错误）直接结束，不浪费重试
+                        holder["error"] = e
+                        return
                     last_error = e
                     logger.warning(f"\u26a0\ufe0f API 错误 (attempt {attempt}/{MAX_RETRIES}): {_fix_surrogates(str(e))}")
 
@@ -254,6 +259,9 @@ def _call_llm(model, messages, tools, config, timeout=API_TIMEOUT, abort_event=N
             last_error = TimeoutError(f"API 调用超时 ({timeout}s)")
             logger.warning(f"⏰ API 超时 (attempt {attempt}/{MAX_RETRIES})")
         except Exception as e:
+            if not is_retryable_error(e):
+                # 不可重试错误（如 400 参数错误）直接抛出，不浪费重试
+                raise
             last_error = e
             logger.warning(f"⚠️ API 错误 (attempt {attempt}/{MAX_RETRIES}): {_fix_surrogates(str(e))}")
         

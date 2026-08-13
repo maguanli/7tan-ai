@@ -672,8 +672,16 @@ def run_agent_loop(
         
         # 添加 assistant 消息到历史
         msg_dict = {"role": "assistant"}
+        # 🔧 DeepSeek reasoning 模型（deepseek-v4-pro 等）在 tool_calls 时会返回
+        # reasoning_content，必须原样回传，否则下一轮 API 会 400 报错
+        reasoning_content = getattr(msg, "reasoning_content", None)
+        if reasoning_content is None:
+            extra = getattr(msg, "model_extra", None) or {}
+            reasoning_content = extra.get("reasoning_content")
         if msg.content:
             msg_dict["content"] = msg.content
+        if reasoning_content:
+            msg_dict["reasoning_content"] = reasoning_content
         if msg.tool_calls:
             safe_calls = []
             for tc in msg.tool_calls:

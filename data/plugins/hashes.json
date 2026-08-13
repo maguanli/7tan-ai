@@ -22,7 +22,7 @@
     "file_replacer": "edc9199cac862a9d59bd2ec2634ece77d89f837ec34b51a756ddb8f168bd2c34",
     "form_enhance": "05c234cf52ba0b32494bcf7d787d2a84b37f5e7ce3a8fcd9a9455b68715dfcdd",
     "git_advanced": "aaa3129c7befcfee979f62801bffe8ecc811560b337d97884ba78e1c985f23f7",
-    "git_ops": "370e912bc20e981dc1e24f9a4acd5cfc47bad0023392b55fcbd876c0608dbdb6",
+    "git_ops": "2b9e15be7aaa8ea2ad32cf780ea661509a0db3975dc2fe62025658e03bd4318b",
     "gzh_publish": "3ff703c694f90b7be5b94ac8be3fded6eb0e69a2ca339f3a94d7ef235da310cb",
     "http_client": "4442fd3118fded738f1feab360b1fb26f3cb07af9407ea7c5c7f53bb845387f4",
     "iching": "9b2aeea0c3ef4199f322e125c8d09bf5a9ad1983dbef25bbc3ad3238f66dd21a",
@@ -48,5 +48,5 @@
     "whisper_stt": "ba7805bce1a90b50d2d5557f5820e56cbc043b055a1417bb14c7fee6bec0d792",
     "zhanlizhi": "d25aca47c566fddb93ff6fc4251e9ec4ea89e4a79495fbc1ab30e9e82f68d0af"
   },
-  "sig": "fd99d7700a422dfdecef3279c37e730136f90728f0c281aff8a85b78a86ec80c"
+  "sig": "440f78059cf9d4e8d3dc9c74c8e21dbc35a842b21e64cf0d23339a21b6bcf924"
 }

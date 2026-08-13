@@ -43,13 +43,13 @@ def _run_git(repo_path: str, *args, timeout: int = 30) -> dict:
     parameters={
         "type": "object",
         "properties": {
-            "repo_path": {"type": "string", "description": "Git 仓库本地路径"},
+            "repo_path": {"type": "string", "description": "Git 仓库本地路径，默认当前项目目录"},
         },
-        "required": ["repo_path"],
+        "required": [],
     },
     category="git",
 )
-def git_status(repo_path: str) -> str:
+def git_status(repo_path: str = ".") -> str:
     """查看 Git 仓库状态"""
     r = _run_git(repo_path, "status", "--short")
     if not r["success"]:
@@ -85,14 +85,14 @@ def git_status(repo_path: str) -> str:
     parameters={
         "type": "object",
         "properties": {
-            "repo_path": {"type": "string", "description": "Git 仓库路径"},
+            "repo_path": {"type": "string", "description": "Git 仓库路径，默认当前项目目录"},
             "staged": {"type": "boolean", "description": "True=查看已暂存差异，默认False=未暂存", "default": False},
         },
-        "required": ["repo_path"],
+        "required": [],
     },
     category="git",
 )
-def git_diff(repo_path: str, staged: bool = False) -> str:
+def git_diff(repo_path: str = ".", staged: bool = False) -> str:
     """查看 Git 差异"""
     args = ["diff"]
     if staged:
@@ -114,14 +114,14 @@ def git_diff(repo_path: str, staged: bool = False) -> str:
     parameters={
         "type": "object",
         "properties": {
-            "repo_path": {"type": "string", "description": "Git 仓库路径"},
+            "repo_path": {"type": "string", "description": "Git 仓库路径，默认当前项目目录"},
             "count": {"type": "integer", "description": "显示最近 N 条", "default": 10},
         },
-        "required": ["repo_path"],
+        "required": [],
     },
     category="git",
 )
-def git_log(repo_path: str, count: int = 10) -> str:
+def git_log(repo_path: str = ".", count: int = 10) -> str:
     """查看提交历史"""
     r = _run_git(repo_path, "log", f"-{count}", "--oneline", "--decorate", "--graph")
     if not r["success"]:
@@ -138,14 +138,14 @@ def git_log(repo_path: str, count: int = 10) -> str:
     parameters={
         "type": "object",
         "properties": {
-            "repo_path": {"type": "string", "description": "Git 仓库路径"},
+            "repo_path": {"type": "string", "description": "Git 仓库路径，默认当前项目目录"},
             "message": {"type": "string", "description": "提交信息"},
         },
-        "required": ["repo_path", "message"],
+        "required": ["message"],
     },
     category="git",
 )
-def git_commit(repo_path: str, message: str) -> str:
+def git_commit(repo_path: str = ".", message: str = "") -> str:
     """提交变更"""
     s = _run_git(repo_path, "diff", "--staged", "--name-only")
     if not s["stdout"]:
@@ -163,14 +163,14 @@ def git_commit(repo_path: str, message: str) -> str:
     parameters={
         "type": "object",
         "properties": {
-            "repo_path": {"type": "string", "description": "Git 仓库路径"},
+            "repo_path": {"type": "string", "description": "Git 仓库路径，默认当前项目目录"},
             "files": {"type": "string", "description": "要添加的文件（默认 '.' 添加全部）", "default": "."},
         },
-        "required": ["repo_path"],
+        "required": [],
     },
     category="git",
 )
-def git_add(repo_path: str, files: str = ".") -> str:
+def git_add(repo_path: str = ".", files: str = ".") -> str:
     """暂存文件"""
     r = _run_git(repo_path, "add", files)
     if r["success"]:
@@ -184,15 +184,15 @@ def git_add(repo_path: str, files: str = ".") -> str:
     parameters={
         "type": "object",
         "properties": {
-            "repo_path": {"type": "string", "description": "Git 仓库路径"},
+            "repo_path": {"type": "string", "description": "Git 仓库路径，默认当前项目目录"},
             "remote": {"type": "string", "description": "远程名称，默认 origin", "default": "origin"},
             "branch": {"type": "string", "description": "分支名（可选，默认当前分支）", "default": ""},
         },
-        "required": ["repo_path"],
+        "required": [],
     },
     category="git",
 )
-def git_push(repo_path: str, remote: str = "origin", branch: str = "") -> str:
+def git_push(repo_path: str = ".", remote: str = "origin", branch: str = "") -> str:
     """推送到远程"""
     args = ["push", remote]
     if branch:
@@ -209,15 +209,15 @@ def git_push(repo_path: str, remote: str = "origin", branch: str = "") -> str:
     parameters={
         "type": "object",
         "properties": {
-            "repo_path": {"type": "string", "description": "Git 仓库路径"},
+            "repo_path": {"type": "string", "description": "Git 仓库路径，默认当前项目目录"},
             "remote": {"type": "string", "description": "远程名称，默认 origin", "default": "origin"},
             "branch": {"type": "string", "description": "分支名（可选）", "default": ""},
         },
-        "required": ["repo_path"],
+        "required": [],
     },
     category="git",
 )
-def git_pull(repo_path: str, remote: str = "origin", branch: str = "") -> str:
+def git_pull(repo_path: str = ".", remote: str = "origin", branch: str = "") -> str:
     """拉取远程更新"""
     args = ["pull", remote]
     if branch:
@@ -234,13 +234,13 @@ def git_pull(repo_path: str, remote: str = "origin", branch: str = "") -> str:
     parameters={
         "type": "object",
         "properties": {
-            "repo_path": {"type": "string", "description": "Git 仓库路径"},
+            "repo_path": {"type": "string", "description": "Git 仓库路径，默认当前项目目录"},
         },
-        "required": ["repo_path"],
+        "required": [],
     },
     category="git",
 )
-def git_branch(repo_path: str) -> str:
+def git_branch(repo_path: str = ".") -> str:
     """列出分支"""
     r = _run_git(repo_path, "branch", "-a")
     if not r["success"]:
@@ -254,15 +254,15 @@ def git_branch(repo_path: str) -> str:
     parameters={
         "type": "object",
         "properties": {
-            "repo_path": {"type": "string", "description": "Git 仓库路径"},
+            "repo_path": {"type": "string", "description": "Git 仓库路径，默认当前项目目录"},
             "branch": {"type": "string", "description": "目标分支名"},
             "create": {"type": "boolean", "description": "是否创建新分支后切换", "default": False},
         },
-        "required": ["repo_path", "branch"],
+        "required": ["branch"],
     },
     category="git",
 )
-def git_checkout(repo_path: str, branch: str, create: bool = False) -> str:
+def git_checkout(repo_path: str = ".", branch: str = "", create: bool = False) -> str:
     """切换/创建分支"""
     args = ["checkout"]
     if create:
@@ -303,13 +303,13 @@ def git_clone(url: str, target_dir: str) -> str:
     parameters={
         "type": "object",
         "properties": {
-            "repo_path": {"type": "string", "description": "要初始化的目录路径"},
+            "repo_path": {"type": "string", "description": "要初始化的目录路径，默认当前目录"},
         },
-        "required": ["repo_path"],
+        "required": [],
     },
     category="git",
 )
-def git_init(repo_path: str) -> str:
+def git_init(repo_path: str = ".") -> str:
     """初始化仓库"""
     os.makedirs(repo_path, exist_ok=True)
     r = _run_git(repo_path, "init")

@@ -119,6 +119,12 @@ async def health_check():
     return {"status": "ok", "version": _APP_VERSION}
 
 
+# ===== 版本信息 =====
+@app.get("/api/version")
+async def version_info():
+    return {"name": "7tan-editor", "version": _APP_VERSION}
+
+
 # ===== WebSocket 端点 =====
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):

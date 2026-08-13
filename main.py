@@ -279,6 +279,22 @@ def startup_self_check():
     except SyntaxError as e:
         return False, f"main.py 语法错误: {e}"
 
+    # ④ integrity.json 完整性校验（防自修改跑偏后无感知；仅开发模式，打包后清单在 exe 内）
+    # 校验失败不阻塞启动，仅告警（清单可能因源码更新而过期，需重新生成）
+    try:
+        if not getattr(sys, 'frozen', False):
+            from src.security.integrity import verify_integrity as _verify_integrity
+            _ok, _issues = _verify_integrity()
+            if not _ok:
+                logger.warning(
+                    f"⚠️ 启动自检：完整性校验未通过！发现 {len(_issues) if isinstance(_issues, list) else '?'} 项异常"
+                    "（文件可能被外部修改，或 integrity.json 已过期——更新源码后需重新生成清单）"
+                )
+            else:
+                logger.info("✅ 启动自检：完整性校验通过")
+    except Exception as e:
+        logger.debug(f"启动自检：完整性校验跳过: {e}")
+
     return True, "OK"
 
 

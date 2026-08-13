@@ -12,7 +12,36 @@ from loguru import logger
 
 # API 安全：仅允许本地请求（桌面应用）或带 token 的远程请求
 import os
-API_TOKEN = os.environ.get("7TAN_API_TOKEN", "")
+import secrets
+
+
+def _load_or_create_api_token() -> str:
+    """加载或自动生成 API Token（优先级：环境变量 > data/.api_token > 随机生成并持久化）。
+
+    防止未配置 7TAN_API_TOKEN 时 API 完全无鉴权（远程/本地进程均可驱动 agent）。
+    """
+    env_token = os.environ.get("7TAN_API_TOKEN", "").strip()
+    if env_token:
+        return env_token
+    token_file = Path(__file__).resolve().parent.parent.parent / "data" / ".api_token"
+    try:
+        if token_file.exists():
+            t = token_file.read_text(encoding="utf-8").strip()
+            if t:
+                return t
+    except Exception:
+        pass
+    token = secrets.token_urlsafe(32)
+    try:
+        token_file.parent.mkdir(parents=True, exist_ok=True)
+        token_file.write_text(token, encoding="utf-8")
+        logger.info(f"🔑 已自动生成 API Token 并保存至 {token_file}")
+    except Exception as e:
+        logger.warning(f"API Token 持久化失败: {e}")
+    return token
+
+
+API_TOKEN = _load_or_create_api_token()
 
 # 全局服务器 socket 引用，供 shutdown_server() 使用
 _server_socket = None
@@ -109,10 +138,13 @@ async def websocket_endpoint(ws: WebSocket):
             logger.warning(f"🚫 拒绝跨站 WebSocket 连接: origin={origin}")
             await ws.close(code=1008, reason="origin not allowed")
             return
-    if API_TOKEN:
+    # 远程连接强制校验 token（本地连接靠 Origin 白名单已足够；无 Origin 的本地进程放行）
+    client_host = ws.client.host if ws.client else ""
+    is_local = client_host in ("127.0.0.1", "::1", "localhost")
+    if not is_local:
         query_token = ws.query_params.get("token", "")
         if query_token != API_TOKEN:
-            logger.warning("🚫 拒绝未授权 WebSocket 连接: token 不匹配")
+            logger.warning(f"🚫 拒绝未授权 WebSocket 连接: host={client_host}, token 不匹配")
             await ws.close(code=1008, reason="unauthorized")
             return
 

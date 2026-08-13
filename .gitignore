@@ -1,6 +1,7 @@
 # 加密密钥 - 绝对不能提交！
 data/.encryption_key
 data/.encryption_salt
+data/.api_token
 data/auth/token.dat
 data/auth/owner.dat
 data/auth/device_last_report.json

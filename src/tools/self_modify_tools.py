@@ -292,6 +292,8 @@ def _publish_sandbox_changes(before: dict):
 )
 def sandbox_execute(code: str, timeout: int = 30) -> str:
     """沙盒执行 Python 代码"""
+    # 自修改审计：记录执行内容摘要（与其它 self_modify 工具一致）
+    _audit_log("sandbox_execute", {"code_hash": hashlib.sha256(code.encode()).hexdigest()[:12], "code_head": code[:200], "timeout": timeout}, "started")
     SANDBOX_ROOT.mkdir(parents=True, exist_ok=True)
 
     # 生成唯一文件名
@@ -309,10 +311,8 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
         python_exe = _find_real_python()
         is_frozen = getattr(sys, 'frozen', False)
 
-        if is_frozen:
-            cmd = [python_exe, str(script_path)]
-        else:
-            cmd = [python_exe, "-I", str(script_path)]
+        # -I 隔离模式：无论是否打包都启用，防止沙盒代码污染宿主环境
+        cmd = [python_exe, "-I", str(script_path)]
 
         logger.debug(f"🔧 沙盒执行: {' '.join(cmd)}")
 

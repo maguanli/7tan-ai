@@ -1,5 +1,9 @@
 # 7Tan 🎮
 
+[![CI](https://github.com/your-org/7tan/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/7tan/actions/workflows/ci.yml)
+
+<!-- CI Badge：推送仓库到 GitHub 后，把 your-org/7tan 替换为实际 owner/repo 即可显示构建状态 -->
+
 > **7坛 AI 小编「盘古」** — 游戏内容自动化发布平台
 
 7Tan 是一个智能游戏编辑系统，能自动从游戏源站采集信息、撰写专业评测、翻译介绍、上传云存储，并一键发布到 7坛管理后台。

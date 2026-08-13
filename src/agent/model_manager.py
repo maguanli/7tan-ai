@@ -180,8 +180,16 @@ class ModelManager:
         else:
             kwargs.setdefault("temperature", self.temperature)
         # 注入 extra_config（如 reasoning_effort 等扩展参数）
+        # 🔒 仅注入 OpenAI chat completion 支持的扩展参数，
+        #    过滤配置元数据（key_name/task_type/endpoint/watermark/size/note 等），
+        #    防止透传给 SDK 导致 TypeError: unexpected keyword argument
+        _LLM_EXTRA_WHITELIST = {
+            "reasoning_effort", "max_completion_tokens", "response_format",
+            "stop", "logprobs", "top_logprobs", "user", "stream_options",
+        }
         for key, value in self.extra_config.items():
-            kwargs.setdefault(key, value)
+            if key in _LLM_EXTRA_WHITELIST:
+                kwargs.setdefault(key, value)
 
         # 🔒 安全校验：确保所有 tools 的 schema 合法（防止 type: null 等 400 错误）
         if "tools" in kwargs:

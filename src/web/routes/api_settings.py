@@ -354,3 +354,185 @@ async def update_scheduler_config(data: dict):
         logger.warning(f"重启调度器失败: {e}")
     
     return {"success": True, "message": "定时采集配置已更新"}
+
+
+# ============================================================
+# 以下端点对应桌面版「设置」页的 Tab（插件市场/能力清单/环境引擎/记忆/提示词/关于）
+# ============================================================
+
+@router.get("/plugins")
+async def get_plugins_settings():
+    """插件市场：可用插件清单 + 安装状态"""
+    try:
+        from ...plugins.manager import get_manager
+        mgr = get_manager()
+        manifest = mgr.get_manifest() or []
+        installed = set(mgr.get_installed() or [])
+        plugins = []
+        for p in manifest:
+            pid = p.get("id", "")
+            plugins.append({
+                "id": pid,
+                "name": p.get("name", pid),
+                "version": p.get("version", ""),
+                "author": p.get("author", ""),
+                "category": p.get("category", ""),
+                "description": p.get("description", ""),
+                "tools": p.get("tools", []),
+                "icon": p.get("icon", "🧩"),
+                "installed": pid in installed,
+            })
+        return {"plugins": plugins, "installed_count": len(installed), "total": len(plugins)}
+    except Exception as e:
+        logger.warning(f"获取插件清单失败: {e}")
+        return {"plugins": [], "installed_count": 0, "total": 0, "error": str(e)}
+
+
+@router.post("/plugins/{plugin_id}/install")
+async def install_plugin_api(plugin_id: str):
+    """安装插件"""
+    try:
+        from ...plugins.manager import get_manager
+        get_manager().install(plugin_id)
+        return {"ok": True, "message": f"插件 {plugin_id} 安装成功（重启后生效）"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"安装失败: {e}")
+
+
+@router.post("/plugins/{plugin_id}/uninstall")
+async def uninstall_plugin_api(plugin_id: str):
+    """卸载插件"""
+    try:
+        from ...plugins.manager import get_manager
+        get_manager().uninstall(plugin_id)
+        return {"ok": True, "message": f"插件 {plugin_id} 已卸载（重启后生效）"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"卸载失败: {e}")
+
+
+@router.get("/capabilities")
+async def get_capabilities_api():
+    """能力清单：按类别分组的 AI 能力 + 统计摘要"""
+    try:
+        from ...database.db import get_capabilities_grouped
+        groups = get_capabilities_grouped() or []
+        total = local = cloud = 0
+        for g in groups:
+            for it in g.get("items", []):
+                total += 1
+                tool = str(it.get("tool", ""))
+                if "本地" in tool or "(" in tool:
+                    local += 1
+                else:
+                    cloud += 1
+        return {"groups": groups, "stats": {"categories": len(groups), "total": total, "local": local, "cloud": cloud}}
+    except Exception as e:
+        logger.warning(f"获取能力清单失败: {e}")
+        return {"groups": [], "stats": {"categories": 0, "total": 0, "local": 0, "cloud": 0}, "error": str(e)}
+
+
+@router.get("/software")
+async def get_software_api():
+    """环境引擎：已安装软件/引擎清单"""
+    try:
+        from ...database.db import get_all_installed_software
+        return {"software": get_all_installed_software() or []}
+    except Exception as e:
+        logger.warning(f"获取软件清单失败: {e}")
+        return {"software": [], "error": str(e)}
+
+
+@router.post("/software/scan")
+async def scan_software_api():
+    """环境引擎：重新扫描已安装软件"""
+    try:
+        from ...database.db import scan_and_sync_installed_software
+        data = scan_and_sync_installed_software()
+        if isinstance(data, dict) and data.get("error"):
+            raise HTTPException(status_code=500, detail=data["error"])
+        return {"ok": True, "message": "扫描完成", "data": data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"扫描失败: {e}")
+
+
+@router.get("/memories")
+async def get_memories_api(section: str = "", keyword: str = ""):
+    """记忆系统：列出记忆（可按分区/关键词过滤）"""
+    try:
+        from ...database.db import get_all_memories
+        mems = get_all_memories(section=section or None, keyword=keyword or None, limit=500) or []
+        return {"memories": mems, "total": len(mems)}
+    except Exception as e:
+        logger.warning(f"获取记忆列表失败: {e}")
+        return {"memories": [], "total": 0, "error": str(e)}
+
+
+@router.delete("/memories")
+async def delete_memory_api(section: str, key: str):
+    """记忆系统：删除一条记忆"""
+    try:
+        from ...database.db import delete_memory
+        ok = delete_memory(section=section, key=key)
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"未找到记忆 {section}/{key}")
+        return {"ok": True, "message": f"已删除记忆 {section}/{key}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除失败: {e}")
+
+
+@router.get("/prompt")
+async def get_prompt_api(prompt_type: str = "system"):
+    """系统提示词：读取指定类型的提示词（只读）"""
+    try:
+        from ...database.db import get_prompt_from_db
+        p = get_prompt_from_db(prompt_type)
+        if not p:
+            # 回退：读取 data/prompts/{type}.txt
+            base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+            fp = os.path.join(base, "data", "prompts", f"{prompt_type}.txt")
+            content = ""
+            if os.path.exists(fp):
+                with open(fp, "r", encoding="utf-8") as f:
+                    content = f.read()
+            p = {"prompt_type": prompt_type, "content": content, "char_count": len(content),
+                 "line_count": content.count("\n") + 1 if content else 0}
+        return {"prompt": p}
+    except Exception as e:
+        logger.warning(f"获取提示词失败: {e}")
+        return {"prompt": None, "error": str(e)}
+
+
+@router.get("/about")
+async def get_about_api():
+    """关于 7Tan：版本 / 构建 / 路径信息"""
+    info = {}
+    try:
+        from ...config.version import APP_VERSION
+        info["version"] = APP_VERSION
+    except Exception:
+        info["version"] = "未知"
+    try:
+        from ...config.build_info import BUILD_ID
+        info["build_id"] = BUILD_ID
+    except Exception:
+        info["build_id"] = ""
+    try:
+        from ...plugins.manager import PLUGIN_DIR
+        info["plugin_dir"] = str(PLUGIN_DIR)
+    except Exception:
+        info["plugin_dir"] = ""
+    base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    info["project_root"] = base
+    info["log_dir"] = os.path.join(base, "logs")
+    info["data_dir"] = os.path.join(base, "data")
+    try:
+        from ...config.loader import load_config
+        cfg = load_config()
+        info["site_root"] = (cfg.get("site_7tan") or {}).get("base_url", "").replace("/api", "") or "https://www.7tan.com"
+    except Exception:
+        info["site_root"] = "https://www.7tan.com"
+    return {"info": info}

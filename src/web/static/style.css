@@ -266,3 +266,52 @@ h3 { margin-bottom: 12px; font-size: 15px; color: var(--muted); font-weight: 600
 .msg code { background: rgba(99,102,241,.15); padding: 1px 5px; border-radius: 4px;
   font-family: Consolas, monospace; font-size: 12px; }
 .msg strong { color: #fff; }
+
+
+/* ===== 系统设置 9 Tab（与桌面版对齐） ===== */
+.settings-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.stab { background: var(--bg-card, #1a1f2e); color: var(--text-secondary, #9aa4b2);
+  border: 1px solid var(--border, #2a3142); border-radius: 8px; padding: 8px 16px;
+  font-size: 13px; cursor: pointer; transition: all .15s; }
+.stab:hover { color: #fff; border-color: var(--primary, #6366f1); }
+.stab.active { background: var(--primary, #6366f1); color: #fff; border-color: var(--primary, #6366f1); font-weight: bold; }
+.stab-panel { display: block; }
+.stab-panel.hidden { display: none; }
+.ai-config-wrap { display: flex; gap: 16px; flex-wrap: wrap; }
+.ai-config-list { width: 230px; flex-shrink: 0; }
+.ai-config-list select { width: 100%; min-height: 200px; background: var(--bg-input, #11151f);
+  border: 1px solid var(--border, #2a3142); border-radius: 6px; color: var(--text-primary, #e5e7eb);
+  font-size: 13px; padding: 6px; }
+.ai-config-list select option { padding: 6px 8px; }
+.ai-config-btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.ai-config-form { flex: 1; min-width: 320px; }
+.form label { display: block; margin-bottom: 10px; font-size: 13px; color: var(--text-secondary, #9aa4b2); }
+.form input, .form select { width: 100%; margin-top: 4px; }
+.plugin-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.plugin-card { background: var(--bg-input, #11151f); border: 1px solid var(--border, #2a3142);
+  border-radius: 8px; padding: 12px; }
+.plugin-card h4 { margin: 0 0 6px; font-size: 14px; color: #fff; }
+.plugin-card .plugin-desc { font-size: 12px; color: var(--text-secondary, #9aa4b2); margin-bottom: 6px; line-height: 1.5; }
+.plugin-card .plugin-tools { font-size: 11px; color: var(--text-muted, #6b7280); margin-bottom: 8px;
+  word-break: break-all; }
+.plugin-card .plugin-actions { display: flex; gap: 6px; align-items: center; }
+.plugin-card .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--primary, #6366f1); color: #fff; }
+.plugin-card .badge.installed { background: var(--green, #10b981); }
+.cap-list { display: flex; flex-direction: column; gap: 12px; }
+.cap-group { background: var(--bg-input, #11151f); border: 1px solid var(--border, #2a3142);
+  border-radius: 8px; padding: 12px 14px; }
+.cap-group h4 { margin: 0 0 8px; font-size: 14px; color: #fff; }
+.cap-group .cap-item { font-size: 12px; color: var(--text-secondary, #9aa4b2);
+  border-top: 1px dashed var(--border, #2a3142); padding: 6px 0; }
+.cap-group .cap-item b { color: #e5e7eb; }
+.cap-group .cap-item .cap-tool { color: var(--text-muted, #6b7280); font-size: 11px; }
+.mem-list { display: flex; flex-direction: column; gap: 8px; }
+.mem-item { background: var(--bg-input, #11151f); border: 1px solid var(--border, #2a3142);
+  border-radius: 8px; padding: 10px 12px; }
+.mem-item .mem-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.mem-item .mem-section { font-size: 11px; background: var(--primary, #6366f1); color: #fff;
+  padding: 2px 8px; border-radius: 10px; }
+.mem-item .mem-key { font-size: 13px; font-weight: bold; color: #fff; }
+.mem-item .mem-content { font-size: 12px; color: var(--text-secondary, #9aa4b2);
+  white-space: pre-wrap; word-break: break-all; max-height: 90px; overflow: auto; }
+.mem-item .mem-actions { margin-top: 6px; text-align: right; }

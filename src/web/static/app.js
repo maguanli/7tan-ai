@@ -819,6 +819,7 @@ async function applyUpdate() {
 
 /* ---------- 启动 ---------- */
 $("#tokenInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#tokenBtn").click(); });
+initSettingsTabs();
 connectWS();
 switchView("chat");
 loadLicenseStatus();
@@ -826,3 +827,324 @@ startLogPolling();
 startConsolePolling();
 // 代码变更轮询：仅当停留在 code 视图时每 10s 自动刷新
 setInterval(() => { if (currentView === "code") loadCodeChanges(); }, 10000);
+
+
+/* ========== 系统设置 9 Tab（与桌面版对齐） ========== */
+let aiConfigsCache = null, aiActiveKey = "";
+function initSettingsTabs() {
+  $$(".stab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $$(".stab").forEach((b) => b.classList.toggle("active", b === btn));
+      $$(".stab-panel").forEach((p) => p.classList.add("hidden"));
+      const panel = $("#stab-" + btn.dataset.stab);
+      if (panel) panel.classList.remove("hidden");
+    });
+  });
+  $("#aiConfigList").addEventListener("change", (e) => selectAiConfig(e.target.value));
+  $("#aiAdd").addEventListener("click", addAiConfig);
+  $("#aiDel").addEventListener("click", deleteAiConfig);
+  $("#aiActivate").addEventListener("click", activateAiConfig);
+  $("#aiSave").addEventListener("click", saveAiConfig);
+  $("#visSave").addEventListener("click", saveVisionConfig);
+  $("#siteSave").addEventListener("click", saveSiteSettings);
+  $("#ossSave").addEventListener("click", saveOssSettings);
+  $("#pluginRefresh").addEventListener("click", loadPlugins);
+  $("#swScan").addEventListener("click", scanSoftware);
+  $("#memRefresh").addEventListener("click", loadMemories);
+  $("#memKeyword").addEventListener("keydown", (e) => { if (e.key === "Enter") loadMemories(); });
+  $("#memSection").addEventListener("change", loadMemories);
+  $("#promptType").addEventListener("change", loadPrompt);
+  $("#promptRefresh").addEventListener("click", loadPrompt);
+  $("#aboutCheckUpdate").addEventListener("click", loadAboutUpdate);
+}
+
+/* 进入设置页时加载全部 tab 数据 */
+const _origLoadSettings = loadSettings;
+loadSettings = function () {
+  _origLoadSettings();
+  loadSettingsTabs();
+};
+function loadSettingsTabs() {
+  loadAiSettings();
+  loadSiteSettings();
+  loadOssSettings();
+  loadPlugins();
+  loadCapabilities();
+  loadSoftware();
+  loadMemories();
+  loadPrompt();
+  loadAbout();
+}
+
+/* --- AI 模型 --- */
+async function loadAiSettings() {
+  try {
+    const d = await API.get("/api/settings");
+    const ai = d.settings.ai || {};
+    aiConfigsCache = ai.configs || {};
+    aiActiveKey = ai.active || "";
+    const keys = Object.keys(aiConfigsCache);
+    $("#aiConfigList").innerHTML = keys.map((k) => `<option value="${escapeHtml(k)}">${escapeHtml(k)}${k === aiActiveKey ? " ⭐" : ""}</option>`).join("");
+    $("#aiActiveLabel").textContent = aiActiveKey ? `（当前启用: ${escapeHtml(aiActiveKey)}）` : "";
+    const vis = ai.vision || {};
+    $("#visKey").value = vis.api_key || "";
+    $("#visBase").value = vis.base_url || "https://open.bigmodel.cn/api/paas/v4";
+    $("#visModel").value = vis.model || "glm-4v-flash";
+    if (keys.length) selectAiConfig(keys[0]);
+  } catch (e) { toast("AI 配置加载失败: " + e.message, true); }
+}
+function selectAiConfig(key) {
+  const cfg = (aiConfigsCache || {})[key];
+  if (!cfg) return;
+  $("#aiName").value = key;
+  $("#aiProvider").value = cfg.provider || "deepseek";
+  $("#aiModel").value = cfg.model || "";
+  $("#aiKey").value = cfg.api_key || "";
+  $("#aiBase").value = cfg.base_url || "";
+}
+function addAiConfig() {
+  const key = ($("#aiName").value || "").trim();
+  if (!key) { toast("请先填写配置名称", true); return; }
+  if (!aiConfigsCache) aiConfigsCache = {};
+  aiConfigsCache[key] = { provider: "deepseek", model: "", api_key: "", base_url: "https://api.deepseek.com/v1" };
+  refreshAiList(key);
+  toast("已新建配置 " + key + "，填写后点保存");
+}
+function deleteAiConfig() {
+  const key = $("#aiConfigList").value;
+  if (!key) return;
+  if (!confirm(`确定删除 AI 配置「${key}」？`)) return;
+  delete aiConfigsCache[key];
+  refreshAiList(Object.keys(aiConfigsCache)[0] || "");
+  toast("已标记删除，点「保存模型配置」生效");
+}
+function activateAiConfig() {
+  const key = $("#aiConfigList").value;
+  if (!key) return;
+  aiActiveKey = key;
+  refreshAiList(key);
+  toast("已切换启用 " + key + "，点「保存模型配置」生效");
+}
+function refreshAiList(selectKey) {
+  $("#aiConfigList").innerHTML = Object.keys(aiConfigsCache).map((k) => `<option value="${escapeHtml(k)}">${escapeHtml(k)}${k === aiActiveKey ? " ⭐" : ""}</option>`).join("");
+  if (selectKey) { $("#aiConfigList").value = selectKey; selectAiConfig(selectKey); }
+  $("#aiActiveLabel").textContent = aiActiveKey ? `（当前启用: ${escapeHtml(aiActiveKey)}）` : "";
+}
+async function saveAiConfig() {
+  const key = ($("#aiName").value || "").trim();
+  if (!key) { toast("请填写配置名称", true); return; }
+  const cfg = {
+    provider: $("#aiProvider").value,
+    model: ($("#aiModel").value || "").trim(),
+    api_key: ($("#aiKey").value || "").trim(),
+    base_url: ($("#aiBase").value || "").trim(),
+  };
+  if (!aiConfigsCache) aiConfigsCache = {};
+  aiConfigsCache[key] = cfg;
+  try {
+    await API.put("/api/settings", { ai: { active: aiActiveKey || key, configs: { [key]: cfg } } });
+    toast("✅ 模型配置已保存");
+    loadAiSettings();
+  } catch (e) { toast("保存失败: " + e.message, true); }
+}
+async function saveVisionConfig() {
+  const vis = {
+    api_key: ($("#visKey").value || "").trim(),
+    base_url: ($("#visBase").value || "").trim(),
+    model: ($("#visModel").value || "").trim(),
+  };
+  try {
+    await API.put("/api/settings", { ai: { vision: vis } });
+    toast("✅ 视觉模型已保存");
+  } catch (e) { toast("保存失败: " + e.message, true); }
+}
+
+/* --- 站点设置 --- */
+async function loadSiteSettings() {
+  try {
+    const d = await API.get("/api/settings");
+    const s = d.settings.site_7tan || {};
+    $("#siteUrl").value = s.base_url || "";
+    $("#siteUser").value = s.username || "";
+    $("#sitePass").value = (s.password && s.password.includes("•")) ? "" : (s.password || "");
+  } catch (e) {}
+}
+async function saveSiteSettings() {
+  const payload = { site_7tan: {} };
+  const url = ($("#siteUrl").value || "").trim();
+  const user = ($("#siteUser").value || "").trim();
+  const pass = $("#sitePass").value;
+  if (url) payload.site_7tan.base_url = url;
+  if (user) payload.site_7tan.username = user;
+  if (pass && !pass.includes("•")) payload.site_7tan.password = pass;
+  try {
+    await API.put("/api/settings", payload);
+    toast("✅ 站点设置已保存");
+    loadSiteSettings();
+  } catch (e) { toast("保存失败: " + e.message, true); }
+}
+
+/* --- OSS 存储 --- */
+async function loadOssSettings() {
+  try {
+    const d = await API.get("/api/settings");
+    const o = d.settings.oss || {};
+    $("#ossBucket").value = o.bucket || "";
+    $("#ossEndpoint").value = o.endpoint || "";
+    $("#ossKey").value = o.access_key || "";
+    $("#ossSecret").value = (o.secret_key && o.secret_key.includes("•")) ? "" : (o.secret_key || "");
+  } catch (e) {}
+}
+async function saveOssSettings() {
+  const payload = { oss: {} };
+  const bucket = ($("#ossBucket").value || "").trim();
+  const endpoint = ($("#ossEndpoint").value || "").trim();
+  const key = ($("#ossKey").value || "").trim();
+  const secret = $("#ossSecret").value;
+  if (bucket) payload.oss.bucket = bucket;
+  if (endpoint) payload.oss.endpoint = endpoint;
+  if (key) payload.oss.access_key = key;
+  if (secret && !secret.includes("•")) payload.oss.secret_key = secret;
+  try {
+    await API.put("/api/settings", payload);
+    toast("✅ OSS 配置已保存");
+    loadOssSettings();
+  } catch (e) { toast("保存失败: " + e.message, true); }
+}
+
+/* --- 插件市场 --- */
+async function loadPlugins() {
+  const list = $("#pluginList");
+  try {
+    const d = await API.get("/api/settings/plugins");
+    $("#pluginStats").textContent = `（已安装 ${d.installed_count} / 共 ${d.total}）`;
+    list.innerHTML = (d.plugins || []).map((p) => `
+      <div class="plugin-card">
+        <h4>${escapeHtml(p.icon || "🧩")} ${escapeHtml(p.name)} <span class="badge ${p.installed ? "installed" : ""}">${p.installed ? "已安装" : "未安装"}</span></h4>
+        <div class="plugin-desc">${escapeHtml(p.description || "")}</div>
+        <div class="plugin-tools">工具: ${escapeHtml((p.tools || []).join(", ") || "-")} ｜ 版本 ${escapeHtml(p.version || "-")} ｜ ${escapeHtml(p.author || "")}</div>
+        <div class="plugin-actions">
+          ${p.installed
+            ? `<button class="btn btn-sm btn-danger" onclick="uninstallPlugin('${p.id}')">🗑️ 卸载</button>`
+            : `<button class="btn btn-sm btn-primary" onclick="installPlugin('${p.id}')">📥 安装</button>`}
+        </div>
+      </div>`).join("") || '<span class="muted">无可用插件</span>';
+  } catch (e) { list.innerHTML = '<span class="muted">加载失败: ' + escapeHtml(e.message) + "</span>"; }
+}
+async function installPlugin(id) {
+  try { await API.post(`/api/settings/plugins/${encodeURIComponent(id)}/install`); toast("✅ " + id + " 安装成功（重启后生效）"); loadPlugins(); }
+  catch (e) { toast("安装失败: " + e.message, true); }
+}
+async function uninstallPlugin(id) {
+  if (!confirm(`确定卸载插件「${id}」？`)) return;
+  try { await API.post(`/api/settings/plugins/${encodeURIComponent(id)}/uninstall`); toast("🗑️ " + id + " 已卸载"); loadPlugins(); }
+  catch (e) { toast("卸载失败: " + e.message, true); }
+}
+
+/* --- 能力清单 --- */
+async function loadCapabilities() {
+  const el = $("#capList");
+  try {
+    const d = await API.get("/api/settings/capabilities");
+    const st = d.stats || {};
+    $("#capStats").textContent = `（分类 ${st.categories} · 工具 ${st.total} · 本地 ${st.local} · 云 ${st.cloud}）`;
+    el.innerHTML = (d.groups || []).map((g) => `
+      <div class="cap-group">
+        <h4>${escapeHtml(g.icon || "📦")} ${escapeHtml(g.category || "")}</h4>
+        ${(g.items || []).map((it) => `<div class="cap-item"><b>${escapeHtml(it.name || "")}</b> — ${escapeHtml(it.desc || "")} <span class="cap-tool">[${escapeHtml(it.tool || "")}]</span></div>`).join("")}
+      </div>`).join("") || '<span class="muted">暂无能力数据</span>';
+  } catch (e) { el.innerHTML = '<span class="muted">加载失败: ' + escapeHtml(e.message) + "</span>"; }
+}
+
+/* --- 环境引擎 --- */
+async function loadSoftware() {
+  const body = $("#swBody");
+  try {
+    const d = await API.get("/api/settings/software");
+    body.innerHTML = (d.software || []).map((s) => `
+      <tr>
+        <td>${escapeHtml(s.category || "")}</td>
+        <td>${escapeHtml(s.icon || "")} ${escapeHtml(s.name || "")}</td>
+        <td>${escapeHtml(s.version || "")}</td>
+        <td title="${escapeHtml(s.install_path || "")}">${escapeHtml(s.install_path || "")}</td>
+        <td>${s.is_working ? "✅" : "❌"}</td>
+      </tr>`).join("") || '<tr><td colspan="5" class="muted">暂无数据</td></tr>';
+  } catch (e) { body.innerHTML = '<tr><td colspan="5" class="muted">加载失败: ' + escapeHtml(e.message) + "</td></tr>"; }
+}
+async function scanSoftware() {
+  try {
+    toast("🔄 正在扫描…");
+    await API.post("/api/settings/software/scan");
+    toast("✅ 扫描完成");
+    loadSoftware();
+  } catch (e) { toast("扫描失败: " + e.message, true); }
+}
+
+/* --- 记忆系统 --- */
+async function loadMemories() {
+  const el = $("#memList");
+  const section = $("#memSection").value;
+  const keyword = ($("#memKeyword").value || "").trim();
+  try {
+    const qs = new URLSearchParams();
+    if (section) qs.set("section", section);
+    if (keyword) qs.set("keyword", keyword);
+    const d = await API.get("/api/settings/memories?" + qs.toString());
+    $("#memTotal").textContent = `共 ${d.total} 条`;
+    el.innerHTML = (d.memories || []).map((m) => `
+      <div class="mem-item">
+        <div class="mem-head">
+          <span class="mem-section">${escapeHtml(m.section || "")}</span>
+          <span class="mem-key">${escapeHtml(m.key || "")}</span>
+          <span class="muted" style="margin-left:auto;font-size:11px">${escapeHtml(m.updated_at || m.created_at || "")}</span>
+        </div>
+        <div class="mem-content">${escapeHtml(m.content || "")}</div>
+        <div class="mem-actions">
+          <button class="btn btn-sm btn-danger" onclick="deleteMemoryItem('${escapeHtml(m.section || "")}','${escapeHtml(m.key || "")}')">🗑 删除</button>
+        </div>
+      </div>`).join("") || '<span class="muted">暂无记忆</span>';
+  } catch (e) { el.innerHTML = '<span class="muted">加载失败: ' + escapeHtml(e.message) + "</span>"; }
+}
+async function deleteMemoryItem(section, key) {
+  if (!confirm(`确定删除记忆「${section}/${key}」？`)) return;
+  try {
+    await API.del(`/api/settings/memories?section=${encodeURIComponent(section)}&key=${encodeURIComponent(key)}`);
+    toast("🗑️ 已删除");
+    loadMemories();
+  } catch (e) { toast("删除失败: " + e.message, true); }
+}
+
+/* --- 系统提示词 --- */
+async function loadPrompt() {
+  const type = $("#promptType").value || "system";
+  try {
+    const d = await API.get("/api/settings/prompt?prompt_type=" + encodeURIComponent(type));
+    const p = d.prompt || {};
+    $("#promptContent").textContent = p.content || "（无内容）";
+    $("#promptMeta").textContent = (p.char_count != null) ? `（${p.char_count} 字 / ${p.line_count} 行）` : "";
+  } catch (e) { $("#promptContent").textContent = "加载失败: " + e.message; }
+}
+
+/* --- 关于 --- */
+async function loadAbout() {
+  try {
+    const d = await API.get("/api/settings/about");
+    const i = d.info || {};
+    $("#aboutInfo").innerHTML = [
+      ["版本", "v" + (i.version || "-")],
+      ["构建", i.build_id || "-"],
+      ["项目根目录", i.project_root || "-"],
+      ["日志目录", i.log_dir || "-"],
+      ["插件目录", i.plugin_dir || "-"],
+      ["站点", i.site_root || "-"],
+    ].map(([k, v]) => `<label>${escapeHtml(k)}<input value="${escapeHtml(v)}" readonly style="background:#0b0d12"></label>`).join("");
+  } catch (e) { $("#aboutInfo").textContent = "加载失败: " + e.message; }
+}
+async function loadAboutUpdate() {
+  const msg = $("#aboutUpdateMsg");
+  msg.textContent = "检查中…";
+  try {
+    const d = await API.get("/api/update/check");
+    msg.textContent = d.has_update ? `发现新版本 v${escapeHtml((d.latest || {}).version || "")}` : `✅ 已是最新版本 v${escapeHtml(d.current)}`;
+  } catch (e) { msg.textContent = "检查失败: " + e.message; }
+}

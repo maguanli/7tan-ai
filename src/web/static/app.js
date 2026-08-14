@@ -664,6 +664,9 @@ function highlightMsgText(escaped) {
 function highlightLogLine(raw) {
   const s = stripAnsi(raw == null ? "" : raw);
   if (!s || !s.trim()) return "";
+  // 前端保底过滤：uvicorn HTTP 访问日志（轮询/健康检查等）不进实时控制台
+  if ((s.includes('GET ') || s.includes('POST ') || s.includes('PUT ')) &&
+      s.includes('HTTP/1.1') && s.includes('/api/')) return "";
   // 标准 loguru 格式: 时间 | 级别 | 模块 | 消息（时间精简为 HH:MM:SS，更接近桌面版）
   const m = s.match(/^(\d{4}-\d{2}-\d{2}[ T][\d:.]+)\s*\|\s*(DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL)\s*\|\s*(.*)$/);
   if (m) {

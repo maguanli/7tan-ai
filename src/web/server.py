@@ -159,6 +159,49 @@ _NOISE_PATTERNS = [
     'Sending HTTP Request',
 ]
 
+# —— HTTP 访问日志噪声（uvicorn access log）：轮询端点每 2 秒刷 2 条，
+# 会淹没 agent 的 💬 Agent / 工具调用日志，必须过滤。 ——
+_HTTP_ACCESS_NOISE = (
+    '/api/logs/recent',    # 控制台轮询
+    '/api/health',         # 健康检查
+    '/api/license/status', # 授权轮询
+    '/api/stats/dashboard',# 仪表盘轮询
+    '/ws',                 # WebSocket
+    '"GET / HTTP/1.1',     # 页面访问
+    '"GET /style.css',     # 静态样式
+    '"GET /app.js',        # 静态脚本
+    '"GET /favicon',       # 图标
+)
+
+_WS_CONNECT_NOISE = (
+    '\"WebSocket /ws\" [accepted]',
+    'connection open',
+    'WebSocket 连接:',
+    'WebSocket 断开:',
+    'WebSocket 已连接',
+    'WebSocket 客户端已连接',
+    'WebSocket 客户端断开',
+)
+
+
+def _is_http_access_noise(line: str) -> bool:
+    """检测是否 HTTP 访问日志噪声（uvicorn access log / WS 连接日志）。"""
+    # 先查 WS 连接噪声（这些行没有 GET/POST 字样，必须先判断）
+    for p in _WS_CONNECT_NOISE:
+        if p in line:
+            return True
+    if '"GET ' not in line and '"POST ' not in line and '"PUT ' not in line:
+        return False
+    if 'HTTP/1.1' not in line:
+        return False
+    for p in _HTTP_ACCESS_NOISE:
+        if p in line:
+            return True
+    # 通用兜底：任意 /api/ 访问日志（含 200）都属于噪声，控制台只关心业务日志
+    if '/api/' in line:
+        return True
+    return False
+
 
 def _ws_log_sink(message: str) -> None:
     """loguru sink — 写入环形缓冲 + 异步广播给所有 WebSocket 客户端。
@@ -169,6 +212,8 @@ def _ws_log_sink(message: str) -> None:
     try:
         line = message.rstrip()
         if not line.strip():
+            return
+        if _is_http_access_noise(line):
             return
         for np_ in _NOISE_PATTERNS:
             if np_ in line:
@@ -225,6 +270,10 @@ class _StdLogBridge(_logging.Handler):
 
 
 def _install_std_log_bridge() -> None:
+    # 抑制 uvicorn 访问日志（access log 是 INFO 级，会刷屏控制台）
+    for _uv_name in ('uvicorn.access', 'uvicorn.error'):
+        _uv_logger = _logging.getLogger(_uv_name)
+        _uv_logger.setLevel(_logging.WARNING)
     root = _logging.getLogger()
     # 放开 root 级别：默认 WARNING 会让 agent_loop 的 INFO（💬 Agent 等）根本不产生记录
     if root.level > _logging.INFO:

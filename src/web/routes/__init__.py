@@ -12,7 +12,6 @@ from .api_terminal import router as terminal_router
 from .api_update import router as update_router
 from .api_code import router as code_router
 from .api_license import router as license_router
-from .api_files import router as files_router
 
 __all__ = [
     "resources_router",
@@ -26,5 +25,4 @@ __all__ = [
     "update_router",
     "code_router",
     "license_router",
-    "files_router",
 ]

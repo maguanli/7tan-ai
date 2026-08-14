@@ -19,10 +19,9 @@
       <button class="nav-item" data-view="sources">🌐 源站管理</button>
       <button class="nav-item" data-view="settings">🔧 系统设置</button>
       <button class="nav-item" data-view="code">🛠️ 代码变更</button>
-      <button class="nav-item" data-view="editor">📝 代码编辑</button>
       <button class="nav-item" data-view="terminal">💻 终端</button>
-      <button class="nav-item" data-view="logs">📜 系统日志</button>
-      <button class="nav-item" data-view="update">⬆️ 更新</button>
+      <button class="nav-item" data-view="logs" style="display:none" title="系统日志(已隐藏)">📜 系统日志</button>
+      <button class="nav-item" data-view="update" style="display:none" title="软件更新(已隐藏)">⬆️ 更新</button>
     </nav>
     <div class="sidebar-footer">
       <span class="status-dot" id="connDot"></span><span id="connText">未连接</span>
@@ -355,63 +354,6 @@
         <button id="codeRefresh" class="btn btn-sm">刷新</button>
       </div>
       <div id="codeList" class="code-list"></div>
-    </section>
-
-        <!-- 代码编辑（文件浏览器 + 在线编辑器） -->
-    <section id="view-editor" class="view">
-      <h2>📝 代码编辑</h2>
-      <div class="editor-layout">
-        <div class="file-tree panel">
-          <div class="toolbar" style="margin-bottom:8px">
-            <span style="font-weight:600">📁 文件</span>
-            <span class="spacer"></span>
-            <button id="edRefresh" class="btn btn-sm" title="刷新文件树">🔄</button>
-            <button id="edNewFile" class="btn btn-sm" title="新建文件">＋文件</button>
-            <button id="edNewDir" class="btn btn-sm" title="新建文件夹">＋目录</button>
-          </div>
-          <div id="edTree" class="tree"><div class="muted" style="padding:8px">加载中…</div></div>
-          <div class="muted" style="padding:8px 4px 0">仅限项目目录内；.env / 密钥 / 数据库等受保护文件不可读写</div>
-        </div>
-        <div class="editor-main panel">
-          <div class="toolbar" style="margin-bottom:8px">
-            <input id="edPath" readonly class="mono" placeholder="未打开文件" style="flex:1;min-width:0;background:transparent;border:none;color:var(--muted);padding:0;font-size:12px">
-            <span id="edMeta" class="muted"></span>
-            <button id="edDelete" class="btn btn-sm btn-danger" title="删除当前文件">🗑 删除</button>
-            <button id="edAi" class="btn btn-sm btn-primary" title="AI 修改当前文件：描述需求，AI 生成修改并预览 diff">🤖 AI 修改</button>
-            <button id="edSave" class="btn btn-sm btn-primary">💾 保存 (Ctrl+S)</button>
-          </div>
-          <div class="editor-box">
-            <div id="edGutter" class="ed-gutter mono"></div>
-            <textarea id="edContent" class="ed-text mono" spellcheck="false" placeholder="从左侧选择文件开始编辑…&#10;&#10;支持：修改文件、新建文件/文件夹、删除文件。&#10;保存后自动记录到「🛠️ 代码变更」页。"></textarea>
-          </div>
-          <div class="ed-status">
-            <span id="edStatus" class="muted">未打开文件</span>
-            <span class="spacer"></span>
-            <span class="muted" id="edRoot"></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- AI 修改弹窗 -->
-      <div id="edAiModal" class="modal-mask" style="display:none">
-        <div class="modal-box ai-modal">
-          <div class="modal-head">
-            <span>🤖 AI 修改 <span class="muted" id="edAiPath"></span></span>
-            <button id="edAiClose" class="btn btn-sm" title="关闭">✕</button>
-          </div>
-          <textarea id="edAiInstr" class="ai-instr" placeholder="描述你想要的修改，例如：&#10;· 给这个函数加上参数校验&#10;· 修复空指针/None 崩溃问题&#10;· 把 print 改成 logger 输出&#10;· 优化这段逻辑的写法…（Ctrl+Enter 提交）"></textarea>
-          <div class="modal-actions">
-            <button id="edAiRun" class="btn btn-primary">🚀 生成修改</button>
-            <span id="edAiState" class="muted"></span>
-          </div>
-          <pre id="edAiDiff" class="diff-view mono"></pre>
-          <div class="modal-actions" id="edAiActions" style="display:none">
-            <button id="edAiApply" class="btn btn-primary">✅ 应用修改</button>
-            <button id="edAiManual" class="btn btn-sm">✏️ 改为手动编辑</button>
-            <button id="edAiCancel" class="btn btn-sm">取消</button>
-          </div>
-        </div>
-      </div>
     </section>
 
     <!-- 终端 -->

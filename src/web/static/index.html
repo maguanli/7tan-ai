@@ -19,6 +19,7 @@
       <button class="nav-item" data-view="settings">🔧 系统设置</button>
       <button class="nav-item" data-view="code">🛠️ 代码变更</button>
       <button class="nav-item" data-view="terminal">💻 终端</button>
+      <button class="nav-item" data-view="logs">📜 系统日志</button>
       <button class="nav-item" data-view="update">⬆️ 更新</button>
     </nav>
     <div class="sidebar-footer">
@@ -162,6 +163,18 @@
         </div>
         <pre class="term-out mono" id="termOutput">就绪。仅允许编译 / 构建 / 查询类安全命令（见后端白名单）。</pre>
       </div>
+    </section>
+
+    <!-- 系统日志 -->
+    <section id="view-logs" class="view">
+      <h2>📜 系统日志</h2>
+      <div class="toolbar">
+        <span class="muted" id="logFileInfo"></span>
+        <span class="spacer"></span>
+        <button id="logRefresh" class="btn btn-sm">刷新</button>
+        <button id="logAuto" class="btn btn-sm">⏸ 暂停自动刷新</button>
+      </div>
+      <pre class="term-out mono" id="logOutput" style="max-height:70vh;overflow:auto">加载中…</pre>
     </section>
 
     <!-- 更新 -->

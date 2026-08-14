@@ -61,8 +61,8 @@ _INSTANCE_LOCK_FD = None
 def _acquire_single_instance() -> bool:
     """获取单实例文件锁。返回 True = 本进程是唯一实例。"""
     args = sys.argv[1:]
-    # CLI 单次任务/向导不阻塞（run / setup 可与桌面共存）
-    if any(a in args for a in ("run", "setup", "--cli")):
+    # CLI 单次任务/向导不阻塞（run / setup / web 可与桌面共存）
+    if any(a in args for a in ("run", "setup", "--cli", "web", "--web")):
         return True
     if os.name != "nt":
         return True  # 非 Windows 暂不启用
@@ -224,6 +224,8 @@ def main():
         run_integrity()
     elif mode == "scheduler":
         run_scheduler()
+    elif mode == "web":
+        run_web_only(args)
     else:
         run_cli(args)
 
@@ -464,6 +466,67 @@ def run_desktop(args):
         print(f"\n❌ GUI 启动失败: {e}")
         print("按 Enter 退出...")
         input()
+
+
+def run_web_only(args):
+    """仅启动网页版控制面板服务（无 GUI 桌面界面）。
+
+    用于：关闭桌面版后，仍可通过浏览器访问网页版控制面板
+    (http://127.0.0.1:9800/)。启动 FastAPI + WebSocket，但不创建 PyQt 窗口。
+    """
+    if os.environ.get("SANDBOX_MODE") == "1":
+        return
+
+    # 清理残留重启锁
+    try:
+        from src.scheduler.daemon import cleanup_stale_restart_locks
+        cleanup_stale_restart_locks()
+    except Exception:
+        pass
+
+    # 启动自检
+    ok, msg = startup_self_check()
+    if not ok:
+        logger.error(f"❌ 启动自检失败: {msg}")
+        sys.exit(1)
+    logger.info("✅ 启动自检通过")
+
+    # 初始化数据库
+    from src.database.db import init_db
+    init_db()
+
+    host = getattr(args, 'host', '0.0.0.0') or '0.0.0.0'
+    port = getattr(args, 'port', 9800)
+
+    # 启动调度器（后台）
+    try:
+        from src.scheduler.scheduler import start_scheduler
+        from src.config.loader import load_config
+        config = load_config()
+        start_scheduler(config)
+        logger.info("📅 调度器已启动（网页版服务模式）")
+    except Exception as e:
+        logger.warning(f"调度器启动跳过: {e}")
+
+    # 加载插件（可选，尽量不阻塞）
+    try:
+        from src.plugins import get_manager
+        mgr = get_manager()
+        mgr.load_all_installed()
+        logger.info("📦 插件已加载")
+    except Exception as e:
+        logger.warning(f"插件加载跳过: {e}")
+
+    # 启动 FastAPI 服务（阻塞，Ctrl+C 停止）
+    from src.web.server import start_server
+    logger.info(f"🌐 网页版控制面板服务启动中: http://{host}:{port}/")
+    try:
+        start_server(host=host, port=port)
+    except KeyboardInterrupt:
+        logger.info("👋 网页版服务已停止")
+    except Exception as e:
+        logger.exception(f"❌ 网页版服务异常退出: {e}")
+        sys.exit(1)
 
 
 def run_task(args):

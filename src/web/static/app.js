@@ -132,7 +132,7 @@ function refreshCurrent() {
     dashboard: loadDashboard, resources: loadResources,
     tasks: loadTasks, chat: () => { loadSessions(); if (curSession) loadChatHistory(curSession); },
     sources: loadSources, settings: loadSettings,
-    code: loadCodeChanges, terminal: () => {}, update: loadUpdate,
+    code: loadCodeChanges, terminal: () => {}, logs: loadLogs, update: loadUpdate,
   };
   if (fns[currentView]) fns[currentView]();
 }
@@ -596,6 +596,34 @@ $("#termRun").addEventListener("click", runTerminal);
 $("#termInput").addEventListener("keydown", (e) => { if (e.key === "Enter") runTerminal(); });
 $("#termClear").addEventListener("click", () => { $("#termOutput").textContent = "就绪。"; });
 
+/* ---------- 系统日志 ---------- */
+let logAutoRefresh = true, logTimer = null;
+async function loadLogs() {
+  try {
+    const d = await API.get("/api/logs/recent?lines=300");
+    $("#logFileInfo").textContent = d.file ? "📄 " + d.file : "";
+    const out = $("#logOutput");
+    const lines = d.lines || [];
+    out.textContent = lines.length ? lines.join("\n") : "（暂无日志）";
+    // 自动刷新时保持底部最新
+    if (logAutoRefresh) out.scrollTop = out.scrollHeight;
+  } catch (e) {
+    $("#logOutput").textContent = "加载失败: " + e.message;
+  }
+}
+$("#logRefresh").addEventListener("click", loadLogs);
+$("#logAuto").addEventListener("click", () => {
+  logAutoRefresh = !logAutoRefresh;
+  $("#logAuto").textContent = logAutoRefresh ? "⏸ 暂停自动刷新" : "▶ 恢复自动刷新";
+  if (logAutoRefresh) loadLogs();
+});
+function startLogPolling() {
+  if (logTimer) clearInterval(logTimer);
+  logTimer = setInterval(() => {
+    if (currentView === "logs" && logAutoRefresh) loadLogs();
+  }, 3000);
+}
+
 /* ---------- 更新 ---------- */
 let updateTaskId = null, updatePollTimer = null;
 async function loadUpdate() {
@@ -657,5 +685,6 @@ $("#tokenInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("
 connectWS();
 loadDashboard();
 loadLicenseStatus();
+startLogPolling();
 // 代码变更轮询：仅当停留在 code 视图时每 10s 自动刷新
 setInterval(() => { if (currentView === "code") loadCodeChanges(); }, 10000);

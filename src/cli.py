@@ -79,6 +79,10 @@ def parse_args(args: list = None) -> CliArgs:
         "--scheduler", action="store_const", const="scheduler", dest="command",
         help="仅运行定时调度器（无 Web UI）",
     )
+    mode.add_argument(
+        "--web", action="store_const", const="web", dest="command",
+        help="仅启动网页版控制面板服务（无桌面界面，关闭桌面版后仍可访问网页版）",
+    )
 
     # 通用参数
     parser.add_argument(
@@ -163,8 +167,6 @@ def parse_args(args: list = None) -> CliArgs:
     ):
         # 兼容旧式: python main.py desktop / web
         cli.command = parsed.legacy_command
-        if cli.command == "web":
-            cli.command = "desktop"  # "web" 重定向到 "desktop"
         if parsed.legacy_command == "run":
             cli.task = list(parsed.legacy_task)
     else:

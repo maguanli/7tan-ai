@@ -146,6 +146,28 @@ async def api_status():
         return {"error": str(e)}
 
 
+# ===== 系统日志（网页版控制台视图用） =====
+@app.get("/api/logs/recent")
+async def api_logs_recent(lines: int = 200):
+    """读取最近日志文件尾部 N 行，供网页版「系统日志」视图轮询显示。"""
+    try:
+        from datetime import date
+        logs_dir = PROJECT_ROOT / "logs"
+        if not logs_dir.exists():
+            return {"file": None, "lines": []}
+        today = date.today().strftime("%Y-%m-%d")
+        # 优先今天的 app 日志，其次最新 app 日志
+        candidates = sorted(logs_dir.glob("app_*.log"), reverse=True)
+        if not candidates:
+            return {"file": None, "lines": []}
+        target = next((c for c in candidates if today in c.name), candidates[0])
+        raw = target.read_text(encoding="utf-8", errors="replace").splitlines()
+        tail = raw[-min(lines, len(raw)):] if raw else []
+        return {"file": target.name, "lines": tail}
+    except Exception as e:
+        return {"file": None, "lines": [], "error": str(e)}
+
+
 # ===== WebSocket 端点 =====
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):

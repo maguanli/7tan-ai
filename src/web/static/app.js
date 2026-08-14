@@ -628,15 +628,59 @@ function startLogPolling() {
 }
 
 /* ---------- 对话左侧实时控制台 ---------- */
-let consolePaused = false, consoleTimer = null;
+let consolePaused = false, consoleTimer = null, consoleBuf = [];
+
+/* 控制台日志高亮：解析 loguru 格式行 / emoji 前缀，输出安全 HTML */
+function stripAnsi(s) {
+  return String(s).replace(/\x1B\[[0-9;]*[A-Za-z]/g, "");
+}
+const CONSOLE_EMOJI_CLASS = {
+  "✅": "ok", "✔": "ok", "🎉": "ok",
+  "❌": "err", "⛔": "err", "💥": "err",
+  "⚠️": "warn", "⏸": "warn", "🔄": "warn", "🔁": "warn",
+  "🚀": "info", "🔌": "info", "🤖": "info", "📚": "info",
+  "📎": "info", "⏳": "info", "📦": "info", "🔍": "info", "📢": "info"
+};
+function highlightLogLine(raw) {
+  const s = stripAnsi(raw == null ? "" : raw);
+  if (!s || !s.trim()) return "";
+  // 标准 loguru 格式: 时间 | 级别 | 模块 | 消息
+  const m = s.match(/^(\d{4}-\d{2}-\d{2}[ T][\d:.]+)\s*\|\s*(DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL)\s*\|\s*(.*)$/);
+  if (m) {
+    const time = escapeHtml(m[1]);
+    const lv = m[2].toLowerCase();
+    const rest = m[3];
+    const pipe = rest.indexOf("|");
+    let mod = "", msg = rest;
+    if (pipe >= 0) { mod = escapeHtml(rest.slice(0, pipe).trim()); msg = rest.slice(pipe + 1); }
+    return `<span class="cl-time">${time}</span> <span class="cl-level lv-${lv}">${m[2]}</span>` +
+      (mod ? ` <span class="cl-module">${mod}</span>` : "") +
+      ` <span class="cl-msg">${escapeHtml(msg)}</span>`;
+  }
+  // 简单行：emoji 前缀决定整行颜色
+  const first = s.trim().slice(0, 2);
+  const cls = CONSOLE_EMOJI_CLASS[first];
+  return `<span class="cl-plain${cls ? " cl-" + cls : ""}">${escapeHtml(s)}</span>`;
+}
+function renderConsole() {
+  const out = $("#consoleOutput");
+  if (!out) return;
+  out.innerHTML = consoleBuf.length
+    ? consoleBuf.join("\n")
+    : '<span class="cl-empty">（暂无日志）</span>';
+  out.scrollTop = out.scrollHeight;
+}
 function appendConsole(text) {
   if (!text) return;
   const out = $("#consoleOutput");
   if (!out || consolePaused) return;
   const MAX = 500;
-  const lines = (out.textContent + "\n" + text).split("\n");
-  out.textContent = lines.slice(-MAX).join("\n");
-  out.scrollTop = out.scrollHeight;
+  String(text).split("\n").forEach((l) => {
+    const html = highlightLogLine(l);
+    if (html) consoleBuf.push(html);
+  });
+  if (consoleBuf.length > MAX) consoleBuf = consoleBuf.slice(-MAX);
+  renderConsole();
 }
 async function loadChatConsole() {
   const out = $("#consoleOutput");
@@ -644,13 +688,12 @@ async function loadChatConsole() {
   try {
     const d = await API.get("/api/logs/recent?lines=150&source=ring");
     const lines = d.lines || [];
-    if (lines.length) {
-      out.textContent = lines.join("\n");
-      out.scrollTop = out.scrollHeight;
-    } else {
-      out.textContent = "（暂无日志）";
-    }
-  } catch (e) { out.textContent = "控制台加载失败: " + e.message; }
+    consoleBuf = lines.map(highlightLogLine).filter(Boolean);
+    if (consoleBuf.length > 500) consoleBuf = consoleBuf.slice(-500);
+    renderConsole();
+  } catch (e) {
+    out.innerHTML = '<span class="cl-err">控制台加载失败: ' + escapeHtml(e.message) + "</span>";
+  }
 }
 $("#consolePause").addEventListener("click", () => {
   consolePaused = !consolePaused;

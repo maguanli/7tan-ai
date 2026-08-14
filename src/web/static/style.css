@@ -339,3 +339,24 @@ h3 { margin-bottom: 12px; font-size: 15px; color: var(--muted); font-weight: 600
   white-space: pre; overflow: auto; font-family: Consolas, "Courier New", monospace; }
 .ed-text::placeholder { color: var(--muted); opacity: .7; }
 .ed-status { display: flex; align-items: center; gap: 8px; padding: 8px 2px 0; }
+
+/* ===== AI 修改弹窗（类 Harness） ===== */
+.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 999;
+  display: flex; align-items: center; justify-content: center; }
+.modal-box { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  width: min(920px, 92vw); max-height: 88vh; display: flex; flex-direction: column; padding: 16px; gap: 10px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: 15px; }
+.modal-head .muted { font-size: 12px; font-weight: 400; }
+.ai-instr { width: 100%; min-height: 64px; background: var(--bg); border: 1px solid var(--border);
+  color: var(--text); border-radius: 8px; padding: 10px; font-size: 13px; resize: vertical;
+  font-family: inherit; }
+.ai-instr:focus { outline: none; border-color: var(--primary); }
+.modal-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.diff-view { flex: 1; min-height: 160px; max-height: 46vh; overflow: auto; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 12px; line-height: 1.55; }
+.diff-view div { white-space: pre; }
+.diff-hunk { color: var(--blue); background: rgba(59,130,246,.12); }
+.diff-add { color: #86efac; background: rgba(34,197,94,.14); }
+.diff-del { color: #fca5a5; background: rgba(239,68,68,.13); }
+.diff-ctx { color: var(--muted); }

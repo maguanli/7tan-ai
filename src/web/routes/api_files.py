@@ -27,6 +27,8 @@ from loguru import logger
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
+from ...utils.code_change_bus import build_diff, publish_file_change
+
 
 def _get_project_root() -> Path:
     """获取项目根目录 — 兼容开发模式和 PyInstaller 打包"""
@@ -190,7 +192,7 @@ async def file_write(req: FileWriteRequest):
         return {"error": f"写入失败: {e}"}
     # 审计 → 代码变更页
     try:
-        from ...utils.code_change_bus import publish_file_change
+        from ...utils.code_change_bus import build_diff, publish_file_change
         publish_file_change(
             action="web_edit",
             path=str(p),
@@ -254,4 +256,128 @@ async def file_delete(path: str = Query(..., description="文件相对路径")):
         return {"error": f"删除失败: {e}"}
     logger.info(f"🗑️ [WEB 编辑器] 删除: {p}")
     return {"success": True}
+
+
+# ===== AI 修改（类 Harness：指令 → LLM 生成修改 → diff 预览/应用） =====
+AI_EDIT_MAX_CHARS = 120_000   # AI 单次修改文件大小上限（字符，保护上下文窗口）
+AI_EDIT_MAX_TOKENS = 32_768   # LLM 生成内容上限
+
+
+class AiEditRequest(BaseModel):
+    path: str
+    instruction: str
+    apply: bool = False   # True=直接写盘（带审计）；False=仅返回 diff 预览（默认）
+
+
+def _extract_content(resp) -> str:
+    """兼容 OpenAI SDK 对象 / dict 两种响应结构，提取 assistant 文本"""
+    try:
+        if hasattr(resp, "choices") and resp.choices:
+            return resp.choices[0].message.content or ""
+    except Exception:
+        pass
+    try:
+        if isinstance(resp, dict):
+            return resp["choices"][0]["message"]["content"] or ""
+    except Exception:
+        pass
+    return ""
+
+
+def _strip_code_fence(text: str) -> str:
+    """去掉 LLM 返回内容外的 ```代码块围栏```（若存在）"""
+    t = text.strip()
+    if t.startswith("```"):
+        lines = t.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        t = "\n".join(lines)
+    return t
+
+
+@router.post("/ai_edit")
+def file_ai_edit(req: AiEditRequest):
+    """AI 修改文件：读取文件 + 指令 → LLM 生成新内容 → 返回 diff（可直接应用）"""
+    p = _resolve(req.path)
+    if p is None:
+        return {"error": "路径越界，仅允许项目根目录内"}
+    if not p.exists() or not p.is_file():
+        return {"error": "文件不存在"}
+    if _is_sensitive(p):
+        return {"error": "敏感文件禁止在线读写（.env / 密钥 / 数据库 / 图片等）"}
+    instruction = (req.instruction or "").strip()
+    if not instruction:
+        return {"error": "请描述你要 AI 做的修改"}
+    try:
+        old_text = p.read_text(encoding="utf-8", errors="replace")
+    except Exception as e:
+        return {"error": f"读取失败: {e}"}
+    if len(old_text) > AI_EDIT_MAX_CHARS:
+        return {"error": f"文件过大（{len(old_text):,} 字符 > {AI_EDIT_MAX_CHARS:,}），AI 修改暂不支持，请人工编辑"}
+    # 获取当前激活模型（get_model("auto") 自动解析）
+    try:
+        from ...agent.model_manager import get_model
+        mm = get_model("auto")
+    except Exception as e:
+        return {"error": f"模型加载失败: {e}"}
+    sys_prompt = (
+        "你是资深软件工程师，负责根据用户的修改指令修改指定源文件。\n"
+        "规则：\n"
+        "1. 只输出修改后的【完整文件内容】，不要输出任何解释、Markdown 或代码块标记。\n"
+        "2. 未修改的部分必须原样保留（包括注释、空行、缩进、引号风格）。\n"
+        "3. 若指令与文件无关、无法完成或当前内容已满足要求，只输出一行：<<NO_CHANGE>>\n"
+        "4. 严格遵守用户指令，不要擅自添加不必要的内容。"
+    )
+    user_prompt = (
+        f"文件路径: {_rel_str(p)}\n"
+        f"文件类型: {p.suffix or '未知'}\n\n"
+        f"===== 当前文件内容开始 =====\n{old_text}\n===== 当前文件内容结束 =====\n\n"
+        f"修改指令: {instruction}"
+    )
+    try:
+        resp = mm.chat(
+            messages=[
+                {"role": "system", "content": sys_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+            max_tokens=AI_EDIT_MAX_TOKENS,
+        )
+    except Exception as e:
+        return {"error": f"AI 调用失败: {e}"}
+    new_text = _strip_code_fence(_extract_content(resp))
+    if "<<NO_CHANGE>>" in new_text or (new_text.strip() and new_text.strip() == old_text.strip()):
+        return {"success": True, "changed": False, "path": _rel_str(p),
+                "note": "AI 认为当前文件已满足要求或无需修改", "model": mm.model_name}
+    if not new_text.strip():
+        return {"error": "AI 未返回内容，请重试或调整指令"}
+    diff = build_diff(old_text, new_text, str(p)) or ""
+    result = {
+        "success": True,
+        "changed": True,
+        "path": _rel_str(p),
+        "diff": diff,
+        "new_content": new_text,
+        "model": mm.model_name,
+    }
+    if req.apply:
+        try:
+            p.write_text(new_text, encoding="utf-8")
+        except Exception as e:
+            return {"error": f"写入失败: {e}"}
+        try:
+            publish_file_change(
+                action="ai_edit",
+                path=str(p),
+                old_text=old_text,
+                new_text=new_text,
+                summary=f"[WEB AI 修改] {p.name}（模型 {mm.model_name}）",
+            )
+        except Exception as e:
+            logger.warning(f"[WEB AI 修改] 审计记录失败: {e}")
+        logger.info(f"🤖 [WEB AI 修改] 已应用: {p}")
+        result["applied"] = True
+    return result
 

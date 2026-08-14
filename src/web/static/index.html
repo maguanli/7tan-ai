@@ -377,6 +377,7 @@
             <input id="edPath" readonly class="mono" placeholder="未打开文件" style="flex:1;min-width:0;background:transparent;border:none;color:var(--muted);padding:0;font-size:12px">
             <span id="edMeta" class="muted"></span>
             <button id="edDelete" class="btn btn-sm btn-danger" title="删除当前文件">🗑 删除</button>
+            <button id="edAi" class="btn btn-sm btn-primary" title="AI 修改当前文件：描述需求，AI 生成修改并预览 diff">🤖 AI 修改</button>
             <button id="edSave" class="btn btn-sm btn-primary">💾 保存 (Ctrl+S)</button>
           </div>
           <div class="editor-box">
@@ -387,6 +388,27 @@
             <span id="edStatus" class="muted">未打开文件</span>
             <span class="spacer"></span>
             <span class="muted" id="edRoot"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI 修改弹窗 -->
+      <div id="edAiModal" class="modal-mask" style="display:none">
+        <div class="modal-box ai-modal">
+          <div class="modal-head">
+            <span>🤖 AI 修改 <span class="muted" id="edAiPath"></span></span>
+            <button id="edAiClose" class="btn btn-sm" title="关闭">✕</button>
+          </div>
+          <textarea id="edAiInstr" class="ai-instr" placeholder="描述你想要的修改，例如：&#10;· 给这个函数加上参数校验&#10;· 修复空指针/None 崩溃问题&#10;· 把 print 改成 logger 输出&#10;· 优化这段逻辑的写法…（Ctrl+Enter 提交）"></textarea>
+          <div class="modal-actions">
+            <button id="edAiRun" class="btn btn-primary">🚀 生成修改</button>
+            <span id="edAiState" class="muted"></span>
+          </div>
+          <pre id="edAiDiff" class="diff-view mono"></pre>
+          <div class="modal-actions" id="edAiActions" style="display:none">
+            <button id="edAiApply" class="btn btn-primary">✅ 应用修改</button>
+            <button id="edAiManual" class="btn btn-sm">✏️ 改为手动编辑</button>
+            <button id="edAiCancel" class="btn btn-sm">取消</button>
           </div>
         </div>
       </div>

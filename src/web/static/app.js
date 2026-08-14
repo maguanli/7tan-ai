@@ -1394,3 +1394,110 @@ $("#edContent").addEventListener("keydown", (e) => {
     edSave();
   }
 });
+
+/* ===== AI 修改（类 Harness：描述需求 → LLM 生成修改 → diff 预览/应用） ===== */
+let edAiResult = null;   // {path, diff, new_content}
+
+function edAiOpen() {
+  if (!edCurrent) { toast("请先从左侧打开一个文件", true); return; }
+  if (edDirty && !confirm("当前文件有未保存的修改，AI 将以磁盘上的文件为准，确定继续？")) return;
+  edAiResult = null;
+  $("#edAiPath").textContent = edCurrent.path;
+  $("#edAiInstr").value = "";
+  $("#edAiDiff").textContent = "";
+  $("#edAiState").textContent = "";
+  $("#edAiActions").style.display = "none";
+  $("#edAiModal").style.display = "flex";
+  $("#edAiRun").disabled = false;
+  $("#edAiInstr").focus();
+}
+
+function edAiClose() { $("#edAiModal").style.display = "none"; edAiResult = null; }
+
+async function edAiRun() {
+  const instr = $("#edAiInstr").value.trim();
+  if (!instr) { toast("请先描述你想要的修改", true); return; }
+  const btn = $("#edAiRun");
+  btn.disabled = true;
+  $("#edAiState").textContent = "⏳ AI 正在读取文件并生成修改…（大文件可能需要 1-2 分钟）";
+  $("#edAiDiff").textContent = "";
+  $("#edAiActions").style.display = "none";
+  try {
+    const r = await API.post("/api/files/ai_edit", { path: edCurrent.path, instruction: instr, apply: false });
+    if (r.error) { $("#edAiState").textContent = "❌ " + r.error; toast("❌ " + r.error, true); return; }
+    if (!r.changed) { $("#edAiState").textContent = "ℹ️ " + (r.note || "AI 未做修改"); return; }
+    edAiResult = r;
+    edRenderDiff(r.diff);
+    let adds = (r.diff.match(/^\+/gm) || []).length, dels = (r.diff.match(/^-/gm) || []).length;
+    if (r.diff.includes("+++ ")) adds--;
+    if (r.diff.includes("--- ")) dels--;
+    $("#edAiState").textContent = "✅ AI 已生成修改（+" + Math.max(adds, 0) + " / -" + Math.max(dels, 0) + " 行，模型 " + (r.model || "") + "）。请检查 diff 后点击「应用修改」。";
+    $("#edAiActions").style.display = "flex";
+  } catch (e) {
+    $("#edAiState").textContent = "❌ " + e.message;
+    toast("❌ " + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function edRenderDiff(diffText) {
+  const pre = $("#edAiDiff");
+  pre.textContent = "";
+  const lines = (diffText || "").split("\n");
+  for (const line of lines) {
+    const div = document.createElement("div");
+    if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) div.className = "diff-hunk";
+    else if (line.startsWith("+")) div.className = "diff-add";
+    else if (line.startsWith("-")) div.className = "diff-del";
+    else div.className = "diff-ctx";
+    div.textContent = line;
+    pre.appendChild(div);
+  }
+  pre.scrollTop = 0;
+}
+
+async function edAiApply() {
+  if (!edAiResult) return;
+  const btn = $("#edAiApply");
+  btn.disabled = true;
+  try {
+    const r = await API.post("/api/files/write", { path: edAiResult.path, content: edAiResult.new_content });
+    if (r.error) { toast("❌ " + r.error, true); return; }
+    edDirty = false;
+    $("#edContent").value = edAiResult.new_content;
+    $("#edStatus").textContent = "已保存 " + new Date().toLocaleTimeString() + "（AI 修改）";
+    toast("✅ AI 修改已应用并保存: " + edAiResult.path);
+    edRenderGutter();
+    edAiClose();
+    edRender();
+  } catch (e) {
+    toast("❌ 应用失败: " + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function edAiManual() {
+  if (!edAiResult) return;
+  edCurrent = { path: edAiResult.path, mtime: edCurrent ? edCurrent.mtime : 0 };
+  edDirty = true;
+  $("#edPath").value = edAiResult.path;
+  $("#edContent").value = edAiResult.new_content;
+  $("#edStatus").textContent = "AI 结果已填入，请手动检查后保存 (Ctrl+S)";
+  edRenderGutter();
+  edAiClose();
+  toast("✏️ AI 结果已填入编辑器，检查后按 Ctrl+S 保存");
+}
+
+/* AI 修改事件绑定 */
+$("#edAi").addEventListener("click", edAiOpen);
+$("#edAiClose").addEventListener("click", edAiClose);
+$("#edAiCancel").addEventListener("click", edAiClose);
+$("#edAiRun").addEventListener("click", edAiRun);
+$("#edAiApply").addEventListener("click", edAiApply);
+$("#edAiManual").addEventListener("click", edAiManual);
+$("#edAiModal").addEventListener("click", (e) => { if (e.target === $("#edAiModal")) edAiClose(); });
+$("#edAiInstr").addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") edAiRun();
+});

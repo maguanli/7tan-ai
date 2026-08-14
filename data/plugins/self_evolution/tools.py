@@ -7,7 +7,7 @@ from datetime import datetime
 
 ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(ROOT))
-from src.tools.registry import register_tool
+from src.tools.registry import register_tool, TOOL_REGISTRY, _check_pro_status
 
 # 可靠定位源码根目录
 # ROOT 在 PyInstaller 环境下是 _internal/，源码在 _internal/../../../
@@ -105,6 +105,13 @@ def self_diagnose() -> str:
 )
 def create_plugin(plugin_id: str, plugin_name: str, description: str, tools_code: str, icon: str = "🔧") -> str:
     """动态创建插件 — 同时写两份：dist（立即生效）和源码（构建后保留）"""
+    # Pro 门控：create_plugin 为完整版专属（可写代码并注册插件）
+    if not _check_pro_status():
+        return (
+            "🔒 权限不足：`create_plugin` 是完整版专属功能。\n\n"
+            "基础版（free）用户无法创建插件（防止任意代码持久化安装）。\n\n"
+            "💡 **升级到完整版**即可解锁：https://www.7tan.com/pro.php"
+        )
     # 安全审计：记录插件创建操作
     try:
         audit_dir = _REAL_ROOT / "logs" / "audit"
@@ -178,6 +185,10 @@ def create_plugin(plugin_id: str, plugin_name: str, description: str, tools_code
 📁 写入位置: {', '.join(written)}
 
 ⚠️ 需要重启应用才能使新工具生效。"""
+
+
+# 强制 Pro 门控：即使 category=system，create_plugin 也标记为完整版专属
+TOOL_REGISTRY["create_plugin"].pro_only = True
 
 
 @register_tool(

@@ -14,6 +14,7 @@
   ok, msg = check_access()
   if not ok: return msg
 """
+import os
 import base64
 import hashlib
 import json
@@ -63,7 +64,18 @@ _BACKUP_FILE = Path(__file__).resolve().parent / "state_backup.json"
 _GLOBAL_BACKUP_FILE = (
     Path.cwd() / "data" / "backups" / "plugin_states" / "viral_writer_state.json"
 )
-_PRIVATE_KEY_FILE = Path(__file__).resolve().parent / "private_key.pem"
+# ─── 私钥路径（仅作者发码环境需要；客户端包不含私钥）───
+# 优先级：环境变量 VIRAL_WRITER_PRIVATE_KEY > 作者本机 ~/.7tan_keys/ > 插件目录（旧路径兼容）
+def _resolve_private_key_file():
+    env = os.environ.get("VIRAL_WRITER_PRIVATE_KEY", "")
+    if env and Path(env).exists():
+        return Path(env)
+    home_keys = Path.home() / ".7tan_keys" / "viral_writer_private_key.pem"
+    if home_keys.exists():
+        return home_keys
+    return Path(__file__).resolve().parent / "private_key.pem"
+
+_PRIVATE_KEY_FILE = _resolve_private_key_file()
 
 # ─── 工具函数 ───
 

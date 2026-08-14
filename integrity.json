@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-08-14T11:36:48.271167",
+  "generated_at": "2026-08-14T11:57:38.552251",
   "generated_by": "7tan-updater build v5.1.0",
   "algorithm": "sha256",
   "scope": "full",
@@ -28,7 +28,7 @@
     "src/scheduler/scheduler.py": "64aea0de60a4f0bb37da655a195aa1c7b14de3767903bfabf675f5f04dfa9fbc",
     "src/scheduler/jobs.py": "81c4f6bc8c33e89fb09f30eb7858f9fd885d06656e3a93efa8d37cf3f65c9ea3",
     "src/scheduler/daemon.py": "91e87d1297aea2791ddb4d33fb91b2ca3f1e3260cb1c8acef1101e0afa16b87b",
-    "src/web/server.py": "ec5fc953efa858f5761fad8711a6f8d002903d5c8629b22fb2ca34a33dc82042",
+    "src/web/server.py": "2fe97fb0f0fabb972bc6ff906dab6dadba5d7248768eb582215c5fe963d54004",
     "src/web/ws.py": "767e16b7122bbcdbf8550270b7b7cbc3371720f2353b37f66d8a8b778b745b0a",
     "src/cli.py": "5d37ad31fe4a350c101eb7a87f48715ea0b2036a0d10c56ac79e1ff46e1ba495",
     "src/security/manifest_template.py": "a3b1ddf9914fe3e10e21c9eb04baef4f815614d7e4c44644d956b4289e09cffd",
@@ -48,5 +48,5 @@
     "backup/**",
     "*.log"
   ],
-  "manifest_hmac": "95bcaeb0a09908a82b41c19444720e29a502990f7d5cf36f69562543965e2c3b"
+  "manifest_hmac": "0d2766af2d926e00c8d3ea88e2136776abd3aa7d1f6801b7804f5a2f505b7b3f"
 }

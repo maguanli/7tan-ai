@@ -2,6 +2,7 @@
 插件管理器 — 安装/卸载/加载插件工具
 """
 import json
+import os
 import sys
 import shutil
 import importlib.util
@@ -175,10 +176,14 @@ class PluginManager:
     # === 模块加载/卸载 ===
 
     def _load_plugin(self, plugin_id: str, pkg_dir: str):
-        """动态加载插件工具模块（带 SHA-256 白名单防篡改校验）
+        """动态加载插件工具模块（哈希白名单校验已解除，默认直接加载）
 
-        🔒 安全：加载前校验 tools.py 与官方白名单（data/plugins/hashes.json）
-          匹配；白名单缺失/签名无效/哈希不符 → 拒绝加载（P1-1 防篡改注入）。
+        🔒 2026-08-14 变更：哈希白名单校验默认解除（用户决定）。
+           - 解除模式（默认）：先尝试 SHA-256 白名单校验，任何失败不再拒绝
+             加载，回退到直接加载（_load_direct），彻底消除
+             "改 tools.py 后忘记重生成 hashes.json → 插件拒载" 问题。
+           - 恢复严格模式：设置环境变量 7TAN_PLUGIN_HASH_VERIFY=1，
+             此时校验失败将拒绝加载（原行为）。
         🔴 三重保险确保不加载 .pyc 缓存：
         1. 删除 __pycache__ 目录
         2. importlib.invalidate_caches() 清除内部缓存
@@ -198,12 +203,42 @@ class PluginManager:
         if plugin_id in self._loaded_modules:
             self._unload_plugin(plugin_id)
 
-        # 🔒 防篡改校验 + 加载（安全模块 plugin_guard 内完成：
-        #    SHA-256 白名单校验 + sys.modules 清理 + 模块加载）
-        from ..security.plugin_guard import verify_and_load
-        module = verify_and_load(plugin_id, pkg_dir, str(PLUGIN_DIR / "hashes.json"))
-        self._loaded_modules[plugin_id] = module
-        logger.info(f"📦 插件已加载: {plugin_id}")
+        strict = os.environ.get("7TAN_PLUGIN_HASH_VERIFY", "0") == "1"
+        if strict:
+            # 严格模式：哈希白名单校验，失败则拒绝加载
+            from ..security.plugin_guard import verify_and_load
+            module = verify_and_load(plugin_id, pkg_dir, str(PLUGIN_DIR / "hashes.json"))
+            self._loaded_modules[plugin_id] = module
+            logger.info(f"📦 插件已加载: {plugin_id}（严格校验通过）")
+            return
+
+        # 解除模式（默认）：先尝试校验，失败则直接加载，不拦截
+        try:
+            from ..security.plugin_guard import verify_and_load
+            module = verify_and_load(plugin_id, pkg_dir, str(PLUGIN_DIR / "hashes.json"))
+            self._loaded_modules[plugin_id] = module
+            logger.info(f"📦 插件已加载: {plugin_id}（哈希校验通过）")
+        except Exception as e:
+            logger.warning(
+                f"插件 {plugin_id} 哈希白名单校验未通过（{str(e)[:60]}），"
+                f"已解除拦截，直接加载")
+            module = self._load_direct(plugin_id, pkg_dir)
+            self._loaded_modules[plugin_id] = module
+            logger.info(f"📦 插件已加载: {plugin_id}（绕过白名单）")
+
+    def _load_direct(self, plugin_id: str, pkg_dir: str):
+        """直接加载插件模块（不经过哈希白名单校验）"""
+        tools_path = Path(pkg_dir) / "tools.py"
+        module_name = f"plugin_{plugin_id}"
+        if module_name in sys.modules:
+            del sys.modules[module_name]
+        self._clear_pycache(pkg_dir)
+        importlib.invalidate_caches()
+        spec = importlib.util.spec_from_file_location(module_name, tools_path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
 
     def _unload_plugin(self, plugin_id: str):
         """从注册表中移除插件的所有工具"""

@@ -10,6 +10,8 @@ from .api_chat import router as chat_router
 from .api_project import router as project_router
 from .api_terminal import router as terminal_router
 from .api_update import router as update_router
+from .api_code import router as code_router
+from .api_license import router as license_router
 
 __all__ = [
     "resources_router",
@@ -21,4 +23,6 @@ __all__ = [
     "project_router",
     "terminal_router",
     "update_router",
+    "code_router",
+    "license_router",
 ]

@@ -17,9 +17,15 @@
       <button class="nav-item" data-view="chat">💬 AI 对话</button>
       <button class="nav-item" data-view="sources">🌐 源站管理</button>
       <button class="nav-item" data-view="settings">🔧 系统设置</button>
+      <button class="nav-item" data-view="code">🛠️ 代码变更</button>
+      <button class="nav-item" data-view="terminal">💻 终端</button>
+      <button class="nav-item" data-view="update">⬆️ 更新</button>
     </nav>
     <div class="sidebar-footer">
       <span class="status-dot" id="connDot"></span><span id="connText">未连接</span>
+    </div>
+    <div class="sidebar-footer" style="border-top:none;padding-top:0">
+      <span class="pro-badge" id="proBadge" title="授权状态">授权状态…</span>
     </div>
   </aside>
 
@@ -131,6 +137,38 @@
       <div class="panel"><h3>危险操作</h3>
         <button id="btnRestart" class="btn btn-danger">重启软件服务</button>
         <span class="muted"> 重启后当前连接会断开，约 30~60 秒恢复</span>
+      </div>
+    </section>
+
+    <!-- 代码变更 -->
+    <section id="view-code" class="view">
+      <h2>🛠️ 代码变更</h2>
+      <div class="toolbar">
+        <span class="muted">AI 最近修改的文件（含 unified diff），自动刷新</span>
+        <span class="spacer"></span>
+        <button id="codeRefresh" class="btn btn-sm">刷新</button>
+      </div>
+      <div id="codeList" class="code-list"></div>
+    </section>
+
+    <!-- 终端 -->
+    <section id="view-terminal" class="view">
+      <h2>💻 终端</h2>
+      <div class="panel">
+        <div class="toolbar">
+          <input id="termInput" placeholder="输入命令：python / pip / git status / dir / type 等（白名单）…" autocomplete="off">
+          <button id="termRun" class="btn btn-primary">执行</button>
+          <button id="termClear" class="btn btn-sm">清空</button>
+        </div>
+        <pre class="term-out mono" id="termOutput">就绪。仅允许编译 / 构建 / 查询类安全命令（见后端白名单）。</pre>
+      </div>
+    </section>
+
+    <!-- 更新 -->
+    <section id="view-update" class="view">
+      <h2>⬆️ 软件更新</h2>
+      <div class="panel" id="updateBox">
+        <div class="muted">正在检查更新…</div>
       </div>
     </section>
   </main>

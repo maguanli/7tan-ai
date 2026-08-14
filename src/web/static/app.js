@@ -34,6 +34,16 @@ function toast(msg, isErr) {
   toastTimer = setTimeout(() => el.classList.remove("show"), 3200);
 }
 
+/* 轻量 Markdown 渲染（代码块 / 行内代码 / 加粗 / 换行） */
+function renderMarkdown(text) {
+  let s = escapeHtml(text == null ? "" : text);
+  s = s.replace(/```(\w*)\n?([\s\S]*?)```/g, (m, lang, code) => `<pre class="code-block">${code}</pre>`);
+  s = s.replace(/`([^`\n]+)`/g, (m, code) => `<code>${code}</code>`);
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/\n/g, "<br>");
+  return s;
+}
+
 /* ---------- API 封装 ---------- */
 const API = {
   token: localStorage.getItem("7tan_web_token") || "",
@@ -122,6 +132,7 @@ function refreshCurrent() {
     dashboard: loadDashboard, resources: loadResources,
     tasks: loadTasks, chat: () => { loadSessions(); if (curSession) loadChatHistory(curSession); },
     sources: loadSources, settings: loadSettings,
+    code: loadCodeChanges, terminal: () => {}, update: loadUpdate,
   };
   if (fns[currentView]) fns[currentView]();
 }
@@ -137,6 +148,16 @@ $("#tokenBtn").addEventListener("click", () => {
   refreshCurrent();
 });
 $("#connInfo").textContent = location.host;
+
+/* ---------- 授权状态 ---------- */
+async function loadLicenseStatus() {
+  try {
+    const d = await API.get("/api/license/status");
+    const el = $("#proBadge");
+    el.textContent = d.is_pro ? "👑 完整版已激活" : "🆓 免费版";
+    el.classList.toggle("pro", !!d.is_pro);
+  } catch (e) { $("#proBadge").textContent = "授权状态不可用"; }
+}
 
 /* ---------- 仪表盘 ---------- */
 async function loadDashboard() {
@@ -185,12 +206,6 @@ async function renderDashboard(d, wsStatus) {
     const ty = await API.get("/api/stats/types");
     const types = ty.types || [];
     const total = types.reduce((a, b) => a + b.value, 0) || 1;
-    let acc = 0;
-    const segs = types.map((x) => {
-      const s = `<div class="bar" style="height:0;min-height:0"></div>`;
-      return "";
-    });
-    // 用简单横向条形表示
     $("#dashTypes").innerHTML = `
       <div style="width:100%">
         ${types.map((x) => `
@@ -335,7 +350,7 @@ async function loadChatHistory(sid) {
     const msgs = d.messages || [];
     $("#chatMessages").innerHTML = msgs.map((m) => `
       <div class="msg ${m.role === "user" ? "user" : "assistant"}">
-        ${escapeHtml(m.content || "")}
+        ${renderMarkdown(m.content || "")}
         ${m.model ? `<span class="meta">模型: ${escapeHtml(m.model)} · ${fmtTime(m.created_at)}</span>` : ""}
       </div>`).join("") || '<div class="muted center">空会话</div>';
     const box = $("#chatMessages"); box.scrollTop = box.scrollHeight;
@@ -347,7 +362,6 @@ async function newChat() {
     if (d.session_id) { curSession = d.session_id; loadSessions(); $("#chatMessages").innerHTML = ""; }
     else { const r = await API.get("/api/chat/history"); const s = (r.sessions || [])[0]; curSession = s && s.session_id; loadSessions(); }
   } catch (e) {
-    // 若后端不支持空消息，退化为从历史取最新会话
     const r = await API.get("/api/chat/history");
     const s = (r.sessions || [])[0];
     curSession = s ? s.session_id : null;
@@ -369,19 +383,59 @@ async function sendChat() {
   $("#chatAbort").disabled = false;
   $("#chatInput").value = "";
   appendMsg("user", text);
-  appendMsg("assistant", "⏳ AI 思考中…（此操作可能耗时较长，请耐心等待）", "pending");
+  const p = appendMsg("assistant", "⏳ AI 思考中…（流式输出即将开始）", "pending streaming");
+  let acc = "";
   try {
-    const d = await API.post("/api/chat/send", { session_id: curSession, message: text });
-    const p = $("#chatMessages .msg.pending");
-    if (d.success) {
-      if (p) { p.textContent = d.result || "（无返回）"; p.classList.remove("pending"); }
-      if (d.model) { const meta = document.createElement("span"); meta.className = "meta"; meta.textContent = "模型: " + d.model + " · 成本 ¥" + (d.cost || 0); p.appendChild(meta); }
-    } else {
-      if (p) { p.textContent = "❌ " + (d.result || "执行失败"); p.classList.add("error"); }
+    const headers = { "Content-Type": "application/json" };
+    if (API.token) headers["Authorization"] = "Bearer " + API.token;
+    const resp = await fetch("/api/chat/send/stream", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ session_id: curSession, message: text }),
+    });
+    if (!resp.ok) {
+      let msg = "HTTP " + resp.status;
+      try { const j = await resp.json(); msg = j.detail || msg; } catch (e) {}
+      throw new Error(msg);
     }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split("\n\n");
+      buf = parts.pop();
+      for (const part of parts) {
+        const line = part.split("\n").find((l) => l.startsWith("data:"));
+        if (!line) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(5)); } catch (e) { continue; }
+        if (ev.type === "text_chunk") {
+          acc += ev.content || "";
+          p.classList.remove("pending");
+          p.innerHTML = renderMarkdown(acc) + '<span class="cursor">▍</span>';
+          const box = $("#chatMessages"); box.scrollTop = box.scrollHeight;
+        } else if (ev.type === "done") {
+          acc = ev.result || acc;
+        } else if (ev.type === "error") {
+          throw new Error(ev.message || "AI 出错");
+        } else if (ev.type === "session_id") {
+          curSession = ev.session_id;
+        }
+      }
+    }
+    p.classList.remove("pending", "streaming");
+    p.innerHTML = renderMarkdown(acc);
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = "✓ 流式完成";
+    p.appendChild(meta);
   } catch (e) {
-    const p = $("#chatMessages .msg.pending");
-    if (p) { p.textContent = "❌ " + e.message; p.classList.add("error"); }
+    if (acc) { p.innerHTML = renderMarkdown(acc); }
+    else { p.textContent = "❌ " + e.message; }
+    p.classList.add("error");
   } finally {
     chatSending = false;
     $("#chatSend").disabled = false;
@@ -396,6 +450,7 @@ function appendMsg(role, text, extra) {
   div.textContent = text;
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
+  return div;
 }
 async function abortChat() {
   if (!curSession) return;
@@ -491,7 +546,116 @@ $("#btnRestart").addEventListener("click", async () => {
   catch (e) { toast("重启指令发送失败: " + e.message, true); }
 });
 
+/* ---------- 代码变更 ---------- */
+async function loadCodeChanges() {
+  try {
+    const d = await API.get("/api/code/changes?limit=50");
+    const list = d.changes || [];
+    $("#codeList").innerHTML = list.map((c) => {
+      const cls = c.status === "failed" ? "failed" : (c.status === "rolled_back" ? "pending" : "published");
+      return `
+      <div class="code-item">
+        <div class="code-head" onclick="toggleDiff(this)">
+          <span class="tag ${cls}">${escapeHtml(c.action || "change")}</span>
+          <span class="code-path" title="${escapeHtml(c.path)}">${escapeHtml(c.path)}</span>
+          <span class="code-sum">${escapeHtml(c.summary || "")}</span>
+          <span class="muted" style="margin-left:auto">${escapeHtml(c.ts_full || c.ts || "")}</span>
+        </div>
+        <pre class="diff hidden">${escapeHtml(c.diff || "（无 diff）")}</pre>
+      </div>`;
+    }).join("") || '<span class="muted">暂无变更记录</span>';
+  } catch (e) {
+    $("#codeList").innerHTML = '<span class="muted">加载失败: ' + escapeHtml(e.message) + "</span>";
+  }
+}
+function toggleDiff(head) {
+  const pre = head.nextElementSibling;
+  if (pre) pre.classList.toggle("hidden");
+}
+$("#codeRefresh").addEventListener("click", loadCodeChanges);
+
+/* ---------- 终端 ---------- */
+async function runTerminal() {
+  const cmd = $("#termInput").value.trim();
+  if (!cmd) return;
+  const out = $("#termOutput");
+  out.textContent += (out.textContent ? "\n" : "") + "$ " + cmd + "\n";
+  $("#termRun").disabled = true;
+  try {
+    const r = await API.post("/api/terminal/execute", { command: cmd });
+    out.textContent += (r.output || "") + (r.exit_code === 0 ? "" : "\n[退出码 " + r.exit_code + "]");
+  } catch (e) {
+    out.textContent += "❌ " + e.message;
+  } finally {
+    $("#termRun").disabled = false;
+    $("#termInput").value = "";
+    out.scrollTop = out.scrollHeight;
+  }
+}
+$("#termRun").addEventListener("click", runTerminal);
+$("#termInput").addEventListener("keydown", (e) => { if (e.key === "Enter") runTerminal(); });
+$("#termClear").addEventListener("click", () => { $("#termOutput").textContent = "就绪。"; });
+
+/* ---------- 更新 ---------- */
+let updateTaskId = null, updatePollTimer = null;
+async function loadUpdate() {
+  const box = $("#updateBox");
+  try {
+    const d = await API.get("/api/update/check");
+    if (!d.has_update) {
+      box.innerHTML = `<div class="ok-line">✅ 当前已是最新版本：<b>v${escapeHtml(d.current)}</b></div>`;
+      return;
+    }
+    const info = d.latest || {};
+    box.innerHTML = `
+      <div style="margin-bottom:12px">当前版本：<b>v${escapeHtml(d.current)}</b></div>
+      <div style="margin-bottom:16px">发现新版本：<b class="up-new">v${escapeHtml(info.version || info.tag || "?")}</b></div>
+      <div class="muted" style="margin-bottom:16px;white-space:pre-wrap">${escapeHtml((info.notes || info.description || "").slice(0, 500))}</div>
+      <button id="upDownload" class="btn btn-primary">⬇️ 下载更新</button>
+      <button id="upApply" class="btn btn-danger" style="display:none">🔄 应用更新并重启</button>
+      <div id="upProgress" class="muted" style="margin-top:12px"></div>`;
+    $("#upDownload").addEventListener("click", startUpdate);
+    $("#upApply").addEventListener("click", applyUpdate);
+  } catch (e) {
+    box.innerHTML = '<span class="muted">检查更新失败: ' + escapeHtml(e.message) + "</span>";
+  }
+}
+async function startUpdate() {
+  try {
+    const d = await API.post("/api/update/download");
+    updateTaskId = d.task_id;
+    $("#upProgress").textContent = "⬇️ 下载中…";
+    if (updatePollTimer) clearInterval(updatePollTimer);
+    updatePollTimer = setInterval(pollUpdate, 2000);
+  } catch (e) { $("#upProgress").textContent = "❌ " + e.message; }
+}
+async function pollUpdate() {
+  if (!updateTaskId) return;
+  try {
+    const p = await API.get("/api/update/progress?task_id=" + updateTaskId);
+    if (p.status === "done") {
+      clearInterval(updatePollTimer); updatePollTimer = null;
+      $("#upProgress").textContent = "✅ 下载完成";
+      $("#upApply").style.display = "";
+      $("#upDownload").style.display = "none";
+    } else if (p.status === "error") {
+      clearInterval(updatePollTimer); updatePollTimer = null;
+      $("#upProgress").textContent = "❌ " + p.error;
+    } else {
+      $("#upProgress").textContent = `⬇️ 下载中… ${fmtSize(p.done)} / ${fmtSize(p.total || "?")}`;
+    }
+  } catch (e) {}
+}
+async function applyUpdate() {
+  if (!confirm("确定应用更新？软件将自动重启，当前连接会断开。")) return;
+  try { await API.post("/api/update/apply"); toast("🔄 正在应用更新…"); }
+  catch (e) { toast("应用失败: " + e.message, true); }
+}
+
 /* ---------- 启动 ---------- */
 $("#tokenInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#tokenBtn").click(); });
 connectWS();
 loadDashboard();
+loadLicenseStatus();
+// 代码变更轮询：仅当停留在 code 视图时每 10s 自动刷新
+setInterval(() => { if (currentView === "code") loadCodeChanges(); }, 10000);

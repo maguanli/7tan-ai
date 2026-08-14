@@ -47,6 +47,8 @@ body {
 .conn-info { color: var(--muted); font-size: 12px; font-family: Consolas, monospace; }
 .view { flex: 1; overflow-y: auto; padding: 20px; display: none; }
 .view.active { display: block; }
+.view.active#view-chat { display: flex; flex-direction: column; }
+#view-chat .chat-layout { flex: 1; min-height: 0; }
 h2 { margin-bottom: 16px; font-size: 20px; }
 h3 { margin-bottom: 12px; font-size: 15px; color: var(--muted); font-weight: 600; }
 
@@ -130,7 +132,7 @@ h3 { margin-bottom: 12px; font-size: 15px; color: var(--muted); font-weight: 600
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ===== 对话 ===== */
-.chat-layout { display: flex; height: calc(100vh - 150px); gap: 12px; }
+.chat-layout { display: flex; flex: 1; min-height: 0; gap: 12px; }
 /* 对话一分为二：左半实时控制台，右半对话 */
 .chat-console-pane { flex: 0 0 50%; min-width: 0; display: flex; flex-direction: column;
   background: #0d1117; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
@@ -169,7 +171,7 @@ h3 { margin-bottom: 12px; font-size: 15px; color: var(--muted); font-weight: 600
   border-bottom: 1px solid var(--border); }
 .console-btns { display: flex; gap: 4px; }
 .console-out { flex: 1; overflow-y: auto; margin: 0; padding: 8px 10px; font-size: 11px; line-height: 1.5;
-  color: #7ee787; white-space: pre-wrap; word-break: break-all; }
+  color: #7ee787; white-space: pre-wrap; word-break: break-all; max-height: none; }
 .console-out.paused { color: var(--muted); }
 
 /* 控制台日志高亮 */

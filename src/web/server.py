@@ -74,8 +74,8 @@ async def auth_middleware(request: Request, call_next):
     host = request.client.host if request.client else ""
     path = request.url.path
 
-    # 健康检查和 WebSocket 放行
-    if path == "/api/health" or path.startswith("/ws"):
+    # 健康检查、WebSocket、静态页面（网页版前端）放行；仅 /api/* 需鉴权
+    if path == "/api/health" or path.startswith("/ws") or not path.startswith("/api/"):
         return await call_next(request)
 
     # 本地请求放行
@@ -113,6 +113,15 @@ app.include_router(terminal_router)
 app.include_router(update_router)
 
 
+# ===== 网页版控制面板（静态前端）=====
+from fastapi.staticfiles import StaticFiles
+
+WEB_STATIC_DIR = Path(__file__).resolve().parent / "static"
+if WEB_STATIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(WEB_STATIC_DIR), html=True), name="webpanel")
+    logger.info(f"🌐 网页版控制面板已挂载: {WEB_STATIC_DIR} → 浏览器访问 http://127.0.0.1:9800/")
+
+
 # ===== 健康检查 =====
 @app.get("/api/health")
 async def health_check():
@@ -134,25 +143,29 @@ async def websocket_endpoint(ws: WebSocket):
     # 2) 无 Origin 的客户端（桌面端/Python websockets 等）→ 放行
     # 3) 若配置了 7TAN_API_TOKEN，本地页面也需携带 ?token=xxx
     origin = ws.headers.get("origin", "")
-    if origin:
+    query_token = ws.query_params.get("token", "")
+    client_host = ws.client.host if ws.client else ""
+    is_local = client_host in ("127.0.0.1", "::1", "localhost")
+
+    # 带有效 token 的连接（浏览器远程页面 / API 客户端）→ 放行，token 是最强凭证
+    if query_token and query_token == API_TOKEN:
+        pass
+    elif origin:
+        # 浏览器连接必须来自本地页面（防 CSWSH）；远程页面若无 token 一律拒绝
         allowed_origin = (
             origin.startswith("http://127.0.0.1")
             or origin.startswith("http://localhost")
             or origin.startswith("http://[::1]")
         )
-        if not allowed_origin:
-            logger.warning(f"🚫 拒绝跨站 WebSocket 连接: origin={origin}")
-            await ws.close(code=1008, reason="origin not allowed")
-            return
-    # 远程连接强制校验 token（本地连接靠 Origin 白名单已足够；无 Origin 的本地进程放行）
-    client_host = ws.client.host if ws.client else ""
-    is_local = client_host in ("127.0.0.1", "::1", "localhost")
-    if not is_local:
-        query_token = ws.query_params.get("token", "")
-        if query_token != API_TOKEN:
-            logger.warning(f"🚫 拒绝未授权 WebSocket 连接: host={client_host}, token 不匹配")
+        if not allowed_origin or not is_local:
+            logger.warning(f"🚫 拒绝未授权 WebSocket 连接: origin={origin}, host={client_host}")
             await ws.close(code=1008, reason="unauthorized")
             return
+    elif not is_local:
+        # 无 Origin 的远程客户端（非浏览器）必须带 token
+        logger.warning(f"🚫 拒绝未授权 WebSocket 连接: host={client_host}, 缺少 token")
+        await ws.close(code=1008, reason="unauthorized")
+        return
 
     client_id = await ws_manager.connect(ws)
     try:

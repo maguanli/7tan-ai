@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7Tan 网页控制面板</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="app">
+  <aside class="sidebar">
+    <div class="logo">🛰️ 7Tan<span>Web Panel</span></div>
+    <nav id="nav">
+      <button class="nav-item active" data-view="dashboard">📊 仪表盘</button>
+      <button class="nav-item" data-view="resources">📦 资源管理</button>
+      <button class="nav-item" data-view="tasks">⚙️ 任务中心</button>
+      <button class="nav-item" data-view="chat">💬 AI 对话</button>
+      <button class="nav-item" data-view="sources">🌐 源站管理</button>
+      <button class="nav-item" data-view="settings">🔧 系统设置</button>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="status-dot" id="connDot"></span><span id="connText">未连接</span>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="token-box">
+        <input type="password" id="tokenInput" placeholder="API Token（远程访问必填，本地可留空）" autocomplete="off">
+        <button id="tokenBtn" class="btn btn-sm">保存</button>
+      </div>
+      <span class="conn-info" id="connInfo"></span>
+    </header>
+
+    <!-- 仪表盘 -->
+    <section id="view-dashboard" class="view active">
+      <h2>📊 仪表盘</h2>
+      <div class="cards" id="dashCards"></div>
+      <div class="grid-2">
+        <div class="panel"><h3>近 7 日发布趋势</h3><div class="bar-chart" id="dashTrend"></div></div>
+        <div class="panel"><h3>资源类型分布</h3><div class="donut-wrap" id="dashTypes"></div></div>
+      </div>
+      <div class="panel"><h3>系统状态</h3><pre class="mono" id="dashSystem"></pre></div>
+    </section>
+
+    <!-- 资源管理 -->
+    <section id="view-resources" class="view">
+      <h2>📦 资源管理</h2>
+      <div class="toolbar">
+        <input id="resSearch" placeholder="搜索标题…">
+        <select id="resType"><option value="">全部类型</option><option value="game">游戏</option><option value="software">软件</option></select>
+        <select id="resStatus"><option value="">全部状态</option><option value="pending">待处理</option><option value="downloading">下载中</option><option value="rewriting">重写中</option><option value="uploading">上传中</option><option value="published">已发布</option><option value="failed">失败</option></select>
+        <button id="resRefresh" class="btn">刷新</button>
+        <span class="spacer"></span>
+        <span id="resTotal" class="muted"></span>
+      </div>
+      <table class="table">
+        <thead><tr><th>ID</th><th>标题</th><th>类型</th><th>状态</th><th>源站</th><th>大小</th><th>创建时间</th><th>操作</th></tr></thead>
+        <tbody id="resBody"></tbody>
+      </table>
+      <div class="pager">
+        <button id="resPrev" class="btn btn-sm">◀ 上一页</button>
+        <span id="resPage" class="muted"></span>
+        <button id="resNext" class="btn btn-sm">下一页 ▶</button>
+      </div>
+    </section>
+
+    <!-- 任务中心 -->
+    <section id="view-tasks" class="view">
+      <h2>⚙️ 任务中心</h2>
+      <div class="panel"><h3>运行中 / 队列</h3><div id="taskActive" class="task-list"></div></div>
+      <div class="panel"><h3>最近任务日志</h3><div class="table-wrap"><table class="table">
+        <thead><tr><th>资源ID</th><th>类型</th><th>状态</th><th>开始时间</th><th>消息</th></tr></thead>
+        <tbody id="taskBody"></tbody>
+      </table></div></div>
+    </section>
+
+    <!-- AI 对话 -->
+    <section id="view-chat" class="view">
+      <h2>💬 AI 对话</h2>
+      <div class="chat-layout">
+        <div class="chat-side">
+          <button id="chatNew" class="btn btn-block">＋ 新对话</button>
+          <div id="sessionList" class="session-list"></div>
+        </div>
+        <div class="chat-main">
+          <div id="chatMessages" class="chat-messages"><div class="muted center">选择或新建一个会话开始对话</div></div>
+          <div class="chat-inputbar">
+            <textarea id="chatInput" rows="3" placeholder="输入任务描述，例如：帮我检查磁盘空间并汇报…（Enter 发送，Shift+Enter 换行）"></textarea>
+            <div class="chat-btns">
+              <button id="chatSend" class="btn btn-primary">发送</button>
+              <button id="chatAbort" class="btn btn-danger" disabled>中止</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 源站管理 -->
+    <section id="view-sources" class="view">
+      <h2>🌐 源站管理</h2>
+      <div class="grid-2">
+        <div class="panel"><h3>添加源站</h3>
+          <form id="sourceForm" class="form">
+            <input name="name" placeholder="源站名称 *" required>
+            <input name="url" placeholder="URL *" required>
+            <select name="site_type"><option value="game">游戏</option><option value="software">软件</option></select>
+            <input name="crawl_interval" type="number" value="360" placeholder="爬取间隔(分钟)">
+            <label class="chk"><input type="checkbox" name="need_login"> 需要登录</label>
+            <input name="login_url" placeholder="登录页 URL">
+            <input name="login_username" placeholder="登录账号">
+            <input name="login_password" type="password" placeholder="登录密码">
+            <input name="notes" placeholder="备注">
+            <button type="submit" class="btn btn-primary">添加</button>
+          </form>
+        </div>
+        <div class="panel"><h3>源站列表</h3><div class="table-wrap"><table class="table">
+          <thead><tr><th>名称</th><th>类型</th><th>间隔</th><th>启用</th><th>操作</th></tr></thead>
+          <tbody id="sourceBody"></tbody>
+        </table></div></div>
+      </div>
+    </section>
+
+    <!-- 系统设置 -->
+    <section id="view-settings" class="view">
+      <h2>🔧 系统设置</h2>
+      <div class="panel"><h3>核心配置（敏感字段已脱敏）</h3><pre class="mono" id="settingsRaw"></pre></div>
+      <div class="panel"><h3>定时调度</h3>
+        <div id="schedulerBox" class="form"></div>
+      </div>
+      <div class="panel"><h3>危险操作</h3>
+        <button id="btnRestart" class="btn btn-danger">重启软件服务</button>
+        <span class="muted"> 重启后当前连接会断开，约 30~60 秒恢复</span>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>

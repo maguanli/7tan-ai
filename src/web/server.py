@@ -4,7 +4,9 @@
 """
 import sys
 import asyncio
+import collections
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import JSONResponse
@@ -67,6 +69,13 @@ except Exception:
 app = FastAPI(title="7Tan", version=_APP_VERSION, docs_url=None, redoc_url=None)
 
 
+@app.on_event("startup")
+async def _capture_event_loop():
+    """捕获事件循环，供日志 sink 线程安全广播 WS 消息使用。"""
+    global _APP_LOOP
+    _APP_LOOP = asyncio.get_running_loop()
+
+
 # ===== API 安全中间件 =====
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
@@ -90,10 +99,73 @@ async def auth_middleware(request: Request, call_next):
     logger.warning(f"未授权的远程请求: {host} -> {path}")
     return JSONResponse({"error": "unauthorized"}, status_code=401)
 
+
+class _NoCacheASGI:
+    """ASGI 中间件：在 http.response.start 事件层为静态资源注入 no-store 头。
+
+    说明：用 BaseHTTPMiddleware 事后修改 resp.headers 不可行——
+    start 事件已先行发送给客户端，事后改头客户端收不到。
+    纯 ASGI 方案直接拦截事件流，最可靠。
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        path = scope.get("path", "")
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start" and \
+                    not path.startswith("/api/") and path != "/ws":
+                headers = [
+                    (k, v) for k, v in message.get("headers", [])
+                    if k.lower() != b"cache-control"
+                ]
+                headers.append((b"cache-control", b"no-store, max-age=0"))
+                message["headers"] = headers
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
+app.add_middleware(_NoCacheASGI)
+
 # ===== WebSocket 管理器 =====
 from .ws import get_ws_manager
 
 ws_manager = get_ws_manager()
+
+# ===== 实时日志广播（网页版实时控制台） =====
+# 内存环形缓冲：网页控制台优先读它（比读日志文件快且实时）
+_LOG_RING: collections.deque = collections.deque(maxlen=1000)
+_APP_LOOP: Optional[asyncio.AbstractEventLoop] = None
+
+
+def _ws_log_sink(message: str) -> None:
+    """loguru sink — 写入环形缓冲 + 异步广播给所有 WebSocket 客户端。"""
+    try:
+        _LOG_RING.append(message.rstrip())
+    except Exception:
+        pass
+    loop = _APP_LOOP
+    if loop is not None and loop.is_running():
+        try:
+            asyncio.run_coroutine_threadsafe(
+                ws_manager.send_log("INFO", message.rstrip()), loop)
+        except Exception:
+            pass
+
+
+# 注册 loguru sink（INFO 及以上；enqueue=True 走独立线程，不阻塞业务）
+logger.add(
+    _ws_log_sink,
+    level="INFO",
+    enqueue=True,
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <7} | {message}",
+)
 
 # ===== 注册 REST API 路由 =====
 from .routes import (
@@ -148,8 +220,11 @@ async def api_status():
 
 # ===== 系统日志（网页版控制台视图用） =====
 @app.get("/api/logs/recent")
-async def api_logs_recent(lines: int = 200):
-    """读取最近日志文件尾部 N 行，供网页版「系统日志」视图轮询显示。"""
+async def api_logs_recent(lines: int = 200, source: str = "file"):
+    """读取最近日志：source=ring 读内存实时缓冲（网页控制台），source=file 读日志文件尾部（系统日志视图）。"""
+    if source == "ring":
+        tail = list(_LOG_RING)[-min(lines, len(_LOG_RING)):]
+        return {"file": None, "lines": tail, "source": "ring"}
     try:
         from datetime import date
         logs_dir = PROJECT_ROOT / "logs"
@@ -407,7 +482,7 @@ def _mount_web_panel():
     否则 mount('/') 会拦截 /ws、/api/* 等请求（Starlette 按注册顺序匹配）。"""
     if WEB_STATIC_DIR.exists():
         app.mount("/", StaticFiles(directory=str(WEB_STATIC_DIR), html=True), name="webpanel")
-        logger.info(f"🌐 网页版控制面板已挂载: {WEB_STATIC_DIR} → 浏览器访问 http://127.0.0.1:9800/")
+        logger.info(f"🌐 网页版控制面板已挂载: {WEB_STATIC_DIR} → 浏览器访问 http://127.0.0.1:9900/")
 
 
 _mount_web_panel()

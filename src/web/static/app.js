@@ -111,6 +111,9 @@ function onWSMessage(msg) {
     if (currentView === "chat") loadChatHistory(curSession);
   } else if (t === "chat_error") {
     toast("❌ " + (msg.error || "对话出错"), true);
+  } else if (t === "log") {
+    const d = msg.data || {};
+    appendConsole(d.message || "");
   } else if (t === "sessions" || t === "jobs" || t === "resources") {
     if (currentView === "chat" && t === "sessions") loadSessions();
   }
@@ -130,7 +133,7 @@ function switchView(view) {
 function refreshCurrent() {
   const fns = {
     dashboard: loadDashboard, resources: loadResources,
-    tasks: loadTasks, chat: () => { loadSessions(); if (curSession) loadChatHistory(curSession); },
+    tasks: loadTasks, chat: () => { loadSessions(); if (curSession) loadChatHistory(curSession); loadChatConsole(); },
     sources: loadSources, settings: loadSettings,
     code: loadCodeChanges, terminal: () => {}, logs: loadLogs, update: loadUpdate,
   };
@@ -624,6 +627,43 @@ function startLogPolling() {
   }, 3000);
 }
 
+/* ---------- 对话左侧实时控制台 ---------- */
+let consolePaused = false, consoleTimer = null;
+function appendConsole(text) {
+  if (!text) return;
+  const out = $("#consoleOutput");
+  if (!out || consolePaused) return;
+  const MAX = 500;
+  const lines = (out.textContent + "\n" + text).split("\n");
+  out.textContent = lines.slice(-MAX).join("\n");
+  out.scrollTop = out.scrollHeight;
+}
+async function loadChatConsole() {
+  const out = $("#consoleOutput");
+  if (consolePaused) return;
+  try {
+    const d = await API.get("/api/logs/recent?lines=150&source=ring");
+    const lines = d.lines || [];
+    if (lines.length) {
+      out.textContent = lines.join("\n");
+      out.scrollTop = out.scrollHeight;
+    } else {
+      out.textContent = "（暂无日志）";
+    }
+  } catch (e) { out.textContent = "控制台加载失败: " + e.message; }
+}
+$("#consolePause").addEventListener("click", () => {
+  consolePaused = !consolePaused;
+  $("#consolePause").textContent = consolePaused ? "▶" : "⏸";
+  $("#consoleOutput").classList.toggle("paused", consolePaused);
+  if (!consolePaused) loadChatConsole();
+});
+$("#consoleClear").addEventListener("click", () => { $("#consoleOutput").textContent = ""; });
+function startConsolePolling() {
+  if (consoleTimer) clearInterval(consoleTimer);
+  consoleTimer = setInterval(() => { if (currentView === "chat") loadChatConsole(); }, 3000);
+}
+
 /* ---------- 更新 ---------- */
 let updateTaskId = null, updatePollTimer = null;
 async function loadUpdate() {
@@ -686,5 +726,6 @@ connectWS();
 loadDashboard();
 loadLicenseStatus();
 startLogPolling();
+startConsolePolling();
 // 代码变更轮询：仅当停留在 code 视图时每 10s 自动刷新
 setInterval(() => { if (currentView === "code") loadCodeChanges(); }, 10000);

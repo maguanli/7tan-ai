@@ -120,7 +120,7 @@ function onWSMessage(msg) {
 }
 
 /* ---------- 视图切换 ---------- */
-let currentView = "dashboard";
+let currentView = "chat";
 $$(".nav-item").forEach((btn) => {
   btn.addEventListener("click", () => switchView(btn.dataset.view));
 });
@@ -820,7 +820,7 @@ async function applyUpdate() {
 /* ---------- 启动 ---------- */
 $("#tokenInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#tokenBtn").click(); });
 connectWS();
-loadDashboard();
+switchView("chat");
 loadLicenseStatus();
 startLogPolling();
 startConsolePolling();

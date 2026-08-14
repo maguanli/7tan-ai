@@ -209,11 +209,18 @@ class ModelManager:
             kwargs["tools"] = self._sanitize_tools(kwargs["tools"])
 
         # 🔒 过滤空 system 消息（Kimi/Moonshot 不允许空 system message）
+        # 🔒 过滤空 assistant 消息（content 为空且无 tool_calls，否则 API 400: content or tool_calls must be set）
         if "messages" in kwargs:
-            kwargs["messages"] = [
-                m for m in kwargs["messages"]
-                if not (m.get("role") == "system" and not (m.get("content", "") or "").strip())
-            ]
+            def _keep_message(m):
+                role = m.get("role")
+                content = m.get("content", "") or ""
+                if role == "system":
+                    return bool(content.strip())
+                if role == "assistant":
+                    has_tool_calls = bool(m.get("tool_calls"))
+                    return bool(content.strip()) or has_tool_calls
+                return True
+            kwargs["messages"] = [m for m in kwargs["messages"] if _keep_message(m)]
 
         return self._chat_with_retry(client, **kwargs)
 

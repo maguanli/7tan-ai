@@ -639,6 +639,14 @@ def start_server(host: str = "0.0.0.0", port: int = 9800):
 
     logger.info(f"🌐 正在启动 API 服务器 on {host}:{port}...")
 
+    # 🎤 注册全局语音朗读桥（与桌面版一致）：Agent 最终回复 → 后端 TTS（Piper/Edge）朗读，
+    # 受数据库 app_settings.voice_mode 开关控制。否则 WEB 版 Agent 回复不会朗读。
+    try:
+        from src.agent.speak_bridge import init_global_tts
+        init_global_tts()
+    except Exception as _tts_err:
+        logger.warning(f"[TTS-Bridge] 初始化失败: {_tts_err}")
+
     # 预创建 socket，在 bind 前设置 SO_REUSEADDR
     # 这样旧进程退出后，新进程可以立即复用端口，无需等待 TIME_WAIT 释放
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

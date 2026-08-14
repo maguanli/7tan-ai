@@ -25,6 +25,9 @@ class ContextManager:
                     role = m.get("role", "user")
                     content = m.get("content", "")
                     if role in ("user", "assistant", "system"):
+                        # 跳过空 assistant 消息（content 为空会导致 API 400: content or tool_calls must be set）
+                        if role == "assistant" and not (content or "").strip():
+                            continue
                         self.history.append({"role": role, "content": content})
                         self._total_tokens += len(content) // 2
                 if self.history:

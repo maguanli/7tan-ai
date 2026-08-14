@@ -317,3 +317,75 @@ def _safe_coro_call(loop, queue, event):
     except Exception:
         pass
 
+
+# ===== 语音朗读开关（读写 app_settings，与桌面版 voice_mode/voice_gender 一致）=====
+
+class VoiceSettings(BaseModel):
+    mode: Optional[bool] = None
+    gender: Optional[str] = None
+
+
+def _app_settings_db() -> str:
+    from ...database.db import _get_data_dir
+    return str(_get_data_dir() / "games.db")
+
+
+def _get_voice_setting(key: str, default: str = "") -> str:
+    import sqlite3
+    try:
+        con = sqlite3.connect(_app_settings_db(), timeout=3)
+        try:
+            cur = con.cursor()
+            cur.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)")
+            cur.execute("SELECT value FROM app_settings WHERE key=?", (key,))
+            row = cur.fetchone()
+            return str(row[0]) if row else default
+        finally:
+            con.close()
+    except Exception as e:
+        logger.warning(f"读取语音设置 {key} 失败: {e}")
+        return default
+
+
+def _set_voice_setting(key: str, value: str) -> bool:
+    import sqlite3
+    try:
+        con = sqlite3.connect(_app_settings_db(), timeout=3)
+        try:
+            cur = con.cursor()
+            cur.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)")
+            cur.execute(
+                "INSERT INTO app_settings(key, value) VALUES(?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, value),
+            )
+            con.commit()
+        finally:
+            con.close()
+        return True
+    except Exception as e:
+        logger.warning(f"写入语音设置 {key} 失败: {e}")
+        return False
+
+
+@router.get("/voice")
+async def get_voice_settings():
+    """读取语音朗读开关/性别（与桌面版共用 app_settings.voice_mode / voice_gender）"""
+    return {
+        "mode": _get_voice_setting("voice_mode", "false").lower() == "true",
+        "gender": _get_voice_setting("voice_gender", "male"),
+    }
+
+
+@router.post("/voice")
+async def set_voice_settings(req: VoiceSettings):
+    """更新语音朗读开关/性别"""
+    if req.mode is not None:
+        _set_voice_setting("voice_mode", "true" if req.mode else "false")
+    if req.gender:
+        _set_voice_setting("voice_gender", req.gender)
+    return {
+        "mode": _get_voice_setting("voice_mode", "false").lower() == "true",
+        "gender": _get_voice_setting("voice_gender", "male"),
+    }
+

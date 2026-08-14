@@ -713,7 +713,10 @@ def run_agent_loop(
                     }
                 })
             msg_dict["tool_calls"] = safe_calls
-        messages.append(msg_dict)
+        if msg_dict.get("content") or msg_dict.get("tool_calls"):
+            messages.append(msg_dict)
+        else:
+            logger.warning("skip empty assistant message (no content and no tool_calls)")
         
         # 记录到对话历史
         content = msg.content or ""
@@ -1023,8 +1026,10 @@ def _repair_messages(messages: list) -> list:
             if has_tool_response:
                 repaired.append(msg)
             else:
-                # 移除孤儿 tool_calls，只保留 content
-                repaired.append({"role": "assistant", "content": msg.get("content", "")})
+                # 移除孤儿 tool_calls，只保留 content；content 为空则整条跳过（避免空 assistant 消息导致 API 400）
+                content = msg.get("content", "") or ""
+                if content.strip():
+                    repaired.append({"role": "assistant", "content": content})
         else:
             repaired.append(msg)
         i += 1

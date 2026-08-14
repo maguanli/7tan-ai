@@ -25,6 +25,13 @@ function fmtTime(t) {
   return String(t).replace("T", " ").slice(0, 19);
 }
 
+/* 完整时间：YYYY-MM-DD HH:MM:SS */
+function fmtFullTime(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " +
+    p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+}
+
 let toastTimer = null;
 function toast(msg, isErr) {
   const el = $("#toast");
@@ -562,7 +569,7 @@ async function sendChat() {
   $("#chatInput").value = "";
   const um = appendMsg("user", text);
   um.body.innerHTML = renderMarkdown(text);
-  um.meta.textContent = "我 · " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  um.meta.textContent = "我 · " + fmtFullTime(new Date());
   const p = appendMsg("assistant", "⏳ AI 思考中…（流式输出即将开始）", "pending streaming");
   p.body.textContent = "⏳ AI 思考中…（流式输出即将开始）";
   let acc = "", doneModel = "";
@@ -612,7 +619,7 @@ async function sendChat() {
     p.div.classList.remove("pending", "streaming");
     p.div.dataset.raw = acc;
     p.body.innerHTML = renderMarkdown(acc);
-    p.meta.textContent = (doneModel || $("#chatModelSelect").value || "AI") + " · " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
+    p.meta.textContent = (doneModel || $("#chatModelSelect").value || "AI") + " · " + fmtFullTime(new Date());
   } catch (e) {
     if (acc) { p.div.dataset.raw = acc; p.body.innerHTML = renderMarkdown(acc); }
     else { p.div.dataset.raw = "❌ " + e.message; p.body.textContent = "❌ " + e.message; }
@@ -621,7 +628,7 @@ async function sendChat() {
     chatSending = false;
     updateSendBtn();
     // 语音朗读 AI 回复
-    if (acc) speakText(acc);
+    // 语音朗读由后端 TTS 完成（agent_loop 最终回复 → speak_bridge → Piper/Edge），前端不再调用浏览器 Web Speech API
     const box = $("#chatMessages"); box.scrollTop = box.scrollHeight;
   }
 }
@@ -700,16 +707,33 @@ async function abortChat() {
   catch (e) { toast("中止失败: " + e.message, true); }
 }
 $("#chatSend").addEventListener("click", sendChat);
+function renderVoiceUI() {
+  const vt = $("#voiceToggle"), vg = $("#voiceGender");
+  if (vt) { vt.textContent = voiceEnabled ? "🔊 语音中" : "🔇 语音"; vt.classList.toggle("on", voiceEnabled); }
+  if (vg) { vg.textContent = voiceGender === "female" ? "♀ 女声" : "♂ 男声"; vg.classList.toggle("male", voiceGender === "male"); }
+}
+async function loadVoiceSettings() {
+  try {
+    const d = await API.get("/api/chat/voice");
+    voiceEnabled = !!d.mode;
+    voiceGender = d.gender === "female" ? "female" : "male";
+  } catch (e) { /* 后端无该接口时静默 */ }
+  renderVoiceUI();
+}
+async function syncVoiceSettings() {
+  try { await API.post("/api/chat/voice", { mode: voiceEnabled, gender: voiceGender }); }
+  catch (e) { toast("语音设置同步失败: " + e.message, true); }
+}
 $("#voiceToggle").addEventListener("click", function() {
   voiceEnabled = !voiceEnabled;
-  this.textContent = voiceEnabled ? "🔊 语音中" : "🔇 语音";
-  this.classList.toggle("on", voiceEnabled);
+  renderVoiceUI();
+  syncVoiceSettings();
   toast(voiceEnabled ? "语音朗读已开启" : "语音朗读已关闭");
 });
 $("#voiceGender").addEventListener("click", function() {
   voiceGender = voiceGender === "male" ? "female" : "male";
-  this.textContent = voiceGender === "female" ? "♀ 女声" : "♂ 男声";
-  this.classList.toggle("male", voiceGender === "male");
+  renderVoiceUI();
+  syncVoiceSettings();
   toast(voiceGender === "female" ? "已切换为女声" : "已切换为男声");
 });
 // 提示词快捷按钮（和桌面版一致）
@@ -1082,6 +1106,7 @@ initSettingsTabs();
 connectWS();
 switchView("chat");
 loadLicenseStatus();
+loadVoiceSettings();
 startLogPolling();
 startConsolePolling();
 // 代码变更轮询：仅当停留在 code 视图时每 10s 自动刷新

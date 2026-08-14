@@ -73,6 +73,10 @@ def _resolve_private_key_file():
     home_keys = Path.home() / ".7tan_keys" / "viral_writer_private_key.pem"
     if home_keys.exists():
         return home_keys
+    # 作者开发机默认密钥目录（D:\7tan\keys，私钥迁移后的固定存放处）
+    dev_keys = Path(r"D:\7tan\keys") / "viral_writer_private_key.pem"
+    if dev_keys.exists():
+        return dev_keys
     return Path(__file__).resolve().parent / "private_key.pem"
 
 _PRIVATE_KEY_FILE = _resolve_private_key_file()

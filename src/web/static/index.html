@@ -4,31 +4,54 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>7Tan 网页控制面板</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style.css?v=20260814m">
 </head>
 <body>
 <div id="app">
   <aside class="sidebar">
-    <div class="logo">🛰️ 7Tan<span>Web Panel</span></div>
+    <div class="logo"><img class="logo-icon" src="/logo/sidebar_icon.png" alt="7Tan"><span class="logo-name">7Tan</span></div>
     <nav id="nav">
       <!-- 仪表盘已隐藏（2026-08-14）：<button class="nav-item" data-view="dashboard">📊 仪表盘</button> -->
-      <button class="nav-item active" data-view="chat">🤖 AI 工作台</button>
+      <button class="nav-item active" data-view="chat">💬 AI 工作台</button>
       <button class="nav-item" data-view="plugins">🧩 插件市场</button>
       <button class="nav-item" data-view="resources">📦 资源管理</button>
       <button class="nav-item" data-view="tasks">⚙️ 任务中心</button>
       <button class="nav-item" data-view="sources">🌐 源站管理</button>
       <button class="nav-item" data-view="settings">🔧 系统设置</button>
       <button class="nav-item" data-view="code">🛠️ 代码变更</button>
-      <button class="nav-item" data-view="terminal">💻 终端</button>
+      <!-- 会话列表（仅 AI 工作台时显示） -->
+      <div id="sidebarSessions" class="sidebar-sessions visible">
+        <div class="sidebar-sessions-title">💬 对话列表</div>
+        <button id="chatNew" class="btn btn-sidebar-new">＋ 新对话</button>
+        <div id="sessionList" class="sidebar-session-list"></div>
+        <div id="sessionCount" class="sidebar-session-count">0 条对话</div>
+      </div>
+      <button class="nav-item" data-view="terminal" style="display:none">💻 终端</button> <!-- 已隐藏终端 -->
       <button class="nav-item" data-view="logs" style="display:none" title="系统日志(已隐藏)">📜 系统日志</button>
       <button class="nav-item" data-view="update" style="display:none" title="软件更新(已隐藏)">⬆️ 更新</button>
     </nav>
-    <div class="sidebar-footer">
-      <span class="status-dot" id="connDot"></span><span id="connText">未连接</span>
+    <div class="sidebar-links">
+      <a class="sidebar-link" href="https://www.7tan.com/bbs/" target="_blank" title="7坛社区">🌐 7坛社区</a>
+      <a class="sidebar-link" href="https://www.7tan.com/bbs/board/3/" target="_blank" title="现金任务">💰 现金任务</a>
     </div>
-    <div class="sidebar-footer" style="border-top:none;padding-top:0">
-      <span class="pro-badge" id="proBadge" title="授权状态">授权状态…</span>
+    <div class="sidebar-links">
+      <a class="sidebar-link" href="https://www.7tan.com/bbs/board/25/" target="_blank" title="问题求助">🙋 问题求助</a>
+      <a class="sidebar-link" href="https://www.7tan.com/bbs/board/26/" target="_blank" title="投诉建议">📮 投诉建议</a>
     </div>
+    <div class="pro-status">
+      <div class="pro-user" id="proUser">👤 未登录</div>
+      <div class="pro-score" id="proScore">⚡ 能力值: -</div>
+      <div class="pro-actions" id="proActionsUser" style="display:none">
+        <button id="proRefresh" class="btn btn-pro-refresh" title="刷新会员状态">🔄 刷新</button>
+        <button id="proLogout" class="btn btn-pro-logout" title="退出登录">🚪 退出</button>
+      </div>
+      <div class="pro-actions" id="proActionsGuest">
+        <button id="proLogin" class="btn btn-pro-login" title="登录会员账号">🔑 登录</button>
+        <button id="proRegister" class="btn btn-pro-register" title="注册 7tan 账号">📝 注册</button>
+      </div>
+    </div>
+    <a class="sidebar-version" id="webVersion" href="https://www.7tan.com/" target="_blank" rel="noopener">7tan.com V1.0.11</a>
+    <div class="sidebar-copyright">© 7坛版权所有</div>
   </aside>
 
   <main class="main">
@@ -38,6 +61,10 @@
         <button id="tokenBtn" class="btn btn-sm">保存</button>
       </div>
       <span class="conn-info" id="connInfo"></span>
+      <div class="topbar-right">
+        <label class="model-label" for="chatModelSelect">当前模型</label>
+        <select id="chatModelSelect" class="model-select" title="选择对话使用的AI模型"><option value="">加载模型…</option></select>
+      </div>
     </header>
 
     <!-- 仪表盘（已隐藏，保留代码可恢复） -->
@@ -85,7 +112,7 @@
 
     <!-- AI 工作台（默认页） -->
     <section id="view-chat" class="view active">
-      <h2>🤖 AI 工作台</h2>
+      <h2>💬 AI 工作台</h2>
       <div class="chat-layout">
         <div class="chat-console-pane">
           <div class="console-head">
@@ -99,16 +126,22 @@
         </div>
         <div class="chat-resizer" title="拖动调整宽度"></div>
         <div class="chat-main">
-          <div class="chat-topbar">
-            <button id="chatNew" class="btn btn-sm">＋ 新对话</button>
-            <div id="sessionList" class="session-list"></div>
-          </div>
+          <div class="chat-topbar" id="chatTopbar"><span class="chat-topbar-icon">💬</span><span class="chat-topbar-title">对话</span></div>
           <div id="chatMessages" class="chat-messages"><div class="muted center">选择或新建一个会话开始对话</div></div>
           <div class="chat-inputbar">
             <textarea id="chatInput" rows="3" placeholder="输入任务描述，例如：帮我检查磁盘空间并汇报…（Enter 发送，Shift+Enter 换行）"></textarea>
-            <div class="chat-btns">
-              <button id="chatSend" class="btn btn-primary">发送</button>
-              <button id="chatAbort" class="btn btn-danger" disabled>中止</button>
+            <div class="chat-bottom-row">
+              <div class="chat-hints">
+                <button class="btn btn-hint" data-hint="找个新游戏">🎮 找个新游戏</button>
+                <button class="btn btn-hint" data-hint="查统计">📊 查统计</button>
+                <button class="btn btn-hint" data-hint="待发布">📦 待发布</button>
+                <button class="btn btn-hint" data-hint="搜资源">🔍 搜资源</button>
+              </div>
+              <div class="chat-btns">
+                <button id="voiceGender" class="btn btn-gender male" title="切换语音性别：男声/女声">♂ 男声</button>
+                <button id="voiceToggle" class="btn btn-voice" title="开启/关闭语音朗读">🔇 语音</button>
+                <button id="chatSend" class="btn btn-send">发送 ▲</button>
+              </div>
             </div>
           </div>
         </div>
@@ -390,7 +423,40 @@
     </section>
   </main>
 </div>
+
+<!-- 登录对话框 -->
+<div id="loginModal" class="modal-mask" style="display:none">
+  <div class="modal-box">
+    <div class="modal-head">🔐 登录 7tan.com <button id="loginClose" class="modal-close" title="关闭">✕</button></div>
+    <div class="modal-body">
+      <label class="field-label" for="loginUser">用户名 / 手机号</label>
+      <input id="loginUser" class="field-input" type="text" placeholder="请输入用户名或手机号" autocomplete="username">
+      <label class="field-label" for="loginPwd">密码</label>
+      <input id="loginPwd" class="field-input" type="password" placeholder="请输入密码" autocomplete="current-password">
+      <label class="field-chk"><input id="loginRemember" type="checkbox" checked> 记住登录（30天）</label>
+      <label class="field-chk"><input id="loginAgree" type="checkbox"> 我已阅读并同意 <a href="https://www.7tan.com/agreement.php" target="_blank" rel="noopener">《用户协议》</a> 与 <a href="https://www.7tan.com/privacy.php" target="_blank" rel="noopener">《隐私政策》</a></label>
+      <div id="loginError" class="login-error"></div>
+      <div class="login-btns">
+        <button id="loginSubmit" class="btn btn-primary">登 录</button>
+        <a href="https://www.7tan.com/bbs/register.php" target="_blank" rel="noopener" class="btn btn-link">没有账号？去注册</a>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- 编辑消息对话框 -->
+<div id="editMsgModal" class="modal-mask" style="display:none">
+  <div class="modal-box" style="width:520px">
+    <div class="modal-head">✏️ 编辑消息 <button class="modal-close" onclick="closeEditMsg()" title="关闭">✕</button></div>
+    <div class="modal-body">
+      <textarea id="editMsgText" class="edit-msg-text" rows="10" placeholder="输入消息内容"></textarea>
+      <div class="login-btns">
+        <button class="btn" onclick="closeEditMsg()">取消</button>
+        <button class="btn btn-primary" onclick="saveEditMsg()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div id="toast" class="toast"></div>
-<script src="/app.js"></script>
+<script src="/app.js?v=20260814m"></script>
 </body>
 </html>

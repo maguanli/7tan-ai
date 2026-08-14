@@ -77,12 +77,12 @@ function connectWS() {
   try { ws = new WebSocket(url); } catch (e) { scheduleReconnect(); return; }
   ws.onopen = () => {
     wsRetry = 0;
-    $("#connDot").classList.add("on");
-    $("#connText").textContent = "已连接";
+    const d = $("#connDot"); if (d) d.classList.add("on");
+    const t = $("#connText"); if (t) t.textContent = "已连接";
   };
   ws.onclose = () => {
-    $("#connDot").classList.remove("on");
-    $("#connText").textContent = "已断开";
+    const d = $("#connDot"); if (d) d.classList.remove("on");
+    const t = $("#connText"); if (t) t.textContent = "已断开";
     scheduleReconnect();
   };
   ws.onerror = () => { try { ws.close(); } catch (e) {} };
@@ -128,12 +128,15 @@ function switchView(view) {
   currentView = view;
   $$(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + view));
+  // 会话列表仅在 AI 工作台时显示
+  const ss = $("#sidebarSessions");
+  if (ss) ss.classList.toggle("visible", view === "chat");
   refreshCurrent();
 }
 function refreshCurrent() {
   const fns = {
     dashboard: loadDashboard, resources: loadResources,
-    tasks: loadTasks, chat: () => { loadSessions(); if (curSession) loadChatHistory(curSession); loadChatConsole(); },
+    tasks: loadTasks, chat: () => { loadSessions(); loadChatModels(); if (curSession) loadChatHistory(curSession); loadChatConsole(); },
     sources: loadSources, settings: loadSettings, plugins: loadMarketPlugins,
     code: loadCodeChanges, terminal: () => {}, logs: loadLogs, update: loadUpdate,
   };
@@ -156,11 +159,90 @@ $("#connInfo").textContent = location.host;
 async function loadLicenseStatus() {
   try {
     const d = await API.get("/api/license/status");
-    const el = $("#proBadge");
-    el.textContent = d.is_pro ? "👑 完整版已激活" : "🆓 免费版";
-    el.classList.toggle("pro", !!d.is_pro);
-  } catch (e) { $("#proBadge").textContent = "授权状态不可用"; }
+    const loggedIn = !!(d.username);
+    const userEl = $("#proUser");
+    if (userEl) userEl.textContent = "👤 " + (d.username || "未登录");
+    const scoreEl = $("#proScore");
+    if (scoreEl) scoreEl.textContent = d.score_brief ? ("⚡ 能力值: " + d.score_brief) : "⚡ 能力值: -";
+    const userActions = $("#proActionsUser");
+    const guestActions = $("#proActionsGuest");
+    if (userActions) userActions.style.display = loggedIn ? "" : "none";
+    if (guestActions) guestActions.style.display = loggedIn ? "none" : "";
+  } catch (e) { /* 授权状态获取失败，静默处理 */ }
 }
+/* 刷新会员状态（对照桌面版 🔄 刷新） */
+async function refreshLicense() {
+  const btn = $("#proRefresh");
+  if (!btn) return;
+  try {
+    btn.disabled = true; btn.textContent = "🔄 刷新中…";
+    const d = await API.post("/api/license/refresh");
+    toast(d.success ? "✅ " + d.message : "⚠️ " + d.message, !d.success);
+  } catch (e) {
+    toast("刷新失败: " + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "🔄 刷新";
+    loadLicenseStatus();
+  }
+}
+/* 退出登录（对照桌面版 🚪 退出） */
+async function logoutLicense() {
+  if (!confirm("确定要退出当前会员账号吗？")) return;
+  try {
+    const d = await API.post("/api/license/logout");
+    toast("✅ " + d.message);
+  } catch (e) {
+    toast("退出失败: " + e.message, true);
+  } finally {
+    loadLicenseStatus();
+  }
+}
+$("#proRefresh") && $("#proRefresh").addEventListener("click", refreshLicense);
+$("#proLogout") && $("#proLogout").addEventListener("click", logoutLicense);
+
+/* 登录（弹出登录框） */
+function openLoginModal() {
+  const errEl = $("#loginError"); if (errEl) errEl.textContent = "";
+  const u = $("#loginUser"); if (u) u.value = "";
+  const p = $("#loginPwd"); if (p) p.value = "";
+  const m = $("#loginModal"); if (m) m.style.display = "flex";
+  setTimeout(() => { const u2 = $("#loginUser"); if (u2) u2.focus(); }, 50);
+}
+function closeLoginModal() {
+  const m = $("#loginModal"); if (m) m.style.display = "none";
+}
+async function submitLogin() {
+  const user = ($("#loginUser").value || "").trim();
+  const pwd = $("#loginPwd").value || "";
+  const remember = $("#loginRemember").checked;
+  const errEl = $("#loginError");
+  if (!user) { errEl.textContent = "请输入用户名或手机号"; return; }
+  if (!pwd) { errEl.textContent = "请输入密码"; return; }
+  const agreeEl = $("#loginAgree");
+  if (agreeEl && !agreeEl.checked) { errEl.textContent = "请先勾选同意《用户协议》与《隐私政策》"; return; }
+  const btn = $("#loginSubmit");
+  btn.disabled = true; btn.textContent = "登录中…"; errEl.textContent = "";
+  try {
+    const d = await API.post("/api/license/login", { username: user, password: pwd, remember: remember });
+    if (d.success) {
+      toast("✅ 登录成功：" + (d.username || ""));
+      closeLoginModal();
+    } else {
+      errEl.textContent = d.message || "登录失败";
+    }
+  } catch (e) {
+    errEl.textContent = "登录失败: " + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = "登 录";
+    loadLicenseStatus();
+  }
+}
+$("#proLogin") && $("#proLogin").addEventListener("click", openLoginModal);
+$("#proRegister") && $("#proRegister").addEventListener("click", () => window.open("https://www.7tan.com/bbs/register.php", "_blank"));
+$("#loginSubmit") && $("#loginSubmit").addEventListener("click", submitLogin);
+$("#loginClose") && $("#loginClose").addEventListener("click", closeLoginModal);
+$("#loginModal") && $("#loginModal").addEventListener("click", (e) => { if (e.target === $("#loginModal")) closeLoginModal(); });
+$("#loginPwd") && $("#loginPwd").addEventListener("keydown", (e) => { if (e.key === "Enter") submitLogin(); });
 
 /* ---------- 仪表盘 ---------- */
 async function loadDashboard() {
@@ -330,15 +412,75 @@ async function cancelTask(id) {
 
 /* ---------- AI 对话 ---------- */
 let curSession = null;
+let chatModelConfigs = [];
+let chatActiveKey = "";
+
+function currentModelVal() {
+  const saved = localStorage.getItem("7tan_web_model") || "";
+  const exists = chatModelConfigs.some((c) => (c.model || c.config_key) === saved);
+  if (exists) return saved;
+  const activeCfg = chatModelConfigs.find((c) => c.config_key === chatActiveKey) || {};
+  return activeCfg.model || "";
+}
+
+function renderModelSelect() {
+  const sel = $("#chatModelSelect");
+  if (!sel) return;
+  if (!chatModelConfigs.length) { sel.innerHTML = '<option value="">无模型配置</option>'; return; }
+  const curVal = currentModelVal();
+  const curCfg = chatModelConfigs.find((c) => (c.model || c.config_key) === curVal) || {};
+  const curKey = curCfg.config_key || chatActiveKey;
+  sel.innerHTML = chatModelConfigs.map((c) => {
+    const val = c.model || c.config_key;
+    const label = c.config_key + (c.model && c.model !== c.config_key ? " · " + c.model : "") + (c.config_key === curKey ? " ★" : "");
+    return `<option value="${escapeHtml(val)}" ${val === curVal ? "selected" : ""}>${escapeHtml(label)}</option>`;
+  }).join("");
+  localStorage.setItem("7tan_web_model", curVal);
+}
+
+async function loadChatModels() {
+  try {
+    const d = await API.get("/api/settings");
+    const ai = (d.settings && d.settings.ai) || {};
+    chatModelConfigs = Object.values(ai.configs || {});
+    chatActiveKey = ai.active || "";
+    renderModelSelect();
+  } catch (e) { const sel = $("#chatModelSelect"); if (sel) sel.innerHTML = '<option value="">模型加载失败</option>'; toast("模型列表加载失败: " + e.message, true); }
+}
+
+$("#chatModelSelect").addEventListener("change", () => {
+  localStorage.setItem("7tan_web_model", $("#chatModelSelect").value);
+  renderModelSelect();
+});
+function _fmtSideTime(ts) {
+  if (!ts) return "";
+  try {
+    const d = new Date(ts.replace("T", " ").slice(0, 19).replace(/-/g, "/"));
+    const now = new Date();
+    if (d.toDateString() === now.toDateString())
+      return d.toTimeString().slice(0, 5); // HH:MM
+    if (d.getFullYear() === now.getFullYear())
+      return (d.getMonth() + 1 + "").padStart(2, "0") + "-" + (d.getDate() + "").padStart(2, "0") + " " + d.toTimeString().slice(0, 5);
+    return d.getFullYear() + "-" + ((d.getMonth() + 1) + "").padStart(2, "0") + "-" + (d.getDate() + "").padStart(2, "0");
+  } catch (e) { return ts.slice(0, 10); }
+}
 async function loadSessions() {
   try {
     const d = await API.get("/api/chat/history");
     const sessions = d.sessions || [];
-    $("#sessionList").innerHTML = sessions.map((s) => `
-      <div class="session-item ${s.session_id === curSession ? "active" : ""}" onclick="selectSession('${s.session_id}')">
-        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(s.title || s.session_id)}</span>
-        <span class="del" title="删除会话" onclick="event.stopPropagation();deleteSession('${s.session_id}')">✕</span>
-      </div>`).join("") || '<span class="muted">暂无会话</span>';
+    const el = $("#sessionList");
+    if (!el) return;
+    el.innerHTML = sessions.map((s) => {
+      const title = (s.title || s.session_id).slice(0, 20);
+      const time = _fmtSideTime(s.last_activity || s.updated_at);
+      return `<div class="sidebar-session-item ${s.session_id === curSession ? "active" : ""}" onclick="selectSession('${s.session_id}')">
+        <span class="s-title">💬 ${escapeHtml(title)}</span>
+        <span class="s-time">${escapeHtml(time)}</span>
+        <span class="s-del" title="删除会话" onclick="event.stopPropagation();deleteSession('${s.session_id}')">✕</span>
+      </div>`;
+    }).join("") || '<div class="muted" style="padding:12px;text-align:center">暂无会话</div>';
+    const cnt = $("#sessionCount");
+    if (cnt) cnt.textContent = sessions.length + " 条对话";
   } catch (e) { toast("会话加载失败: " + e.message, true); }
 }
 async function selectSession(sid) {
@@ -351,11 +493,18 @@ async function loadChatHistory(sid) {
   try {
     const d = await API.get("/api/chat/history?session_id=" + encodeURIComponent(sid));
     const msgs = d.messages || [];
-    $("#chatMessages").innerHTML = msgs.map((m) => `
-      <div class="msg ${m.role === "user" ? "user" : "assistant"}">
-        ${renderMarkdown(m.content || "")}
-        ${m.model ? `<span class="meta">模型: ${escapeHtml(m.model)} · ${fmtTime(m.created_at)}</span>` : ""}
-      </div>`).join("") || '<div class="muted center">空会话</div>';
+    $("#chatMessages").innerHTML = msgs.map((m) => {
+      const who = m.role === "user" ? "我" : (m.model || "AI");
+      return `<div class="msg ${m.role === "user" ? "user" : "assistant"}" data-raw="${escapeHtml(m.content || "")}">
+        <div class="msg-body">${renderMarkdown(m.content || "")}</div>
+        <span class="meta">${escapeHtml(who)} · ${fmtTime(m.created_at)}</span>
+        <div class="msg-actions">
+          <button class="msg-act" onclick="copyMsg(this)">复制</button>
+          <button class="msg-act" onclick="editMsg(this)">编辑</button>
+          <button class="msg-act danger" onclick="delMsg(this)">删除</button>
+        </div>
+      </div>`;
+    }).join("") || '<div class="muted center">空会话</div>';
     const box = $("#chatMessages"); box.scrollTop = box.scrollHeight;
   } catch (e) { toast("历史加载失败: " + e.message, true); }
 }
@@ -377,24 +526,53 @@ async function deleteSession(sid) {
   catch (e) { toast("删除失败: " + e.message, true); }
 }
 let chatSending = false;
+let voiceEnabled = false;
+let voiceGender = "male"; // male / female
+function updateSendBtn() {
+  const btn = $("#chatSend");
+  if (chatSending) { btn.textContent = "中止"; btn.className = "btn btn-send abort"; }
+  else { btn.textContent = "发送 ▲"; btn.className = "btn btn-send"; }
+}
+function speakText(text) {
+  if (!voiceEnabled || !text) return;
+  try {
+    const synth = window.speechSynthesis;
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text.replace(/[#*`>\-\[\]()]/g, "").substring(0, 500));
+    u.lang = "zh-CN";
+    u.rate = 1; u.pitch = 1;
+    const voices = synth.getVoices();
+    const zhVoices = voices.filter(v => v.lang.startsWith("zh"));
+    if (zhVoices.length) {
+      // 尝试按性别选
+      const want = voiceGender === "male" ? /male|男|yunxi|yangyang/i : /female|女|xiaoxiao|xiaoyi/i;
+      const found = zhVoices.find(v => want.test(v.name) || want.test(v.voiceURI));
+      u.voice = found || zhVoices[0];
+    }
+    synth.speak(u);
+  } catch (e) { console.warn("TTS failed", e); }
+}
 async function sendChat() {
+  if (chatSending) { abortChat(); return; } // 发送中点击=中止
   const text = $("#chatInput").value.trim();
-  if (!text || chatSending) return;
+  if (!text) return;
   if (!curSession) { toast("请先新建或选择会话", true); return; }
   chatSending = true;
-  $("#chatSend").disabled = true;
-  $("#chatAbort").disabled = false;
+  updateSendBtn();
   $("#chatInput").value = "";
-  appendMsg("user", text);
+  const um = appendMsg("user", text);
+  um.body.innerHTML = renderMarkdown(text);
+  um.meta.textContent = "我 · " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
   const p = appendMsg("assistant", "⏳ AI 思考中…（流式输出即将开始）", "pending streaming");
-  let acc = "";
+  p.body.textContent = "⏳ AI 思考中…（流式输出即将开始）";
+  let acc = "", doneModel = "";
   try {
     const headers = { "Content-Type": "application/json" };
     if (API.token) headers["Authorization"] = "Bearer " + API.token;
     const resp = await fetch("/api/chat/send/stream", {
       method: "POST",
       headers,
-      body: JSON.stringify({ session_id: curSession, message: text }),
+      body: JSON.stringify({ session_id: curSession, message: text, model: ($("#chatModelSelect").value || null) }),
     });
     if (!resp.ok) {
       let msg = "HTTP " + resp.status;
@@ -417,11 +595,13 @@ async function sendChat() {
         try { ev = JSON.parse(line.slice(5)); } catch (e) { continue; }
         if (ev.type === "text_chunk") {
           acc += ev.content || "";
-          p.classList.remove("pending");
-          p.innerHTML = renderMarkdown(acc) + '<span class="cursor">▍</span>';
+          p.div.classList.remove("pending");
+          p.div.dataset.raw = acc;
+          p.body.innerHTML = renderMarkdown(acc) + '<span class="cursor">▍</span>';
           const box = $("#chatMessages"); box.scrollTop = box.scrollHeight;
         } else if (ev.type === "done") {
           acc = ev.result || acc;
+          doneModel = ev.model || doneModel;
         } else if (ev.type === "error") {
           throw new Error(ev.message || "AI 出错");
         } else if (ev.type === "session_id") {
@@ -429,20 +609,19 @@ async function sendChat() {
         }
       }
     }
-    p.classList.remove("pending", "streaming");
-    p.innerHTML = renderMarkdown(acc);
-    const meta = document.createElement("span");
-    meta.className = "meta";
-    meta.textContent = "✓ 流式完成";
-    p.appendChild(meta);
+    p.div.classList.remove("pending", "streaming");
+    p.div.dataset.raw = acc;
+    p.body.innerHTML = renderMarkdown(acc);
+    p.meta.textContent = (doneModel || $("#chatModelSelect").value || "AI") + " · " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
   } catch (e) {
-    if (acc) { p.innerHTML = renderMarkdown(acc); }
-    else { p.textContent = "❌ " + e.message; }
-    p.classList.add("error");
+    if (acc) { p.div.dataset.raw = acc; p.body.innerHTML = renderMarkdown(acc); }
+    else { p.div.dataset.raw = "❌ " + e.message; p.body.textContent = "❌ " + e.message; }
+    p.div.classList.add("error");
   } finally {
     chatSending = false;
-    $("#chatSend").disabled = false;
-    $("#chatAbort").disabled = true;
+    updateSendBtn();
+    // 语音朗读 AI 回复
+    if (acc) speakText(acc);
     const box = $("#chatMessages"); box.scrollTop = box.scrollHeight;
   }
 }
@@ -450,10 +629,70 @@ function appendMsg(role, text, extra) {
   const box = $("#chatMessages");
   const div = document.createElement("div");
   div.className = "msg " + role + (extra ? " " + extra : "");
-  div.textContent = text;
+  div.dataset.raw = text || "";
+  const body = document.createElement("div");
+  body.className = "msg-body";
+  div.appendChild(body);
+  const meta = document.createElement("span");
+  meta.className = "meta";
+  div.appendChild(meta);
+  const actions = document.createElement("div");
+  actions.className = "msg-actions";
+  actions.innerHTML = '<button class="msg-act" onclick="copyMsg(this)">复制</button><button class="msg-act" onclick="editMsg(this)">编辑</button><button class="msg-act danger" onclick="delMsg(this)">删除</button>';
+  div.appendChild(actions);
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
-  return div;
+  return { div, body, meta };
+}
+
+/* ---------- 消息操作：复制 / 编辑 / 删除 ---------- */
+let editMsgTarget = null;
+function fallbackCopy(text, done) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); } catch (e) {}
+  document.body.removeChild(ta);
+  done();
+}
+function copyMsg(btn) {
+  const msg = btn.closest(".msg");
+  const raw = (msg && msg.dataset.raw) || "";
+  const done = () => { btn.textContent = "已复制"; setTimeout(() => { btn.textContent = "复制"; }, 1500); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(raw).then(done).catch(() => fallbackCopy(raw, done));
+  } else {
+    fallbackCopy(raw, done);
+  }
+}
+function editMsg(btn) {
+  const msg = btn.closest(".msg");
+  if (!msg) return;
+  editMsgTarget = msg;
+  $("#editMsgText").value = msg.dataset.raw || "";
+  $("#editMsgModal").style.display = "flex";
+  setTimeout(() => { const t = $("#editMsgText"); if (t) { t.focus(); } }, 50);
+}
+function closeEditMsg() {
+  $("#editMsgModal").style.display = "none";
+  editMsgTarget = null;
+}
+function saveEditMsg() {
+  if (!editMsgTarget) return;
+  const newText = $("#editMsgText").value;
+  editMsgTarget.dataset.raw = newText;
+  const body = editMsgTarget.querySelector(".msg-body");
+  if (body) body.innerHTML = renderMarkdown(newText);
+  closeEditMsg();
+  toast("✅ 已更新消息");
+}
+function delMsg(btn) {
+  const msg = btn.closest(".msg");
+  if (!msg) return;
+  if (!confirm("确定要删除这条消息吗？")) return;
+  msg.remove();
 }
 async function abortChat() {
   if (!curSession) return;
@@ -461,7 +700,27 @@ async function abortChat() {
   catch (e) { toast("中止失败: " + e.message, true); }
 }
 $("#chatSend").addEventListener("click", sendChat);
-$("#chatAbort").addEventListener("click", abortChat);
+$("#voiceToggle").addEventListener("click", function() {
+  voiceEnabled = !voiceEnabled;
+  this.textContent = voiceEnabled ? "🔊 语音中" : "🔇 语音";
+  this.classList.toggle("on", voiceEnabled);
+  toast(voiceEnabled ? "语音朗读已开启" : "语音朗读已关闭");
+});
+$("#voiceGender").addEventListener("click", function() {
+  voiceGender = voiceGender === "male" ? "female" : "male";
+  this.textContent = voiceGender === "female" ? "♀ 女声" : "♂ 男声";
+  this.classList.toggle("male", voiceGender === "male");
+  toast(voiceGender === "female" ? "已切换为女声" : "已切换为男声");
+});
+// 提示词快捷按钮（和桌面版一致）
+document.querySelectorAll(".btn-hint").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const hint = btn.getAttribute("data-hint");
+    if (hint) { $("#chatInput").value = hint; $("#chatInput").focus(); }
+  });
+});
+// 预加载语音列表
+if (window.speechSynthesis) { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); }
 $("#chatNew").addEventListener("click", newChat);
 $("#chatInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); }

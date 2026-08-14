@@ -54,6 +54,17 @@ class ChatResponse(BaseModel):
     model: str = ""  # 生成该回复的 AI 模型名
 
 
+def _resolve_model_name(model_name: str) -> str:
+    """解析实际使用的模型名：显式传入优先；否则取数据库激活配置的模型"""
+    if model_name and model_name.strip():
+        return model_name.strip()
+    try:
+        from ...agent.model_manager import get_model
+        return get_model(None).model_name or ""
+    except Exception:
+        return ""
+
+
 def _load_system_prompt() -> str:
     """加载系统提示词：数据库优先 → 文件回退 → 内置默认"""
     # 1. 数据库（管理员在设置页面修改的）
@@ -91,6 +102,7 @@ async def send_message(req: ChatRequest):
     """发送对话消息"""
     session_id = req.session_id or create_session()
     system_prompt = _load_system_prompt()
+    used_model = _resolve_model_name(req.model)
 
     # 保存用户消息
     save_message(session_id, "user", req.message)
@@ -109,7 +121,7 @@ async def send_message(req: ChatRequest):
                 result = run_agent_loop(
                     task=req.message,
                     session_id=session_id,
-                    model_name=req.model,
+                    model_name=used_model,
                     tools=get_all_tools(),
                     abort_event=abort_event,
                     system_prompt=system_prompt,
@@ -133,7 +145,7 @@ async def send_message(req: ChatRequest):
             )
 
         # 保存 AI 回复（带模型名）
-        save_message(session_id, "assistant", result.get("result", ""), model=req.model or "")
+        save_message(session_id, "assistant", result.get("result", ""), model=used_model)
 
         return ChatResponse(
             session_id=session_id,
@@ -142,7 +154,7 @@ async def send_message(req: ChatRequest):
             cost=result.get("cost", 0),
             iterations=result.get("iterations", 0),
             tokens=result.get("total_tokens", 0),
-            model=req.model or "",
+            model=used_model,
         )
     except HTTPException:
         raise
@@ -170,6 +182,7 @@ def _get_executor():
 async def send_message_stream(req: ChatRequest, request: Request):
     """SSE 流式发送对话消息 — 逐步返回思考过程和结果"""
     session_id = req.session_id or create_session()
+    used_model = _resolve_model_name(req.model)
     save_message(session_id, "user", req.message)
     
     # 创建中止标志
@@ -186,7 +199,7 @@ async def send_message_stream(req: ChatRequest, request: Request):
                 for event in run_agent_loop_streaming(
                     task=req.message,
                     session_id=session_id,
-                    model_name=req.model,
+                    model_name=used_model,
                     tools=get_all_tools(),
                     abort_event=abort_event,
                     system_prompt=_load_system_prompt(),
@@ -232,9 +245,9 @@ async def send_message_stream(req: ChatRequest, request: Request):
                 final_data = event
                 full_result = event.get("result", full_result)
                 # 标记生成该回复的模型
-                final_data["model"] = req.model or ""
+                final_data["model"] = used_model
                 # Save final result
-                save_message(session_id, "assistant", full_result, model=req.model or "")
+                save_message(session_id, "assistant", full_result, model=used_model)
             
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         

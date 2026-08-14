@@ -627,6 +627,16 @@ def start_server(host: str = "0.0.0.0", port: int = 9800):
     import uvicorn
     import socket
 
+    # 🔧 修复：统一工作目录到项目根目录。
+    # token_store / 数据库等模块使用相对路径（data/auth/token.dat 等），
+    # 依赖进程 cwd。若 WEB 进程与桌面版 cwd 不一致，会导致读不到登录态、
+    # 找不到数据文件。这里强制 chdir 到项目根目录，与桌面版保持一致。
+    try:
+        os.chdir(str(PROJECT_ROOT))
+        logger.info(f"📁 已切换工作目录到项目根: {PROJECT_ROOT}")
+    except Exception as _cwd_err:
+        logger.warning(f"⚠️ 切换工作目录失败: {_cwd_err}")
+
     logger.info(f"🌐 正在启动 API 服务器 on {host}:{port}...")
 
     # 预创建 socket，在 bind 前设置 SO_REUSEADDR

@@ -315,3 +315,27 @@ h3 { margin-bottom: 12px; font-size: 15px; color: var(--muted); font-weight: 600
 .mem-item .mem-content { font-size: 12px; color: var(--text-secondary, #9aa4b2);
   white-space: pre-wrap; word-break: break-all; max-height: 90px; overflow: auto; }
 .mem-item .mem-actions { margin-top: 6px; text-align: right; }
+
+/* ===== 代码编辑（文件树 + 在线编辑器） ===== */
+.editor-layout { display: flex; gap: 12px; height: calc(100vh - 150px); min-height: 460px; }
+.file-tree { width: 300px; min-width: 260px; display: flex; flex-direction: column; margin-bottom: 0; overflow: hidden; }
+.editor-main { flex: 1; display: flex; flex-direction: column; margin-bottom: 0; overflow: hidden; min-width: 0; }
+.tree { flex: 1; overflow-y: auto; font-size: 13px; padding: 4px 0; }
+.tree-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; user-select: none; }
+.tree-item:hover { background: var(--panel2); }
+.tree-item.active { background: rgba(99,102,241,.2); color: #fff; }
+.tree-item.dir > .tw { color: var(--yellow); }
+.tree-item.hidden-item { opacity: .45; }
+.tree-item.hidden-item:hover { opacity: .8; }
+.tree-item .tw { flex: none; width: 22px; text-align: center; }
+.tree-item .tn { overflow: hidden; text-overflow: ellipsis; }
+.tree-item .ts { margin-left: auto; padding-left: 8px; font-size: 11px; flex: none; }
+.editor-box { flex: 1; display: flex; min-height: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; }
+.ed-gutter { width: 48px; flex: none; padding: 10px 8px 10px 0; text-align: right; color: var(--muted); opacity: .75;
+  user-select: none; overflow: hidden; background: var(--panel2); border-right: 1px solid var(--border);
+  font-size: 12px; line-height: 1.5; white-space: pre; }
+.ed-text { flex: 1; resize: none; border: none; background: transparent; color: var(--text);
+  padding: 10px 12px; font-size: 12px; line-height: 1.5; tab-size: 4; outline: none;
+  white-space: pre; overflow: auto; font-family: Consolas, "Courier New", monospace; }
+.ed-text::placeholder { color: var(--muted); opacity: .7; }
+.ed-status { display: flex; align-items: center; gap: 8px; padding: 8px 2px 0; }

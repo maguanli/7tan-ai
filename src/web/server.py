@@ -369,7 +369,7 @@ from .routes import (
     resources_router, tasks_router, sources_router,
     stats_router, settings_router, chat_router,
     project_router, terminal_router, update_router,
-    code_router, license_router,
+    code_router, license_router, files_router,
 )
 
 app.include_router(resources_router)
@@ -383,6 +383,7 @@ app.include_router(terminal_router)
 app.include_router(update_router)
 app.include_router(code_router)
 app.include_router(license_router)
+app.include_router(files_router)
 
 
 # ===== 网页版控制面板（静态前端）=====
@@ -677,6 +678,10 @@ def start_server(host: str = "0.0.0.0", port: int = 9800):
 def _mount_web_panel():
     """挂载静态前端。必须在所有路由注册完成后调用，
     否则 mount('/') 会拦截 /ws、/api/* 等请求（Starlette 按注册顺序匹配）。"""
+    _logo_dir = PROJECT_ROOT / "data" / "logo"
+    if _logo_dir.exists():
+        app.mount("/logo", StaticFiles(directory=str(_logo_dir)), name="logo")
+        logger.info(f"🖼️ LOGO 静态目录已挂载: {_logo_dir} → /logo")
     if WEB_STATIC_DIR.exists():
         app.mount("/", StaticFiles(directory=str(WEB_STATIC_DIR), html=True), name="webpanel")
         logger.info(f"🌐 网页版控制面板已挂载: {WEB_STATIC_DIR} → 浏览器访问 http://127.0.0.1:9900/")

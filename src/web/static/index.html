@@ -13,11 +13,13 @@
     <nav id="nav">
       <!-- 仪表盘已隐藏（2026-08-14）：<button class="nav-item" data-view="dashboard">📊 仪表盘</button> -->
       <button class="nav-item active" data-view="chat">🤖 AI 工作台</button>
+      <button class="nav-item" data-view="plugins">🧩 插件市场</button>
       <button class="nav-item" data-view="resources">📦 资源管理</button>
       <button class="nav-item" data-view="tasks">⚙️ 任务中心</button>
       <button class="nav-item" data-view="sources">🌐 源站管理</button>
       <button class="nav-item" data-view="settings">🔧 系统设置</button>
       <button class="nav-item" data-view="code">🛠️ 代码变更</button>
+      <button class="nav-item" data-view="editor">📝 代码编辑</button>
       <button class="nav-item" data-view="terminal">💻 终端</button>
       <button class="nav-item" data-view="logs">📜 系统日志</button>
       <button class="nav-item" data-view="update">⬆️ 更新</button>
@@ -111,6 +113,20 @@
             </div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- 插件市场（独立页面，位于 AI 工作台下方） -->
+    <section id="view-plugins" class="view">
+      <h2>🧩 插件市场</h2>
+      <div class="panel">
+        <div class="toolbar">
+          <h3 style="margin:0">可用插件</h3>
+          <span class="muted" id="marketPluginStats"></span>
+          <span class="spacer"></span>
+          <button id="marketPluginRefresh" class="btn btn-sm">🔄 刷新插件</button>
+        </div>
+        <div id="marketPluginList" class="plugin-list"></div>
       </div>
     </section>
 
@@ -339,6 +355,41 @@
         <button id="codeRefresh" class="btn btn-sm">刷新</button>
       </div>
       <div id="codeList" class="code-list"></div>
+    </section>
+
+        <!-- 代码编辑（文件浏览器 + 在线编辑器） -->
+    <section id="view-editor" class="view">
+      <h2>📝 代码编辑</h2>
+      <div class="editor-layout">
+        <div class="file-tree panel">
+          <div class="toolbar" style="margin-bottom:8px">
+            <span style="font-weight:600">📁 文件</span>
+            <span class="spacer"></span>
+            <button id="edRefresh" class="btn btn-sm" title="刷新文件树">🔄</button>
+            <button id="edNewFile" class="btn btn-sm" title="新建文件">＋文件</button>
+            <button id="edNewDir" class="btn btn-sm" title="新建文件夹">＋目录</button>
+          </div>
+          <div id="edTree" class="tree"><div class="muted" style="padding:8px">加载中…</div></div>
+          <div class="muted" style="padding:8px 4px 0">仅限项目目录内；.env / 密钥 / 数据库等受保护文件不可读写</div>
+        </div>
+        <div class="editor-main panel">
+          <div class="toolbar" style="margin-bottom:8px">
+            <input id="edPath" readonly class="mono" placeholder="未打开文件" style="flex:1;min-width:0;background:transparent;border:none;color:var(--muted);padding:0;font-size:12px">
+            <span id="edMeta" class="muted"></span>
+            <button id="edDelete" class="btn btn-sm btn-danger" title="删除当前文件">🗑 删除</button>
+            <button id="edSave" class="btn btn-sm btn-primary">💾 保存 (Ctrl+S)</button>
+          </div>
+          <div class="editor-box">
+            <div id="edGutter" class="ed-gutter mono"></div>
+            <textarea id="edContent" class="ed-text mono" spellcheck="false" placeholder="从左侧选择文件开始编辑…&#10;&#10;支持：修改文件、新建文件/文件夹、删除文件。&#10;保存后自动记录到「🛠️ 代码变更」页。"></textarea>
+          </div>
+          <div class="ed-status">
+            <span id="edStatus" class="muted">未打开文件</span>
+            <span class="spacer"></span>
+            <span class="muted" id="edRoot"></span>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- 终端 -->

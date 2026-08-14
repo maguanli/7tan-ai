@@ -134,8 +134,8 @@ function refreshCurrent() {
   const fns = {
     dashboard: loadDashboard, resources: loadResources,
     tasks: loadTasks, chat: () => { loadSessions(); if (curSession) loadChatHistory(curSession); loadChatConsole(); },
-    sources: loadSources, settings: loadSettings,
-    code: loadCodeChanges, terminal: () => {}, logs: loadLogs, update: loadUpdate,
+    sources: loadSources, settings: loadSettings, plugins: loadMarketPlugins,
+    code: loadCodeChanges, editor: edRender, terminal: () => {}, logs: loadLogs, update: loadUpdate,
   };
   if (fns[currentView]) fns[currentView]();
 }
@@ -849,6 +849,7 @@ function initSettingsTabs() {
   $("#siteSave").addEventListener("click", saveSiteSettings);
   $("#ossSave").addEventListener("click", saveOssSettings);
   $("#pluginRefresh").addEventListener("click", loadPlugins);
+  $("#marketPluginRefresh").addEventListener("click", loadMarketPlugins);
   $("#swScan").addEventListener("click", scanSoftware);
   $("#memRefresh").addEventListener("click", loadMemories);
   $("#memKeyword").addEventListener("keydown", (e) => { if (e.key === "Enter") loadMemories(); });
@@ -1012,7 +1013,7 @@ async function saveOssSettings() {
   } catch (e) { toast("保存失败: " + e.message, true); }
 }
 
-/* --- 插件市场 --- */
+/* --- 插件市场（设置页入口） --- */
 async function loadPlugins() {
   const list = $("#pluginList");
   try {
@@ -1032,13 +1033,35 @@ async function loadPlugins() {
   } catch (e) { list.innerHTML = '<span class="muted">加载失败: ' + escapeHtml(e.message) + "</span>"; }
 }
 async function installPlugin(id) {
-  try { await API.post(`/api/settings/plugins/${encodeURIComponent(id)}/install`); toast("✅ " + id + " 安装成功（重启后生效）"); loadPlugins(); }
+  try { await API.post(`/api/settings/plugins/${encodeURIComponent(id)}/install`); toast("✅ " + id + " 安装成功（重启后生效）"); loadPlugins(); loadMarketPlugins(); }
   catch (e) { toast("安装失败: " + e.message, true); }
 }
 async function uninstallPlugin(id) {
   if (!confirm(`确定卸载插件「${id}」？`)) return;
-  try { await API.post(`/api/settings/plugins/${encodeURIComponent(id)}/uninstall`); toast("🗑️ " + id + " 已卸载"); loadPlugins(); }
+  try { await API.post(`/api/settings/plugins/${encodeURIComponent(id)}/uninstall`); toast("🗑️ " + id + " 已卸载"); loadPlugins(); loadMarketPlugins(); }
   catch (e) { toast("卸载失败: " + e.message, true); }
+}
+
+/* --- 插件市场（左侧栏独立页面入口） --- */
+async function loadMarketPlugins() {
+  const list = $("#marketPluginList");
+  if (!list) return;
+  try {
+    const d = await API.get("/api/settings/plugins");
+    const statsEl = $("#marketPluginStats");
+    if (statsEl) statsEl.textContent = `（已安装 ${d.installed_count} / 共 ${d.total}）`;
+    list.innerHTML = (d.plugins || []).map((p) => `
+      <div class="plugin-card">
+        <h4>${escapeHtml(p.icon || "🧩")} ${escapeHtml(p.name)} <span class="badge ${p.installed ? "installed" : ""}">${p.installed ? "已安装" : "未安装"}</span></h4>
+        <div class="plugin-desc">${escapeHtml(p.description || "")}</div>
+        <div class="plugin-tools">工具: ${escapeHtml((p.tools || []).join(", ") || "-")} ｜ 版本 ${escapeHtml(p.version || "-")} ｜ ${escapeHtml(p.author || "")}</div>
+        <div class="plugin-actions">
+          ${p.installed
+            ? `<button class="btn btn-sm btn-danger" onclick="uninstallPlugin('${p.id}')">🗑️ 卸载</button>`
+            : `<button class="btn btn-sm btn-primary" onclick="installPlugin('${p.id}')">📥 安装</button>`}
+        </div>
+      </div>`).join("") || '<span class="muted">无可用插件</span>';
+  } catch (e) { list.innerHTML = '<span class="muted">加载失败: ' + escapeHtml(e.message) + "</span>"; }
 }
 
 /* --- 能力清单 --- */
@@ -1130,15 +1153,45 @@ async function loadAbout() {
   try {
     const d = await API.get("/api/settings/about");
     const i = d.info || {};
-    $("#aboutInfo").innerHTML = [
+    const verTxt = "v" + (i.version || "-") + (i.build_id && !String(i.build_id).startsWith("FREE") ? " · " + escapeHtml(i.build_id) : "");
+    const fields = [
       ["版本", "v" + (i.version || "-")],
       ["构建", i.build_id || "-"],
       ["项目根目录", i.project_root || "-"],
       ["日志目录", i.log_dir || "-"],
       ["插件目录", i.plugin_dir || "-"],
       ["站点", i.site_root || "-"],
-    ].map(([k, v]) => `<label>${escapeHtml(k)}<input value="${escapeHtml(v)}" readonly style="background:#0b0d12"></label>`).join("");
-  } catch (e) { $("#aboutInfo").textContent = "加载失败: " + e.message; }
+    ];
+    const introText = [
+      "7Tan AI工具 是一款由 AI 驱动的个人创作与开发助手，代号「盘古」。",
+      "它将软件研发、游戏内容生产、系统运维三大能力融为一体，",
+      "让 AI 不只是聊天，而是真正替你干活。",
+      "",
+      "【核心能力】",
+      "🤖 AI 智能中枢 — 接入 DeepSeek 等大模型，支持深度推理、代码生成、文案创作与多轮对话",
+      "",
+      "🌐 游戏内容工厂 — 自动采集游戏资讯、撰写评测简介、配图处理、敏感词审核，一键发布到网站",
+      "",
+      "💻 全栈开发助手 — 代码检索/审查/测试/重构、Git 版本管理、Docker/K8s 运维、ADB 设备调试，200+ 工具随叫随到",
+      "",
+      "🧠 自我进化系统 — 可自主创建插件、优化提示词、管理记忆，越用越聪明",
+      "",
+      "🎬 录屏与制图 — 屏幕录制、图像生成、语音合成",
+      "",
+      "【出品】7Tan 团队",
+    ].join("\n");
+    document.getElementById("aboutInfo").innerHTML = [
+      "<div style='text-align:center;padding:8px 0 2px'>",
+      "<img src='/logo/logo_v4_256.png' alt='7Tan AI工具' style='width:96px;height:96px;border-radius:18px;object-fit:contain;background:#16213e;padding:8px' onerror=\"this.style.display='none'\">",
+      "<div style='font-size:22px;font-weight:bold;margin-top:10px'>7Tan AI工具</div>",
+      "<div style='font-size:13px;opacity:.65;margin-top:2px'>" + verTxt + "</div>",
+      "</div>",
+      "<div style='margin-top:14px;line-height:1.9;font-size:13px;white-space:pre-wrap'>" + escapeHtml(introText) + "</div>",
+      "<details style='margin-top:14px'><summary style='cursor:pointer;opacity:.7;font-size:12px'>📋 技术信息</summary>",
+      "<div class='form' style='margin-top:8px'>" + fields.map(function(f){ return "<label>" + escapeHtml(f[0]) + "<input value=\"" + escapeHtml(f[1]) + "\" readonly style=\"background:#0b0d12\"></label>"; }).join("") + "</div>",
+      "</details>",
+    ].join("");
+  } catch (e) { document.getElementById("aboutInfo").textContent = "加载失败: " + e.message; }
 }
 async function loadAboutUpdate() {
   const msg = $("#aboutUpdateMsg");
@@ -1148,3 +1201,196 @@ async function loadAboutUpdate() {
     msg.textContent = d.has_update ? `发现新版本 v${escapeHtml((d.latest || {}).version || "")}` : `✅ 已是最新版本 v${escapeHtml(d.current)}`;
   } catch (e) { msg.textContent = "检查失败: " + e.message; }
 }
+
+
+/* ---------- 代码编辑（文件浏览器 + 在线编辑器，类 Harness 工作区） ---------- */
+let edCurrent = null;            // 当前打开文件 {path, mtime}
+let edDirty = false;             // 是否有未保存修改
+const edOpenDirs = new Set();    // 已展开的目录（相对路径）
+
+function edIcon(t, name) {
+  if (t === "dir") return "📁";
+  const m = /\.([^.]+)$/.exec(name);
+  const ext = m ? m[1].toLowerCase() : "";
+  const icons = { py:"🐍", js:"🟨", ts:"🟦", jsx:"⚛️", tsx:"⚛️", html:"🌐", css:"🎨", scss:"🎨",
+    json:"📋", md:"📄", txt:"📄", yaml:"⚙️", yml:"⚙️", toml:"⚙️", ini:"⚙️", cfg:"⚙️",
+    sql:"🗄️", sh:"🐚", bat:"🖥️", cmd:"🖥️", ps1:"🖥️", xml:"📰", vue:"💚",
+    go:"🐹", rs:"🦀", java:"☕", kt:"🟣", c:"©️", cpp:"➕", h:"📑", cs:"#️⃣",
+    gitignore:"🚫", lock:"🔒", env:"🔑", example:"🧪" };
+  return icons[ext] || "📄";
+}
+
+async function edList(dir) {
+  const d = await API.get("/api/files/tree?dir=" + encodeURIComponent(dir || ""));
+  if (d.error) throw new Error(d.error);
+  return d.entries || [];
+}
+
+/* 递归构建文件树（懒加载：只加载展开的目录） */
+async function edBuildNode(dir, depth) {
+  const wrap = document.createElement("div");
+  let entries;
+  try {
+    entries = await edList(dir);
+  } catch (e) {
+    const err = document.createElement("div");
+    err.className = "muted";
+    err.style.padding = "6px 8px";
+    err.textContent = e.message;
+    wrap.appendChild(err);
+    return wrap;
+  }
+  for (const it of entries) {
+    const row = document.createElement("div");
+    const isDir = it.type === "dir";
+    const open = edOpenDirs.has(it.path);
+    row.className = "tree-item " + (isDir ? "dir" : "file");
+    if (isDir && it.hidden) row.classList.add("hidden-item");
+    row.style.paddingLeft = (8 + depth * 14) + "px";
+    row.title = it.path + (isDir && it.hidden ? "（受保护目录，不可展开）" : "");
+    const caret = isDir ? (open ? "▾ " : "▸ ") : "";
+    row.innerHTML = '<span class="tw">' + caret + edIcon(it.type, it.name) + '</span>' +
+      '<span class="tn">' + escapeHtml(it.name) + "</span>" +
+      (!isDir && it.size > 0 ? '<span class="ts muted">' + fmtSize(it.size) + "</span>" : "");
+    if (isDir) {
+      row.addEventListener("click", () => {
+        if (it.hidden) { toast("该目录受保护（node_modules / .git / .venv 等），不可展开", true); return; }
+        if (edOpenDirs.has(it.path)) edOpenDirs.delete(it.path); else edOpenDirs.add(it.path);
+        edRender();
+      });
+      wrap.appendChild(row);
+      if (open) wrap.appendChild(await edBuildNode(it.path, depth + 1));
+    } else {
+      row.addEventListener("click", () => edOpenFile(it.path));
+      if (edCurrent && edCurrent.path === it.path) row.classList.add("active");
+      wrap.appendChild(row);
+    }
+  }
+  return wrap;
+}
+
+async function edRender() {
+  const box = $("#edTree");
+  if (!box) return;
+  box.innerHTML = '<div class="muted" style="padding:8px">加载中…</div>';
+  try {
+    const root = await edBuildNode("", 0);
+    box.innerHTML = "";
+    box.appendChild(root);
+    const d = await API.get("/api/files/tree?dir=");
+    const r = $("#edRoot");
+    if (r && d && d.root) r.textContent = "项目根: /" + (d.root === "." ? "" : d.root);
+  } catch (e) {
+    box.innerHTML = '<span class="muted">' + escapeHtml(e.message) + "</span>";
+  }
+}
+
+/* 打开文件 */
+async function edOpenFile(path) {
+  if (edDirty && !confirm("当前文件有未保存的修改，确定放弃并打开其他文件？")) return;
+  try {
+    const d = await API.get("/api/files/read?path=" + encodeURIComponent(path));
+    if (d.error) { toast("❌ " + d.error, true); return; }
+    edCurrent = { path: d.path, mtime: d.mtime };
+    edDirty = false;
+    $("#edPath").value = d.path;
+    $("#edContent").value = d.content;
+    $("#edMeta").textContent = fmtSize(d.size) + " · " + fmtTime(new Date(d.mtime * 1000).toISOString());
+    $("#edStatus").textContent = "已打开";
+    edRenderGutter();
+    edRender();
+  } catch (e) {
+    toast("❌ 打开失败: " + e.message, true);
+  }
+}
+
+/* 行号 */
+function edRenderGutter() {
+  const ta = $("#edContent");
+  const g = $("#edGutter");
+  const n = Math.min(ta.value.split("\n").length, 5000);
+  let html = "";
+  for (let i = 1; i <= n; i++) html += i + "\n";
+  g.textContent = html;
+  g.scrollTop = ta.scrollTop;
+}
+
+/* 保存 */
+async function edSave() {
+  if (!edCurrent) return;
+  const btn = $("#edSave");
+  btn.disabled = true;
+  try {
+    const r = await API.post("/api/files/write", { path: edCurrent.path, content: $("#edContent").value });
+    if (r.error) { toast("❌ " + r.error, true); return; }
+    edDirty = false;
+    $("#edStatus").textContent = "已保存 " + new Date().toLocaleTimeString();
+    toast("✅ 已保存: " + edCurrent.path);
+    edRender();
+  } catch (e) {
+    toast("❌ 保存失败: " + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* 新建文件/目录 */
+async function edCreate(type) {
+  const label = type === "dir" ? "文件夹名" : "文件名";
+  const name = prompt("请输入要新建的" + label + "：", type === "dir" ? "new_dir" : "new_file.py");
+  if (!name) return;
+  let base = "";
+  if (edCurrent && edCurrent.path.includes("/")) base = edCurrent.path.slice(0, edCurrent.path.lastIndexOf("/"));
+  const path = base ? base + "/" + name : name;
+  try {
+    const r = await API.post("/api/files/create", { path, type });
+    if (r.error) { toast("❌ " + r.error, true); return; }
+    toast("✅ 已创建 " + name);
+    if (base) edOpenDirs.add(base);
+    await edRender();
+    if (type === "file") edOpenFile(r.path);
+  } catch (e) {
+    toast("❌ 创建失败: " + e.message, true);
+  }
+}
+
+/* 删除当前文件 */
+async function edDelete() {
+  if (!edCurrent) return;
+  if (!confirm("确定删除文件？\n" + edCurrent.path + "\n（删除后不可恢复）")) return;
+  try {
+    const r = await API.del("/api/files/delete?path=" + encodeURIComponent(edCurrent.path));
+    if (r.error) { toast("❌ " + r.error, true); return; }
+    toast("🗑️ 已删除: " + edCurrent.path);
+    edCurrent = null; edDirty = false;
+    $("#edContent").value = "";
+    $("#edPath").value = "";
+    $("#edMeta").textContent = "";
+    $("#edStatus").textContent = "未打开文件";
+    edRenderGutter();
+    edRender();
+  } catch (e) {
+    toast("❌ 删除失败: " + e.message, true);
+  }
+}
+
+/* 事件绑定 */
+$("#edRefresh").addEventListener("click", edRender);
+$("#edNewFile").addEventListener("click", () => edCreate("file"));
+$("#edNewDir").addEventListener("click", () => edCreate("dir"));
+$("#edSave").addEventListener("click", edSave);
+$("#edDelete").addEventListener("click", edDelete);
+$("#edContent").addEventListener("input", () => {
+  edDirty = true;
+  $("#edStatus").textContent = "未保存";
+  edRenderGutter();
+});
+$("#edContent").addEventListener("scroll", () => {
+  $("#edGutter").scrollTop = $("#edContent").scrollTop;
+});
+$("#edContent").addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    edSave();
+  }
+});

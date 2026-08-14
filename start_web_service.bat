@@ -2,23 +2,18 @@
 chcp 65001 >nul
 title 7Tan Web Panel Service
 cd /d "%~dp0"
-
 echo ================================================
-echo   7Tan Web Panel Service (standalone mode)
-echo   URL: http://127.0.0.1:9900/
+echo   7Tan Web Panel Service  (background mode)
+echo   URL:  http://127.0.0.1:9900/
 echo   LAN:  http://本机IP:9900/
-echo   Works alongside desktop app. Stop: close this window / Ctrl+C
+echo   No window - service runs hidden in background.
+echo   Stop:  taskkill /f /im pythonw.exe
 echo ================================================
 echo.
-
-set PYTHON=python
-if exist ".venv\Scripts\python.exe" set PYTHON=.venv\Scripts\python.exe
-
-echo Starting web service: http://127.0.0.1:9900/
-echo Press Ctrl+C to stop
+wscript "%~dp07TanWebService.vbs"
 echo.
-%PYTHON% main.py --web --host 0.0.0.0 --port 9900
-
+echo [OK] Web service started in background (hidden).
+echo Open browser:  http://127.0.0.1:9900/
+echo You may close this window - service keeps running.
 echo.
-echo Service stopped.
 pause

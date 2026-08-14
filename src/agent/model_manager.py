@@ -7,12 +7,14 @@ from typing import Any
 
 from loguru import logger
 
-from ..utils.retry import retry, is_retryable_error, classify_policy, RETRY_POLICIES, RetryConfig
+from ..utils.retry import retry, is_retryable_error, classify_policy, RETRY_POLICIES, RetryConfig, RetryExhausted
 
 
 # LLM 调用重试策略（统一走 utils/retry.py，避免手写重试循环）
+# 2026-08-14 修复：偶发网络故障（APIConnectionError）可持续 1~5 分钟，
+# 原 5 次重试（约 62s）窗口太短，故障稍长就报错。调至 8 次（约 6 分钟）覆盖短时波动。
 _LLM_RETRY_CFG = RetryConfig(
-    max_retries=5,
+    max_retries=8,
     base_delay=2.0,
     max_delay=120.0,
     backoff=2.0,
@@ -318,7 +320,55 @@ class ModelManager:
         """带智能重试的 chat 调用（重试统一走 utils/retry.py 装饰器）"""
         # Clean surrogate chars before API call
         kwargs = self._sanitize_surrogates(kwargs)
-        return self._chat_once(client, **kwargs)
+        try:
+            return self._chat_once(client, **kwargs)
+        except Exception as e:
+            # 2026-08-14 增强：连接类错误重试耗尽后，自动做一次快速网络诊断，
+            # 把干巴巴的 "Connection error" 变成可操作的中文提示。
+            is_conn_err = (
+                isinstance(e, RetryExhausted)
+                or "onnection" in type(e).__name__
+                or "onnection" in str(e)
+            )
+            if is_conn_err:
+                diag = self._diagnose_network()
+                logger.error(f"🔌 AI 连接失败（已自动重试多次）: {diag}")
+                if isinstance(e, RetryExhausted) and e.last_error is not None:
+                    base = getattr(self, '_db_base_url', '') or 'AI 服务'
+                    raise RuntimeError(
+                        f"AI 服务连接失败（已自动重试多次仍无法连接）。\n诊断: {diag}\n"
+                        f"建议：① 检查本机网络能否访问 {base}；"
+                        f"② 稍等几分钟再试；③ 若持续失败，可在 设置→AI模型 中切换备用模型。"
+                    ) from e.last_error
+            raise
+
+    def _diagnose_network(self) -> str:
+        """快速诊断到 AI 服务的网络连通性（重试耗尽后调用一次）
+
+        检查顺序：base_url 解析 → DNS 解析 → TCP 443 连通。
+        返回人类可读的诊断结果，帮助区分"本机网络问题"与"AI 服务端问题"。
+        """
+        try:
+            import socket
+            from urllib.parse import urlparse
+            base = getattr(self, '_db_base_url', '') or "https://api.deepseek.com/v1"
+            host = urlparse(base).netloc.split(':')[0]
+            if not host:
+                return f"base_url 无效: {base}"
+            # DNS 解析
+            try:
+                ips = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+                ip = ips[0][4][0]
+            except Exception as dns_err:
+                return f"DNS 解析失败: {host}（{dns_err}）"
+            # TCP 443 连通性
+            try:
+                with socket.create_connection((host, 443), timeout=8):
+                    return f"网络连通正常（{host}→{ip}:443 可达），问题可能在 AI 服务端或 API Key"
+            except Exception as tcp_err:
+                return f"无法连接 {host}（{ip}:443）: {tcp_err}"
+        except Exception as e:
+            return f"网络诊断失败: {e}"
 
     @retry(policy=_LLM_RETRY_CFG, auto_classify=False)
     def _chat_once(self, client, **kwargs):

@@ -114,12 +114,11 @@ app.include_router(update_router)
 
 
 # ===== 网页版控制面板（静态前端）=====
+# ⚠️ 注意：mount('/') 会拦截所有未匹配路径，必须等 /ws、/api/* 等路由全部注册完
+# 才能挂载，否则 WebSocket 会被静态处理器吞掉（返回 500）。挂载逻辑见文件末尾 _mount_web_panel()。
 from fastapi.staticfiles import StaticFiles
 
 WEB_STATIC_DIR = Path(__file__).resolve().parent / "static"
-if WEB_STATIC_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(WEB_STATIC_DIR), html=True), name="webpanel")
-    logger.info(f"🌐 网页版控制面板已挂载: {WEB_STATIC_DIR} → 浏览器访问 http://127.0.0.1:9800/")
 
 
 # ===== 健康检查 =====
@@ -365,3 +364,15 @@ def start_server(host: str = "0.0.0.0", port: int = 9800):
         except Exception:
             pass
         _server_socket = None
+
+
+# ===== 网页版控制面板（静态前端）— 必须放在所有路由注册之后 =====
+def _mount_web_panel():
+    """挂载静态前端。必须在所有路由注册完成后调用，
+    否则 mount('/') 会拦截 /ws、/api/* 等请求（Starlette 按注册顺序匹配）。"""
+    if WEB_STATIC_DIR.exists():
+        app.mount("/", StaticFiles(directory=str(WEB_STATIC_DIR), html=True), name="webpanel")
+        logger.info(f"🌐 网页版控制面板已挂载: {WEB_STATIC_DIR} → 浏览器访问 http://127.0.0.1:9800/")
+
+
+_mount_web_panel()

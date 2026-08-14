@@ -167,6 +167,42 @@ logger.add(
     format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <7} | {message}",
 )
 
+# ===== 标准 logging 桥接（agent_loop 等模块的关键日志 → 实时控制台） =====
+# agent_loop.py 用 logging.getLogger 打 💬 Agent / 工具调用等日志（标准 logging），
+# loguru 不会自动接管标准 logging，桌面版靠 console_panel._LoggingBridge 才能显示，
+# WEB 版此前无桥接 → 💬 Agent 内容不进环形缓冲/WS 广播，实时控制台看不到。
+import logging as _logging
+
+
+class _StdLogBridge(_logging.Handler):
+    """标准 logging → WEB 实时控制台桥接。"""
+
+    def emit(self, record: _logging.LogRecord) -> None:
+        try:
+            _ws_log_sink(self.format(record))
+        except Exception:
+            pass
+
+
+def _install_std_log_bridge() -> None:
+    root = _logging.getLogger()
+    # 放开 root 级别：默认 WARNING 会让 agent_loop 的 INFO（💬 Agent 等）根本不产生记录
+    if root.level > _logging.INFO:
+        root.setLevel(_logging.INFO)
+    for h in root.handlers:
+        if isinstance(h, _StdLogBridge):
+            return
+    h = _StdLogBridge()
+    h.setLevel(_logging.INFO)
+    h.setFormatter(_logging.Formatter(
+        fmt="%(asctime)s.%(msecs)03d | %(levelname)-7s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+    root.addHandler(h)
+
+
+_install_std_log_bridge()
+
 # ===== 注册 REST API 路由 =====
 from .routes import (
     resources_router, tasks_router, sources_router,

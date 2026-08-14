@@ -5,6 +5,8 @@
 import sys
 import asyncio
 import collections
+import threading as _threading
+import time as _time
 from pathlib import Path
 from typing import Optional
 
@@ -143,11 +145,49 @@ ws_manager = get_ws_manager()
 _LOG_RING: collections.deque = collections.deque(maxlen=1000)
 _APP_LOOP: Optional[asyncio.AbstractEventLoop] = None
 
+# —— 与桌面版控制台对齐：时间窗口去重（3s 精确 + 2s 模糊）+ 启动噪声过滤 ——
+_DEDUP_MAP: dict = {}
+_DEDUP_LOCK = _threading.Lock()
+_DEDUP_WINDOW = 3.0
+_DEDUP_FUZZY_WINDOW = 2.0
+
+_NOISE_PATTERNS = [
+    '🔧 注册工具', '📦 插件已加载', '✅ 数据库初始化完成',
+    '[系统] loguru 控制台 sink 已连接', '[系统] 标准 logging 桥接已安装',
+    '[系统] Python stdout/stderr 重定向已安装', '[系统] OS 管道已安装',
+    '[系统] GUI 模式，跳过 OS 管道', '[系统] loguru sink 失败',
+    'Sending HTTP Request',
+]
+
 
 def _ws_log_sink(message: str) -> None:
-    """loguru sink — 写入环形缓冲 + 异步广播给所有 WebSocket 客户端。"""
+    """loguru sink — 写入环形缓冲 + 异步广播给所有 WebSocket 客户端。
+
+    与桌面版 console_panel 对齐：入口做时间窗口去重（WS 广播与轮询
+    双通道防重复）与噪声过滤（保持控制台清爽，不显示启动噪音）。
+    """
     try:
-        _LOG_RING.append(message.rstrip())
+        line = message.rstrip()
+        if not line.strip():
+            return
+        for np_ in _NOISE_PATTERNS:
+            if np_ in line:
+                return
+        h = hash(line)
+        h_fuzzy = hash(line[:60])
+        now = _time.time()
+        with _DEDUP_LOCK:
+            last = _DEDUP_MAP.get(h)
+            if last is not None and (now - last) < _DEDUP_WINDOW:
+                return
+            last_f = _DEDUP_MAP.get(h_fuzzy)
+            if last_f is not None and (now - last_f) < _DEDUP_FUZZY_WINDOW:
+                return
+            _DEDUP_MAP[h] = now
+            _DEDUP_MAP[h_fuzzy] = now
+            if len(_DEDUP_MAP) > 10000:
+                _DEDUP_MAP.clear()
+        _LOG_RING.append(line)
     except Exception:
         pass
     loop = _APP_LOOP
@@ -202,6 +242,78 @@ def _install_std_log_bridge() -> None:
 
 
 _install_std_log_bridge()
+
+# ===== stdout/stderr 重定向（与桌面版控制台对齐：捕获 print 输出） =====
+# 桌面版 console_panel 有 Python 重定向层，WEB 版此前没有 → print() 输出的内容
+# （部分模块的关键信息）WEB 控制台看不到，与桌面版内容不一致。这里补上。
+import io as _io
+
+
+class _StreamRedirector(_io.TextIOBase):
+    """线程安全的 stdout/stderr → 实时控制台 重定向。
+
+    把 print() 输出按行送入环形缓冲 + WS 广播，同时写回原流
+    （pythonw 下原流可能为 None，自动跳过），不破坏原有输出。
+    """
+
+    def __init__(self, original):
+        self._original = original
+        self._buf = []
+        self._lock = _threading.Lock()
+
+    def write(self, s: str) -> int:
+        if not s:
+            return 0
+        with self._lock:
+            self._buf.append(s)
+            while True:
+                joined = "".join(self._buf)
+                idx = joined.find("\n")
+                if idx < 0:
+                    break
+                line = joined[:idx]
+                rest = joined[idx + 1:]
+                self._buf = [rest] if rest else []
+                if line.strip():
+                    _ws_log_sink(line)
+            try:
+                if self._original is not None:
+                    self._original.write(s)
+                    self._original.flush()
+            except Exception:
+                pass
+        return len(s)
+
+    def flush(self):
+        with self._lock:
+            if self._buf:
+                _ws_log_sink("".join(self._buf).rstrip())
+                self._buf = []
+            try:
+                if self._original is not None:
+                    self._original.flush()
+            except Exception:
+                pass
+
+
+_STREAM_REDIRECT_INSTALLED = False
+
+
+def _install_stream_redirect() -> None:
+    """安装 stdout/stderr → 实时控制台 重定向（幂等，只装一次）。"""
+    global _STREAM_REDIRECT_INSTALLED
+    if _STREAM_REDIRECT_INSTALLED:
+        return
+    try:
+        sys.stdout = _StreamRedirector(sys.__stdout__)
+        sys.stderr = _StreamRedirector(sys.__stderr__)
+        _STREAM_REDIRECT_INSTALLED = True
+        logger.info("[系统] Python stdout/stderr 重定向已安装（WEB 控制台）")
+    except Exception as e:
+        logger.warning(f"[系统] stdout/stderr 重定向失败: {e}")
+
+
+_install_stream_redirect()
 
 # ===== 注册 REST API 路由 =====
 from .routes import (

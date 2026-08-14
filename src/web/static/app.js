@@ -641,26 +641,48 @@ const CONSOLE_EMOJI_CLASS = {
   "🚀": "info", "🔌": "info", "🤖": "info", "📚": "info",
   "📎": "info", "⏳": "info", "📦": "info", "🔍": "info", "📢": "info"
 };
+/* 消息级关键词高亮（与桌面版 16 条高亮规则对齐，基于已转义文本，安全） */
+function highlightMsgText(escaped) {
+  const rules = [
+    [/(💬\s*Agent:)/g, "cl-agent"],
+    [/(👤\s*User:)/g, "cl-user"],
+    [/\b(ERROR|CRITICAL|FATAL)\b/g, "cl-kw-err"],
+    [/\b(WARNING|WARN)\b/g, "cl-kw-warn"],
+    [/\b(SUCCESS|OK)\b/g, "cl-kw-ok"],
+    [/\b(INFO|DEBUG)\b/g, "cl-kw-info"],
+    [/\bhttps?:\/\/\S+/g, "cl-url"],
+    [/\b[A-Za-z_][\w.]*\.py\b/g, "cl-file"],
+    [/\b(\d+(?:\.\d+)?)\s*(GB|MB|KB|秒|s|ms|行|条)\b/g, "cl-num"],
+    [/\b(True|False|None)\b/g, "cl-bool"],
+  ];
+  let out = escaped;
+  for (const [re, cls] of rules) {
+    out = out.replace(re, `<span class="${cls}">$&</span>`);
+  }
+  return out;
+}
 function highlightLogLine(raw) {
   const s = stripAnsi(raw == null ? "" : raw);
   if (!s || !s.trim()) return "";
-  // 标准 loguru 格式: 时间 | 级别 | 模块 | 消息
+  // 标准 loguru 格式: 时间 | 级别 | 模块 | 消息（时间精简为 HH:MM:SS，更接近桌面版）
   const m = s.match(/^(\d{4}-\d{2}-\d{2}[ T][\d:.]+)\s*\|\s*(DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL)\s*\|\s*(.*)$/);
   if (m) {
-    const time = escapeHtml(m[1]);
+    let time = m[1];
+    const tm = time.match(/\d{2}:\d{2}:\d{2}/);
+    if (tm) time = tm[0];
     const lv = m[2].toLowerCase();
     const rest = m[3];
     const pipe = rest.indexOf("|");
     let mod = "", msg = rest;
     if (pipe >= 0) { mod = escapeHtml(rest.slice(0, pipe).trim()); msg = rest.slice(pipe + 1); }
-    return `<span class="cl-time">${time}</span> <span class="cl-level lv-${lv}">${m[2]}</span>` +
+    return `<span class="cl-time">${escapeHtml(time)}</span> <span class="cl-level lv-${lv}">${m[2]}</span>` +
       (mod ? ` <span class="cl-module">${mod}</span>` : "") +
-      ` <span class="cl-msg">${escapeHtml(msg)}</span>`;
+      ` <span class="cl-msg">${highlightMsgText(escapeHtml(msg))}</span>`;
   }
-  // 简单行：emoji 前缀决定整行颜色
+  // 简单行：emoji 前缀决定整行颜色 + 关键词高亮
   const first = s.trim().slice(0, 2);
   const cls = CONSOLE_EMOJI_CLASS[first];
-  return `<span class="cl-plain${cls ? " cl-" + cls : ""}">${escapeHtml(s)}</span>`;
+  return `<span class="cl-plain${cls ? " cl-" + cls : ""}">${highlightMsgText(escapeHtml(s))}</span>`;
 }
 function renderConsole() {
   const out = $("#consoleOutput");
@@ -706,6 +728,35 @@ function startConsolePolling() {
   if (consoleTimer) clearInterval(consoleTimer);
   consoleTimer = setInterval(() => { if (currentView === "chat") loadChatConsole(); }, 3000);
 }
+
+/* 控制台/对话 分隔条拖拽（自由调整左右宽度，默认 50/50） */
+(function initChatResizer() {
+  const resizer = document.querySelector(".chat-resizer");
+  const layout = document.querySelector(".chat-layout");
+  if (!resizer || !layout) return;
+  let dragging = false;
+  resizer.addEventListener("mousedown", (e) => {
+    dragging = true;
+    resizer.classList.add("active");
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const rect = layout.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    let pct = ((e.clientX - rect.left) / rect.width) * 100;
+    pct = Math.max(15, Math.min(85, pct));
+    document.querySelector(".chat-console-pane").style.flex = `0 0 ${pct}%`;
+  });
+  document.addEventListener("mouseup", () => {
+    if (dragging) {
+      dragging = false;
+      resizer.classList.remove("active");
+      document.body.style.userSelect = "";
+    }
+  });
+})();
 
 /* ---------- 更新 ---------- */
 let updateTaskId = null, updatePollTimer = null;

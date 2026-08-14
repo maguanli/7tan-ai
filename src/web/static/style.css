@@ -132,8 +132,11 @@ h3 { margin-bottom: 12px; font-size: 15px; color: var(--muted); font-weight: 600
 /* ===== 对话 ===== */
 .chat-layout { display: flex; height: calc(100vh - 150px); gap: 12px; }
 /* 对话一分为二：左半实时控制台，右半对话 */
-.chat-console-pane { flex: 0 0 44%; min-width: 0; display: flex; flex-direction: column;
+.chat-console-pane { flex: 0 0 50%; min-width: 0; display: flex; flex-direction: column;
   background: #0d1117; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.chat-resizer { flex: 0 0 6px; cursor: col-resize; background: var(--border);
+  border-radius: 3px; transition: background .15s; }
+.chat-resizer:hover, .chat-resizer.active { background: var(--primary); }
 .chat-topbar { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
   border-bottom: 1px solid var(--border); background: var(--panel2); }
 .session-list { flex: 1; display: flex; flex-direction: row; gap: 6px; overflow-x: auto; }
@@ -172,6 +175,17 @@ h3 { margin-bottom: 12px; font-size: 15px; color: var(--muted); font-weight: 600
 /* 控制台日志高亮 */
 .console-out .cl-time { color: #565f89; }
 .console-out .cl-level { font-weight: 700; border-radius: 3px; padding: 0 4px; margin: 0 2px; }
+/* 与桌面版控制台对齐的增强高亮：Agent/User 角色、关键词、URL、文件、数字、布尔 */
+.cl-agent { color: #00d4ff; font-weight: 700; }
+.cl-user { color: #fbbf24; font-weight: 700; }
+.cl-kw-err { color: #ef4444; font-weight: 700; }
+.cl-kw-warn { color: #f59e0b; font-weight: 700; }
+.cl-kw-ok { color: #10b981; font-weight: 700; }
+.cl-kw-info { color: #3b82f6; font-weight: 700; }
+.cl-url { color: #60a5fa; }
+.cl-file { color: #fbbf24; }
+.cl-num { color: #fb923c; }
+.cl-bool { color: #c084fc; }
 .console-out .lv-debug { color: #7f8ea3; }
 .console-out .lv-info { color: #58a6ff; }
 .console-out .lv-success { color: #3fb950; }

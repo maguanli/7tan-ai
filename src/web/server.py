@@ -507,7 +507,6 @@ async def _handle_chat(ws: WebSocket, client_id: str, data: dict):
     import threading
     from ..agent.agent_loop import run_agent_loop
     from ..agent.conversation import save_message
-    from ..database.db import get_session, save_message as db_save
 
     session_id = data.get("session_id", "")
     message = data.get("message", "")
@@ -548,9 +547,8 @@ async def _handle_chat(ws: WebSocket, client_id: str, data: dict):
 
 async def _handle_pipeline(ws: WebSocket, client_id: str, data: dict):
     try:
-        from ..pipeline.pipeline import run_full_pipeline
-        result = run_full_pipeline()
-        await ws.send_json({"type": "pipeline_done", "data": result})
+        # WEB 版无完整流水线入口（pipeline 模块无 run_full_pipeline），返回明确提示而非崩连接
+        await ws.send_json({"type": "error", "data": {"message": "pipeline 消息暂不支持（WEB 版）"}})
     except Exception as e:
         await ws.send_json({"type": "error", "data": {"message": str(e)}})
 
@@ -566,26 +564,28 @@ async def _handle_status(ws: WebSocket, client_id: str):
 
 async def _handle_jobs(ws: WebSocket, client_id: str):
     try:
-        from ..database.connection import get_db
-        db = get_db()
-        jobs = db.execute("SELECT * FROM task_logs ORDER BY created_at DESC LIMIT 20").fetchall()
-        await ws.send_json({
-            "type": "jobs",
-            "data": [dict(row) for row in jobs],
-        })
+        from ..database.db import get_session, TaskLog
+        session = get_session()
+        try:
+            rows = session.query(TaskLog).order_by(TaskLog.id.desc()).limit(20).all()
+            data = [{c.name: getattr(r, c.name) for c in TaskLog.__table__.columns} for r in rows]
+        finally:
+            session.close()
+        await ws.send_json({"type": "jobs", "data": data})
     except Exception as e:
         await ws.send_json({"type": "error", "data": {"message": str(e)}})
 
 
 async def _handle_resources(ws: WebSocket, client_id: str):
     try:
-        from ..database.connection import get_db
-        db = get_db()
-        resources = db.execute("SELECT * FROM resources ORDER BY created_at DESC LIMIT 50").fetchall()
-        await ws.send_json({
-            "type": "resources",
-            "data": [dict(row) for row in resources],
-        })
+        from ..database.db import get_session, Resource
+        session = get_session()
+        try:
+            rows = session.query(Resource).order_by(Resource.created_at.desc()).limit(50).all()
+            data = [{c.name: getattr(r, c.name) for c in Resource.__table__.columns} for r in rows]
+        finally:
+            session.close()
+        await ws.send_json({"type": "resources", "data": data})
     except Exception as e:
         await ws.send_json({"type": "error", "data": {"message": str(e)}})
 

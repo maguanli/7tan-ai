@@ -448,9 +448,11 @@ function renderModelSelect() {
   if (!sel) return;
   if (!chatModelConfigs.length) { sel.innerHTML = '<option value="">无模型配置</option>'; return; }
   const curKey = currentModelVal();
+  // ★ = 设置页启用的模型（chatActiveKey，与数据库 is_active 一致）
+  // selected = 用户当前选择的聊天模型（localStorage）
   sel.innerHTML = chatModelConfigs.map((c) => {
     const key = c.config_key || (c.model || "");
-    const label = c.config_key + (c.model && c.model !== c.config_key ? " · " + c.model : "") + (c.config_key === curKey ? " ★" : "");
+    const label = c.config_key + (c.model && c.model !== c.config_key ? " · " + c.model : "") + (c.config_key === chatActiveKey ? " ★" : "");
     return `<option value="${escapeHtml(key)}" ${key === curKey ? "selected" : ""}>${escapeHtml(label)}</option>`;
   }).join("");
   localStorage.setItem("7tan_web_model", curKey);
@@ -462,12 +464,20 @@ async function loadChatModels() {
     const ai = (d.settings && d.settings.ai) || {};
     chatModelConfigs = Object.values(ai.configs || {});
     chatActiveKey = ai.active || "";
+    // 同步：如果 localStorage 没有有效值，跟随设置页的启用模型
+    const saved = localStorage.getItem("7tan_web_model") || "";
+    const valid = chatModelConfigs.find((c) => c.config_key === saved || (c.model || "") === saved);
+    if (!valid && chatActiveKey) localStorage.setItem("7tan_web_model", chatActiveKey);
     renderModelSelect();
   } catch (e) { const sel = $("#chatModelSelect"); if (sel) sel.innerHTML = '<option value="">模型加载失败</option>'; toast("模型列表加载失败: " + e.message, true); }
 }
 
 $("#chatModelSelect").addEventListener("change", () => {
-  localStorage.setItem("7tan_web_model", $("#chatModelSelect").value);
+  const newKey = $("#chatModelSelect").value;
+  localStorage.setItem("7tan_web_model", newKey);
+  // 同步到设置页：切换工作台模型 = 启用该模型（保持两端一致）
+  chatActiveKey = newKey;
+  API.put("/api/settings", { ai: { active: newKey } }).catch(() => {});
   renderModelSelect();
 });
 function _fmtSideTime(ts) {
@@ -1339,6 +1349,7 @@ async function saveAiConfig() {
     await API.put("/api/settings", { ai: { active: aiActiveKey || key, configs: { [key]: cfg } } });
     toast("✅ 模型配置已保存");
     loadAiSettings();
+    loadChatModels();
   } catch (e) { toast("保存失败: " + e.message, true); }
 }
 async function saveVisionConfig() {

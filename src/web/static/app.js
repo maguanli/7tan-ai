@@ -933,6 +933,20 @@ function delMsg(btn) {
   if (!confirm("确定要删除这条消息吗？")) return;
   msg.remove();
 }
+// 🛡️ 页面关闭/刷新时主动通知后端中止任务（防 SSE 断连检测失效导致后台空转）
+window.addEventListener('pagehide', () => {
+  if (chatSending && curSession) {
+    try {
+      const url = '/api/chat/abort/' + encodeURIComponent(curSession);
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(url);
+      } else {
+        fetch(url, { method: 'POST', keepalive: true });
+      }
+    } catch (e) {}
+  }
+});
+
 async function abortChat() {
   // 1) 关键：立即断开前端流式 fetch，马上恢复按钮状态（不再等后端响应）
   if (chatAbortCtrl) {

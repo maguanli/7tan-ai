@@ -237,6 +237,7 @@ async def send_message(req: ChatRequest):
                     tools=get_all_tools(),
                     abort_event=abort_event,
                     system_prompt=system_prompt,
+                    max_iterations=30,
                 )
                 _safe_loop_call(loop, future.set_result, result)
             except Exception as e:
@@ -301,6 +302,11 @@ async def send_message_stream(req: ChatRequest, request: Request):
     
     # 创建中止标志
     abort_event = threading.Event()
+    # 🛡️ 并发保护：同一会话已有任务在跑 → 先中止旧任务，避免多个 agent 同时空转
+    _old_evt = _abort_flags.get(session_id)
+    if _old_evt is not None and not _old_evt.is_set():
+        _old_evt.set()
+        logger.warning(f"⚠️ [API] 会话 {session_id} 已有任务在执行，已中止旧任务（防并发失控）")
     _abort_flags[session_id] = abort_event
     
     async def event_generator():
@@ -317,6 +323,7 @@ async def send_message_stream(req: ChatRequest, request: Request):
                     tools=get_all_tools(),
                     abort_event=abort_event,
                     system_prompt=_load_system_prompt(),
+                    max_iterations=30,
                 ):
                     # Put event into queue for the async generator to pick up
                     _safe_coro_call(loop, queue, event)
@@ -334,7 +341,14 @@ async def send_message_stream(req: ChatRequest, request: Request):
         full_result = ""
         final_data = {}
         
+        _stream_start = time.monotonic()
+        _STREAM_MAX_SECONDS = 900  # 🛡️ SSE 流总时长上限：15 分钟强制中止（防客户端断开检测失效导致后台空转）
         while True:
+            # ⏰ 流超时强制中止（兜底：is_disconnected 在某些浏览器场景不可靠）
+            if time.monotonic() - _stream_start > _STREAM_MAX_SECONDS:
+                abort_event.set()
+                logger.warning(f"⏰ [API] SSE 流超时({_STREAM_MAX_SECONDS}s)，强制中止会话 {session_id}")
+                break
             # \U0001f514 客户端断开（关窗/点终止）→ 自动中止服务端任务，防止后台空转
             try:
                 if await request.is_disconnected():

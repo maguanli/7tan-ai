@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="robots" content="noindex">
+    <meta name="referrer" content="never">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="renderer" content="webkit">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+        <title>安全中心 - 当快软件园</title>
+    <style type="text/css">
+        *{ margin: 0; padding: 0;}
+		        .confirmBox{box-shadow:0 0 10px 0 rgba(47,47,47,0.2);width:430px;height:200px;border-radius:10px;box-sizing:border-box;margin-top:20px;border:1px solid #eeeeee;background-color:#fff;padding:20px;margin:0 auto;margin-top:46px;overflow:hidden}
+        .confirmBox img{width:60px;display:inline-block;float:left;margin-right:24px}
+        .confirmBox p{width:290px;overflow:hidden;font-size:17px;float:left;line-height:32px;margin:0}
+        .confirmBox p span{color:#666;height:32px;text-overflow:ellipsis;white-space:nowrap;overflow:hidden;display:block;font-size:14px}
+        .confirmBox > div{width:100%;display:block;overflow:hidden}
+        .btnBox{width:100%;height:36px;margin-top:16px;text-align:center}
+        .btnBox span{text-decoration:none;font-size:14px;width:110px;line-height:32px;height:32px;display:inline-block;border-radius:4px}
+        .btnBox span.btn1{color:#fff;margin-right:12px;background-color:#358ff0;border:1px solid #358ff0;cursor: pointer;}
+        .btnBox span.btn2{color:#fff;margin-left:12px;background-color:#999;border:1px solid #999;cursor: pointer;}
+		    </style>
+</head>
+<body>
+<div class="confirmBox">
+        <div>
+        <img src="https://www.downkuai.com/images/confirm.png"/>
+		<p>您将要跳转的是外部网站【APP隐私政策页面】，该网站的安全性我们暂时无法保证，请注意财产安全，谨慎访问。</p>
+    </div>
+    <div class="btnBox">
+		<span class="btn1" id="jump">继续访问</span>
+		<span class="btn2" id="stop">停止访问</span>
+    </div>
+    </div>
+<script>
+    function decrypt(data, a = '#FC$fcgh^%$^%f') {
+        if(data.startsWith('http')){
+            return data;
+        }
+        const binaryString = atob(data);
+        const dataBytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            dataBytes[i] = binaryString.charCodeAt(i);
+        }
+        const keyBytes = new Uint8Array(a.length);
+        for (let i = 0; i < a.length; i++) {
+            keyBytes[i] = a.charCodeAt(i);
+        }
+        const resultBytes = new Uint8Array(dataBytes.length);
+        const keyLen = keyBytes.length;
+        for (let i = 0; i < dataBytes.length; i++) {
+            resultBytes[i] = dataBytes[i] ^ keyBytes[i % keyLen];
+        }
+        let result = '';
+        for (let i = 0; i < resultBytes.length; i++) {
+            result += String.fromCharCode(resultBytes[i]);
+        }
+        return decodeURIComponent(result);
+    }
+
+    document.getElementById('jump').addEventListener('click', function(e) {
+        e.preventDefault();
+        window.location.href = decrypt('SzI3VBVGVCl7F2J7FyBLIy9USAQGBTMLXipCB04jbUcJDkJaGFVWN1MHQD9uSA8EDxxwTVAzSQ==');
+    });
+    document.getElementById('stop').addEventListener('click', function(e) {
+        window.close();
+    });
+</script>
+</body>
+</html>

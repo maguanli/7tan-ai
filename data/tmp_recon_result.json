@@ -1,0 +1,379 @@
+{
+  "chat_display": "flex",
+  "buttons": [
+    {
+      "id": "",
+      "cls": "nav-item active",
+      "txt": "💬 AI 工作台"
+    },
+    {
+      "id": "",
+      "cls": "nav-item",
+      "txt": "🧩 插件市场"
+    },
+    {
+      "id": "",
+      "cls": "nav-item",
+      "txt": "📦 资源管理"
+    },
+    {
+      "id": "",
+      "cls": "nav-item",
+      "txt": "⚙️ 任务中心"
+    },
+    {
+      "id": "",
+      "cls": "nav-item",
+      "txt": "🌐 源站管理"
+    },
+    {
+      "id": "",
+      "cls": "nav-item",
+      "txt": "🔧 系统设置"
+    },
+    {
+      "id": "",
+      "cls": "nav-item",
+      "txt": "🛠️ 代码变更"
+    },
+    {
+      "id": "",
+      "cls": "nav-item",
+      "txt": "🔀 平台适配"
+    },
+    {
+      "id": "chatNew",
+      "cls": "btn btn-sidebar-new",
+      "txt": "＋ 新对话"
+    },
+    {
+      "id": "",
+      "cls": "nav-item",
+      "txt": "💻 终端"
+    },
+    {
+      "id": "",
+      "cls": "nav-item",
+      "txt": "📜 系统日志"
+    },
+    {
+      "id": "",
+      "cls": "nav-item",
+      "txt": "⬆️ 更新"
+    },
+    {
+      "id": "proRefresh",
+      "cls": "btn btn-pro-refresh",
+      "txt": "🔄 刷新"
+    },
+    {
+      "id": "proLogout",
+      "cls": "btn btn-pro-logout",
+      "txt": "🚪 退出"
+    },
+    {
+      "id": "proLogin",
+      "cls": "btn btn-pro-login",
+      "txt": "🔑 登录"
+    },
+    {
+      "id": "proRegister",
+      "cls": "btn btn-pro-register",
+      "txt": "📝 注册"
+    },
+    {
+      "id": "tokenBtn",
+      "cls": "btn btn-sm",
+      "txt": "保存"
+    },
+    {
+      "id": "resRefresh",
+      "cls": "btn",
+      "txt": "刷新"
+    },
+    {
+      "id": "resPrev",
+      "cls": "btn btn-sm",
+      "txt": "◀ 上一页"
+    },
+    {
+      "id": "resNext",
+      "cls": "btn btn-sm",
+      "txt": "下一页 ▶"
+    },
+    {
+      "id": "consolePause",
+      "cls": "btn btn-sm",
+      "txt": "⏸"
+    },
+    {
+      "id": "consoleClear",
+      "cls": "btn btn-sm",
+      "txt": "清"
+    },
+    {
+      "id": "chatAttachRemove",
+      "cls": "chat-attach-remove",
+      "txt": "✕"
+    },
+    {
+      "id": "",
+      "cls": "btn btn-hint",
+      "txt": "🎮 找个新游戏"
+    },
+    {
+      "id": "",
+      "cls": "btn btn-hint",
+      "txt": "📊 查统计"
+    },
+    {
+      "id": "",
+      "cls": "btn btn-hint",
+      "txt": "📦 待发布"
+    },
+    {
+      "id": "",
+      "cls": "btn btn-hint",
+      "txt": "🔍 搜资源"
+    },
+    {
+      "id": "chatImageBtn",
+      "cls": "btn btn-image",
+      "txt": "📎 图片"
+    },
+    {
+      "id": "voiceGender",
+      "cls": "btn btn-gender male",
+      "txt": "♂ 男声"
+    },
+    {
+      "id": "voiceToggle",
+      "cls": "btn btn-voice on",
+      "txt": "🔊 语音中"
+    },
+    {
+      "id": "chatSend",
+      "cls": "btn btn-send",
+      "txt": "发送 ▲"
+    },
+    {
+      "id": "marketPluginRefresh",
+      "cls": "btn btn-sm",
+      "txt": "🔄 刷新插件"
+    },
+    {
+      "id": "",
+      "cls": "btn btn-primary",
+      "txt": "添加"
+    },
+    {
+      "id": "",
+      "cls": "stab active",
+      "txt": "🤖 AI 模型"
+    },
+    {
+      "id": "",
+      "cls": "stab",
+      "txt": "🌐 站点设置"
+    },
+    {
+      "id": "",
+      "cls": "stab",
+      "txt": "☁️ OSS 存储"
+    },
+    {
+      "id": "",
+      "cls": "stab",
+      "txt": "🧩 插件市场"
+    },
+    {
+      "id": "",
+      "cls": "stab",
+      "txt": "🧠 能力清单"
+    },
+    {
+      "id": "",
+      "cls": "stab",
+      "txt": "🖥 环境引擎"
+    },
+    {
+      "id": "",
+      "cls": "stab",
+      "txt": "🧠 记忆系统"
+    },
+    {
+      "id": "",
+      "cls": "stab",
+      "txt": "📝 系统提示词"
+    },
+    {
+      "id": "",
+      "cls": "stab",
+      "txt": "ℹ️ 关于"
+    },
+    {
+      "id": "aiAdd",
+      "cls": "btn btn-sm",
+      "txt": "＋ 新建"
+    },
+    {
+      "id": "aiDel",
+      "cls": "btn btn-sm btn-danger",
+      "txt": "✕ 删除"
+    },
+    {
+      "id": "aiActivate",
+      "cls": "btn btn-sm",
+      "txt": "⭐ 启用"
+    },
+    {
+      "id": "",
+      "cls": "",
+      "txt": ""
+    },
+    {
+      "id": "aiSave",
+      "cls": "btn btn-primary",
+      "txt": "💾 保存模型配置"
+    },
+    {
+      "id": "",
+      "cls": "",
+      "txt": ""
+    },
+    {
+      "id": "visSave",
+      "cls": "btn btn-primary",
+      "txt": "💾 保存视觉模型"
+    },
+    {
+      "id": "siteSave",
+      "cls": "btn btn-primary",
+      "txt": "💾 保存站点设置"
+    },
+    {
+      "id": "ossSave",
+      "cls": "btn btn-primary",
+      "txt": "💾 保存 OSS 配置"
+    },
+    {
+      "id": "pluginRefresh",
+      "cls": "btn btn-sm",
+      "txt": "🔄 刷新插件"
+    },
+    {
+      "id": "swScan",
+      "cls": "btn btn-sm",
+      "txt": "🔄 重新扫描"
+    },
+    {
+      "id": "memRefresh",
+      "cls": "btn btn-sm",
+      "txt": "🔄 刷新"
+    },
+    {
+      "id": "promptRefresh",
+      "cls": "btn btn-sm",
+      "txt": "🔄 刷新"
+    },
+    {
+      "id": "aboutCheckUpdate",
+      "cls": "btn btn-primary",
+      "txt": "🔄 检查更新"
+    },
+    {
+      "id": "btnRestart",
+      "cls": "btn btn-danger",
+      "txt": "重启软件服务"
+    },
+    {
+      "id": "codeRefresh",
+      "cls": "btn btn-sm",
+      "txt": "刷新"
+    },
+    {
+      "id": "adaptRunBtn",
+      "cls": "btn btn-primary",
+      "txt": "✅ 确认适配（一键完成）"
+    },
+    {
+      "id": "adaptRefreshBtn",
+      "cls": "btn",
+      "txt": "🔄 重新检测"
+    },
+    {
+      "id": "termRun",
+      "cls": "btn btn-primary",
+      "txt": "执行"
+    },
+    {
+      "id": "termClear",
+      "cls": "btn btn-sm",
+      "txt": "清空"
+    },
+    {
+      "id": "logRefresh",
+      "cls": "btn btn-sm",
+      "txt": "刷新"
+    },
+    {
+      "id": "logAuto",
+      "cls": "btn btn-sm",
+      "txt": "⏸ 暂停自动刷新"
+    },
+    {
+      "id": "loginClose",
+      "cls": "modal-close",
+      "txt": "✕"
+    },
+    {
+      "id": "loginSubmit",
+      "cls": "btn btn-primary",
+      "txt": "登 录"
+    },
+    {
+      "id": "",
+      "cls": "modal-close",
+      "txt": "✕"
+    },
+    {
+      "id": "",
+      "cls": "btn",
+      "txt": "取消"
+    },
+    {
+      "id": "",
+      "cls": "btn btn-primary",
+      "txt": "保存"
+    },
+    {
+      "id": "",
+      "cls": "modal-close",
+      "txt": "✕"
+    },
+    {
+      "id": "",
+      "cls": "btn",
+      "txt": "关闭"
+    },
+    {
+      "id": "svcRestartBtn",
+      "cls": "btn btn-primary",
+      "txt": "🔄 一键重启服务"
+    }
+  ],
+  "msg_containers": [
+    "#chatMessages",
+    ".chat-messages"
+  ],
+  "send_candidates_发送": [
+    {
+      "id": "chatSend",
+      "cls": "btn btn-send",
+      "txt": "发送 ▲"
+    }
+  ],
+  "app_js": [
+    "/app.js?v=20260815w"
+  ]
+}

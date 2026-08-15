@@ -934,14 +934,26 @@ function delMsg(btn) {
   msg.remove();
 }
 async function abortChat() {
-  // 1) 通知后端停止生成（尽力而为：后端即使没有任务/已断开也不影响前端断流）
-  if (curSession) {
-    try { await API.post("/api/chat/abort/" + encodeURIComponent(curSession)); }
-    catch (e) { /* 后端可能已断开或没有执行中的任务，忽略 */ }
-  }
-  // 2) 关键：立即断开前端流式 fetch，马上恢复按钮状态（不再等后端响应）
+  // 1) 关键：立即断开前端流式 fetch，马上恢复按钮状态（不再等后端响应）
   if (chatAbortCtrl) {
     try { chatAbortCtrl.abort(); } catch (e) {}
+  }
+  // 2) 兜底：无论 fetch 是否正常中断，都立刻复位按钮状态，防止卡在"中止"
+  chatAbortCtrl = null;
+  chatSending = false;
+  updateSendBtn();
+  // 3) 通知后端停止生成（尽力而为，快速超时 1.5s；后端即使无任务/断开也不影响前端）
+  if (curSession) {
+    try {
+      const c = new AbortController();
+      const t = setTimeout(() => c.abort(), 1500);
+      await fetch("/api/chat/abort/" + encodeURIComponent(curSession), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: c.signal,
+      }).catch(() => {});
+      clearTimeout(t);
+    } catch (e) { /* 后端可能已断开或没有执行中的任务，忽略 */ }
   }
   toast("⏹ 已中止");
 }

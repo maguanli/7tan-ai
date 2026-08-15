@@ -14,35 +14,17 @@ function keyEyeSvg(open) {
 function toggleKeyVis(id, btn) {
   const el = document.getElementById(id);
   if (!el) return;
-  if (el.tagName === "TEXTAREA") {
-    // 当前明文(textarea) → 隐藏：换回单行密码框
-    const v = el.value;
-    const p = el.placeholder || "";
-    const inp = document.createElement("input");
-    inp.type = "password";
-    inp.id = id;
-    inp.value = v;
-    inp.placeholder = p;
-    inp.style.cssText = "width:100%;box-sizing:border-box;padding:6px 38px 6px 8px;font-size:13px;";
-    el.replaceWith(inp);
-    btn.innerHTML = keyEyeSvg(true); // 睁眼：当前掩码，点击可查看
+  // 保持单行输入框不变（不换 textarea、不改变大小），仅切换 密码/明文 类型
+  if (el.type === "password") {
+    el.type = "text";
+    el.title = el.value || "";
+    try { el.focus(); el.select(); } catch (e) {}
+    btn.innerHTML = keyEyeSvg(false);
   } else {
-    // 当前隐藏(input) → 显示：替换为多行文本框，自动换行完整显示全部字符
-    const v = el.value;
-    const p = el.placeholder || "";
-    const ta = document.createElement("textarea");
-    ta.id = id;
-    ta.value = v;
-    ta.placeholder = p;
-    ta.spellcheck = false;
-    ta.style.cssText = "width:100%;box-sizing:border-box;padding:6px 38px 6px 8px;font-size:13px;line-height:1.5;font-family:Consolas,Menlo,monospace;resize:vertical;min-height:36px;max-height:160px;";
-    const total = String(v || "").length;
-    ta.rows = Math.min(6, Math.max(2, Math.ceil(total / 40), String(v || "").split("\n").length)); // 高度自适应
-    el.replaceWith(ta);
-    ta.scrollTop = ta.scrollHeight; // 滚动到底部，直接看到 Key 尾部
-    btn.innerHTML = keyEyeSvg(false); // 闭眼：当前明文，点击可隐藏
+    el.type = "password";
+    el.title = "";
+    btn.innerHTML = keyEyeSvg(true);
   }
-  btn.style.opacity = "0.9";
 }
 
 function escapeHtml(s) {

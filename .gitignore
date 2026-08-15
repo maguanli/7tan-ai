@@ -50,6 +50,7 @@ data/plugins/*/state_backup.json
 data/tmp/
 data/code_changes.jsonl
 data/.instance.lock
+data/.restart_lock
 
 # 备份文件
 *.bak

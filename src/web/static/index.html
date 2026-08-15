@@ -19,6 +19,7 @@
       <button class="nav-item" data-view="sources">🌐 源站管理</button>
       <button class="nav-item" data-view="settings">🔧 系统设置</button>
       <button class="nav-item" data-view="code">🛠️ 代码变更</button>
+      <button class="nav-item" data-view="adapt">🔀 平台适配</button>
       <!-- 会话列表（仅 AI 工作台时显示） -->
       <div id="sidebarSessions" class="sidebar-sessions visible">
         <div class="sidebar-sessions-title">💬 对话列表</div>
@@ -390,6 +391,39 @@
     </section>
 
     <!-- 终端 -->
+    <!-- 平台适配（其他系统包 WEB 版：插件复制适配向导） -->
+    <section id="view-adapt" class="view">
+      <h2>🔀 平台适配</h2>
+      <div class="panel" id="adaptSystem">
+        <h3>系统检测</h3>
+        <div class="muted" id="adaptSystemInfo">检测中…</div>
+      </div>
+      <div class="panel" id="adaptResultPanel" style="display:none">
+        <h3>✅ 适配完成</h3>
+        <div id="adaptResult"></div>
+      </div>
+      <div class="panel">
+        <h3>插件兼容性清单</h3>
+        <div class="table-wrap"><table class="table">
+          <thead><tr><th>插件</th><th>状态</th><th>说明</th></tr></thead>
+          <tbody id="adaptBody"></tbody>
+        </table></div>
+      </div>
+      <div class="panel" id="adaptActionPanel" style="display:none">
+        <h3>插件复制适配</h3>
+        <p class="muted" id="adaptActionText"></p>
+        <button id="adaptRunBtn" class="btn btn-primary">✅ 确认适配（一键完成）</button>
+        <button id="adaptRefreshBtn" class="btn">🔄 重新检测</button>
+      </div>
+      <div class="panel" id="adaptProgressPanel" style="display:none">
+        <h3>⏳ 适配进行中</h3>
+        <div style="height:14px;background:#eee;border-radius:7px;overflow:hidden">
+          <div id="adaptProgressBar" style="height:100%;width:0;background:#4caf50;transition:width .6s"></div>
+        </div>
+        <pre class="mono" id="adaptLog" style="max-height:280px;overflow:auto;margin-top:10px"></pre>
+      </div>
+    </section>
+
     <section id="view-terminal" class="view">
       <h2>💻 终端</h2>
       <div class="panel">

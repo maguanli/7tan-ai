@@ -145,3 +145,6 @@ filterbranch.log
 # 根目录数据库（敏感数据不入库）
 /games.db
 mobile/  
+data/plugins/adapt_report.json
+data/plugins/adapt_status.json
+data/adapt_running.lock

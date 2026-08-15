@@ -146,6 +146,7 @@ function refreshCurrent() {
     tasks: loadTasks, chat: () => { loadSessions(); loadChatModels(); if (curSession) loadChatHistory(curSession); loadChatConsole(); },
     sources: loadSources, settings: loadSettings, plugins: loadMarketPlugins,
     code: loadCodeChanges, terminal: () => {}, logs: loadLogs, update: loadUpdate,
+    adapt: loadAdaptView,
   };
   if (fns[currentView]) fns[currentView]();
 }
@@ -1485,3 +1486,138 @@ async function loadAboutUpdate() {
     msg.textContent = d.has_update ? `发现新版本 v${escapeHtml((d.latest || {}).version || "")}` : `✅ 已是最新版本 v${escapeHtml(d.current)}`;
   } catch (e) { msg.textContent = "检查失败: " + e.message; }
 }
+
+/* ===== 平台适配（插件复制适配向导）===== */
+let adaptTimer = null;
+let adaptRunning = false;
+
+async function loadAdaptView() {
+  // 清除旧轮询
+  if (adaptTimer) { clearInterval(adaptTimer); adaptTimer = null; }
+  try {
+    // 1) 体检（当前系统 + 插件兼容性）
+    const data = await API.req("GET", "/api/adapt/check");
+    if (data.error) {
+      $("#adaptSystemInfo").textContent = "体检失败: " + data.error;
+      return;
+    }
+    renderAdaptSystem(data);
+    renderAdaptPlugins(data.plugins || []);
+
+    // 2) 状态（是否正在运行 / 历史报告）
+    const st = await API.req("GET", "/api/adapt/status");
+    renderAdaptStatus(st, data);
+  } catch (e) {
+    $("#adaptSystemInfo").textContent = "加载失败: " + e.message;
+  }
+}
+
+function renderAdaptSystem(data) {
+  const st = data.stats || {};
+  const info = [
+    "<b>当前系统：</b>" + escapeHtml(data.platform_name || data.platform || "?") +
+    " &nbsp;|&nbsp; <b>详情：</b>" + escapeHtml(data.os_detail || "") +
+    " &nbsp;|&nbsp; <b>Python：</b>" + escapeHtml(data.python || ""),
+    "<b>插件总数：</b>" + (data.total || 0) +
+    " &nbsp;✅ 原生兼容 <b style='color:#2e7d32'>" + (st.ok || 0) + "</b>" +
+    " &nbsp;🔄 可适配 <b style='color:#e65100'>" + (st.adaptable || 0) + "</b>" +
+    " &nbsp;⏭️ 跳过 <b style='color:#888'>" + (st.skipped || 0) + "</b>" +
+    " &nbsp;❌ 缺失 <b style='color:#c62828'>" + (st.missing || 0) + "</b>",
+  ].join("<br>");
+  $("#adaptSystemInfo").innerHTML = info;
+}
+
+function renderAdaptPlugins(plugins) {
+  const rows = plugins.map((p) => {
+    const icon = { ok: "✅", adaptable: "🔄", skipped: "⏭️", missing: "❌" }[p.status] || "❓";
+    const cls = p.status === "ok" ? "" : (p.status === "adaptable" ? "warn" : "muted");
+    let note = escapeHtml(p.action || "");
+    if (p.windows_hits && p.windows_hits.length) note += " <span class='muted'>[Windows API: " + escapeHtml(p.windows_hits.slice(0, 3).join(", ")) + "]</span>";
+    if (p.has_variant) note += " <span class='muted'>[有平台变体]</span>";
+    return "<tr><td>" + icon + " " + escapeHtml(p.id) + "</td><td class='" + cls + "'>" + icon + " " +
+      ({ ok: "原生兼容", adaptable: "可适配", skipped: "降级跳过", missing: "缺失" }[p.status] || p.status) +
+      "</td><td>" + note + "</td></tr>";
+  }).join("");
+  $("#adaptBody").innerHTML = rows || "<tr><td colspan='3' class='muted'>无插件数据</td></tr>";
+}
+
+function renderAdaptStatus(st, checkData) {
+  const hasAdaptable = (checkData.stats || {}).adaptable > 0;
+  const actionPanel = $("#adaptActionPanel");
+  const progressPanel = $("#adaptProgressPanel");
+  const resultPanel = $("#adaptResultPanel");
+
+  if (st.running) {
+    adaptRunning = true;
+    actionPanel.style.display = "none";
+    progressPanel.style.display = "block";
+    resultPanel.style.display = "none";
+    $("#adaptProgressBar").style.width = "40%";
+    startAdaptPolling();
+    return;
+  }
+  // 未运行：显示确认按钮（有可适配插件时）
+  if (hasAdaptable && !st.running) {
+    const need = (checkData.stats || {}).adaptable || 0;
+    const skip = (checkData.stats || {}).skipped || 0;
+    actionPanel.style.display = "block";
+    $("#adaptActionText").innerHTML =
+      "检测到当前系统（" + escapeHtml(checkData.platform_name || "") + "）有 <b style='color:#e65100'>" + need +
+      "</b> 个插件需要适配、<b>" + skip + "</b> 个插件将降级跳过。<br>" +
+      "点击下方按钮，7Tan 将自动完成全部操作：复制平台插件 → 安装依赖 → 自测 → 启用，通常 1~3 分钟。";
+  } else {
+    actionPanel.style.display = "none";
+  }
+  // 历史报告（适配完成过）
+  if (st.has_report && st.report && st.report.adapted_at) {
+    resultPanel.style.display = "block";
+    const r = st.report;
+    const s = r.stats || {};
+    $("#adaptResult").innerHTML =
+      "<div>上次适配：<b>" + escapeHtml(r.adapted_at || "") + "</b>（" + escapeHtml(r.platform_name || "") + "）</div>" +
+      "<div>✅ 原生兼容 <b>" + (s.ok || 0) + "</b> · 🔄 已适配 <b style='color:#2e7d32'>" + (s.adapted || 0) + "</b> · ⏭️ 跳过 <b>" + (s.skipped || 0) + "</b> · ❌ 失败 <b style='color:#c62828'>" + (s.failed || 0) + "</b></div>";
+  } else if (!hasAdaptable) {
+    resultPanel.style.display = "block";
+    $("#adaptResult").innerHTML = "<div class='muted'>✅ 当前系统所有插件均可直接使用，无需适配。</div>";
+  }
+}
+
+function startAdaptPolling() {
+  if (adaptTimer) return;
+  adaptTimer = setInterval(async () => {
+    try {
+      const st = await API.req("GET", "/api/adapt/status");
+      const log = st.log_tail || "";
+      if (log) $("#adaptLog").textContent = log;
+      $("#adaptProgressBar").style.width = "65%";
+      if (!st.running) {
+        clearInterval(adaptTimer); adaptTimer = null;
+        adaptRunning = false;
+        $("#adaptProgressBar").style.width = "100%";
+        // 完成：重新体检 + 显示报告
+        const data = await API.req("GET", "/api/adapt/check");
+        renderAdaptSystem(data);
+        renderAdaptPlugins(data.plugins || []);
+        renderAdaptStatus(st, data);
+        toast("✅ 平台适配完成");
+      }
+    } catch (e) { /* 忽略轮询瞬时错误 */ }
+  }, 1500);
+}
+
+$("#adaptRunBtn").addEventListener("click", async () => {
+  $("#adaptRunBtn").disabled = true;
+  $("#adaptRunBtn").textContent = "⏳ 正在启动适配…";
+  try {
+    const r = await API.req("POST", "/api/adapt/run");
+    if (!r.ok) { toast(r.msg || "启动失败", true); $("#adaptRunBtn").disabled = false; $("#adaptRunBtn").textContent = "✅ 确认适配（一键完成）"; return; }
+    toast("🚀 适配已启动，请稍候…");
+    renderAdaptStatus({ running: true }, null);
+  } catch (e) {
+    toast("启动失败: " + e.message, true);
+    $("#adaptRunBtn").disabled = false;
+    $("#adaptRunBtn").textContent = "✅ 确认适配（一键完成）";
+  }
+});
+
+$("#adaptRefreshBtn").addEventListener("click", () => loadAdaptView());

@@ -161,6 +161,11 @@ def smoke_test(pdir: Path) -> tuple:
     entry = plugin_entry_module(pdir)
     if entry is None:
         return False, "未找到插件入口模块"
+    # 确保项目根目录在 sys.path：变体 tools.py 可能含 `from src.tools.registry import register_tool`
+    # （platform_adapter.py 位于 tools/ 下，subprocess 运行时 sys.path[0] 不含项目根目录）
+    _root = Path(__file__).resolve().parent.parent
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
     try:
         spec = importlib.util.spec_from_file_location(f"_adapt_test_{pdir.name}", entry)
         if spec is None or spec.loader is None:

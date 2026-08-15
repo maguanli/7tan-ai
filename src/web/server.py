@@ -369,7 +369,7 @@ from .routes import (
     resources_router, tasks_router, sources_router,
     stats_router, settings_router, chat_router,
     project_router, terminal_router, update_router,
-    code_router, license_router,
+    code_router, license_router, adapt_router,
 )
 
 app.include_router(resources_router)
@@ -383,6 +383,7 @@ app.include_router(terminal_router)
 app.include_router(update_router)
 app.include_router(code_router)
 app.include_router(license_router)
+app.include_router(adapt_router)
 
 
 # ===== 网页版控制面板（静态前端）=====

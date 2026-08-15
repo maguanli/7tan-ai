@@ -222,6 +222,44 @@ def port_open(port: int, timeout: float = 1.0) -> bool:
         return False
 
 
+def http_ok(port: int = DEFAULT_PORT, timeout: float = 2.0) -> bool:
+    """HTTP 健康检查：端口能连且 /api/health 有响应才算健康。
+    解决「端口被假活进程占用（TCP 通但 HTTP 无响应）导致重启被跳过」的问题。"""
+    try:
+        import urllib.request
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/health", method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def kill_port_owner(port: int) -> bool:
+    """只杀掉占用指定端口的进程（比 taskkill /IM pythonw.exe 安全，不误伤其他 pythonw）。"""
+    try:
+        out = subprocess.run(
+            ["netstat", "-ano", "-p", "tcp"],
+            capture_output=True, timeout=10, text=True,
+        ).stdout or ""
+        pids = set()
+        for line in out.splitlines():
+            if f":{port}" in line and "LISTENING" in line:
+                parts = line.split()
+                if parts and parts[-1].isdigit():
+                    pids.add(parts[-1])
+        killed = False
+        for pid in pids:
+            r = subprocess.run(["taskkill", "/F", "/PID", pid],
+                               capture_output=True, timeout=10, text=True)
+            if r.returncode == 0:
+                log(f"[launch] 🔪 已强制结束占用 {port} 的进程 PID={pid}")
+                killed = True
+        return killed
+    except Exception as e:
+        log(f"[launch] ⚠️ 杀端口占用进程失败: {e}")
+        return False
+
+
 def launch() -> int:
     """启动 9900 WEB 服务（幂等：端口已开直接退出）。
 
@@ -229,8 +267,12 @@ def launch() -> int:
     开发版：pythonw 无窗口启动 main.py --web，日志写入 logs/web_9900.log
     """
     if port_open(DEFAULT_PORT):
-        log("[launch] ✅ 9900 服务已在运行，跳过启动")
-        return 0
+        if http_ok():
+            log("[launch] ✅ 9900 服务已在运行且健康，跳过启动")
+            return 0
+        log("[launch] ⚠️ 端口被占用但 HTTP 无响应（疑似假活），强制重启…")
+        kill_port_owner(DEFAULT_PORT)
+        time.sleep(2)
 
     if is_exe_mode():
         exe = find_main_exe()

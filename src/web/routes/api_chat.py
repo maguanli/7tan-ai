@@ -286,7 +286,7 @@ def _get_executor():
     global _executor
     if _executor is None:
         import concurrent.futures
-        _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="chat-stream")
+        _executor = concurrent.futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="chat-stream")
     return _executor
 
 
@@ -344,11 +344,14 @@ async def send_message_stream(req: ChatRequest, request: Request):
             except Exception:
                 pass
             try:
-                # 600s 无新内容才判定超时（深度任务友好，原300s对长思考/长工具调用过紧）
-                event = await asyncio.wait_for(queue.get(), timeout=600)
+                # 1s 轮询等待：长任务期间 agent 可能长时间不产生事件，
+                # 若一次阻塞 600s，则客户端点中止/关页面后服务端无法及时停止，线程被长期占用
+                event = await asyncio.wait_for(queue.get(), timeout=1.0)
             except asyncio.TimeoutError:
-                yield f"data: {json.dumps({'type': 'error', 'message': f'Timeout - {timeout}s'})}\n\n"
-                break
+                # 轮询超时：交给循环顶部重新检查 is_disconnected / abort_event，然后继续等待
+                if abort_event.is_set():
+                    break
+                continue
             
             if event is None:
                 break

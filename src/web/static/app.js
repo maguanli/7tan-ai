@@ -100,22 +100,32 @@ function renderMarkdown(text) {
 /* ---------- API 封装 ---------- */
 const API = {
   token: localStorage.getItem("7tan_web_token") || "",
-  async req(method, path, body) {
+  async req(method, path, body, timeoutMs) {
     const headers = { "Content-Type": "application/json" };
     if (this.token) headers["Authorization"] = "Bearer " + this.token;
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs || 12000) : null;
     let resp;
     try {
       resp = await fetch(path, {
         method,
         headers,
         body: body != null ? JSON.stringify(body) : undefined,
+        signal: ctrl ? ctrl.signal : undefined,
       });
     } catch (e) {
+      if (timer) clearTimeout(timer);
+      const aborted = e && (e.name === "AbortError" || /abort/i.test(String(e && e.message || e)));
+      if (aborted) {
+        notifyServiceDown();
+        throw new Error("服务无响应（可能已挂起），请点击「一键重启服务」");
+      }
       if (e instanceof TypeError || /fetch|network/i.test(String(e && e.message || e))) {
         notifyServiceDown();
       }
       throw e;
     }
+    if (timer) clearTimeout(timer);
     if (!resp.ok) {
       let msg = "HTTP " + resp.status;
       try { const j = await resp.json(); msg = j.detail || j.error || msg; } catch (e) {}
@@ -142,7 +152,7 @@ function closeServiceDownModal() {
 function restartService() {
   const btn = $("#svcRestartBtn");
   if (btn) { btn.disabled = true; btn.textContent = "⏳ 正在重启…"; }
-  API.post("/api/settings/restart")
+  API.post("/api/settings/restart", {}, 5000)
     .then(() => {
       toast("🔄 重启指令已发送，约 5 秒后自动恢复，请稍候刷新页面");
       closeServiceDownModal();

@@ -99,6 +99,9 @@ data/video_editor/thumbs/
 # 输出产物
 output/
 
+# WEB 服务进程 PID 文件（运行时生成，不入库）
+data/*.pid
+
 # 编译旧版残留（进程占用时临时改名）
 *.pyd.old
 \"tracked_list.txt\"  

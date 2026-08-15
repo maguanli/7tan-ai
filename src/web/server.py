@@ -441,6 +441,24 @@ async def api_logs_recent(lines: int = 200, source: str = "file"):
         return {"file": None, "lines": [], "error": str(e)}
 
 
+@app.post("/api/logs/clear")
+async def api_logs_clear():
+    """清空实时控制台内存环形缓冲（网页控制台【清】按钮）。
+
+    修复：此前清空只清前端 DOM，后端 _LOG_RING 仍有旧日志，
+    3 秒轮询 /api/logs/recent 又把旧日志拉回来 → 看起来"没清空"。
+    """
+    try:
+        with _DEDUP_LOCK:
+            cleared = len(_LOG_RING)
+            _LOG_RING.clear()
+            _DEDUP_MAP.clear()
+        return {"ok": True, "cleared": cleared}
+    except Exception as e:
+        logger.warning(f"清空控制台环形缓冲失败: {e}")
+        return {"ok": False, "cleared": 0, "error": str(e)}
+
+
 # ===== WebSocket 端点 =====
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):

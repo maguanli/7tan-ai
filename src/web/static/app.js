@@ -1102,7 +1102,13 @@ $("#consolePause").addEventListener("click", () => {
   $("#consoleOutput").classList.toggle("paused", consolePaused);
   if (!consolePaused) loadChatConsole();
 });
-$("#consoleClear").addEventListener("click", () => { $("#consoleOutput").textContent = ""; });
+$("#consoleClear").addEventListener("click", async () => {
+  // 修复：清空必须同时清 前端内存缓冲 consoleBuf + 后端环形缓冲 _LOG_RING，
+  // 否则 3 秒轮询 /api/logs/recent 会把旧日志重新拉回来（表现为"点清空没清掉"）
+  consoleBuf = [];
+  try { await API.post("/api/logs/clear"); } catch (e) { /* 后端清空失败不阻断前端 */ }
+  renderConsole();
+});
 function startConsolePolling() {
   if (consoleTimer) clearInterval(consoleTimer);
   consoleTimer = setInterval(() => { if (currentView === "chat") loadChatConsole(); }, 3000);

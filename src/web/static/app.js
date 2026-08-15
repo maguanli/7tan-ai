@@ -1756,6 +1756,17 @@ $("#adaptRunBtn").addEventListener("click", async () => {
 
 $("#adaptRefreshBtn").addEventListener("click", () => loadAdaptView());
 
+/* ===== 侧栏版本号动态同步 ===== */
+(async () => {
+  try {
+    const d = await API.get("/api/update/check");
+    if (d && d.current) {
+      const el = document.getElementById("webVersion");
+      if (el) el.textContent = "7tan.com V" + d.current;
+    }
+  } catch (e) { /* 保持 HTML 默认值 */ }
+})();
+
 /* ===== 平台自适应：Windows 下隐藏「平台适配」入口（该功能仅供其他系统包使用）===== */
 (async () => {
   try {

@@ -649,6 +649,7 @@ async function deleteSession(sid) {
   catch (e) { toast("删除失败: " + e.message, true); }
 }
 let chatSending = false;
+let chatAbortCtrl = null;   // 当前流式请求的 AbortController（点"中止"时立即断开）
 let voiceEnabled = false;
 let voiceGender = "male"; // male / female
 function updateSendBtn() {
@@ -783,9 +784,12 @@ async function sendChat() {
   try {
     const headers = { "Content-Type": "application/json" };
     if (API.token) headers["Authorization"] = "Bearer " + API.token;
+    // 创建中止控制器：点"中止"时前端立即断开流式连接（后端收到断开也会自动停 agent）
+    chatAbortCtrl = new AbortController();
     const resp = await fetch("/api/chat/send/stream", {
       method: "POST",
       headers,
+      signal: chatAbortCtrl.signal,
       body: JSON.stringify({ session_id: curSession, message: text, model: currentModelName(), image_path: imagePath }),
     });
     if (!resp.ok) {
@@ -828,10 +832,20 @@ async function sendChat() {
     p.body.innerHTML = renderMarkdown(acc);
     p.meta.textContent = (doneModel || currentModelName() || "AI") + " · " + fmtFullTime(new Date());
   } catch (e) {
-    if (acc) { p.div.dataset.raw = acc; p.body.innerHTML = renderMarkdown(acc); }
-    else { p.div.dataset.raw = "❌ " + e.message; p.body.textContent = "❌ " + e.message; }
-    p.div.classList.add("error");
+    const aborted = (e && e.name === "AbortError") || /abort/i.test(String((e && e.message) || ""));
+    if (aborted) {
+      // 用户主动中止：保留已输出的部分，标记为已中止
+      p.div.classList.remove("pending", "streaming");
+      if (acc) { p.div.dataset.raw = acc; p.body.innerHTML = renderMarkdown(acc); }
+      else { p.div.dataset.raw = "⏹ 已中止"; p.body.textContent = "⏹ 已中止"; }
+      p.meta.textContent = "已中止 · " + fmtFullTime(new Date());
+    } else {
+      if (acc) { p.div.dataset.raw = acc; p.body.innerHTML = renderMarkdown(acc); }
+      else { p.div.dataset.raw = "❌ " + e.message; p.body.textContent = "❌ " + e.message; }
+      p.div.classList.add("error");
+    }
   } finally {
+    chatAbortCtrl = null;
     chatSending = false;
     updateSendBtn();
     clearChatImage(); // 发送结束，清理附件预览（图片已留在用户消息气泡中）
@@ -910,9 +924,16 @@ function delMsg(btn) {
   msg.remove();
 }
 async function abortChat() {
-  if (!curSession) return;
-  try { await API.post("/api/chat/abort/" + encodeURIComponent(curSession)); toast("⏹ 已发送中止信号"); }
-  catch (e) { toast("中止失败: " + e.message, true); }
+  // 1) 通知后端停止生成（尽力而为：后端即使没有任务/已断开也不影响前端断流）
+  if (curSession) {
+    try { await API.post("/api/chat/abort/" + encodeURIComponent(curSession)); }
+    catch (e) { /* 后端可能已断开或没有执行中的任务，忽略 */ }
+  }
+  // 2) 关键：立即断开前端流式 fetch，马上恢复按钮状态（不再等后端响应）
+  if (chatAbortCtrl) {
+    try { chatAbortCtrl.abort(); } catch (e) {}
+  }
+  toast("⏹ 已中止");
 }
 $("#chatSend").addEventListener("click", sendChat);
 function renderVoiceUI() {

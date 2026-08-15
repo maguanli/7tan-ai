@@ -237,7 +237,7 @@ async def send_message(req: ChatRequest):
                     tools=get_all_tools(),
                     abort_event=abort_event,
                     system_prompt=system_prompt,
-                    max_iterations=30,
+                    max_iterations=30,  # 🛡️ 迭代上限30（防失控：1000轮可跑数小时）
                 )
                 _safe_loop_call(loop, future.set_result, result)
             except Exception as e:
@@ -310,6 +310,14 @@ async def send_message_stream(req: ChatRequest, request: Request):
     _abort_flags[session_id] = abort_event
     
     async def event_generator():
+        try:
+            async for ev in _stream_events():
+                yield ev
+        finally:
+            # 生成器真正结束时才清理中止标志（不能在 return 时 pop，否则中止按钮失效）
+            _abort_flags.pop(session_id, None)
+
+    async def _stream_events():
         loop = asyncio.get_running_loop()
         # Run streaming agent in executor, collect events via queue
         queue = asyncio.Queue()
@@ -323,7 +331,7 @@ async def send_message_stream(req: ChatRequest, request: Request):
                     tools=get_all_tools(),
                     abort_event=abort_event,
                     system_prompt=_load_system_prompt(),
-                    max_iterations=30,
+                    max_iterations=30,  # 🛡️ 迭代上限30（防失控：1000轮可跑数小时）
                 ):
                     # Put event into queue for the async generator to pick up
                     _safe_coro_call(loop, queue, event)
@@ -388,18 +396,15 @@ async def send_message_stream(req: ChatRequest, request: Request):
             final_data["session_id"] = session_id
             yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
     
-    try:
-        return StreamingResponse(
-            event_generator(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            }
-        )
-    finally:
-        _abort_flags.pop(session_id, None)
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @router.get("/history")

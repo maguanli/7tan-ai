@@ -540,7 +540,7 @@ async def _handle_chat(ws: WebSocket, client_id: str, data: dict):
     def run_and_report():
         try:
             save_message(session_id, "user", message)
-            result = run_agent_loop(task=message, model_name=model, session_id=session_id)
+            result = run_agent_loop(task=message, model_name=model, session_id=session_id, max_iterations=30)  # 🛡️ 迭代上限30（防失控）
             save_message(session_id, "assistant", result.get("result", ""), model=model)
             asyncio.run_coroutine_threadsafe(
                 ws.send_json({

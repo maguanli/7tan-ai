@@ -466,3 +466,66 @@ h3 { margin-bottom: 12px; font-size: 15px; color: var(--muted); font-weight: 600
   min-height: 200px; font-family: inherit; line-height: 1.6; }
 .edit-msg-text:focus { border-color: var(--primary); }
 
+/* ===== 移动端响应式（≤768px：侧边栏折叠为抽屉 + 内容自适应） ===== */
+.menu-btn { display: none; }
+.sidebar-mask { display: none; }
+
+@media (max-width: 768px) {
+  .menu-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    width: 34px; height: 34px; border-radius: 6px; font-size: 18px; cursor: pointer;
+    flex-shrink: 0; padding: 0;
+  }
+  .menu-btn:active { background: var(--primary); }
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 990;
+    width: 240px; min-width: 240px; max-width: 82vw;
+    transform: translateX(-105%); transition: transform .25s ease;
+    box-shadow: 0 0 28px rgba(0,0,0,.55); overflow-y: auto;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-mask {
+    display: block; position: fixed; inset: 0; z-index: 980;
+    background: rgba(0,0,0,.55); opacity: 0; visibility: hidden;
+    transition: opacity .25s; -webkit-tap-highlight-color: transparent;
+  }
+  .sidebar-mask.show { opacity: 1; visibility: visible; }
+  .main { width: 100%; }
+  .topbar { padding: 8px 10px; gap: 8px; }
+  .token-box { flex: 1; min-width: 0; }
+  .token-box input { width: 100%; min-width: 0; font-size: 12px; padding: 6px 8px; }
+  .conn-info { display: none; }
+  .topbar-right { flex-shrink: 0; gap: 4px; }
+  .model-label { display: none; }
+  .topbar-right .model-select { max-width: 120px; font-size: 12px; padding: 5px 6px; }
+  .view { padding: 10px; }
+  h2 { font-size: 17px; margin-bottom: 10px; }
+  h3 { font-size: 14px; }
+  /* 对话区：纵向堆叠，聊天区为主，控制台收窄 */
+  #view-chat .chat-layout { flex-direction: column; gap: 8px; }
+  .chat-console-pane { flex: 0 0 auto !important; max-height: 34vh; min-height: 100px; width: 100%; }
+  .console-out { max-height: 24vh; font-size: 11px; }
+  .chat-main { flex: 1; min-height: 0; width: 100%; }
+  .chat-messages { padding: 10px; }
+  .msg { max-width: 92%; font-size: 14px; }
+  .chat-inputbar textarea { font-size: 16px; } /* ≥16px 防 iOS 聚焦缩放 */
+  .chat-bottom-row { flex-wrap: wrap; gap: 6px; }
+  .chat-hints { order: 2; width: 100%; display: flex; gap: 6px; overflow-x: auto; white-space: nowrap; padding-bottom: 2px; }
+  .btn-hint { padding: 5px 10px; font-size: 12px; flex-shrink: 0; }
+  .chat-btns { margin-left: auto; flex-shrink: 0; }
+  .btn-send { padding: 7px 14px; }
+  /* 工具栏 / 表格 / 设置页 */
+  .toolbar { gap: 6px; }
+  .toolbar input { width: 100%; }
+  .toolbar select { max-width: 110px; }
+  .table th, .table td { padding: 6px 8px; font-size: 12px; }
+  .pager { justify-content: center; }
+  .settings-tabs { overflow-x: auto; display: flex; white-space: nowrap; gap: 4px; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  .stab { flex-shrink: 0; font-size: 13px; padding: 7px 10px; }
+  .grid-2 { grid-template-columns: 1fr; gap: 10px; }
+  .panel { padding: 12px; }
+  .mono { max-height: 240px; font-size: 11px; }
+  .modal-box { width: 94vw; }
+}
+

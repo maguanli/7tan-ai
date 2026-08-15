@@ -229,6 +229,18 @@ function onWSMessage(msg) {
   }
 }
 
+/* ---------- 移动端：侧边栏抽屉 ---------- */
+function setSidebar(open) {
+  const sb = document.querySelector(".sidebar");
+  const mask = document.getElementById("sidebarMask");
+  if (sb) sb.classList.toggle("open", !!open);
+  if (mask) mask.classList.toggle("show", !!open);
+}
+function toggleSidebar() {
+  const sb = document.querySelector(".sidebar");
+  setSidebar(!(sb && sb.classList.contains("open")));
+}
+
 /* ---------- 视图切换 ---------- */
 let currentView = "chat";
 $$(".nav-item").forEach((btn) => {
@@ -242,6 +254,7 @@ function switchView(view) {
   const ss = $("#sidebarSessions");
   if (ss) ss.classList.toggle("visible", view === "chat");
   refreshCurrent();
+  if (window.innerWidth <= 768) setSidebar(false); // 移动端切换后自动收起抽屉
 }
 function refreshCurrent() {
   const fns = {
@@ -1406,6 +1419,11 @@ async function applyUpdate() {
 }
 
 /* ---------- 启动 ---------- */
+const menuBtn = document.getElementById("menuBtn");
+if (menuBtn) menuBtn.addEventListener("click", toggleSidebar);
+const sidebarMaskEl = document.getElementById("sidebarMask");
+if (sidebarMaskEl) sidebarMaskEl.addEventListener("click", () => setSidebar(false));
+window.addEventListener("resize", () => { if (window.innerWidth > 768) setSidebar(false); });
 $("#tokenInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#tokenBtn").click(); });
 initSettingsTabs();
 connectWS();

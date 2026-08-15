@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>7Tan 网页控制面板</title>
-<link rel="stylesheet" href="/style.css?v=20260816a">
+<link rel="stylesheet" href="/style.css?v=20260816m">
 </head>
 <body>
 <div id="app">
@@ -60,6 +60,7 @@
 
   <main class="main">
     <header class="topbar">
+      <button id="menuBtn" class="menu-btn" title="打开菜单" aria-label="菜单">☰</button>
       <div class="token-box">
         <input type="password" id="tokenInput" placeholder="API Token（远程访问必填，本地可留空）" autocomplete="off">
         <button id="tokenBtn" class="btn btn-sm">保存</button>
@@ -471,6 +472,8 @@
     </section>
   </main>
 </div>
+<!-- 移动端侧边栏遮罩 -->
+<div id="sidebarMask" class="sidebar-mask"></div>
 
 <!-- 登录对话框 -->
 <div id="loginModal" class="modal-mask" style="display:none">
@@ -519,6 +522,6 @@
     </div>
   </div>
 </div>
-<script src="/app.js?v=20260816a"></script>
+<script src="/app.js?v=20260816m"></script>
 </body>
 </html>

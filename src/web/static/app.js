@@ -1001,9 +1001,11 @@ async function loadLogs() {
     $("#logFileInfo").textContent = d.file ? "📄 " + d.file : "";
     const out = $("#logOutput");
     const lines = d.lines || [];
+    // 更新前检测用户是否已在底部
+    const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 60;
     out.textContent = lines.length ? lines.join("\n") : "（暂无日志）";
-    // 自动刷新时保持底部最新
-    if (logAutoRefresh) out.scrollTop = out.scrollHeight;
+    // 只有原本在底部才自动滚到底
+    if (logAutoRefresh && atBottom) out.scrollTop = out.scrollHeight;
   } catch (e) {
     $("#logOutput").textContent = "加载失败: " + e.message;
   }
@@ -1084,10 +1086,13 @@ function highlightLogLine(raw) {
 function renderConsole() {
   const out = $("#consoleOutput");
   if (!out) return;
+  // 更新前检测用户是否已在底部（距底 < 60px 视为"在看最新日志"）
+  const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 60;
   out.innerHTML = consoleBuf.length
     ? consoleBuf.join("\n")
     : '<span class="cl-empty">（暂无日志）</span>';
-  out.scrollTop = out.scrollHeight;
+  // 只有原本在底部才自动滚到底，用户手动往上看了就不打扰
+  if (atBottom) out.scrollTop = out.scrollHeight;
 }
 function appendConsole(text) {
   if (!text) return;

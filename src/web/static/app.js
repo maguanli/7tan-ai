@@ -569,6 +569,8 @@ function setChatImage(file) {
   if (!/^image\//.test(file.type)) { toast("请选择图片文件", true); return; }
   if (file.size > 10 * 1024 * 1024) { toast("图片不能超过 10MB", true); return; }
   chatImageFile = file;
+  // 选图/拖图后把焦点放回输入框：用户可直接回车发送（防止焦点留在📎按钮上，回车无效或再次弹出文件选择框）
+  setTimeout(() => { const inp = $("#chatInput"); if (inp) inp.focus(); }, 0);
   const rd = new FileReader();
   rd.onload = (e) => {
     if (chatImageFile !== file) return; // 竞态防护：图片已被清除/替换时丢弃迟到的预览
@@ -619,6 +621,16 @@ function bindChatImageEvents() {
   }
 }
 bindChatImageEvents();
+
+// 兜底：焦点落在聊天区📎按钮上时，输入区有内容则回车=发送（防止"选完图焦点在按钮上，回车没反应/又弹出文件选择框"）
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || e.shiftKey) return;
+  const t = e.target;
+  if (t && t.id === "chatImageBtn") {
+    const text = $("#chatInput").value.trim();
+    if (text || chatImageFile) { e.preventDefault(); sendChat(); }
+  }
+});
 
 async function sendChat() {
   if (chatSending) { abortChat(); return; } // 发送中点击=中止

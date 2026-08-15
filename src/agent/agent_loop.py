@@ -602,6 +602,7 @@ def run_agent_loop(
     total_tokens = 0
     all_logs = []
     iteration = 0
+    _empty_resp_count = 0  # 🛡️ 连续空响应计数（防 reasoning 模型只输出思考内容导致死循环）
     
     # 🔔 流式事件：开始分析
     if event_callback:
@@ -802,8 +803,23 @@ def run_agent_loop(
         
         # 处理工具调用
         if not tool_calls_raw:
-            messages.append({"role": "user", "content": "请继续完成任务，或调用工具。"})
+            # 🛡️ 防死循环：reasoning 模型（deepseek-v4-pro 等）可能只返回思考内容，
+            # content=None 且 tool_calls=None，且 finish_reason 非 stop/length。
+            # 连续多次空响应则中止，避免无限 append「请继续」死循环。
+            _empty_resp_count += 1
+            if _empty_resp_count >= 3:
+                logger.error(f"🛑 [Agent] 连续 {_empty_resp_count} 次空响应（无内容且无工具调用），中止循环，会话: {session_id}")
+                return {
+                    "success": False,
+                    "result": "⚠️ AI 连续返回空响应，任务已中止。请重试或换一个更具体的描述。",
+                    "iterations": iteration,
+                    "cost": total_cost,
+                    "total_tokens": total_tokens,
+                    "logs": all_logs,
+                }
+            messages.append({"role": "user", "content": "你的回复为空，请直接给出最终回答，不要只输出思考过程。"})
             continue
+        _empty_resp_count = 0  # 有工具调用，重置空响应计数
         
         # 并行执行工具
         tc_dicts = []

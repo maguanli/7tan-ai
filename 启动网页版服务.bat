@@ -1,26 +1,45 @@
 @echo off
 chcp 65001 >nul
-title 7Tan ç½‘é¡µç‰ˆæŽ§åˆ¶é¢æ¿æœåŠ¡
+title 7Tan ÍøÒ³°æ¿ØÖÆÃæ°å
 cd /d "%~dp0"
 
 echo ================================================
-echo   7Tan ç½‘é¡µç‰ˆæŽ§åˆ¶é¢æ¿æœåŠ¡ï¼ˆç‹¬ç«‹æ¨¡å¼ï¼‰
-echo   è®¿é—®åœ°å€ï¼šhttp://127.0.0.1:9900/
-echo   å±€åŸŸç½‘è®¿é—®ï¼šhttp://æœ¬æœºIP:9900/
-echo   ä¸Žæ¡Œé¢ç‰ˆäº’ä¸å½±å“ï¼Œæ¡Œé¢ç‰ˆå…³é—­åŽæœ¬æœåŠ¡ç…§å¸¸å¯ç”¨
-echo   åœæ­¢ï¼šå…³é—­æœ¬çª—å£ æˆ– æŒ‰ Ctrl+C
+echo   7Tan ÍøÒ³°æ¿ØÖÆÃæ°å
+echo   ·ÃÎÊµØÖ·: http://127.0.0.1:9900/
 echo ================================================
 echo.
 
-REM ä¼˜å…ˆä½¿ç”¨è™šæ‹ŸçŽ¯å¢ƒ Python
-set PYTHON=python
-if exist ".venv\Scripts\python.exe" set PYTHON=.venv\Scripts\python.exe
+REM ÓÅÏÈÊ¹ÓÃÐéÄâ»·¾³ Python
+set PYTHON=pythonw
+if exist ".venv\Scripts\pythonw.exe" set PYTHON=.venv\Scripts\pythonw.exe
 
-echo æ­£åœ¨å¯åŠ¨ç½‘é¡µç‰ˆæœåŠ¡ï¼ˆæµè§ˆå™¨è®¿é—® http://127.0.0.1:9900/ ï¼‰...
-echo æŒ‰ Ctrl+C å¯åœæ­¢æœåŠ¡
+REM ×Ô¶¯ÅäÖÃ¿ª»ú×ÔÆô(ÃÝµÈ: ÒÑÅäÖÃ×Ô¶¯Ìø¹ý, ÎÞÐèÓÃ»§²Ù×÷)
+"%PYTHON%" tools\web_autostart.py --install >nul 2>&1
+echo [OK] ¿ª»ú×ÔÆôÒÑÅäÖÃ: ÒÔºóµçÄÔ¿ª»ú×Ô¶¯ÔËÐÐÍøÒ³°æ·þÎñ, ËæÊ±¿ÉÖ±½Ó·ÃÎÊ http://127.0.0.1:9900/
 echo.
-%PYTHON% main.py --web --host 0.0.0.0 --port 9900
 
-echo.
-echo æœåŠ¡å·²åœæ­¢ã€‚
-pause
+REM ¼ì²é 9900 ¶Ë¿ÚÊÇ·ñÒÑÔÚÔËÐÐ(ÒÑÔÚÔËÐÐÔòÖ±½Ó´ò¿ªä¯ÀÀÆ÷)
+netstat -ano | findstr ":9900" >nul 2>&1
+if %errorlevel%==0 goto open_browser
+
+echo [..] ÕýÔÚÆô¶¯ÍøÒ³°æ·þÎñ(ºóÌ¨ÔËÐÐ, ±¾´°¿Ú¿É¹Ø±Õ)...
+start "" "%PYTHON%" main.py --web --host 0.0.0.0 --port 9900
+
+REM µÈ´ý·þÎñ¾ÍÐ÷(×î¶àµÈ 20 Ãë)
+set /a tries=0
+:waitloop
+ping -n 2 127.0.0.1 >nul
+set /a tries+=1
+netstat -ano | findstr ":9900" >nul 2>&1
+if %errorlevel%==0 goto open_browser
+if %tries% lss 20 goto waitloop
+echo [!!] ·þÎñÆô¶¯½ÏÂý, ÇëÉÔºóÊÖ¶¯´ò¿ª http://127.0.0.1:9900/
+ping -n 4 127.0.0.1 >nul
+exit /b 1
+
+:open_browser
+echo [OK] ·þÎñÒÑ¾ÍÐ÷, ÕýÔÚ´ò¿ªä¯ÀÀÆ÷...
+start "" http://127.0.0.1:9900/
+echo ä¯ÀÀÆ÷½«×Ô¶¯´ò¿ª http://127.0.0.1:9900/ (ÈçÎ´×Ô¶¯´ò¿ªÇëÊÖ¶¯·ÃÎÊ)
+ping -n 4 127.0.0.1 >nul
+exit /b 0

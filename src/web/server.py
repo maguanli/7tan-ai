@@ -647,6 +647,15 @@ def start_server(host: str = "0.0.0.0", port: int = 9800):
     except Exception as _tts_err:
         logger.warning(f"[TTS-Bridge] 初始化失败: {_tts_err}")
 
+    # 💬 注册 WEB 版实时控制台朗读监听：监听标准 logging 的 💬 Agent 日志行
+    # （中间迭代 + 最终回复），与桌面版 console_panel 行为一致。
+    # 没有它，WEB 版实时控制台中的 Agent 说话内容不会朗读。
+    try:
+        from src.agent.web_console_tts import init_web_console_tts
+        init_web_console_tts()
+    except Exception as _wtts_err:
+        logger.warning(f"[TTS-Web] 初始化失败: {_wtts_err}")
+
     # 预创建 socket，在 bind 前设置 SO_REUSEADDR
     # 这样旧进程退出后，新进程可以立即复用端口，无需等待 TIME_WAIT 释放
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

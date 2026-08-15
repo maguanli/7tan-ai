@@ -368,12 +368,35 @@ def _set_voice_setting(key: str, value: str) -> bool:
         return False
 
 
+def _sync_tts_gender() -> None:
+    """将数据库里的 voice_gender 同步到 TTS 引擎内存（否则切换性别不生效）"""
+    try:
+        g = _get_voice_setting("voice_gender", "female").lower().strip()
+        if g not in ("female", "male"):
+            g = "female"
+        from data.plugins.tts_piper.tools import tts_set_gender
+        tts_set_gender(g)
+    except Exception as e:
+        logger.warning(f"同步 TTS 性别失败: {e}")
+
+
+def _tts_engine_now() -> str:
+    """返回 TTS 引擎当前实际使用的性别（用于前端展示/诊断）"""
+    try:
+        from data.plugins.tts_piper.tools import tts_get_gender
+        return tts_get_gender().get("gender", "")
+    except Exception:
+        return ""
+
+
 @router.get("/voice")
 async def get_voice_settings():
     """读取语音朗读开关/性别（与桌面版共用 app_settings.voice_mode / voice_gender）"""
+    _sync_tts_gender()
     return {
         "mode": _get_voice_setting("voice_mode", "false").lower() == "true",
         "gender": _get_voice_setting("voice_gender", "male"),
+        "engine": _tts_engine_now(),
     }
 
 
@@ -384,8 +407,10 @@ async def set_voice_settings(req: VoiceSettings):
         _set_voice_setting("voice_mode", "true" if req.mode else "false")
     if req.gender:
         _set_voice_setting("voice_gender", req.gender)
+    _sync_tts_gender()
     return {
         "mode": _get_voice_setting("voice_mode", "false").lower() == "true",
         "gender": _get_voice_setting("voice_gender", "male"),
+        "engine": _tts_engine_now(),
     }
 

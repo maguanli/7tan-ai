@@ -62,7 +62,7 @@ def _acquire_single_instance() -> bool:
     """获取单实例文件锁。返回 True = 本进程是唯一实例。"""
     args = sys.argv[1:]
     # CLI 单次任务/向导不阻塞（run / setup / web 可与桌面共存）
-    if any(a in args for a in ("run", "setup", "--cli", "web", "--web")):
+    if any(a in args for a in ("run", "setup", "--cli", "web", "--web", "web_autostart", "--web-autostart")):
         return True
     if os.name != "nt":
         return True  # 非 Windows 暂不启用
@@ -226,6 +226,8 @@ def main():
         run_scheduler()
     elif mode == "web":
         run_web_only(args)
+    elif mode == "web_autostart":
+        run_web_autostart(args)
     else:
         run_cli(args)
 
@@ -466,6 +468,20 @@ def run_desktop(args):
         print(f"\n❌ GUI 启动失败: {e}")
         print("按 Enter 退出...")
         input()
+
+
+def run_web_autostart(args):
+    """WEB 服务开机自启管理: install(配置)/uninstall(取消)/status(查看)/launch(启动)"""
+    action = getattr(args, 'web_autostart', None) or "status"
+    import importlib.util
+    mod_path = PROJECT_ROOT / "tools" / "web_autostart.py"
+    if not mod_path.exists():
+        print(f"❌ 自启工具不存在: {mod_path}")
+        sys.exit(1)
+    spec = importlib.util.spec_from_file_location("web_autostart", str(mod_path))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    sys.exit(mod.main([f"--{action}"]))
 
 
 def run_web_only(args):

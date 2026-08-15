@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 @dataclass
 class CliArgs:
     """命令行参数数据类"""
-    command: str = "desktop"         # desktop / cli / run / setup / integrity / scheduler
+    command: str = "desktop"         # desktop / cli / run / setup / integrity / scheduler / web / web_autostart
     task: list = field(default_factory=list)
     model: str = None
     port: int = 9800
@@ -19,6 +19,7 @@ class CliArgs:
     host: str = "0.0.0.0"          # API 服务绑定地址
     config: str = None              # 自定义配置文件路径
     log_level: str = "INFO"         # 日志级别
+    web_autostart: str = None       # WEB 服务开机自启: install/uninstall/status/launch
 
 
 def parse_args(args: list = None) -> CliArgs:
@@ -82,6 +83,13 @@ def parse_args(args: list = None) -> CliArgs:
     mode.add_argument(
         "--web", action="store_const", const="web", dest="command",
         help="仅启动网页版控制面板服务（无桌面界面，关闭桌面版后仍可访问网页版）",
+    )
+    parser.add_argument(
+        "--web-autostart",
+        type=str,
+        choices=["install", "uninstall", "status", "launch"],
+        default=None,
+        help="WEB 服务开机自启管理: install(配置自启)/uninstall(取消)/status(查看)/launch(启动服务)",
     )
 
     # 通用参数
@@ -156,7 +164,10 @@ def parse_args(args: list = None) -> CliArgs:
     )
 
     # 确定 command
-    if parsed.run_task is not None:
+    if parsed.web_autostart:
+        cli.command = "web_autostart"
+        cli.web_autostart = parsed.web_autostart
+    elif parsed.run_task is not None:
         cli.command = "run"
         if parsed.run_task:
             cli.task = [parsed.run_task]
@@ -171,6 +182,13 @@ def parse_args(args: list = None) -> CliArgs:
             cli.task = list(parsed.legacy_task)
     else:
         cli.command = "desktop"  # 默认桌面应用
+
+    # headless 强依赖 daemon
+    if cli.headless and not cli.daemon:
+        cli.daemon = True
+
+    return cli
+    cli.command = "desktop"  # 默认桌面应用
 
     # headless 强依赖 daemon
     if cli.headless and not cli.daemon:

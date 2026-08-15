@@ -326,19 +326,29 @@ def _run_edge_tts_api(text: str, voice: str, output_path: str, timeout: int = 6)
     """
     async def _synthesize():
         communicate = __import__('edge_tts').Communicate(text, voice)
-        with open(output_path, 'wb') as f:
-            async for chunk in communicate.stream():
-                if chunk['type'] == 'audio':
-                    f.write(chunk['data'])
-                elif chunk['type'] == 'WordBoundary':
-                    pass  # 忽略词边界事件
+
+        async def _stream():
+            with open(output_path, 'wb') as f:
+                async for chunk in communicate.stream():
+                    if chunk['type'] == 'audio':
+                        f.write(chunk['data'])
+                    elif chunk['type'] == 'WordBoundary':
+                        pass  # 忽略词边界事件
+
+        # asyncio 层真正超时：防止 socket connect 卡死不受 Python 层 timeout 控制
+        await _asyncio.wait_for(_stream(), timeout=timeout)
 
     try:
-        # 统一在新线程中运行并强制超时（无论当前线程是否已有事件循环，
-        # 避免网络卡死时无限等待 → 朗读延迟高达 10+ 秒）
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        # 统一在新线程中运行并强制超时。
+        # 关键修复：用 shutdown(wait=False)，绝不等待卡死的网络线程——
+        # 否则 with ThreadPoolExecutor.__exit__ 会 wait=True 无限等卡住线程，
+        # 导致 _dedup_pending 被占 90 秒、所有朗读被「全局互斥」跳过（完全无声）。
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        try:
             future = executor.submit(_asyncio.run, _synthesize())
-            future.result(timeout=timeout)
+            future.result(timeout=timeout + 2)
+        finally:
+            executor.shutdown(wait=False)
     except concurrent.futures.TimeoutError:
         raise TimeoutError(f"Edge TTS API 超时（{timeout}秒）")
 
@@ -728,7 +738,7 @@ _dedup_pending = ""  # 正在合成中的文本（抢占标记，防并发重复
 _synth_slot_ts = 0.0  # 合成占位时间戳（看门狗用）
 _dedup_lock = threading.Lock()
 DEDUP_WINDOW = 300  # 秒（5 分钟）
-SYNTH_SLOT_TIMEOUT = 90  # 秒：合成占位超时强制释放（防合成卡死导致语音永久锁死）
+SYNTH_SLOT_TIMEOUT = 25  # 秒：合成占位超时强制释放（防合成卡死导致语音永久锁死）
 
 
 def _dedup_clean(text: str) -> str:

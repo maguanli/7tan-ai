@@ -11,7 +11,9 @@
 原理:
     - 写注册表 HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run
       （用户级自启，无需管理员权限、无需安装，绿色版解压即用）
-    - 自启条目指向本脚本 --launch：内部以 pythonw 无窗口启动 main.py --web
+    - 绿色版（ZIP 内 7tan-editor/7tan-editor.exe）：自启条目与启动均直接用
+      7tan-editor.exe --web（exe 自带 Python 运行时，零依赖，无需安装 Node.js/Python）
+    - 开发版（源码目录 + .venv）：pythonw 无窗口启动 main.py --web
     - 与桌面版单实例保护兼容（main.py 对 web 模式放行，可共存）
 
 绿色版适配（免安装软件的独有坑）:
@@ -82,6 +84,26 @@ def find_pythonw() -> str:
     return "pythonw"  # 最后兜底：让系统解析
 
 
+def find_main_exe() -> str:
+    """绿色版主程序 7tan-editor.exe（exe 自带 Python 运行时，零依赖启动 WEB 服务）"""
+    return os.path.join(ROOT, "7tan-editor.exe")
+
+
+def is_exe_mode() -> bool:
+    """是否绿色版（exe 模式）：exe 存在即优先使用，无需外部 Python 环境"""
+    return os.path.isfile(find_main_exe())
+
+
+def build_cmd() -> str:
+    """构造注册表自启命令（幂等比较用；随当前运行形态动态生成，天然路径自愈）"""
+    if is_exe_mode():
+        exe = find_main_exe()
+        return f'"{exe}" --web --host 0.0.0.0 --port {DEFAULT_PORT}'
+    pyw = find_pythonw()
+    script = os.path.abspath(__file__)
+    return f'"{pyw}" "{script}" --launch'
+
+
 def _read_reg() -> str | None:
     """读取当前自启注册表值；不存在/异常返回 None"""
     try:
@@ -108,9 +130,7 @@ def install(silent: bool = False, force: bool = False) -> bool:
     - 未配置 → 新建
     """
     import winreg
-    pyw = find_pythonw()
-    script = os.path.abspath(__file__)
-    cmd = f'"{pyw}" "{script}" --launch'
+    cmd = build_cmd()
 
     old = _read_reg()
     if not force and old == cmd:
@@ -125,7 +145,8 @@ def install(silent: bool = False, force: bool = False) -> bool:
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
             winreg.SetValueEx(k, APP_NAME, 0, winreg.REG_SZ, cmd)
         if not silent:
-            log(f"[install] ✅ 开机自启已配置: {cmd}")
+            mode = "exe(绿色版)" if is_exe_mode() else "pythonw(开发版)"
+            log(f"[install] ✅ 开机自启已配置 [{mode}]: {cmd}")
         return True
     except Exception as e:
         if not silent:
@@ -166,35 +187,49 @@ def port_open(port: int, timeout: float = 1.0) -> bool:
 
 
 def launch() -> int:
-    """启动 9900 WEB 服务（后台 pythonw + 日志文件，幂等：端口已开直接退出）"""
+    """启动 9900 WEB 服务（幂等：端口已开直接退出）。
+
+    绿色版：直接启动 7tan-editor.exe --web（exe 自带 Python，零依赖）
+    开发版：pythonw 无窗口启动 main.py --web，日志写入 logs/web_9900.log
+    """
     if port_open(DEFAULT_PORT):
         log("[launch] ✅ 9900 服务已在运行，跳过启动")
         return 0
 
-    pyw = find_pythonw()
-    if not os.path.isfile(MAIN_PY):
-        log(f"[launch] ❌ main.py 不存在: {MAIN_PY}")
-        return 1
-
-    try:
-        os.makedirs(LOG_DIR, exist_ok=True)
-        logf = open(SERVICE_LOG, "a", encoding="utf-8", buffering=1)
-    except Exception as e:
-        logf = None
-        log(f"[launch] ⚠️ 无法打开日志文件: {e}")
-
-    try:
-        p = subprocess.Popen(
-            [pyw, MAIN_PY, "--web", "--host", "0.0.0.0", "--port", str(DEFAULT_PORT)],
-            cwd=ROOT,
-            stdout=logf,
-            stderr=logf,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        log(f"[launch] 🚀 已启动 WEB 服务 (PID={p.pid}, pyw={pyw})")
-    except Exception as e:
-        log(f"[launch] ❌ 启动失败: {e}")
-        return 1
+    if is_exe_mode():
+        exe = find_main_exe()
+        try:
+            p = subprocess.Popen(
+                [exe, "--web", "--host", "0.0.0.0", "--port", str(DEFAULT_PORT)],
+                cwd=ROOT,
+            )
+            log(f"[launch] 🚀 已启动 WEB 服务 (exe 绿色版, PID={p.pid}, exe={exe})")
+        except Exception as e:
+            log(f"[launch] ❌ 启动失败: {e}")
+            return 1
+    else:
+        pyw = find_pythonw()
+        if not os.path.isfile(MAIN_PY):
+            log(f"[launch] ❌ main.py 不存在: {MAIN_PY}")
+            return 1
+        try:
+            os.makedirs(LOG_DIR, exist_ok=True)
+            logf = open(SERVICE_LOG, "a", encoding="utf-8", buffering=1)
+        except Exception as e:
+            logf = None
+            log(f"[launch] ⚠️ 无法打开日志文件: {e}")
+        try:
+            p = subprocess.Popen(
+                [pyw, MAIN_PY, "--web", "--host", "0.0.0.0", "--port", str(DEFAULT_PORT)],
+                cwd=ROOT,
+                stdout=logf,
+                stderr=logf,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            log(f"[launch] 🚀 已启动 WEB 服务 (PID={p.pid}, pyw={pyw})")
+        except Exception as e:
+            log(f"[launch] ❌ 启动失败: {e}")
+            return 1
 
     # 轮询等待就绪（最多 30 秒）
     for i in range(30):

@@ -1,18 +1,26 @@
 # -*- coding: utf-8 -*-
 """
-7Tan Web 服务开机自启管理器（产品级）
+7Tan Web 服务开机自启管理器（产品级 · 适配绿色版免安装）
 
 用法:
-    python tools/web_autostart.py --install      # 配置开机自启（幂等，已配置则跳过）
+    python tools/web_autostart.py --install      # 配置开机自启（幂等 + 路径自愈）
     python tools/web_autostart.py --uninstall    # 取消开机自启
     python tools/web_autostart.py --status       # 查看自启状态 + 9900 端口状态
     python tools/web_autostart.py --launch       # 启动 9900 服务（端口已开则直接退出）
 
 原理:
     - 写注册表 HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run
-      （用户级自启，无需管理员权限，开机自动后台运行）
+      （用户级自启，无需管理员权限、无需安装，绿色版解压即用）
     - 自启条目指向本脚本 --launch：内部以 pythonw 无窗口启动 main.py --web
     - 与桌面版单实例保护兼容（main.py 对 web 模式放行，可共存）
+
+绿色版适配（免安装软件的独有坑）:
+    用户可能移动/重命名软件目录，注册表里存的是绝对路径，目录变更后旧条目失效。
+    因此 install() 实现「路径自愈」：
+      - 已配置且路径与当前一致 → 跳过（幂等）
+      - 已配置但路径与当前不一致 → 自动更新为新路径（目录变更自愈）
+    「启动网页版服务.bat」每次双击都用 %~dp0 动态路径重新执行 install，
+    WEB 服务每次启动（server.py）也会静默校准一次 → 移动目录后无需任何手动操作。
 """
 import os
 import sys
@@ -74,31 +82,54 @@ def find_pythonw() -> str:
     return "pythonw"  # 最后兜底：让系统解析
 
 
-def _run_key_exists() -> bool:
+def _read_reg() -> str | None:
+    """读取当前自启注册表值；不存在/异常返回 None"""
     try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_READ) as k:
-            winreg.QueryValueEx(k, APP_NAME)
-            return True
+            return winreg.QueryValueEx(k, APP_NAME)[0]
     except FileNotFoundError:
-        return False
+        return None
     except Exception:
-        return False
+        return None
 
 
-def install() -> bool:
-    """写入开机自启注册表项（幂等）"""
+def _run_key_exists() -> bool:
+    return _read_reg() is not None
+
+
+def install(silent: bool = False, force: bool = False) -> bool:
+    """写入开机自启注册表项（幂等 + 绿色版路径自愈）。
+
+    绿色版（免安装、解压即用）用户可能移动/重命名软件目录，
+    注册表中存的是绝对路径，目录变更后旧条目会失效。因此：
+    - 已配置且路径与当前一致 → 跳过（幂等）
+    - 已配置但路径与当前不一致 → 自动更新为新路径（目录变更自愈）
+    - 未配置 → 新建
+    """
     import winreg
     pyw = find_pythonw()
     script = os.path.abspath(__file__)
     cmd = f'"{pyw}" "{script}" --launch'
+
+    old = _read_reg()
+    if not force and old == cmd:
+        if not silent:
+            log("[install] ✅ 开机自启已配置且路径正确，跳过")
+        return True
+    if old and old != cmd:
+        log("[install] 🔄 检测到软件目录变更，自动更新自启路径")
+        log(f"          旧: {old}")
+        log(f"          新: {cmd}")
     try:
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
             winreg.SetValueEx(k, APP_NAME, 0, winreg.REG_SZ, cmd)
-        log(f"[install] ✅ 开机自启已配置: {cmd}")
+        if not silent:
+            log(f"[install] ✅ 开机自启已配置: {cmd}")
         return True
     except Exception as e:
-        log(f"[install] ❌ 配置失败: {e}")
+        if not silent:
+            log(f"[install] ❌ 配置失败: {e}")
         return False
 
 
@@ -137,7 +168,7 @@ def port_open(port: int, timeout: float = 1.0) -> bool:
 def launch() -> int:
     """启动 9900 WEB 服务（后台 pythonw + 日志文件，幂等：端口已开直接退出）"""
     if port_open(DEFAULT_PORT):
-        log(f"[launch] ✅ 9900 服务已在运行，跳过启动")
+        log("[launch] ✅ 9900 服务已在运行，跳过启动")
         return 0
 
     pyw = find_pythonw()

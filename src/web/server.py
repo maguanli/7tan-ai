@@ -656,6 +656,15 @@ def start_server(host: str = "0.0.0.0", port: int = 9800):
     except Exception as _wtts_err:
         logger.warning(f"[TTS-Web] 初始化失败: {_wtts_err}")
 
+    # 🔄 绿色版开机自启路径自愈：WEB 服务每次启动静默校准注册表自启路径。
+    # 绿色版（解压即用）用户可能移动/重命名软件目录，自启条目会指向旧路径失效；
+    # 这里每次启动都校验一次，路径不一致自动更新，保证「移动目录后依然开机自启」。
+    try:
+        from tools.web_autostart import install as _autostart_install
+        _autostart_install(silent=True)
+    except Exception as _autostart_err:
+        logger.debug(f"[autostart] 自启路径校准跳过: {_autostart_err}")
+
     # 预创建 socket，在 bind 前设置 SO_REUSEADDR
     # 这样旧进程退出后，新进程可以立即复用端口，无需等待 TIME_WAIT 释放
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

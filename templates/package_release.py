@@ -279,7 +279,6 @@ _WEB_ROOT_FILES = [
     ("requirements-web.txt",            "requirements-web.txt"),
     ("启动网页版服务(macOS).command",    "启动网页版服务(macOS).command"),
     ("启动网页版服务(Linux).sh",        "启动网页版服务(Linux).sh"),
-    ("启动网页版服务(Windows).bat",     "启动网页版服务(Windows).bat"),
 ]
 
 # WEB 版目录清单：(项目内相对路径, zip 内路径, 额外排除目录名)
@@ -497,10 +496,9 @@ def main() -> int:
                     print(f"  [OK] {_doc_name} ({_doc_src.stat().st_size:,}B)")
 
             # 2.3.2 绿色版一键启动脚本（ZIP 根目录，按操作系统选择对应文件双击/执行：自启+启动服务+开浏览器）
+            # Windows 专属完整包：仅内置 Windows 启动脚本（macOS/Linux 脚本只在通用包里）
             _launchers = [
                 ("启动网页版服务(Windows).bat", "Windows"),
-                ("启动网页版服务(macOS).command", "macOS"),
-                ("启动网页版服务(Linux).sh", "Linux"),
             ]
             for _launcher_name, _os_name in _launchers:
                 _launcher_src = Path(__file__).resolve().parent.parent / _launcher_name

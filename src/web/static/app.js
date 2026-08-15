@@ -571,6 +571,7 @@ function setChatImage(file) {
   chatImageFile = file;
   const rd = new FileReader();
   rd.onload = (e) => {
+    if (chatImageFile !== file) return; // 竞态防护：图片已被清除/替换时丢弃迟到的预览
     chatImageDataUrl = e.target.result;
     const pv = $("#chatAttachPreview"); if (pv) pv.src = chatImageDataUrl;
     const nm = $("#chatAttachName"); if (nm) nm.textContent = file.name + " (" + fmtSize(file.size) + ")";
@@ -648,6 +649,7 @@ async function sendChat() {
   const um = appendMsg("user", text);
   um.body.innerHTML = (chatImageDataUrl ? `<img class="msg-img" src="${chatImageDataUrl}" alt="图片">` : "") + renderMarkdown(text);
   um.meta.textContent = "我 · " + fmtFullTime(new Date());
+  clearChatImage(); // 消息已上屏，立即清理输入框附件（图片保留在消息气泡中）
   const p = appendMsg("assistant", "⏳ AI 思考中…（流式输出即将开始）", "pending streaming");
   p.body.textContent = "⏳ AI 思考中…（流式输出即将开始）";
   let acc = "", doneModel = "";

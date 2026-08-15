@@ -1787,3 +1787,25 @@ $("#adaptRefreshBtn").addEventListener("click", () => loadAdaptView());
     }
   } catch (e) { /* 接口不可用时保持原样，不阻塞其它功能 */ }
 })();
+
+/* ===== API Key 显示/隐藏按钮：动态注入（兼容浏览器缓存旧 HTML 的场景） ===== */
+function injectKeyVisibility() {
+  ["aiKey", "visKey"].forEach((id) => {
+    const inp = document.getElementById(id);
+    if (!inp) return;
+    if (inp.nextElementSibling && inp.nextElementSibling.tagName === "BUTTON") return; // 新版 HTML 已自带按钮
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "position:relative;display:inline-flex;align-items:center;width:100%;";
+    inp.parentNode.insertBefore(wrap, inp);
+    wrap.appendChild(inp);
+    inp.style.paddingRight = "34px";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = "👁";
+    btn.title = "显示/隐藏";
+    btn.style.cssText = "position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;padding:4px;opacity:0.6;";
+    btn.onclick = () => toggleKeyVis(id, btn);
+    wrap.appendChild(btn);
+  });
+}
+injectKeyVisibility();

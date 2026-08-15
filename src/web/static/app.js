@@ -425,25 +425,35 @@ let chatActiveKey = "";
 
 function currentModelVal() {
   const saved = localStorage.getItem("7tan_web_model") || "";
-  const exists = chatModelConfigs.some((c) => (c.model || c.config_key) === saved);
-  if (exists) return saved;
-  const activeCfg = chatModelConfigs.find((c) => c.config_key === chatActiveKey) || {};
-  return activeCfg.model || "";
+  // 新版：localStorage 存 config_key（唯一）
+  let cfg = chatModelConfigs.find((c) => c.config_key === saved);
+  if (cfg) return cfg.config_key;
+  // 兼容旧数据：localStorage 存的是 model 名
+  cfg = chatModelConfigs.find((c) => (c.model || c.config_key) === saved);
+  if (cfg) return cfg.config_key;
+  // 回退：当前启用配置 → 第一个配置
+  const activeCfg = chatModelConfigs.find((c) => c.config_key === chatActiveKey) || chatModelConfigs[0] || {};
+  return activeCfg.config_key || (activeCfg.model || "");
+}
+
+// 当前选中配置的模型名（发送给后端用；config_key 仅用于 UI 唯一标识）
+function currentModelName() {
+  const key = $("#chatModelSelect").value || currentModelVal();
+  const cfg = chatModelConfigs.find((c) => c.config_key === key) || {};
+  return cfg.model || key || null;
 }
 
 function renderModelSelect() {
   const sel = $("#chatModelSelect");
   if (!sel) return;
   if (!chatModelConfigs.length) { sel.innerHTML = '<option value="">无模型配置</option>'; return; }
-  const curVal = currentModelVal();
-  const curCfg = chatModelConfigs.find((c) => (c.model || c.config_key) === curVal) || {};
-  const curKey = curCfg.config_key || chatActiveKey;
+  const curKey = currentModelVal();
   sel.innerHTML = chatModelConfigs.map((c) => {
-    const val = c.model || c.config_key;
+    const key = c.config_key || (c.model || "");
     const label = c.config_key + (c.model && c.model !== c.config_key ? " · " + c.model : "") + (c.config_key === curKey ? " ★" : "");
-    return `<option value="${escapeHtml(val)}" ${val === curVal ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    return `<option value="${escapeHtml(key)}" ${key === curKey ? "selected" : ""}>${escapeHtml(label)}</option>`;
   }).join("");
-  localStorage.setItem("7tan_web_model", curVal);
+  localStorage.setItem("7tan_web_model", curKey);
 }
 
 async function loadChatModels() {
@@ -671,7 +681,7 @@ async function sendChat() {
     const resp = await fetch("/api/chat/send/stream", {
       method: "POST",
       headers,
-      body: JSON.stringify({ session_id: curSession, message: text, model: ($("#chatModelSelect").value || null), image_path: imagePath }),
+      body: JSON.stringify({ session_id: curSession, message: text, model: currentModelName(), image_path: imagePath }),
     });
     if (!resp.ok) {
       let msg = "HTTP " + resp.status;
@@ -711,7 +721,7 @@ async function sendChat() {
     p.div.classList.remove("pending", "streaming");
     p.div.dataset.raw = acc;
     p.body.innerHTML = renderMarkdown(acc);
-    p.meta.textContent = (doneModel || $("#chatModelSelect").value || "AI") + " · " + fmtFullTime(new Date());
+    p.meta.textContent = (doneModel || currentModelName() || "AI") + " · " + fmtFullTime(new Date());
   } catch (e) {
     if (acc) { p.div.dataset.raw = acc; p.body.innerHTML = renderMarkdown(acc); }
     else { p.div.dataset.raw = "❌ " + e.message; p.body.textContent = "❌ " + e.message; }

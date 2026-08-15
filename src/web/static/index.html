@@ -249,13 +249,13 @@
                   </select>
                 </label>
                 <label>模型 <input id="aiModel" placeholder="如 deepseek-v4-flash"></label>
-                <label>API Key<div style="position:relative;display:inline-flex;align-items:center;"><input id="aiKey" type="password" placeholder="sk-...（留空保持不变）" style="padding-right:30px;"><button onclick="toggleKeyVis('aiKey',this)" style="position:absolute;right:4px;background:none;border:none;cursor:pointer;font-size:16px;padding:4px;opacity:0.6;" title="显示/隐藏">👁</button></div></label>
+                <label>API Key<div style="position:relative;display:inline-flex;align-items:center;"><input id="aiKey" type="password" placeholder="sk-...（留空保持不变）" style="padding-right:30px;"><button onclick="toggleKeyVis('aiKey',this)" style="position:absolute;right:4px;background:none;border:none;cursor:pointer;padding:4px;opacity:0.9;color:#f0f0f0;display:flex;align-items:center;" title="显示/隐藏"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></label>
                 <label>Base URL <input id="aiBase" placeholder="https://api.deepseek.com/v1"></label>
                 <button id="aiSave" class="btn btn-primary">💾 保存模型配置</button>
               </div>
               <h3 style="margin-top:16px">👁️ 视觉模型（识图）</h3>
               <div class="form">
-                <label>API Key<div style="position:relative;display:inline-flex;align-items:center;"><input id="visKey" type="password" placeholder="视觉模型 Key（留空保持不变）" style="padding-right:30px;"><button onclick="toggleKeyVis('visKey',this)" style="position:absolute;right:4px;background:none;border:none;cursor:pointer;font-size:16px;padding:4px;opacity:0.6;" title="显示/隐藏">👁</button></div></label>
+                <label>API Key<div style="position:relative;display:inline-flex;align-items:center;"><input id="visKey" type="password" placeholder="视觉模型 Key（留空保持不变）" style="padding-right:30px;"><button onclick="toggleKeyVis('visKey',this)" style="position:absolute;right:4px;background:none;border:none;cursor:pointer;padding:4px;opacity:0.9;color:#f0f0f0;display:flex;align-items:center;" title="显示/隐藏"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></label>
                 <label>Base URL <input id="visBase" value="https://open.bigmodel.cn/api/paas/v4"></label>
                 <label>模型 <input id="visModel" value="glm-4v-flash"></label>
                 <button id="visSave" class="btn btn-primary">💾 保存视觉模型</button>
@@ -505,6 +505,6 @@
   </div>
 </div>
 <div id="toast" class="toast"></div>
-<script src="/app.js?v=20260815n"></script>
+<script src="/app.js?v=20260815o"></script>
 </body>
 </html>

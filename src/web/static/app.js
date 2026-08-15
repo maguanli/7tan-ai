@@ -4,13 +4,20 @@
 /* ---------- 工具 ---------- */
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
+function keyEyeSvg(open) {
+  // open=true → 睁眼（当前密码掩码，点击可查看）；open=false → 闭眼（当前明文，点击可隐藏）
+  // 用 SVG 而非 emoji：emoji 是彩色字体不受 color 控制，深色背景下看不见
+  return open
+    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
+    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+}
 function toggleKeyVis(id, btn) {
   const inp = document.getElementById(id);
   if (!inp) return;
   const isHidden = inp.type === 'password';
   inp.type = isHidden ? 'text' : 'password';
-  btn.textContent = isHidden ? '🙈' : '👁';
-  btn.style.opacity = isHidden ? '1' : '0.6';
+  btn.innerHTML = keyEyeSvg(isHidden);
+  btn.style.opacity = '0.9';
 }
 
 function escapeHtml(s) {
@@ -1801,9 +1808,9 @@ function injectKeyVisibility() {
     inp.style.paddingRight = "34px";
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = "👁";
+    btn.innerHTML = keyEyeSvg(true);
     btn.title = "显示/隐藏";
-    btn.style.cssText = "position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;padding:4px;opacity:0.6;";
+    btn.style.cssText = "position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;opacity:0.9;color:#f0f0f0;display:flex;align-items:center;";
     btn.onclick = () => toggleKeyVis(id, btn);
     wrap.appendChild(btn);
   });

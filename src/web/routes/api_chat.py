@@ -3,13 +3,19 @@
 POST /api/chat/send    — 发送消息
 GET  /api/chat/history — 获取历史
 """
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 import json
 import threading
 import asyncio
+import os
+import sys
+import time
+import uuid
+import subprocess
+from pathlib import Path
 
 from ...agent.agent_loop import run_agent_loop, run_agent_loop_streaming
 from ...tools.registry import get_all_tools
@@ -21,6 +27,108 @@ from ...agent.conversation import (
 from loguru import logger
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+# ============================================================
+# 图片上传与视觉分析（WEB 版聊天配图）
+# ============================================================
+_ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
+_CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
+
+
+def _project_root() -> Path:
+    """项目根目录（src/web/routes/api_chat.py → 上溯 4 级）"""
+    return Path(__file__).resolve().parent.parent.parent.parent
+
+
+def _find_camera_do() -> Optional[str]:
+    """定位视觉分析后端脚本 camera_do.py（GLM-4V）"""
+    root = _project_root()
+    candidates = [
+        root / "tools" / "camera_vision" / "camera_do.py",
+        Path("tools/camera_vision/camera_do.py"),
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return None
+
+
+def _analyze_image(image_path: str) -> str:
+    """调用视觉大模型（GLM-4V）分析用户上传的图片，返回文字描述。
+    失败/未配置/超时返回空字符串，不阻断聊天。"""
+    do = _find_camera_do()
+    if not do:
+        logger.warning("未找到 camera_do.py，跳过图片分析")
+        return ""
+    try:
+        r = subprocess.run(
+            [sys.executable, do, "analyze", "--image", image_path],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=120, cwd=str(_project_root()),
+            creationflags=_CREATE_NO_WINDOW,
+        )
+        out = (r.stdout or "").strip()
+        if r.returncode != 0:
+            logger.warning(f"图片分析失败 exit={r.returncode}: {(r.stderr or '')[-500:]}")
+            return ""
+        return out[-3000:]
+    except subprocess.TimeoutExpired:
+        logger.warning("图片分析超时")
+        return ""
+    except Exception as e:
+        logger.warning(f"图片分析异常: {e}")
+        return ""
+
+
+def _compose_message(req: "ChatRequest") -> str:
+    """组装最终用户消息：纯文本 / 文本+图片视觉描述"""
+    msg = (req.message or "").strip()
+    if not req.image_path:
+        return msg
+    path = req.image_path.strip()
+    if not os.path.exists(path):
+        logger.warning(f"图片路径不存在: {path}")
+        return msg
+    desc = _analyze_image(path)
+    if not desc:
+        return msg
+    note = f"[用户上传图片：{os.path.basename(path)}]\n图片内容：{desc}"
+    return f"{msg}\n\n{note}" if msg else note
+
+
+@router.post("/upload")
+async def upload_image(file: UploadFile = File(...)):
+    """上传聊天配图 → 保存到 data/uploads/，返回本地路径供视觉分析"""
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="未收到文件")
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _ALLOWED_IMAGE_EXT:
+        raise HTTPException(status_code=400, detail=f"仅支持图片格式: {', '.join(sorted(_ALLOWED_IMAGE_EXT))}")
+    upload_dir = _project_root() / "data" / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    name = f"chat_{time.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}{ext}"
+    dest = upload_dir / name
+    size = 0
+    try:
+        with open(dest, "wb") as f:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_IMAGE_SIZE:
+                    raise HTTPException(status_code=413, detail="图片超过 10MB 上限")
+                f.write(chunk)
+    except HTTPException:
+        dest.unlink(missing_ok=True)
+        raise
+    except Exception as e:
+        dest.unlink(missing_ok=True)
+        logger.error(f"上传保存失败: {e}")
+        raise HTTPException(status_code=500, detail=f"保存失败: {e}")
+    logger.info(f"📎 聊天图片上传成功: {dest.name} ({size} bytes)")
+    return {"path": str(dest), "name": file.filename, "size": size}
 
 # 用户中止标志 — 由 abort 端点设置，由 agent_loop 检查
 _abort_flags: dict[str, threading.Event] = {}
@@ -42,6 +150,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     model: Optional[str] = None
+    image_path: Optional[str] = None  # 用户上传的图片本地路径（视觉分析用）
 
 
 class ChatResponse(BaseModel):
@@ -104,8 +213,11 @@ async def send_message(req: ChatRequest):
     system_prompt = _load_system_prompt()
     used_model = _resolve_model_name(req.model)
 
+    # 组装用户消息（若带图片：先视觉分析，描述并入消息）
+    user_message = _compose_message(req)
+
     # 保存用户消息
-    save_message(session_id, "user", req.message)
+    save_message(session_id, "user", user_message)
 
     # 创建中止标志（供 abort 端点和 agent_loop 检查）
     abort_event = threading.Event()
@@ -119,7 +231,7 @@ async def send_message(req: ChatRequest):
         def _run_agent():
             try:
                 result = run_agent_loop(
-                    task=req.message,
+                    task=user_message,
                     session_id=session_id,
                     model_name=used_model,
                     tools=get_all_tools(),
@@ -183,7 +295,9 @@ async def send_message_stream(req: ChatRequest, request: Request):
     """SSE 流式发送对话消息 — 逐步返回思考过程和结果"""
     session_id = req.session_id or create_session()
     used_model = _resolve_model_name(req.model)
-    save_message(session_id, "user", req.message)
+    # 组装用户消息（若带图片：先视觉分析，描述并入消息）
+    user_message = _compose_message(req)
+    save_message(session_id, "user", user_message)
     
     # 创建中止标志
     abort_event = threading.Event()
@@ -197,7 +311,7 @@ async def send_message_stream(req: ChatRequest, request: Request):
         def runner():
             try:
                 for event in run_agent_loop_streaming(
-                    task=req.message,
+                    task=user_message,
                     session_id=session_id,
                     model_name=used_model,
                     tools=get_all_tools(),

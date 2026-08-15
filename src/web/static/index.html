@@ -130,7 +130,14 @@
           <div class="chat-topbar" id="chatTopbar"><span class="chat-topbar-icon">💬</span><span class="chat-topbar-title">对话</span></div>
           <div id="chatMessages" class="chat-messages"><div class="muted center">选择或新建一个会话开始对话</div></div>
           <div class="chat-inputbar">
-            <textarea id="chatInput" rows="3" placeholder="输入任务描述，例如：帮我检查磁盘空间并汇报…（Enter 发送，Shift+Enter 换行）"></textarea>
+            <textarea id="chatInput" rows="3" placeholder="输入任务描述，例如：帮我检查磁盘空间并汇报…（Enter 发送，Shift+Enter 换行，可直接粘贴图片）"></textarea>
+            <div class="chat-attach-row" id="chatAttachRow" style="display:none">
+              <div class="chat-attach-item">
+                <img id="chatAttachPreview" alt="图片预览">
+                <button id="chatAttachRemove" class="chat-attach-remove" title="移除图片">✕</button>
+                <span id="chatAttachName" class="muted"></span>
+              </div>
+            </div>
             <div class="chat-bottom-row">
               <div class="chat-hints">
                 <button class="btn btn-hint" data-hint="找个新游戏">🎮 找个新游戏</button>
@@ -139,6 +146,8 @@
                 <button class="btn btn-hint" data-hint="搜资源">🔍 搜资源</button>
               </div>
               <div class="chat-btns">
+                <button id="chatImageBtn" class="btn btn-image" title="添加图片（支持粘贴/拖拽）">📎 图片</button>
+                <input type="file" id="chatImageFile" accept="image/*" style="display:none">
                 <button id="voiceGender" class="btn btn-gender male" title="切换语音性别：男声/女声">♂ 男声</button>
                 <button id="voiceToggle" class="btn btn-voice" title="开启/关闭语音朗读">🔇 语音</button>
                 <button id="chatSend" class="btn btn-send">发送 ▲</button>

@@ -226,6 +226,21 @@ h3 { margin-bottom: 12px; font-size: 15px; color: var(--muted); font-weight: 600
 .btn-send:hover { opacity: 0.9; }
 .btn-send.abort { background: linear-gradient(90deg, #ef4444, #f97316); }
 
+/* 聊天图片附件 */
+.chat-attach-row { display: flex; gap: 8px; align-items: center; }
+.chat-attach-item { position: relative; display: inline-flex; align-items: center; gap: 8px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px 6px 6px; }
+.chat-attach-item img { max-height: 80px; max-width: 180px; border-radius: 6px; display: block; }
+.chat-attach-remove { position: absolute; top: -8px; right: -8px; width: 20px; height: 20px;
+  border-radius: 50%; border: none; background: #ef4444; color: #fff; cursor: pointer;
+  font-size: 12px; line-height: 20px; text-align: center; padding: 0; }
+.chat-attach-remove:hover { opacity: 0.85; }
+.btn-image { background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+.btn-image:hover { border-color: var(--primary); color: var(--primary); }
+.chat-inputbar.drag-over { outline: 2px dashed var(--primary); }
+.msg-img { max-width: 240px; max-height: 240px; border-radius: 8px; display: block; margin-bottom: 6px; }
+
 /* 实时控制台（对话左半区） */
 .chat-console-pane .console-head { flex: 0 0 auto; }
 .console-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px;

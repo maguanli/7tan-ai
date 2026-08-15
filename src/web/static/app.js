@@ -560,16 +560,93 @@ function speakText(text) {
     synth.speak(u);
   } catch (e) { console.warn("TTS failed", e); }
 }
+/* ---------- 聊天图片附件（选择/粘贴/拖拽/上传） ---------- */
+let chatImageFile = null;   // 待发送的图片 File
+let chatImageDataUrl = null; // 本地预览 dataURL
+
+function setChatImage(file) {
+  if (!file) return;
+  if (!/^image\//.test(file.type)) { toast("请选择图片文件", true); return; }
+  if (file.size > 10 * 1024 * 1024) { toast("图片不能超过 10MB", true); return; }
+  chatImageFile = file;
+  const rd = new FileReader();
+  rd.onload = (e) => {
+    chatImageDataUrl = e.target.result;
+    const pv = $("#chatAttachPreview"); if (pv) pv.src = chatImageDataUrl;
+    const nm = $("#chatAttachName"); if (nm) nm.textContent = file.name + " (" + fmtSize(file.size) + ")";
+    const row = $("#chatAttachRow"); if (row) row.style.display = "flex";
+  };
+  rd.onerror = () => { toast("图片读取失败", true); };
+  rd.readAsDataURL(file);
+}
+
+function clearChatImage() {
+  chatImageFile = null;
+  chatImageDataUrl = null;
+  const row = $("#chatAttachRow"); if (row) row.style.display = "none";
+  const fi = $("#chatImageFile"); if (fi) fi.value = "";
+}
+
+function bindChatImageEvents() {
+  const btn = $("#chatImageBtn");
+  if (btn) btn.addEventListener("click", () => { const fi = $("#chatImageFile"); if (fi) fi.click(); });
+  const fi = $("#chatImageFile");
+  if (fi) fi.addEventListener("change", (e) => setChatImage(e.target.files && e.target.files[0]));
+  const rm = $("#chatAttachRemove");
+  if (rm) rm.addEventListener("click", clearChatImage);
+  // 粘贴截图（Ctrl+V）
+  const input = $("#chatInput");
+  if (input) input.addEventListener("paste", (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const it of items) {
+      if (it.type && it.type.startsWith("image/")) {
+        const f = it.getAsFile();
+        if (f) { e.preventDefault(); setChatImage(f); return; }
+      }
+    }
+  });
+  // 拖拽图片到输入区
+  const zone = document.querySelector(".chat-inputbar");
+  if (zone) {
+    ["dragover", "dragenter"].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add("drag-over"); }));
+    ["dragleave", "drop"].forEach((ev) => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove("drag-over"); }));
+    zone.addEventListener("drop", (e) => {
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) setChatImage(f);
+    });
+  }
+}
+bindChatImageEvents();
+
 async function sendChat() {
   if (chatSending) { abortChat(); return; } // 发送中点击=中止
   const text = $("#chatInput").value.trim();
-  if (!text) return;
+  if (!text && !chatImageFile) return;
   if (!curSession) { toast("请先新建或选择会话", true); return; }
   chatSending = true;
   updateSendBtn();
   $("#chatInput").value = "";
+  // 若有图片：先上传，获取服务器路径（供视觉分析）
+  let imagePath = null;
+  if (chatImageFile) {
+    const fd = new FormData();
+    fd.append("file", chatImageFile);
+    const hdrs = {};
+    if (API.token) hdrs["Authorization"] = "Bearer " + API.token;
+    let upResp;
+    try {
+      upResp = await fetch("/api/chat/upload", { method: "POST", headers: hdrs, body: fd });
+    } catch (e) { toast("图片上传失败: " + e.message, true); chatSending = false; updateSendBtn(); return; }
+    if (!upResp.ok) {
+      let m = "图片上传失败";
+      try { const j = await upResp.json(); m = j.detail || m; } catch (e) {}
+      toast(m, true); chatSending = false; updateSendBtn(); return;
+    }
+    try { const upj = await upResp.json(); imagePath = upj.path || null; } catch (e) {}
+  }
   const um = appendMsg("user", text);
-  um.body.innerHTML = renderMarkdown(text);
+  um.body.innerHTML = (chatImageDataUrl ? `<img class="msg-img" src="${chatImageDataUrl}" alt="图片">` : "") + renderMarkdown(text);
   um.meta.textContent = "我 · " + fmtFullTime(new Date());
   const p = appendMsg("assistant", "⏳ AI 思考中…（流式输出即将开始）", "pending streaming");
   p.body.textContent = "⏳ AI 思考中…（流式输出即将开始）";
@@ -580,7 +657,7 @@ async function sendChat() {
     const resp = await fetch("/api/chat/send/stream", {
       method: "POST",
       headers,
-      body: JSON.stringify({ session_id: curSession, message: text, model: ($("#chatModelSelect").value || null) }),
+      body: JSON.stringify({ session_id: curSession, message: text, model: ($("#chatModelSelect").value || null), image_path: imagePath }),
     });
     if (!resp.ok) {
       let msg = "HTTP " + resp.status;
@@ -628,6 +705,7 @@ async function sendChat() {
   } finally {
     chatSending = false;
     updateSendBtn();
+    clearChatImage(); // 发送结束，清理附件预览（图片已留在用户消息气泡中）
     // 语音朗读 AI 回复
     // 语音朗读由后端 TTS 完成（agent_loop 最终回复 → speak_bridge → Piper/Edge），前端不再调用浏览器 Web Speech API
     const box = $("#chatMessages"); box.scrollTop = box.scrollHeight;

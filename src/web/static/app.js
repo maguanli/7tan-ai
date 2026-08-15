@@ -1314,20 +1314,32 @@ function addAiConfig() {
   refreshAiList(key);
   toast("已新建配置 " + key + "，填写后点保存");
 }
-function deleteAiConfig() {
+async function deleteAiConfig() {
   const key = $("#aiConfigList").value;
   if (!key) return;
+  if (!aiConfigsCache || !aiConfigsCache[key]) { delete aiConfigsCache[key]; refreshAiList(Object.keys(aiConfigsCache)[0] || ""); toast("已删除本地未保存配置"); return; }
   if (!confirm(`确定删除 AI 配置「${key}」？`)) return;
+  const wasActive = (key === aiActiveKey);
   delete aiConfigsCache[key];
-  refreshAiList(Object.keys(aiConfigsCache)[0] || "");
-  toast("已标记删除，点「保存模型配置」生效");
+  const first = Object.keys(aiConfigsCache)[0] || "";
+  refreshAiList(first);
+  try {
+    await API.put("/api/settings", { ai: { deleted: [key], active: wasActive ? first : aiActiveKey } });
+    if (wasActive) { aiActiveKey = first; refreshAiList(first); loadChatModels(); }
+    toast("✅ 已删除配置 " + key);
+  } catch (e) { toast("删除失败: " + e.message, true); loadAiSettings(); }
 }
-function activateAiConfig() {
+async function activateAiConfig() {
   const key = $("#aiConfigList").value;
   if (!key) return;
+  if (!aiConfigsCache || !aiConfigsCache[key]) { toast("该配置尚未保存到数据库，请先点「保存模型配置」", true); return; }
   aiActiveKey = key;
   refreshAiList(key);
-  toast("已切换启用 " + key + "，点「保存模型配置」生效");
+  try {
+    await API.put("/api/settings", { ai: { active: key } });
+    toast("✅ 已启用模型 " + key);
+    loadChatModels();
+  } catch (e) { toast("启用失败: " + e.message, true); loadAiSettings(); }
 }
 function refreshAiList(selectKey) {
   $("#aiConfigList").innerHTML = Object.keys(aiConfigsCache).map((k) => `<option value="${escapeHtml(k)}">${escapeHtml(k)}${k === aiActiveKey ? " ⭐" : ""}</option>`).join("");

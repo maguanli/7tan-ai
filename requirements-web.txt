@@ -46,6 +46,7 @@ cryptography>=41.0.0
 fastapi>=0.104.0
 uvicorn>=0.24.0
 websockets>=12.0
+python-multipart>=0.0.9  # FastAPI 文件上传（聊天图片）
 
 # === UI 渲染 ===
 pygments>=2.0.0

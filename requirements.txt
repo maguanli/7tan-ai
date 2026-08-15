@@ -50,6 +50,7 @@ cryptography>=41.0.0
 fastapi>=0.104.0
 uvicorn>=0.24.0
 websockets>=12.0
+python-multipart>=0.0.9  # FastAPI 文件上传（聊天图片）
 
 # === Native Desktop (PyQt6 — 全原生控件) ===
 PyQt6>=6.5  # QtWidgets/QtNetwork/QtWebSockets

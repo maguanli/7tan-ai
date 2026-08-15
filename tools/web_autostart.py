@@ -31,6 +31,14 @@ import socket
 import shutil
 import subprocess
 
+# 控制台输出容错：编码跟随系统代码页，无法编码的字符(emoji等)替换为?，
+# 防止 GBK(936) 控制台下 print 中文/emoji 时抛 UnicodeEncodeError
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="replace")
+    except Exception:
+        pass
+
 APP_NAME = "7TanWebService"
 DEFAULT_PORT = 9900
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"

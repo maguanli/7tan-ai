@@ -14,16 +14,24 @@ function keyEyeSvg(open) {
 function toggleKeyVis(id, btn) {
   const el = document.getElementById(id);
   if (!el) return;
-  // 保持单行输入框不变（不换 textarea、不改变大小），仅切换 密码/明文 类型
+  const viewId = id + "_fullview";
+  const oldView = document.getElementById(viewId);
   if (el.type === "password") {
+    // 显示明文：输入框切 text，并在其下方展示完整 Key（自动换行，输入框本身不变形）
     el.type = "text";
-    el.title = el.value || "";
     try { el.focus(); el.select(); } catch (e) {}
     btn.innerHTML = keyEyeSvg(false);
+    btn.title = "隐藏";
+    const view = document.createElement("div");
+    view.id = viewId;
+    view.style.cssText = "margin-top:6px;padding:8px 10px;background:#16181c;border:1px solid #3a3f47;border-radius:4px;font-family:Consolas,'Courier New',monospace;font-size:12px;line-height:1.6;color:#e8eaed;word-break:break-all;white-space:pre-wrap;user-select:text;cursor:text;";
+    view.textContent = el.value || "（空）";
+    el.parentElement.insertAdjacentElement("afterend", view);
   } else {
     el.type = "password";
-    el.title = "";
     btn.innerHTML = keyEyeSvg(true);
+    btn.title = "显示";
+    if (oldView) oldView.remove();
   }
 }
 

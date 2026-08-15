@@ -158,20 +158,8 @@ function restartService() {
       closeServiceDownModal();
     })
     .catch(() => {
-      toast("正在通过本地协议启动服务，请在浏览器弹窗中点「打开」…");
-      try {
-        const ifr = document.createElement("iframe");
-        ifr.style.display = "none";
-        ifr.src = "7tan://restart";
-        document.body.appendChild(ifr);
-        setTimeout(() => { ifr.remove(); }, 2000);
-        setTimeout(() => {
-          toast("已发送启动指令，几秒后服务恢复，请刷新页面");
-          closeServiceDownModal();
-        }, 900);
-      } catch (e2) {
-        toast("服务未运行，请手动双击「启动网页版服务(Windows).bat」重启", true);
-      }
+      toast("重启指令发送失败，请手动双击「启动网页版服务(Windows).bat」重启", true);
+      closeServiceDownModal();
       if (btn) { btn.disabled = false; btn.textContent = "🔄 一键重启服务"; }
     });
 }

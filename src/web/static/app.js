@@ -1800,12 +1800,12 @@ function injectKeyVisibility() {
   ["aiKey", "visKey"].forEach((id) => {
     const inp = document.getElementById(id);
     if (!inp) return;
-    if (inp.nextElementSibling && inp.nextElementSibling.tagName === "BUTTON") return; // 新版 HTML 已自带按钮
+    if (inp.parentElement && inp.parentElement.querySelector("button")) return; // 新版 HTML 已自带按钮
     const wrap = document.createElement("div");
-    wrap.style.cssText = "position:relative;display:inline-flex;align-items:center;width:100%;";
+    wrap.style.cssText = "display:block;position:relative;margin-top:2px;";
     inp.parentNode.insertBefore(wrap, inp);
     wrap.appendChild(inp);
-    inp.style.paddingRight = "34px";
+    inp.style.width = "100%"; inp.style.boxSizing = "border-box"; inp.style.paddingRight = "38px";
     const btn = document.createElement("button");
     btn.type = "button";
     btn.innerHTML = keyEyeSvg(true);

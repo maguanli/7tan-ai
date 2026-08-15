@@ -264,6 +264,24 @@ async def update_settings(updates: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/ai/key/reveal")
+async def reveal_ai_key(config_key: str):
+    """查看指定 AI 配置的明文 API Key（本地管理后台，管理员自用）"""
+    from ...database.db import get_ai_config_by_key
+    cfg = get_ai_config_by_key(config_key, mask_secrets=False)
+    if not cfg:
+        raise HTTPException(status_code=404, detail=f"AI 配置不存在: {config_key}")
+    return {"config_key": config_key, "api_key": cfg.get("api_key", "")}
+
+
+@router.get("/ai/vision-key/reveal")
+async def reveal_vision_key():
+    """查看视觉模型的明文 API Key（本地管理后台，管理员自用）"""
+    from ...database.db import get_vision_config
+    cfg = get_vision_config(mask_secrets=False)
+    return {"api_key": (cfg or {}).get("api_key", "")}
+
+
 @router.post("/restart")
 async def restart():
     """重启程序"""

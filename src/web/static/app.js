@@ -11,28 +11,43 @@ function keyEyeSvg(open) {
     ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
     : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 }
-function toggleKeyVis(id, btn) {
+async function toggleKeyVis(id, btn) {
   const el = document.getElementById(id);
   if (!el) return;
   const viewId = id + "_fullview";
   const oldView = document.getElementById(viewId);
-  if (el.type === "password") {
-    // 显示明文：输入框切 text，并在其下方展示完整 Key（自动换行，输入框本身不变形）
-    el.type = "text";
-    try { el.focus(); el.select(); } catch (e) {}
-    btn.innerHTML = keyEyeSvg(false);
-    btn.title = "隐藏";
-    const view = document.createElement("div");
-    view.id = viewId;
-    view.style.cssText = "margin-top:6px;padding:8px 10px;background:#16181c;border:1px solid #3a3f47;border-radius:4px;font-family:Consolas,'Courier New',monospace;font-size:12px;line-height:1.6;color:#e8eaed;word-break:break-all;white-space:pre-wrap;user-select:text;cursor:text;";
-    view.textContent = el.value || "（空）";
-    el.parentElement.insertAdjacentElement("afterend", view);
-  } else {
-    el.type = "password";
+  if (oldView) {
+    // 已展示明文 → 收起
+    oldView.remove();
     btn.innerHTML = keyEyeSvg(true);
-    btn.title = "显示";
-    if (oldView) oldView.remove();
+    btn.title = "显示明文";
+    return;
   }
+  // 未展示 → 从后端获取明文（前端拿到的值是脱敏的，中间是 ••••，必须调后端解密）
+  btn.innerHTML = keyEyeSvg(false);
+  btn.title = "隐藏明文";
+  let plain = "";
+  try {
+    if (id === "visKey") {
+      const r = await API.get("/api/settings/ai/vision-key/reveal");
+      plain = (r && r.api_key) || "";
+    } else {
+      const cfgKey = ($("#aiConfigList") && $("#aiConfigList").value) || ($("#aiName") && $("#aiName").value) || "";
+      if (!cfgKey) { toast("请先选择一个模型配置", true); btn.innerHTML = keyEyeSvg(true); btn.title = "显示明文"; return; }
+      const r = await API.get("/api/settings/ai/key/reveal?config_key=" + encodeURIComponent(cfgKey));
+      plain = (r && r.api_key) || "";
+    }
+  } catch (e) {
+    toast("获取明文 Key 失败: " + e.message, true);
+    btn.innerHTML = keyEyeSvg(true);
+    btn.title = "显示明文";
+    return;
+  }
+  const view = document.createElement("div");
+  view.id = viewId;
+  view.style.cssText = "margin-top:6px;padding:8px 10px;background:#16181c;border:1px solid #3a3f47;border-radius:4px;font-family:Consolas,'Courier New',monospace;font-size:12px;line-height:1.6;color:#e8eaed;word-break:break-all;white-space:pre-wrap;user-select:text;cursor:text;";
+  view.textContent = plain || "（空）";
+  el.parentElement.insertAdjacentElement("afterend", view);
 }
 
 function escapeHtml(s) {

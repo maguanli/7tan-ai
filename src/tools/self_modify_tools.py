@@ -312,13 +312,17 @@ def sandbox_execute(code: str, timeout: int = 30) -> str:
         is_frozen = getattr(sys, 'frozen', False)
 
         # -I 隔离模式：无论是否打包都启用，防止沙盒代码污染宿主环境
-        cmd = [python_exe, "-I", str(script_path)]
+        cmd = [python_exe, "-I", "-X", "utf8", str(script_path)]
 
         logger.debug(f"🔧 沙盒执行: {' '.join(cmd)}")
 
         # 设置 SANDBOX_MODE 环境变量，防止子进程意外启动 GUI
         env = os.environ.copy()
         env["SANDBOX_MODE"] = "1"
+        # Windows 下子进程 stdout 默认按 GBK 编码，print emoji 会 UnicodeEncodeError；
+        # 注意：-I(=-E -s) 会忽略所有 PYTHON* 环境变量，所以真正生效的是命令行 -X utf8
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
 
         result = subprocess.run(
             cmd,

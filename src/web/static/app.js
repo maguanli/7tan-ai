@@ -4,6 +4,14 @@
 /* ---------- 工具 ---------- */
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
+function toggleKeyVis(id, btn) {
+  const inp = document.getElementById(id);
+  if (!inp) return;
+  const isHidden = inp.type === 'password';
+  inp.type = isHidden ? 'text' : 'password';
+  btn.textContent = isHidden ? '🙈' : '👁';
+  btn.style.opacity = isHidden ? '1' : '0.6';
+}
 
 function escapeHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({

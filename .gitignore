@@ -148,3 +148,5 @@ mobile/
 data/plugins/adapt_report.json
 data/plugins/adapt_status.json
 data/adapt_running.lock
+data/plugins/*/variants/backup/
+data/plugins/*/variants/backup/**

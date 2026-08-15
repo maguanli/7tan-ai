@@ -549,7 +549,7 @@ def run_agent_loop(
     system_prompt: str = "",
     tools: list = None,
     ctx: ConversationContext = None,
-    max_iterations: int = 30,  # 🛡️ 迭代上限30（防失控）
+    max_iterations: int = 1000,  # 迭代上限1000（按用户要求恢复）
     task_mode: str = "general",
     session_id: str = None,      # 兼容旧调用
     model_name: str = None,      # 兼容旧调用
@@ -962,7 +962,7 @@ def run_agent_loop(
 
 def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str = None, 
                             tools: list = None, abort_event=None, system_prompt: str = "",
-                            max_iterations: int = 30):  # 🛡️ 迭代上限30（防失控）
+                            max_iterations: int = 1000):  # 迭代上限1000（按用户要求恢复）
     """
     流式版 agent_loop — 使用 event_callback 实时 yield 中间事件（思考、工具调用等）。
     

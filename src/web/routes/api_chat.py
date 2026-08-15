@@ -237,7 +237,7 @@ async def send_message(req: ChatRequest):
                     tools=get_all_tools(),
                     abort_event=abort_event,
                     system_prompt=system_prompt,
-                    max_iterations=30,  # 🛡️ 迭代上限30（防失控：1000轮可跑数小时）
+                    max_iterations=1000,  # 迭代上限1000（按用户要求恢复）
                 )
                 _safe_loop_call(loop, future.set_result, result)
             except Exception as e:
@@ -331,7 +331,7 @@ async def send_message_stream(req: ChatRequest, request: Request):
                     tools=get_all_tools(),
                     abort_event=abort_event,
                     system_prompt=_load_system_prompt(),
-                    max_iterations=30,  # 🛡️ 迭代上限30（防失控：1000轮可跑数小时）
+                    max_iterations=1000,  # 迭代上限1000（按用户要求恢复）
                 ):
                     # Put event into queue for the async generator to pick up
                     _safe_coro_call(loop, queue, event)

@@ -1597,7 +1597,7 @@ async function loadAbout() {
       "",
       "🎬 录屏与制图 — 屏幕录制、图像生成、语音合成",
       "",
-      "【出品】7Tan 团队",
+      "【出品】老马",
     ].join("\n");
     document.getElementById("aboutInfo").innerHTML = [
       "<div style='text-align:center;padding:8px 0 2px'>",

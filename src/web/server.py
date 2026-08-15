@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from loguru import logger
 
 # API 安全：仅允许本地请求（桌面应用）或带 token 的远程请求
@@ -736,6 +736,14 @@ def _mount_web_panel():
     if _logo_dir.exists():
         app.mount("/logo", StaticFiles(directory=str(_logo_dir)), name="logo")
         logger.info(f"🖼️ LOGO 静态目录已挂载: {_logo_dir} → /logo")
+    @app.get("/", include_in_schema=False)
+    async def web_index():
+        """Home: no-cache so browser always fetches latest frontend."""
+        idx = WEB_STATIC_DIR / "index.html"
+        if idx.exists():
+            return FileResponse(idx, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+        return JSONResponse({"error": "web panel not found"}, status_code=404)
+
     if WEB_STATIC_DIR.exists():
         app.mount("/", StaticFiles(directory=str(WEB_STATIC_DIR), html=True), name="webpanel")
         logger.info(f"🌐 网页版控制面板已挂载: {WEB_STATIC_DIR} → 浏览器访问 http://127.0.0.1:9900/")

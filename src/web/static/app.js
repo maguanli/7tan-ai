@@ -97,6 +97,14 @@ function renderMarkdown(text) {
   return s;
 }
 
+/* ---------- 移动端适配：内容量控制（手机不渲染/保留太多内容） ---------- */
+function isMobile() {
+  return window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent || "");
+}
+const CHAT_PAGE = isMobile() ? 30 : 80;     // 对话框每页渲染条数（手机 30，桌面 80）
+const CONSOLE_MAX = isMobile() ? 120 : 500;  // 实时控制台最多保留行数（手机 120，桌面 500）
+const CONSOLE_LINES = isMobile() ? 60 : 150; // 控制台轮询拉取行数（手机 60，桌面 150）
+
 /* ---------- API 封装 ---------- */
 const API = {
   token: localStorage.getItem("7tan_web_token") || "",
@@ -609,24 +617,47 @@ async function selectSession(sid) {
   loadSessions();
   await loadChatHistory(sid);
 }
+/* 对话消息分页渲染（移动端友好：不全量渲染，可“加载更早”） */
+let chatAllMsgs = [];      // 当前会话完整消息缓存
+let chatLoadedCount = 0;   // 已渲染的消息条数
+function msgToHtml(m, idx) {
+  const who = m.role === "user" ? "我" : (m.model || "AI");
+  return `<div class="msg ${m.role === "user" ? "user" : "assistant"}" data-idx="${idx}" data-raw="${escapeHtml(m.content || "")}">
+    <div class="msg-body">${renderMarkdown(m.content || "")}</div>
+    <span class="meta">${escapeHtml(who)} · ${fmtTime(m.created_at)}</span>
+    <div class="msg-actions">
+      <button class="msg-act" onclick="copyMsg(this)">复制</button>
+      <button class="msg-act" onclick="editMsg(this)">编辑</button>
+      <button class="msg-act danger" onclick="delMsg(this)">删除</button>
+    </div>
+  </div>`;
+}
+function renderChatWindow() {
+  const box = $("#chatMessages");
+  if (!box) return;
+  const total = chatAllMsgs.length;
+  if (!total) { box.innerHTML = '<div class="muted center">空会话</div>'; return; }
+  const shown = Math.min(total, Math.max(chatLoadedCount || 0, CHAT_PAGE));
+  const start = total - shown;
+  const extra = start;
+  let html = "";
+  if (extra > 0) {
+    html += `<div class="chat-load-more"><button id="chatLoadMore" class="btn btn-sm">⬆️ 加载更早 ${Math.min(extra, CHAT_PAGE)} 条（还剩 ${extra} 条）</button></div>`;
+  }
+  html += chatAllMsgs.slice(start).map((m, i) => msgToHtml(m, start + i)).join("");
+  box.innerHTML = html;
+  const btn = $("#chatLoadMore");
+  if (btn) btn.onclick = () => { chatLoadedCount = shown + CHAT_PAGE; renderChatWindow(); };
+  box.scrollTop = box.scrollHeight;
+}
 async function loadChatHistory(sid) {
   if (!sid) { $("#chatMessages").innerHTML = '<div class="muted center">选择或新建一个会话开始对话</div>'; return; }
   try {
     const d = await API.get("/api/chat/history?session_id=" + encodeURIComponent(sid));
     const msgs = d.messages || [];
-    $("#chatMessages").innerHTML = msgs.map((m) => {
-      const who = m.role === "user" ? "我" : (m.model || "AI");
-      return `<div class="msg ${m.role === "user" ? "user" : "assistant"}" data-raw="${escapeHtml(m.content || "")}">
-        <div class="msg-body">${renderMarkdown(m.content || "")}</div>
-        <span class="meta">${escapeHtml(who)} · ${fmtTime(m.created_at)}</span>
-        <div class="msg-actions">
-          <button class="msg-act" onclick="copyMsg(this)">复制</button>
-          <button class="msg-act" onclick="editMsg(this)">编辑</button>
-          <button class="msg-act danger" onclick="delMsg(this)">删除</button>
-        </div>
-      </div>`;
-    }).join("") || '<div class="muted center">空会话</div>';
-    const box = $("#chatMessages"); box.scrollTop = box.scrollHeight;
+    chatAllMsgs = msgs;
+    chatLoadedCount = 0;
+    renderChatWindow();
   } catch (e) { toast("历史加载失败: " + e.message, true); }
 }
 async function newChat() {
@@ -776,6 +807,8 @@ async function sendChat() {
   um.body.innerHTML = (chatImageDataUrl ? `<img class="msg-img" src="${chatImageDataUrl}" alt="图片">` : "") + renderMarkdown(text);
   um.meta.textContent = "我 · " + fmtFullTime(new Date());
   clearChatImage(); // 消息已上屏，立即清理输入框附件（图片保留在消息气泡中）
+  // 同步用户消息到缓存（供分页渲染）
+  if (chatAllMsgs) chatAllMsgs.push({ role: "user", content: text, created_at: fmtFullTime(new Date()) });
   const p = appendMsg("assistant", "⏳ AI 思考中…（流式输出即将开始）", "pending streaming");
   p.body.textContent = "⏳ AI 思考中…（流式输出即将开始）";
   let acc = "", doneModel = "";
@@ -849,6 +882,8 @@ async function sendChat() {
     clearChatImage(); // 发送结束，清理附件预览（图片已留在用户消息气泡中）
     // 语音朗读 AI 回复
     // 语音朗读由后端 TTS 完成（agent_loop 最终回复 → speak_bridge → Piper/Edge），前端不再调用浏览器 Web Speech API
+    // 同步 AI 回复到缓存（供分页渲染）
+    if (chatAllMsgs) chatAllMsgs.push({ role: "assistant", content: p.div.dataset.raw || acc || "", model: doneModel || currentModelName() || "AI", created_at: fmtFullTime(new Date()) });
     const box = $("#chatMessages"); box.scrollTop = box.scrollHeight;
   }
 }
@@ -912,6 +947,9 @@ function saveEditMsg() {
   editMsgTarget.dataset.raw = newText;
   const body = editMsgTarget.querySelector(".msg-body");
   if (body) body.innerHTML = renderMarkdown(newText);
+  // 同步到消息缓存（供分页渲染）
+  const eidx = parseInt(editMsgTarget.dataset.idx, 10);
+  if (!isNaN(eidx) && chatAllMsgs && chatAllMsgs[eidx]) chatAllMsgs[eidx].content = newText;
   closeEditMsg();
   toast("✅ 已更新消息");
 }
@@ -919,6 +957,9 @@ function delMsg(btn) {
   const msg = btn.closest(".msg");
   if (!msg) return;
   if (!confirm("确定要删除这条消息吗？")) return;
+  // 同步从消息缓存移除（供分页渲染）
+  const didx = parseInt(msg.dataset.idx, 10);
+  if (!isNaN(didx) && chatAllMsgs && chatAllMsgs[didx]) chatAllMsgs.splice(didx, 1);
   msg.remove();
 }
 // 🛡️ 页面关闭/刷新时主动通知后端中止任务（防 SSE 断连检测失效导致后台空转）
@@ -1240,7 +1281,7 @@ function appendConsole(text) {
   if (!text) return;
   const out = $("#consoleOutput");
   if (!out || consolePaused) return;
-  const MAX = 500;
+  const MAX = CONSOLE_MAX;
   String(text).split("\n").forEach((l) => {
     const html = highlightLogLine(l);
     if (html) consoleBuf.push(html);
@@ -1252,10 +1293,10 @@ async function loadChatConsole() {
   const out = $("#consoleOutput");
   if (consolePaused) return;
   try {
-    const d = await API.get("/api/logs/recent?lines=150&source=ring");
+    const d = await API.get("/api/logs/recent?lines=" + CONSOLE_LINES + "&source=ring");
     const lines = d.lines || [];
     consoleBuf = lines.map(highlightLogLine).filter(Boolean);
-    if (consoleBuf.length > 500) consoleBuf = consoleBuf.slice(-500);
+    if (consoleBuf.length > CONSOLE_MAX) consoleBuf = consoleBuf.slice(-CONSOLE_MAX);
     renderConsole();
   } catch (e) {
     out.innerHTML = '<span class="cl-err">控制台加载失败: ' + escapeHtml(e.message) + "</span>";

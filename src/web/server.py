@@ -5,6 +5,7 @@
 import sys
 import asyncio
 import collections
+import ipaddress
 import threading as _threading
 import time as _time
 from pathlib import Path
@@ -46,6 +47,26 @@ def _load_or_create_api_token() -> str:
 
 
 API_TOKEN = _load_or_create_api_token()
+
+# ===== 局域网免 Token 开关（config.yaml -> web.allow_lan）=====
+_ALLOW_LAN = False
+try:
+    from src.config.loader import load_config
+    _ALLOW_LAN = bool(load_config().get("web", {}).get("allow_lan", False))
+except Exception:
+    _ALLOW_LAN = False
+
+
+def _is_lan_address(host: str) -> bool:
+    """判断 IP 是否为局域网/私有地址（192.168/16、10/8、172.16/12、链路本地等）"""
+    if not host:
+        return False
+    try:
+        ip = ipaddress.ip_address(host.split("%")[0])
+        return ip.is_private or ip.is_link_local or ip.is_loopback or (not ip.is_global)
+    except ValueError:
+        return False
+
 
 # 全局服务器 socket 引用，供 shutdown_server() 使用
 _server_socket = None
@@ -91,6 +112,10 @@ async def auth_middleware(request: Request, call_next):
 
     # 本地请求放行
     if host in ("127.0.0.1", "::1", "localhost"):
+        return await call_next(request)
+
+    # 局域网免 Token：config.yaml web.allow_lan=true 时放行私有网段设备
+    if _ALLOW_LAN and _is_lan_address(host):
         return await call_next(request)
 
     # 远程请求需要 API Token
@@ -471,24 +496,15 @@ async def websocket_endpoint(ws: WebSocket):
     query_token = ws.query_params.get("token", "")
     client_host = ws.client.host if ws.client else ""
     is_local = client_host in ("127.0.0.1", "::1", "localhost")
+    # 局域网免 Token：config.yaml web.allow_lan=true 时放行私有网段设备
+    is_trusted = is_local or (_ALLOW_LAN and _is_lan_address(client_host))
 
     # 带有效 token 的连接（浏览器远程页面 / API 客户端）→ 放行，token 是最强凭证
     if query_token and query_token == API_TOKEN:
         pass
-    elif origin:
-        # 浏览器连接必须来自本地页面（防 CSWSH）；远程页面若无 token 一律拒绝
-        allowed_origin = (
-            origin.startswith("http://127.0.0.1")
-            or origin.startswith("http://localhost")
-            or origin.startswith("http://[::1]")
-        )
-        if not allowed_origin or not is_local:
-            logger.warning(f"🚫 拒绝未授权 WebSocket 连接: origin={origin}, host={client_host}")
-            await ws.close(code=1008, reason="unauthorized")
-            return
-    elif not is_local:
-        # 无 Origin 的远程客户端（非浏览器）必须带 token
-        logger.warning(f"🚫 拒绝未授权 WebSocket 连接: host={client_host}, 缺少 token")
+    elif not is_trusted:
+        # 可信主机（本地/局域网免Token开启）之外的连接必须带 token
+        logger.warning(f"🚫 拒绝未授权 WebSocket 连接: origin={origin}, host={client_host}")
         await ws.close(code=1008, reason="unauthorized")
         return
 

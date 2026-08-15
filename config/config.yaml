@@ -9,7 +9,7 @@ ai:
       model: ${DEEPSEEK_MODEL}
       provider: deepseek
   vision:
-    api_key: ${VISION_API_KEY}
+    api_key: ${ZHIPU_API_KEY}
     base_url: ${VISION_BASE_URL}
     model: ${VISION_MODEL}
 analytics:
@@ -97,6 +97,7 @@ update:
   channel: stable
   enabled: true
 web:
+  allow_lan: true
   auto_open_browser: true
   language: zh-CN
   port: 9800

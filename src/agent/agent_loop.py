@@ -619,7 +619,17 @@ def run_agent_loop(
         messages.append({"role": "system", "content": system_content})
     if ctx and ctx.get_messages():
         messages.extend(ctx.get_messages())
-    messages.append({"role": "user", "content": task})
+        # 🧹 去重防护：WEB 版调用流程会先 save_message 保存当前用户消息，
+        # 再以相同内容作为 task 传入 → ctx 历史最后一条 == task，导致 LLM 收到两条相同用户消息。
+        # 此处若发现历史最后一条 user 消息与当前 task 完全相同，则跳过追加。
+        _ctx_msgs = ctx.get_messages()
+        _last = _ctx_msgs[-1] if _ctx_msgs else None
+        if _last and _last.get("role") == "user" and str(_last.get("content", "")).strip() == str(task or "").strip():
+            logger.info("🧹 检测到当前任务与历史最后一条用户消息重复，跳过追加（避免 AI 收到两次）")
+        else:
+            messages.append({"role": "user", "content": task})
+    else:
+        messages.append({"role": "user", "content": task})
     
     # 主循环
     while iteration < max_iterations:

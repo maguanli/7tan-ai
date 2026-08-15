@@ -359,13 +359,19 @@ def main() -> int:
                     _safe_write(zf, _doc_src, _doc_name)
                     print(f"  [OK] {_doc_name} ({_doc_src.stat().st_size:,}B)")
 
-            # 2.3.2 绿色版一键启动脚本（ZIP 根目录，双击即用：自启+启动服务+开浏览器）
-            _bat_src = Path(__file__).resolve().parent.parent / "启动网页版服务.bat"
-            if _bat_src.exists():
-                _safe_write(zf, _bat_src, "启动网页版服务.bat")
-                print(f"  [OK] 启动网页版服务.bat ({_bat_src.stat().st_size:,}B)")
-            else:
-                print("  [WARN] 启动网页版服务.bat 不存在，已跳过（绿色版将无一键启动）")
+            # 2.3.2 绿色版一键启动脚本（ZIP 根目录，按操作系统选择对应文件双击/执行：自启+启动服务+开浏览器）
+            _launchers = [
+                ("Windows-启动网页版服务.bat", "Windows"),
+                ("macOS-启动网页版服务.command", "macOS"),
+                ("Linux-启动网页版服务.sh", "Linux"),
+            ]
+            for _launcher_name, _os_name in _launchers:
+                _launcher_src = Path(__file__).resolve().parent.parent / _launcher_name
+                if _launcher_src.exists():
+                    _safe_write(zf, _launcher_src, _launcher_name)
+                    print(f"  [OK] {_launcher_name} ({_launcher_src.stat().st_size:,}B)")
+                else:
+                    print(f"  [WARN] {_launcher_name} 不存在，已跳过（{_os_name} 用户将无一键启动）")
 
             # 2.4 完整源码 + 构建工具链（7tan-src/，让"完整版"可自行构建）
             n_src = add_source_bundle(zf, Path(__file__).resolve().parent.parent)

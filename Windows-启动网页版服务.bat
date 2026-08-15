@@ -9,7 +9,7 @@ set "PYW=%~dp0.venv\Scripts\pythonw.exe"
 set "URL=http://127.0.0.1:9900/"
 
 echo ==========================================
-echo   7Tan 网页版服务（一键启动）
+echo   7Tan 网页版服务（一键启动，适用于 Windows 10/11 64位）
 echo   - 绿色版免安装，无需安装 Python / Node.js
 echo   - 首次运行自动配置开机自启
 echo ==========================================

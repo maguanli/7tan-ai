@@ -14,7 +14,7 @@ echo "=============================================="
 # [1/4] 检测系统
 UNAME=$(uname -s)
 if [ "$UNAME" != "Darwin" ]; then
-  echo "❌ 本脚本仅支持 macOS；Linux 请执行「启动网页版服务.sh」"
+  echo "❌ 本脚本仅支持 macOS；Linux 请执行「Linux-启动网页版服务.sh」"
   read -r -p "按回车退出..." _
   exit 1
 fi

@@ -208,9 +208,12 @@ h3 { margin-bottom: 12px; font-size: 15px; color: var(--muted); font-weight: 600
 .msg .meta { display: block; font-size: 11px; color: var(--muted); margin-top: 6px; }
 .msg.error { border-color: var(--red); }
 .chat-inputbar { border-top: 1px solid var(--border); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-.chat-inputbar textarea { width: 100%; background: var(--bg); border: 1px solid var(--border);
-  color: var(--text); border-radius: 8px; padding: 10px; font-size: 14px; resize: none; box-sizing: border-box; }
-.chat-inputbar textarea:focus { outline: none; border-color: var(--primary); }
+.chat-input-wrap { border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+  overflow: hidden; transition: border-color 0.15s; }
+.chat-input-wrap:focus-within { border-color: var(--primary); }
+.chat-inputbar textarea { width: 100%; background: transparent; border: none; color: var(--text);
+  border-radius: 0; padding: 10px; font-size: 14px; resize: none; box-sizing: border-box; }
+.chat-inputbar textarea:focus { outline: none; }
 .chat-bottom-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .chat-hints { display: flex; gap: 6px; flex-wrap: wrap; }
 .btn-hint { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px 10px; font-size: 11px; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
@@ -227,7 +230,7 @@ h3 { margin-bottom: 12px; font-size: 15px; color: var(--muted); font-weight: 600
 .btn-send.abort { background: linear-gradient(90deg, #ef4444, #f97316); }
 
 /* 聊天图片附件 */
-.chat-attach-row { display: flex; gap: 8px; align-items: center; }
+.chat-attach-row { display: flex; gap: 8px; align-items: center; padding: 8px 8px 0 8px; }
 .chat-attach-item { position: relative; display: inline-flex; align-items: center; gap: 8px;
   background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px 6px 6px; }
 .chat-attach-item img { max-height: 80px; max-width: 180px; border-radius: 6px; display: block; }

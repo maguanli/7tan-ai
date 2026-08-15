@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>7Tan 网页控制面板</title>
-<link rel="stylesheet" href="/style.css?v=20260814o">
+<link rel="stylesheet" href="/style.css?v=20260815b">
 </head>
 <body>
 <div id="app">
@@ -130,13 +130,15 @@
           <div class="chat-topbar" id="chatTopbar"><span class="chat-topbar-icon">💬</span><span class="chat-topbar-title">对话</span></div>
           <div id="chatMessages" class="chat-messages"><div class="muted center">选择或新建一个会话开始对话</div></div>
           <div class="chat-inputbar">
-            <textarea id="chatInput" rows="3" placeholder="输入任务描述，例如：帮我检查磁盘空间并汇报…（Enter 发送，Shift+Enter 换行，可直接粘贴图片）"></textarea>
-            <div class="chat-attach-row" id="chatAttachRow" style="display:none">
-              <div class="chat-attach-item">
-                <img id="chatAttachPreview" alt="图片预览">
-                <button id="chatAttachRemove" class="chat-attach-remove" title="移除图片">✕</button>
-                <span id="chatAttachName" class="muted"></span>
+            <div class="chat-input-wrap">
+              <div class="chat-attach-row" id="chatAttachRow" style="display:none">
+                <div class="chat-attach-item">
+                  <img id="chatAttachPreview" alt="图片预览">
+                  <button id="chatAttachRemove" class="chat-attach-remove" title="移除图片">✕</button>
+                  <span id="chatAttachName" class="muted"></span>
+                </div>
               </div>
+            <textarea id="chatInput" rows="3" placeholder="输入任务描述，例如：帮我检查磁盘空间并汇报…（Enter 发送，Shift+Enter 换行，可直接粘贴图片）"></textarea>
             </div>
             <div class="chat-bottom-row">
               <div class="chat-hints">

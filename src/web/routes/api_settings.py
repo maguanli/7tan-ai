@@ -6,7 +6,7 @@ POST /api/settings/restart — 重启程序
 """
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, Any
 
@@ -554,3 +554,120 @@ async def get_about_api():
     except Exception:
         info["site_root"] = "https://www.7tan.com"
     return {"info": info}
+
+
+# ===== 远程访问设置（WEB 版：局域网 / Token / 外网穿透）=====
+@router.get("/remote")
+async def get_remote_access(request: Request):
+    """获取远程访问信息：局域网IP、端口、allow_lan、Token、穿透工具状态"""
+    import socket as _socket
+
+    # 1) 本机局域网 IP（UDP 探测 + 主机名解析）
+    lan_ips = []
+    try:
+        s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        if ip and ip not in lan_ips:
+            lan_ips.append(ip)
+        s.close()
+    except Exception:
+        pass
+    try:
+        for info in _socket.getaddrinfo(_socket.gethostname(), None, _socket.AF_INET):
+            ip = info[4][0]
+            if ip and not ip.startswith("127.") and ip not in lan_ips:
+                lan_ips.append(ip)
+    except Exception:
+        pass
+
+    # 2) 端口：优先当前请求实际端口，兜底配置
+    port = request.url.port
+    if not port:
+        try:
+            port = (load_config().get("web") or {}).get("port") or 9800
+        except Exception:
+            port = 9800
+
+    # 3) 配置项
+    cfg = load_config()
+    allow_lan = bool((cfg.get("web") or {}).get("allow_lan", False))
+    host = (cfg.get("web") or {}).get("host", "0.0.0.0")
+
+    # 4) Token
+    token = _read_remote_token()
+
+    # 5) 内网穿透工具进程检测
+    tunnel_tools = _detect_tunnel_tools()
+
+    return {
+        "lan_ips": lan_ips,
+        "port": port,
+        "host": host,
+        "allow_lan": allow_lan,
+        "token": token,
+        "token_masked": _mask_secret(token) if token else "",
+        "tunnel_tools": tunnel_tools,
+    }
+
+
+def _read_remote_token() -> str:
+    """读取当前生效的 API Token（环境变量 > data/.api_token）"""
+    env_token = os.environ.get("7TAN_API_TOKEN", "").strip()
+    if env_token:
+        return env_token
+    token_file = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", ".api_token")
+    try:
+        if os.path.exists(token_file):
+            with open(token_file, "r", encoding="utf-8") as f:
+                return f.read().strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _detect_tunnel_tools() -> list:
+    """检测常见内网穿透/组网工具是否在运行（Windows tasklist）"""
+    tools = ["frpc", "frps", "cpolar", "ngrok", "cloudflared", "zerotier", "tailscale"]
+    found = []
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["tasklist", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, timeout=10,
+        ).stdout.lower()
+        for t in tools:
+            if t in out:
+                found.append(t)
+    except Exception:
+        pass
+    return found
+
+
+@router.put("/remote")
+async def update_remote_access(body: dict):
+    """更新远程访问配置（allow_lan 开关），保存后需重启服务生效"""
+    config = load_config()
+    web = config.setdefault("web", {})
+    if "allow_lan" in body:
+        web["allow_lan"] = bool(body["allow_lan"])
+    save_config(config)
+    logger.info(f"🌐 远程访问配置已保存: allow_lan={web.get('allow_lan')}（重启服务后生效）")
+    return {"ok": True, "msg": "已保存，重启服务后生效"}
+
+
+@router.post("/remote/regenerate-token")
+async def regenerate_remote_token():
+    """重新生成 API Token 并写入 data/.api_token，重启服务后生效"""
+    import secrets
+    token = secrets.token_urlsafe(32)
+    token_file = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", ".api_token")
+    try:
+        os.makedirs(os.path.dirname(token_file), exist_ok=True)
+        with open(token_file, "w", encoding="utf-8") as f:
+            f.write(token)
+    except Exception as e:
+        logger.warning(f"API Token 写入失败: {e}")
+        return {"ok": False, "msg": f"写入失败: {e}"}
+    logger.info("🔑 API Token 已重新生成（重启服务后生效）")
+    return {"ok": True, "token": token, "msg": "已重新生成，重启服务后生效"}

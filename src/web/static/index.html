@@ -209,6 +209,7 @@
         <button class="stab" data-stab="sw">🖥 环境引擎</button>
         <button class="stab" data-stab="memory">🧠 记忆系统</button>
         <button class="stab" data-stab="prompt">📝 系统提示词</button>
+        <button class="stab" data-stab="remote">🌐 远程访问</button>
         <button class="stab" data-stab="about">ℹ️ 关于</button>
       </div>
 
@@ -363,6 +364,31 @@
             <span class="muted" id="promptMeta"></span>
           </div>
           <pre class="mono" id="promptContent" style="max-height:60vh;overflow:auto;white-space:pre-wrap"></pre>
+        </div>
+      </div>
+
+      <!-- 🌐 远程访问 -->
+      <div id="stab-remote" class="stab-panel hidden">
+        <div class="panel">
+          <h3>🌐 远程访问</h3>
+          <div id="remoteInfo" class="form"></div>
+        </div>
+        <div class="panel">
+          <h3>🔑 API Token（远程访问凭据）</h3>
+          <div class="form">
+            <label>Token <input id="remoteToken" type="password" readonly value="" placeholder="点击「👁 显示」查看"></label>
+            <div class="toolbar" style="margin-top:8px">
+              <button id="remoteToggleToken" class="btn btn-sm">👁 显示</button>
+              <button id="remoteCopyToken" class="btn btn-sm">📋 复制</button>
+              <button id="remoteRegenToken" class="btn btn-sm btn-danger">🔄 重新生成</button>
+              <span class="muted" id="remoteTokenMsg"></span>
+            </div>
+            <p class="muted" style="margin-top:8px">⚠️ Token 是远程访问的钥匙：外网访问始终需要它（即使开启局域网免 Token，也只放行局域网）。重新生成后旧 Token 立即失效，重启服务后生效。</p>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>🌍 外网访问（内网穿透）</h3>
+          <div id="remoteWan" class="form"></div>
         </div>
       </div>
 

@@ -1457,6 +1457,9 @@ function initSettingsTabs() {
   $("#promptType").addEventListener("change", loadPrompt);
   $("#promptRefresh").addEventListener("click", loadPrompt);
   $("#aboutCheckUpdate").addEventListener("click", loadAboutUpdate);
+  $("#remoteToggleToken").addEventListener("click", toggleRemoteToken);
+  $("#remoteCopyToken").addEventListener("click", copyRemoteToken);
+  $("#remoteRegenToken").addEventListener("click", regenerateRemoteToken);
 }
 
 /* 进入设置页时加载全部 tab 数据 */
@@ -1474,6 +1477,7 @@ function loadSettingsTabs() {
   loadSoftware();
   loadMemories();
   loadPrompt();
+  loadRemote();
   loadAbout();
 }
 
@@ -1805,6 +1809,99 @@ async function loadAbout() {
       "</details>",
     ].join("");
   } catch (e) { document.getElementById("aboutInfo").textContent = "加载失败: " + e.message; }
+}
+/* --- 远程访问 --- */
+let remoteTokenPlain = "";
+async function loadRemote() {
+  try {
+    const d = await API.get("/api/settings/remote");
+    const port = d.port || 9900;
+    const ips = (d.lan_ips || []).filter(Boolean);
+    const localUrl = "http://127.0.0.1:" + port + "/";
+    const lanUrls = ips.map(ip => "http://" + ip + ":" + port + "/");
+    remoteTokenPlain = d.token || "";
+    const masked = d.token_masked || "";
+    $("#remoteToken").value = masked || "";
+    $("#remoteToken").type = "password";
+    $("#remoteTokenMsg").textContent = "";
+
+    $("#remoteInfo").innerHTML = [
+      "<label>本机访问 <input value='" + escapeHtml(localUrl) + "' readonly></label>",
+      "<label>局域网访问（手机/平板）<textarea rows='" + Math.max(1, lanUrls.length) + "' readonly style='width:100%;box-sizing:border-box;font-family:monospace'>" + escapeHtml(lanUrls.join("\n") || "（未检测到局域网 IP）") + "</textarea></label>",
+      "<label>监听地址 <input value='" + escapeHtml(String(d.host || "0.0.0.0")) + ":" + port + "' readonly></label>",
+      "<div class='toolbar' style='margin-top:8px;flex-wrap:wrap;gap:8px'><label style='display:flex;align-items:center;gap:8px;white-space:normal'><input type='checkbox' id='remoteAllowLan' " + (d.allow_lan ? "checked" : "") + "> 局域网免 Token（私有网段设备直接访问，无需输入 Token）</label><button id='remoteSaveLan' class='btn btn-sm btn-primary'>💾 保存开关</button><span class='muted' id='remoteLanMsg'></span></div>",
+    ].join("");
+    $("#remoteSaveLan").addEventListener("click", saveRemoteLan);
+
+    // 外网访问面板
+    const tools = d.tunnel_tools || [];
+    const toolText = tools.length ? "检测到正在运行：" + tools.map(escapeHtml).join("、") : "未检测到内网穿透工具（frp / cpolar / ngrok / cloudflared 等）";
+    $("#remoteWan").innerHTML = [
+      "<div class='muted' style='margin-bottom:8px'>🔍 " + toolText + "</div>",
+      "<details open><summary style='cursor:pointer'>📡 方案一：内网穿透（推荐，免费）</summary>",
+      "<div class='form' style='margin-top:6px'>",
+      "<p class='muted'>让外网通过一个公网地址访问本机服务，无需公网 IP。常用工具及命令：</p>",
+      "<label>① Cloudflare Tunnel（免费、稳定）<input value='cloudflared tunnel --url http://127.0.0.1:" + port + "' readonly></label>",
+      "<label>② cpolar（国内访问快）<input value='cpolar http " + port + "' readonly></label>",
+      "<label>③ frp（需一台有公网 IP 的服务器）<input value='frpc -c frpc.ini  # 服务端 frps 配置见 frp 文档' readonly></label>",
+      "<p class='muted' style='margin-top:6px'>⚠️ 外网访问<b>始终需要 API Token</b>（即使开启局域网免 Token 也只放行局域网）。启动穿透后，把生成的公网地址填到手机浏览器即可。</p>",
+      "</div></details>",
+      "<details><summary style='cursor:pointer'>☁️ 方案二：云服务器部署</summary>",
+      "<div class='form' style='margin-top:6px'>",
+      "<p class='muted'>将 WEB 版部署到云服务器（腾讯云/阿里云轻量等），通过服务器公网 IP:" + port + " 访问；记得在服务器安全组放行 " + port + " 端口。</p>",
+      "</div></details>",
+      "<details><summary style='cursor:pointer'>🔗 方案三：异地组网（Tailscale / ZeroTier）</summary>",
+      "<div class='form' style='margin-top:6px'>",
+      "<p class='muted'>在电脑和手机上都安装 Tailscale / ZeroTier 并登录同一账号，手机用分配的虚拟 IP:" + port + " 访问。无需公网 IP，也无需穿透。</p>",
+      "</div></details>",
+    ].join("");
+  } catch (e) {
+    $("#remoteInfo").innerHTML = "<span class='muted'>加载失败: " + escapeHtml(e.message) + "</span>";
+  }
+}
+async function saveRemoteLan() {
+  const on = $("#remoteAllowLan").checked;
+  try {
+    await API.put("/api/settings/remote", { allow_lan: on });
+    $("#remoteLanMsg").textContent = "已保存，重启服务后生效";
+    toast(on ? "✅ 已开启局域网免 Token（重启服务后生效）" : "已关闭局域网免 Token（重启服务后生效）");
+  } catch (e) { toast("保存失败: " + e.message, true); }
+}
+function toggleRemoteToken() {
+  const el = $("#remoteToken");
+  if (el.type === "password") {
+    el.type = "text";
+    el.value = remoteTokenPlain || el.value;
+  } else {
+    el.type = "password";
+    el.value = remoteTokenPlain ? remoteTokenPlain.slice(0, 3) + "••••" + remoteTokenPlain.slice(-3) : el.value;
+  }
+}
+async function copyRemoteToken() {
+  if (!remoteTokenPlain) { toast("Token 为空", true); return; }
+  try {
+    await navigator.clipboard.writeText(remoteTokenPlain);
+    toast("📋 已复制 Token");
+  } catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = remoteTokenPlain;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    toast("📋 已复制 Token");
+  }
+}
+async function regenerateRemoteToken() {
+  if (!confirm("重新生成 API Token 后，旧 Token 立即失效（重启服务后生效）。确定继续？")) return;
+  try {
+    const d = await API.post("/api/settings/remote/regenerate-token");
+    remoteTokenPlain = d.token || "";
+    $("#remoteToken").value = remoteTokenPlain ? remoteTokenPlain.slice(0, 3) + "••••" + remoteTokenPlain.slice(-3) : "";
+    $("#remoteToken").type = "password";
+    $("#remoteTokenMsg").textContent = "✅ 已重新生成，重启服务后生效";
+    toast("🔄 Token 已重新生成（重启后生效）");
+  } catch (e) { toast("重新生成失败: " + e.message, true); }
 }
 async function loadAboutUpdate() {
   const msg = $("#aboutUpdateMsg");

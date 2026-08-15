@@ -464,10 +464,8 @@ async function loadChatModels() {
     const ai = (d.settings && d.settings.ai) || {};
     chatModelConfigs = Object.values(ai.configs || {});
     chatActiveKey = ai.active || "";
-    // 同步：如果 localStorage 没有有效值，跟随设置页的启用模型
-    const saved = localStorage.getItem("7tan_web_model") || "";
-    const valid = chatModelConfigs.find((c) => c.config_key === saved || (c.model || "") === saved);
-    if (!valid && chatActiveKey) localStorage.setItem("7tan_web_model", chatActiveKey);
+    // 同步：AI工作台「当前模型」跟随设置页启用的模型（数据库是唯一事实源，保证两端一致）
+    if (chatActiveKey) localStorage.setItem("7tan_web_model", chatActiveKey);
     renderModelSelect();
   } catch (e) { const sel = $("#chatModelSelect"); if (sel) sel.innerHTML = '<option value="">模型加载失败</option>'; toast("模型列表加载失败: " + e.message, true); }
 }

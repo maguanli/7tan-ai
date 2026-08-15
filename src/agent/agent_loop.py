@@ -602,6 +602,7 @@ def run_agent_loop(
     total_tokens = 0
     all_logs = []
     iteration = 0
+    _last_text_iteration = 0  # 🛡️ 最近一次有文本输出的迭代（防工具死循环）
     _empty_resp_count = 0  # 🛡️ 连续空响应计数（防 reasoning 模型只输出思考内容导致死循环）
     
     # 🔔 流式事件：开始分析
@@ -647,6 +648,19 @@ def run_agent_loop(
             }
         iteration += 1
         logger.info(f"🔄 Agent 迭代 {iteration}/{max_iterations}")
+        # 🛡️ 无进展循环检测：连续 20 轮只有工具调用、没有文本输出 → 疑似工具死循环，自动停止
+        if iteration >= 20 and (iteration - _last_text_iteration) >= 20:
+            logger.warning(f"🛑 [Agent] 检测到连续 {iteration - _last_text_iteration} 轮无文本输出（疑似工具循环），自动中止，会话: {session_id}")
+            _cleanup_ctx_on_abort(ctx, messages)
+            return {
+                "success": False,
+                "result": "⚠️ 任务疑似陷入工具循环（连续多轮只有工具调用、没有实质输出），已自动停止。建议把任务拆小、分步操作。",
+                "iterations": iteration,
+                "cost": total_cost,
+                "total_tokens": total_tokens,
+                "logs": all_logs,
+                "reason": "loop_detected",
+            }
         # 🔔 流式事件：迭代进度
         if event_callback:
             try:
@@ -731,6 +745,8 @@ def run_agent_loop(
         
         # 记录到对话历史
         content = msg.content or ""
+        if content:
+            _last_text_iteration = iteration
         tool_calls_raw = msg.tool_calls
         log_entry = {
             "iteration": iteration,
@@ -945,7 +961,8 @@ def run_agent_loop(
 
 
 def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str = None, 
-                            tools: list = None, abort_event=None, system_prompt: str = ""):
+                            tools: list = None, abort_event=None, system_prompt: str = "",
+                            max_iterations: int = 30):
     """
     流式版 agent_loop — 使用 event_callback 实时 yield 中间事件（思考、工具调用等）。
     
@@ -973,6 +990,7 @@ def run_agent_loop_streaming(task: str, session_id: str = None, model_name: str 
                 tools=tools, event_callback=_on_event,
                 abort_event=abort_event,
                 system_prompt=system_prompt,
+                max_iterations=max_iterations,
             )
             result_holder["result"] = r
         except Exception as e:

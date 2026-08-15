@@ -344,7 +344,8 @@ async def send_message_stream(req: ChatRequest, request: Request):
             except Exception:
                 pass
             try:
-                event = await asyncio.wait_for(queue.get(), timeout=300)
+                # 600s 无新内容才判定超时（深度任务友好，原300s对长思考/长工具调用过紧）
+                event = await asyncio.wait_for(queue.get(), timeout=600)
             except asyncio.TimeoutError:
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Timeout - 300s'})}\n\n"
                 break

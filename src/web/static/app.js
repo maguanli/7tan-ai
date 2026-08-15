@@ -1043,13 +1043,6 @@ $("#voiceGender").addEventListener("click", function() {
   syncVoiceSettings();
   toast(voiceGender === "female" ? "已切换为女声" : "已切换为男声");
 });
-// 提示词快捷按钮（和桌面版一致）
-document.querySelectorAll(".btn-hint").forEach(btn => {
-  btn.addEventListener("click", () => {
-    const hint = btn.getAttribute("data-hint");
-    if (hint) { $("#chatInput").value = hint; $("#chatInput").focus(); }
-  });
-});
 // 预加载语音列表
 if (window.speechSynthesis) { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); }
 $("#chatNew").addEventListener("click", newChat);

@@ -128,6 +128,32 @@ def _run_key_exists() -> bool:
     return _read_reg() is not None
 
 
+def install_protocol(silent: bool = False) -> bool:
+    # 注册 7tan:// URL 协议 -> 触发本地启动脚本（服务死亡时也能一键拉起）。
+    # 协议 handler 固定指向项目根目录的「启动网页版服务(Windows).bat」，
+    # 该 bat 内部用 %~dp0 动态定位且幂等。绿色版移动目录后，由 install()
+    # 每次启动路径自愈时顺带重新注册，保证协议始终指向正确路径。
+    if os.name != "nt":
+        return False
+    import winreg
+    bat = os.path.join(ROOT, "启动网页版服务(Windows).bat")
+    proto_key = "Software" + "\\" + "Classes" + "\\" + "7tan"
+    cmd_key = proto_key + "\\" + "shell" + "\\" + "open" + "\\" + "command"
+    try:
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, proto_key) as k:
+            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, "URL:7Tan Protocol")
+            winreg.SetValueEx(k, "URL Protocol", 0, winreg.REG_SZ, "")
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, cmd_key) as k:
+            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, '"' + bat + '" "%1"')
+        if not silent:
+            log("[protocol] 已注册 7tan:// 协议 -> " + bat)
+        return True
+    except Exception as e:
+        if not silent:
+            log("[protocol] 协议注册失败: " + str(e))
+        return False
+
+
 def install(silent: bool = False, force: bool = False) -> bool:
     """写入开机自启注册表项（幂等 + 绿色版路径自愈）。
 
@@ -138,6 +164,8 @@ def install(silent: bool = False, force: bool = False) -> bool:
     - 未配置 → 新建
     """
     import winreg
+    # 顺带注册 7tan:// 协议（幂等），保证服务死亡时前端可一键拉起
+    install_protocol(silent=silent)
     cmd = build_cmd()
 
     old = _read_reg()

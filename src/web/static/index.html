@@ -505,6 +505,20 @@
   </div>
 </div>
 <div id="toast" class="toast"></div>
-<script src="/app.js?v=20260815t"></script>
+<!-- 服务掉线：一键重启 -->
+<div id="serviceDownModal" class="modal-mask" style="display:none">
+  <div class="modal-box">
+    <div class="modal-head">⚠️ 网页版服务未运行 <button class="modal-close" onclick="closeServiceDownModal()" title="关闭">✕</button></div>
+    <div class="modal-body">
+      <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.7">检测到本地网页版服务（9900 端口）未运行或已停止，部分功能无法使用。</p>
+      <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.7">点击下方按钮即可一键重新启动服务（无需手动查找脚本）。</p>
+      <div class="login-btns" style="margin-top:6px">
+        <button class="btn" onclick="closeServiceDownModal()">关闭</button>
+        <button id="svcRestartBtn" class="btn btn-primary" onclick="restartService()">🔄 一键重启服务</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/app.js?v=20260815u"></script>
 </body>
 </html>

@@ -680,9 +680,11 @@ def start_server(host: str = "0.0.0.0", port: int = 9800):
     # 这里每次启动都校验一次，路径不一致自动更新，保证「移动目录后依然开机自启」。
     try:
         from tools.web_autostart import install as _autostart_install
+        from tools.web_autostart import install_protocol as _protocol_install
         _autostart_install(silent=True)
+        _protocol_install(silent=True)
     except Exception as _autostart_err:
-        logger.debug(f"[autostart] 自启路径校准跳过: {_autostart_err}")
+        logger.debug(f"[autostart] 自启/协议路径校准跳过: {_autostart_err}")
 
     # 预创建 socket，在 bind 前设置 SO_REUSEADDR
     # 这样旧进程退出后，新进程可以立即复用端口，无需等待 TIME_WAIT 释放

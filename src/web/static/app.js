@@ -38,7 +38,8 @@ async function toggleKeyVis(id, btn) {
       plain = (r && r.api_key) || "";
     }
   } catch (e) {
-    toast("获取明文 Key 失败: " + e.message, true);
+    const _isDown = e instanceof TypeError || /fetch|network/i.test(String(e && e.message || e));
+    if (!_isDown) toast("获取明文 Key 失败: " + e.message, true);
     btn.innerHTML = keyEyeSvg(true);
     btn.title = "显示明文";
     return;
@@ -102,11 +103,19 @@ const API = {
   async req(method, path, body) {
     const headers = { "Content-Type": "application/json" };
     if (this.token) headers["Authorization"] = "Bearer " + this.token;
-    const resp = await fetch(path, {
-      method,
-      headers,
-      body: body != null ? JSON.stringify(body) : undefined,
-    });
+    let resp;
+    try {
+      resp = await fetch(path, {
+        method,
+        headers,
+        body: body != null ? JSON.stringify(body) : undefined,
+      });
+    } catch (e) {
+      if (e instanceof TypeError || /fetch|network/i.test(String(e && e.message || e))) {
+        notifyServiceDown();
+      }
+      throw e;
+    }
     if (!resp.ok) {
       let msg = "HTTP " + resp.status;
       try { const j = await resp.json(); msg = j.detail || j.error || msg; } catch (e) {}
@@ -119,6 +128,49 @@ const API = {
   put(path, body) { return this.req("PUT", path, body || {}); },
   del(path) { return this.req("DELETE", path); },
 };
+
+/* ---------- 服务掉线：一键重启 ---------- */
+let _svcDownNotified = 0;
+function showServiceDownModal() {
+  const m = $("#serviceDownModal");
+  if (m) m.style.display = "flex";
+}
+function closeServiceDownModal() {
+  const m = $("#serviceDownModal");
+  if (m) m.style.display = "none";
+}
+function restartService() {
+  const btn = $("#svcRestartBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 正在重启…"; }
+  API.post("/api/settings/restart")
+    .then(() => {
+      toast("🔄 重启指令已发送，约 5 秒后自动恢复，请稍候刷新页面");
+      closeServiceDownModal();
+    })
+    .catch(() => {
+      toast("正在通过本地协议启动服务，请在浏览器弹窗中点「打开」…");
+      try {
+        const ifr = document.createElement("iframe");
+        ifr.style.display = "none";
+        ifr.src = "7tan://restart";
+        document.body.appendChild(ifr);
+        setTimeout(() => { ifr.remove(); }, 2000);
+        setTimeout(() => {
+          toast("已发送启动指令，几秒后服务恢复，请刷新页面");
+          closeServiceDownModal();
+        }, 900);
+      } catch (e2) {
+        toast("服务未运行，请手动双击「启动网页版服务(Windows).bat」重启", true);
+      }
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 一键重启服务"; }
+    });
+}
+function notifyServiceDown() {
+  const now = Date.now();
+  if (now - _svcDownNotified < 30000) return;
+  _svcDownNotified = now;
+  showServiceDownModal();
+}
 
 /* ---------- WebSocket（实时广播） ---------- */
 let ws = null, wsRetry = 0;

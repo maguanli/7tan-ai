@@ -1719,3 +1719,16 @@ $("#adaptRunBtn").addEventListener("click", async () => {
 });
 
 $("#adaptRefreshBtn").addEventListener("click", () => loadAdaptView());
+
+/* ===== 平台自适应：Windows 下隐藏「平台适配」入口（该功能仅供其他系统包使用）===== */
+(async () => {
+  try {
+    const d = await API.req("GET", "/api/adapt/check");
+    const isWin = d && (d.platform === "win32" || String(d.platform_name || "").toLowerCase() === "windows");
+    if (isWin) {
+      const navBtn = document.querySelector('.nav-item[data-view="adapt"]');
+      if (navBtn) navBtn.style.display = "none";
+      if (currentView === "adapt") switchView("chat");
+    }
+  } catch (e) { /* 接口不可用时保持原样，不阻塞其它功能 */ }
+})();

@@ -55,7 +55,11 @@ fi
 # [4/4] 启动 WEB 服务并打开浏览器
 echo "[4/4] 启动 7Tan WEB 服务 (http://127.0.0.1:9900/) ..."
 if ! "$PY" -c "import socket,sys; s=socket.socket(); s.settimeout(1); sys.exit(0 if s.connect_ex(('127.0.0.1',9900))==0 else 1)" >/dev/null 2>&1; then
-  nohup "$PY" main.py --web --host 0.0.0.0 --port 9900 >> logs/web_9900.log 2>&1 &
+  if [ -f web_main.py ]; then
+    nohup "$PY" web_main.py --host 0.0.0.0 --port 9900 >> logs/web_9900.log 2>&1 &
+  else
+    nohup "$PY" main.py --web --host 0.0.0.0 --port 9900 >> logs/web_9900.log 2>&1 &
+  fi
   echo "  → 服务已后台启动 (PID $!)"
 fi
 
@@ -75,5 +79,5 @@ echo ""
 echo "✅ 7Tan WEB 版已启动！"
 echo "   浏览器已打开: http://127.0.0.1:9900/"
 echo "   服务日志: logs/web_9900.log"
-echo "   停止服务: pkill -f 'main.py --web'"
+echo "   停止服务: pkill -f 'web_main.py'  (或 pkill -f 'main.py --web')"
 echo ""

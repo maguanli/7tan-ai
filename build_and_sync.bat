@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
-title 7Tan Build Tool v12 (single exe package)
+title 7Tan Build Tool v13 (dual package: Windows full + other-OS web)
 
 set ROOT=%~dp0
 cd /d "%ROOT%"
@@ -38,8 +38,8 @@ if not defined WM_VER (
 
 echo [INFO] Build version: %WM_VER%
 echo ==========================================
-echo   7Tan Build Tool v12 (single exe package)
-echo   Build exe + package one full zip
+echo   7Tan Build Tool v13 (dual package)
+echo   [1] Windows full zip (exe + src)   [2] Other-OS web-only zip
 echo ==========================================
 echo.
 
@@ -139,7 +139,7 @@ echo.
 
 REM ===== Step 3: Package release zip =====
 REM 旧 zip 不再预先 del：package_release.py 用临时包+原子替换覆盖，天然防占用冲突
-echo [3/4] Packaging release zip (single full exe package)...
+echo [3/4] Packaging Windows release zip (full exe package)...
 if not exist "dist\release" mkdir "dist\release"
 "%ROOT%.venv\Scripts\python.exe" "templates\package_release.py" --uid "%WM_UID%" --version "%WM_VER%" --out "dist\release" --free-dir "dist\7tan-editor"
 if errorlevel 2 (
@@ -155,11 +155,31 @@ if errorlevel 1 (
     if not defined SKIP_PAUSE pause
     exit /b 1
 )
-echo [3/4] Release zip generated in dist\release
+echo [3/4] Windows release zip generated in dist\release
+echo.
+
+REM ===== Step 4: Package other-OS web-only zip =====
+echo [4/4] Packaging other-OS web-only zip (macOS/Linux/Harmony)...
+"%ROOT%.venv\Scripts\python.exe" "templates\package_release.py" --web-only --uid "%WM_UID%" --version "%WM_VER%" --out "dist\release"
+if errorlevel 2 (
+    echo.
+    echo [ERROR] Web-only packaging failed: file locked / antivirus scanning.
+    echo         Close opened zip in dist\release, or whitelist dist in antivirus, then retry.
+    if not defined SKIP_PAUSE pause
+    exit /b 2
+)
+if errorlevel 1 (
+    echo.
+    echo [ERROR] Web-only packaging failed. Check log above for details.
+    if not defined SKIP_PAUSE pause
+    exit /b 1
+)
+echo [4/4] Other-OS web-only zip generated in dist\release
 echo.
 
 echo ==========================================
-echo   DONE! single package ready:
-echo   dist\release\7tan-editor-v%WM_VER%.zip
+echo   DONE! two packages ready:
+echo   [1] Windows: dist\release\7tan-editor-v%WM_VER%.zip
+echo   [2] Other-OS: dist\release\7tan-web-v%WM_VER%.zip
 echo ==========================================
 if not defined SKIP_PAUSE pause

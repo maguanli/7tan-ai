@@ -267,18 +267,155 @@ def add_source_bundle(zf: zipfile.ZipFile, project_root) -> int:
     return count
 
 
+# ============================================================
+# 其他系统通用包（WEB 版，macOS / Linux / 鸿蒙 等非 Windows 系统）
+# 不含 exe：解压后双击对应平台启动脚本 → 自动装依赖 → WEB 版直接可用
+# ============================================================
+
+# WEB 版根目录文件清单：(项目内相对路径, zip 内路径)
+_WEB_ROOT_FILES = [
+    ("web_main.py",                     "web_main.py"),
+    ("main.py",                         "main.py"),
+    ("requirements-web.txt",            "requirements-web.txt"),
+    ("启动网页版服务(macOS).command",    "启动网页版服务(macOS).command"),
+    ("启动网页版服务(Linux).sh",        "启动网页版服务(Linux).sh"),
+    ("启动网页版服务(Windows).bat",     "启动网页版服务(Windows).bat"),
+]
+
+# WEB 版目录清单：(项目内相对路径, zip 内路径, 额外排除目录名)
+_WEB_DIRS = [
+    ("src",           "src",           {"ui", "__pycache__"}),
+    ("config",        "config",        set()),
+    ("data/plugins",  "data/plugins",  {"backup", "__pycache__"}),
+    ("data/logo",     "data/logo",     set()),
+    ("tools",         "tools",         {"__pycache__"}),
+]
+
+# WEB 版额外排除文件（PyQt6 桌面专用，避免非 Windows 依赖报错）
+_WEB_EXCLUDE_FILES = EXCLUDE_FILE_PATTERNS | {
+    "browser_bridge.py",
+    "cookie_manager.py",
+    "*.pyc",
+}
+
+_WEB_README = (
+    "7Tan WEB 版（其他操作系统通用包）\n"
+    "====================================\n"
+    "适用系统：macOS / Linux / 鸿蒙 PC 等非 Windows 系统\n"
+    "（Windows 用户请下载 Windows 专属完整包）\n"
+    "\n"
+    "快速开始：\n"
+    "  1. 解压本 ZIP 到任意目录（路径建议不要含中文）\n"
+    "  2. 选择对应系统的启动脚本：\n"
+    "       macOS   → 双击「启动网页版服务(macOS).command」\n"
+    "                 （首次提示权限，请右键→打开）\n"
+    "       Linux   → 终端执行：bash 启动网页版服务(Linux).sh\n"
+    "  3. 脚本自动检查/安装依赖，并启动 http://127.0.0.1:9900/\n"
+    "  4. 浏览器打开 WEB 版后，按页面提示点击【确认适配】，\n"
+    "     7Tan 自动完成当前系统的插件复制适配，全部功能可用\n"
+    "\n"
+    "系统要求：Python 3.10+（脚本会自动提示安装方法）\n"
+    "\n"
+    "功能说明：\n"
+    "  - 完整 WEB 版：对话 / 编程 / 爬虫 / 写作 / 代码工具 / 记忆 / 统计等\n"
+    "  - Windows 专属插件（桌面控制、公众号发布）在非 Windows 系统\n"
+    "    自动适配或友好降级\n"
+    "  - 详细说明见《7Tan使用说明书.html》\n"
+)
+
+
+def build_web_only_zip(out: Path, ver: str, uid: str, project_root) -> int:
+    """打包「其他系统通用包」：WEB 版源码 + 启动脚本 + 跨平台插件 + 平台适配器。
+
+    不含 exe / 桌面 UI（src/ui、PyQt6 专属文件），解压即用。
+    """
+    root = Path(project_root)
+    build_id = ""
+    suffix = ""
+    if uid:
+        build_id = gen_build_id()
+        suffix = f"-{build_id}"
+
+    zip_name = f"7tan-web-v{ver}{suffix}.zip"
+    all_zip = out / zip_name
+    tmp_zip = out / f".{zip_name}.{os.getpid()}.tmp"
+    n_total = 0
+    try:
+        with zipfile.ZipFile(tmp_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=ZIP_LEVEL) as zf:
+            # 1. 根目录文件（启动脚本 / 入口 / 依赖清单）
+            for rel, arc in _WEB_ROOT_FILES:
+                src = root / rel
+                if not src.exists():
+                    print(f"  [WARN] 缺少文件（跳过）: {rel}")
+                    continue
+                _safe_write(zf, src, arc)
+                n_total += 1
+                print(f"  [OK] {arc} ({src.stat().st_size:,}B)")
+            # 2. 目录（src 排除桌面 ui；plugins 保留 variants 排除 backup）
+            for rel, arc, extra_dirs in _WEB_DIRS:
+                src = root / rel
+                if not src.exists():
+                    print(f"  [WARN] 缺少目录（跳过）: {rel}")
+                    continue
+                n = zip_dir(zf, src, arc,
+                            exclude_dirs=EXCLUDE_DIRS | extra_dirs,
+                            exclude_files=_WEB_EXCLUDE_FILES)
+                print(f"  [OK] {arc}/  {n} 文件")
+                n_total += n
+            # 3. 水印
+            if build_id:
+                zf.writestr("BUILD_INFO.txt",
+                            f"BUILD_ID   : {build_id}\n"
+                            f"渠道       : {uid}\n"
+                            f"说明       : 本文件用于分发溯源，请勿删除。\n")
+            # 4. 使用说明
+            zf.writestr("README_WEB.txt", _WEB_README)
+            # 5. 说明书
+            for _doc_name in ["7Tan使用说明书.md", "7Tan使用说明书.html"]:
+                _doc_src = root / "templates" / _doc_name
+                if _doc_src.exists():
+                    _safe_write(zf, _doc_src, _doc_name)
+                    print(f"  [OK] {_doc_name} ({_doc_src.stat().st_size:,}B)")
+
+        _atomic_replace(tmp_zip, all_zip)
+    except PermissionError as e:
+        print(f"[ERROR] 发布包写入失败：文件被占用或杀毒软件正在扫描（{e}）")
+        print("        请关闭 dist\\release 下已打开的 zip，或将 dist 目录加入杀软白名单后重试。")
+        _safe_cleanup(tmp_zip)
+        return 2
+    except OSError as e:
+        print(f"[ERROR] 发布包写入失败：{e}")
+        print("        请检查磁盘空间与目录权限。")
+        _safe_cleanup(tmp_zip)
+        return 2
+    except Exception as e:
+        print(f"[ERROR] 打包失败：{type(e).__name__}: {e}")
+        _safe_cleanup(tmp_zip)
+        return 1
+
+    size_mb = all_zip.stat().st_size / 1048576
+    print(f"\n[OK] 其他系统通用包: {all_zip}  ({size_mb:.1f} MB, {n_total} 文件)")
+    return 0
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description="7Tan 发布打包工具（纯 exe 单包模式）")
+    ap = argparse.ArgumentParser(description="7Tan 发布打包工具（纯 exe 单包 / 其他系统通用包）")
     ap.add_argument("--uid", default="", help="分发渠道 UID（提供则写水印说明，用于溯源）")
     ap.add_argument("--version", default="1.0.0", help="版本号")
     ap.add_argument("--out", default="dist/release", help="输出目录")
     ap.add_argument("--free-dir", default="dist/7tan-editor", help="exe 目录（COLLECT 输出）")
+    ap.add_argument("--web-only", action="store_true",
+                    help="只打包「其他系统通用包」（WEB 版，不含 exe，macOS/Linux/鸿蒙用）")
     args = ap.parse_args()
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     ver = args.version
     free_dir = Path(args.free_dir)
+
+    # ---- 0.5 其他系统通用包模式（不含 exe，WEB 版）----
+    if args.web_only:
+        return build_web_only_zip(out, ver, args.uid, Path(__file__).resolve().parent.parent)
 
     # ---- 0. 基础检查 ----
     if not free_dir.exists():
@@ -361,9 +498,9 @@ def main() -> int:
 
             # 2.3.2 绿色版一键启动脚本（ZIP 根目录，按操作系统选择对应文件双击/执行：自启+启动服务+开浏览器）
             _launchers = [
-                ("Windows-启动网页版服务.bat", "Windows"),
-                ("macOS-启动网页版服务.command", "macOS"),
-                ("Linux-启动网页版服务.sh", "Linux"),
+                ("启动网页版服务(Windows).bat", "Windows"),
+                ("启动网页版服务(macOS).command", "macOS"),
+                ("启动网页版服务(Linux).sh", "Linux"),
             ]
             for _launcher_name, _os_name in _launchers:
                 _launcher_src = Path(__file__).resolve().parent.parent / _launcher_name

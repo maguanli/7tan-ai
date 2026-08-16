@@ -4496,7 +4496,7 @@ class SettingsPage(QWidget):
             "🧠 自我进化系统 — 可自主创建插件、优化提示词、管理记忆，\n"
             "   越用越聪明\n\n"
             "🎬 录屏与制图 — 屏幕录制、图像生成、语音合成\n\n"
-            "【出品】7Tan 团队"
+            "【出品】老马"
         )
         layout.addWidget(intro_text)
         # ===== 软件更新 =====

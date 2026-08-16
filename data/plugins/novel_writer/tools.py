@@ -771,3 +771,32 @@ def novel_chapter_blueprint(chapter: int = 18, outline: str = "", prev_chapter: 
         except Exception:
             pass
     return _build_blueprint(n, outline_text, tail, goal)
+
+
+@register_tool(
+    name="novel_platform_rules",
+    description="番茄小说作家专区运营规则速查：作品推荐评估条件（横版封面/连续更新3天/8万字）、推荐验证期（7天小流量+10万字转正）、作家专区页面结构与功能导航。写小说/运营前调用，确保符合番茄平台推荐机制。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "section": {"type": "string", "description": "查询部分：recommend=作品推荐规则，nav=作家专区页面结构，all=全部（默认）"},
+        },
+        "required": []
+    },
+    category="writing",
+)
+def novel_platform_rules(section: str = "all") -> str:
+    """返回番茄作家专区运营规则（抓取自作家专区作品推荐页）"""
+    kf = Path(__file__).parent / "knowledge" / "zuojia_zone_rules.md"
+    if not kf.exists():
+        return "❌ 知识文件不存在：" + str(kf)
+    text = kf.read_text(encoding="utf-8")
+    if section == "recommend":
+        start = text.find("## 二、")
+        end = text.find("## 三、")
+        return text[start:end if end > start else len(text)].strip()
+    if section == "nav":
+        start = text.find("## 一、")
+        end = text.find("## 二、")
+        return text[start:end if end > start else len(text)].strip()
+    return text.strip()

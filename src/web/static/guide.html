@@ -101,7 +101,7 @@
   <div class="card" id="evo">
     <h2><span class="num">1</span> 🚀 修改 7Tan，让它不断升级进化</h2>
     <p>7Tan 的全部代码就在你下载的包里，解压后（以 v1.0.12 为例）结构如下：</p>
-    <pre><code>📦 桌面版（7tan-editor-*.zip）
+    <pre><code>📦  Windows版（7tan-editor-*.zip）
 ├─ 7tan-editor\                  ← 主程序（exe + 运行时，双击即用）
 ├─ 7tan-src\                     ← 全部源码与资源（可改造区）
 │  ├─ src\                       ← 主程序源码（Python）
@@ -111,7 +111,7 @@
 ├─ 7Tan使用说明书.html / .md
 └─ 启动网页版服务(Windows).bat
 
-📦 WEB版（7tan-web-*.zip）
+📦 通用版（7tan-web-*.zip）
 ├─ src\                          ← 主程序源码（Python）
 │  └─ web\static\                ← 网页版前端（HTML / CSS / JS）
 ├─ data\                         ← 数据与记忆（含 plugins\ 插件）
@@ -119,6 +119,14 @@
 ├─ tools\                        ← 内置工具
 ├─ main.py / web_main.py         ← 程序入口
 └─ 启动网页版服务(Linux).sh / (macOS).command</code></pre>
+    <h3>💻 Windows 版里怎么用 WEB 版？</h3>
+    <ol>
+      <li><strong>启动</strong>：解压后双击根目录的 <code>启动网页版服务(Windows).bat</code>，脚本会自动安装网页服务<strong>开机自启</strong>并启动，随后自动打开浏览器进入 <code>http://127.0.0.1:9900/</code>。</li>
+      <li><strong>日常使用</strong>：自启安装成功后，以后每次开机网页版都会自动运行，直接访问 <code>http://127.0.0.1:9900/</code> 即可，无需再手动启动。</li>
+      <li><strong>手机访问</strong>：同一 WiFi 下用 <code>http://电脑IP:9900</code>（如 <code>http://192.168.2.10:9900</code>）即可；出门在外可用 Cloudflare 隧道公网地址。</li>
+      <li><strong>与桌面版互通</strong>：桌面版（<code>7tan-editor\</code>）和网页版共用同一份 <code>data\</code> 数据与插件，可随时切换、同时使用。</li>
+    </ol>
+    <div class="tip green">💡 <strong>Windows 用户一个包全搞定</strong>：要桌面版就双击 <code>7tan-editor\7tan-editor.exe</code>，要网页版就双击 <code>启动网页版服务(Windows).bat</code>，两个都能用，数据互通。</div>
     <h3>三种改造方式（从易到难）</h3>
     <ol>
       <li><strong>改网页外观/文字</strong>：直接编辑 <code>src\web\static\</code>（桌面版为 <code>7tan-src\src\web\static\</code>）下的 <code>index.html</code>、<code>style.css</code>、<code>app.js</code>，保存后<strong>刷新浏览器（Ctrl+F5）立即生效</strong>，不用重启。</li>
@@ -131,35 +139,8 @@
   <!-- ② UI 个性化 -->
   <div class="card" id="ui">
     <h2><span class="num">2</span> 🎨 UI 个性化设计，让界面长成你喜欢的样子</h2>
-    <p>网页版的配色、字体、布局全部集中在 <code>src\web\static\style.css</code>（桌面版为 <code>7tan-src\src\web\static\style.css</code>），主题色用几个变量统一控制：</p>
-    <pre><code>:root {
-  --bg: #0f1117;        /* 背景色 */
-  --panel: #161923;     /* 面板色 */
-  --text: #e6e8ef;      /* 正文颜色 */
-  --primary: #6366f1;   /* 主色调（紫蓝） */
-  --primary2: #8b5cf6;  /* 渐变辅色 */
-  --green: #22c55e;     /* 成功绿 */
-  --red: #ef4444;       /* 警示红 */
-}</code></pre>
-    <div class="grid-2">
-      <div class="mini">
-        <h4>🌙 想换整体风格？</h4>
-        <p>把 <code>--primary</code> 改成绿色系、暖色系……整个界面主色跟着变，改一行刷新即可。</p>
-      </div>
-      <div class="mini">
-        <h4>📱 想改布局？</h4>
-        <p>编辑 <code>index.html</code> 调整侧边栏、顶栏、面板结构；<code>style.css</code> 底部有手机端适配代码。</p>
-      </div>
-      <div class="mini">
-        <h4>🖼️ 想换 LOGO？</h4>
-        <p>把图片放到 <code>src\web\static\</code> 目录，替换 <code>index.html</code> 中 <code>.logo-icon</code> 引用的图片即可。</p>
-      </div>
-      <div class="mini">
-        <h4>💬 想改文案？</h4>
-        <p>网页上的所有文字都在 <code>index.html</code> 和 <code>app.js</code> 里，直接改中文即可。</p>
-      </div>
-    </div>
-    <div class="tip blue">🎨 <strong>不动手也能换肤</strong>：直接对 7Tan 说"<strong>把网页版改成绿色主题 / 换个更清爽的布局</strong>"，它会自动改好 CSS 并让你刷新查看。</div>
+    <p>不用懂代码，也不用改文件。你想让界面长成什么样子，直接在<strong>AI 工作台的对话框</strong>里跟 7Tan 说，它就会帮你改好，刷新页面就能看到效果。</p>
+    <div class="tip blue">💬 <strong>想改什么直接说</strong>：例如"<strong>把网页版改成绿色主题</strong>"、"<strong>侧边栏太宽，改窄一点</strong>"、"<strong>换一个更清爽的布局</strong>"、"<strong>把按钮改成圆角</strong>"……7Tan 会自动改好 CSS/HTML，你刷新查看，不满意继续说，改到满意为止。</div>
   </div>
 
   <!-- ③ 制作插件 -->

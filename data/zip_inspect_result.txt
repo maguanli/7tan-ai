@@ -1,0 +1,84 @@
+=== 顶层根目录文件 ===
+  7Tan使用说明书.html
+  7Tan使用说明书.md
+  README.txt
+  启动网页版服务(Windows).bat
+
+=== 含 web_main / start_web / 启动 条目 ===
+  7tan-src/src/web/server.py
+  启动网页版服务(Windows).bat
+
+=== bat 内容: 启动网页版服务(Windows).bat ===
+@echo off
+chcp 936 >nul 2>&1
+setlocal
+cd /d "%~dp0"
+title 7Tan ��ҳ�����������
+
+set "EXE=%~dp07tan-editor\7tan-editor.exe"
+set "PYW=%~dp0.venv\Scripts\pythonw.exe"
+set "URL=http://127.0.0.1:9900/"
+
+echo ==========================================
+echo   7Tan ��ҳ�����һ�������������� Windows 10/11 64λ��
+echo   - ��ɫ���ⰲװ�����谲װ Python / Node.js
+echo   - �״������Զ����ÿ�������
+echo ==========================================
+echo.
+
+if exist "%EXE%" (
+    rem ====== ��ɫ��ģʽ��exe �Դ����л��� ======
+    echo [1/3] ���ÿ�������...
+    "%EXE%" --web-autostart install
+    echo [2/3] ������ҳ�����...
+    "%EXE%" --web-autostart launch
+) else if exist "%PYW%" (
+    rem ====== ����ģʽ��ʹ����Ŀ���⻷�� ======
+    echo [1/3] ���ÿ�������...
+    "%PYW%" "%~dp0tools\web_autostart.py" --install
+    echo [2/3] ������ҳ�����...
+    "%PYW%" "%~dp0tools\web_autostart.py" --launch
+) else (
+    echo.
+    echo [����] δ�ҵ� 7tan-editor.exe �򿪷����л�����
+    echo        ��������Ŀ¼�Ƿ���������ѹ���� ZIP ������
+    echo.
+    pause
+    exit /b 1
+)
+
+echo [3/3] �������...
+start "" "%URL%"
+echo.
+echo ��ɣ���ҳ���ַ: %URL%
+echo �Ժ󿪻��Զ����У���ʱֱ�ӷ��ʼ��ɡ�
+timeout /t 3 /nobreak >nul
+exit /b 0
+
+
+=== README.txt ===
+7Tan 编辑器（完整版）
+=====================
+目录结构：
+  7tan-editor/    免安装版，双击 7tan-editor.exe 即可运行
+  7tan-src/       完整源码 + 构建工具链（可自行构建 exe）
+
+使用方式：
+  解压后进入 7tan-editor/，双击 7tan-editor.exe 即可运行
+  （无需安装 Python 或任何依赖，绿色免安装）
+
+自行构建：
+  进入 7tan-src/，按 README_BUILD.md 说明操作：
+    setup.bat                一键准备构建环境
+    build.bat                构建 exe（仅构建，不含打包）
+
+授权声明：
+  本软件版权归开发者所有，源码与构建产物仅限个人使用，
+  禁止打包再分发、转售或用于任何商业用途。
+
+系统要求：Windows 10/11 64 位
+
+功能说明：
+  本软件本体免费，核心功能全部开放使用；
+  个别高级插件（如爆款写作等）需付费解锁。
+  详细使用说明见《7Tan使用说明书.md / .html》。

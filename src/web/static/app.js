@@ -613,17 +613,59 @@ async function loadSessions() {
     const el = $("#sessionList");
     if (!el) return;
     el.innerHTML = sessions.map((s) => {
-      const title = (s.title || s.session_id).slice(0, 20);
+      const fullTitle = s.title || s.session_id;
+      const title = fullTitle.slice(0, 20);
       const time = _fmtSideTime(s.last_activity || s.updated_at);
-      return `<div class="sidebar-session-item ${s.session_id === curSession ? "active" : ""}" onclick="selectSession('${s.session_id}')">
+      const cnt = Number(s.message_count) || 0;
+      return `<div class="sidebar-session-item ${s.session_id === curSession ? "active" : ""}" data-full-title="${escapeHtml(fullTitle)}" data-count="${cnt}" onclick="selectSession('${s.session_id}')">
         <span class="s-title">💬 ${escapeHtml(title)}</span>
         <span class="s-time">${escapeHtml(time)}</span>
         <span class="s-del" title="删除会话" onclick="event.stopPropagation();deleteSession('${s.session_id}')">✕</span>
       </div>`;
     }).join("") || '<div class="muted" style="padding:12px;text-align:center">暂无会话</div>';
+    _bindSessionTooltip(el);
     const cnt = $("#sessionCount");
     if (cnt) cnt.textContent = sessions.length + " 条对话";
   } catch (e) { toast("会话加载失败: " + e.message, true); }
+}
+
+/* 会话悬停提示：显示完整标题 + 消息条数（事件委托，列表刷新后依然生效） */
+function _bindSessionTooltip(el) {
+  if (!el || el.dataset.tipBound) return;
+  el.dataset.tipBound = "1";
+  el.addEventListener("mouseover", (ev) => {
+    const item = ev.target.closest(".sidebar-session-item");
+    if (item) _showSessionTooltip(item, ev);
+  });
+  el.addEventListener("mouseout", (ev) => {
+    const item = ev.target.closest(".sidebar-session-item");
+    if (!item || !item.contains(ev.relatedTarget)) _hideSessionTooltip();
+  });
+  el.addEventListener("mouseleave", _hideSessionTooltip);
+}
+function _showSessionTooltip(item, ev) {
+  let tip = document.getElementById("sessionTooltip");
+  if (!tip) {
+    tip = document.createElement("div");
+    tip.id = "sessionTooltip";
+    tip.className = "session-tooltip";
+    document.body.appendChild(tip);
+  }
+  const full = item.dataset.fullTitle || "";
+  const cnt = item.dataset.count || "0";
+  tip.innerHTML = `<div class="t-title">💬 ${escapeHtml(full)}</div><div class="t-count">${cnt} 条对话</div>`;
+  tip.style.display = "block";
+  const pad = 14;
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  const r = tip.getBoundingClientRect();
+  if (x + r.width > window.innerWidth - 8) x = Math.max(8, ev.clientX - r.width - pad);
+  if (y + r.height > window.innerHeight - 8) y = Math.max(8, ev.clientY - r.height - pad);
+  tip.style.left = x + "px";
+  tip.style.top = y + "px";
+}
+function _hideSessionTooltip() {
+  const tip = document.getElementById("sessionTooltip");
+  if (tip) tip.style.display = "none";
 }
 async function selectSession(sid) {
   curSession = sid;

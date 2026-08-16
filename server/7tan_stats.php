@@ -18,6 +18,68 @@ if (!function_exists('getDB')) {
     die('getDB() not found in config.php');
 }
 $db = getDB();
+// ══════════════ WEB 版访问统计（新增 2026-08-16）══════════════
+// 上报接口: 7tan_stats.php?action=track&site=...&page=...&ref=...
+function parse_ua($ua) {
+    $ua = strtolower($ua);
+    if (strpos($ua, 'micromessenger') !== false) { $browser = '微信内置'; }
+    elseif (strpos($ua, 'edg/') !== false) { $browser = 'Edge'; }
+    elseif (strpos($ua, 'opr/') !== false || strpos($ua, 'opera') !== false) { $browser = 'Opera'; }
+    elseif (strpos($ua, 'qqbrowser') !== false) { $browser = 'QQ浏览器'; }
+    elseif (strpos($ua, 'ucbrowser') !== false) { $browser = 'UC浏览器'; }
+    elseif (strpos($ua, 'chrome') !== false) { $browser = 'Chrome'; }
+    elseif (strpos($ua, 'safari') !== false) { $browser = 'Safari'; }
+    elseif (strpos($ua, 'firefox') !== false) { $browser = 'Firefox'; }
+    else { $browser = '其他'; }
+    if (preg_match('/ipad|tablet/', $ua)) { $device = '平板'; }
+    elseif (preg_match('/mobile|android|iphone|ipod|phone/', $ua)) { $device = '手机'; }
+    else { $device = '电脑'; }
+    if (strpos($ua, 'windows') !== false) { $os = 'Windows'; }
+    elseif (strpos($ua, 'android') !== false) { $os = 'Android'; }
+    elseif (strpos($ua, 'iphone') !== false || strpos($ua, 'ipad') !== false || strpos($ua, 'ipod') !== false) { $os = 'iOS'; }
+    elseif (strpos($ua, 'mac os') !== false || strpos($ua, 'macintosh') !== false) { $os = 'macOS'; }
+    elseif (strpos($ua, 'linux') !== false) { $os = 'Linux'; }
+    else { $os = '未知'; }
+    return [$browser, $device, $os];
+}
+
+$db->exec("
+    CREATE TABLE IF NOT EXISTS `7tan_web_visits` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `site` VARCHAR(100) NOT NULL DEFAULT '',
+        `page` VARCHAR(200) NOT NULL DEFAULT '',
+        `referrer` VARCHAR(300) NOT NULL DEFAULT '',
+        `ip` VARCHAR(45) NOT NULL DEFAULT '',
+        `ua` VARCHAR(500) NOT NULL DEFAULT '',
+        `browser` VARCHAR(30) NOT NULL DEFAULT '未知',
+        `device` VARCHAR(20) NOT NULL DEFAULT '电脑',
+        `os` VARCHAR(30) NOT NULL DEFAULT '未知',
+        `visit_time` DATETIME NOT NULL,
+        INDEX `idx_site_time` (`site`, `visit_time`),
+        INDEX `idx_time` (`visit_time`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
+
+if (isset($_GET['action']) && $_GET['action'] === 'track') {
+    $site = substr(trim($_GET['site'] ?? ''), 0, 100);
+    $page = substr(trim($_GET['page'] ?? ''), 0, 200);
+    $ref  = substr(trim($_GET['ref']  ?? ''), 0, 300);
+    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? '';
+    $ip = trim(explode(',', $ip)[0]);
+    $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500);
+    list($browser, $device, $os) = parse_ua($ua);
+    $stmt = $db->prepare("SELECT COUNT(*) AS c FROM 7tan_web_visits WHERE site=? AND ip=? AND page=? AND visit_time > DATE_SUB(NOW(), INTERVAL 60 SECOND)");
+    $stmt->execute([$site, $ip, $page]);
+    if ((int)($stmt->fetch()['c'] ?? 0) === 0) {
+        $stmt = $db->prepare("INSERT INTO 7tan_web_visits (site,page,referrer,ip,ua,browser,device,os,visit_time) VALUES (?,?,?,?,?,?,?,?,NOW())");
+        $stmt->execute([$site, $page, $ref, $ip, $ua, $browser, $device, $os]);
+    }
+    header('Content-Type: image/gif');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    echo base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+    exit;
+}
+
 
 // ── 免登录查看模式 ──
 // 用法:
@@ -123,6 +185,31 @@ $stmt = $db->query("
     LIMIT 20
 ");
 $recent_pings = $stmt->fetchAll();
+// ══════════════ WEB 版访问统计查询（新增 2026-08-16）══════════════
+$web_filter_site = trim($_GET['site'] ?? '');
+$w1 = $web_filter_site !== '' ? ' WHERE site = ?' : '';
+$w2 = $web_filter_site !== '' ? ' AND site = ?' : '';
+$p_site = $web_filter_site !== '' ? [$web_filter_site] : [];
+$stmt = $db->prepare("SELECT COUNT(*) AS pv, COUNT(DISTINCT ip) AS uv FROM 7tan_web_visits$w1");
+$stmt->execute($p_site);
+$web_total = $stmt->fetch();
+$stmt = $db->prepare("SELECT COUNT(*) AS pv, COUNT(DISTINCT ip) AS uv FROM 7tan_web_visits WHERE DATE(visit_time) = ?$w2");
+$stmt->execute($web_filter_site !== '' ? [$today, $web_filter_site] : [$today]);
+$web_today = $stmt->fetch();
+$web_browser = $web_device = $web_os = [];
+foreach (['browser', 'device', 'os'] as $k) {
+    $stmt = $db->prepare("SELECT $k AS name, COUNT(*) AS cnt FROM 7tan_web_visits$w1 GROUP BY $k ORDER BY cnt DESC LIMIT 10");
+    $stmt->execute($p_site);
+    ${'web_' . $k} = $stmt->fetchAll();
+}
+$stmt = $db->prepare("SELECT DATE(visit_time) AS dt, COUNT(*) AS pv, COUNT(DISTINCT ip) AS uv FROM 7tan_web_visits WHERE visit_time >= ?$w2 GROUP BY dt ORDER BY dt ASC");
+$stmt->execute($web_filter_site !== '' ? [date('Y-m-d', strtotime('-13 days')), $web_filter_site] : [date('Y-m-d', strtotime('-13 days'))]);
+$web_daily = $stmt->fetchAll();
+$stmt = $db->prepare("SELECT site, page, referrer, ip, browser, device, os, visit_time FROM 7tan_web_visits$w1 ORDER BY visit_time DESC LIMIT 20");
+$stmt->execute($p_site);
+$web_recent = $stmt->fetchAll();
+$web_sites = $db->query("SELECT site, COUNT(*) AS cnt, MAX(visit_time) AS last FROM 7tan_web_visits GROUP BY site ORDER BY last DESC LIMIT 20")->fetchAll();
+
 
 // ── 辅助函数 ──
 function mask_id($id) {
@@ -364,5 +451,95 @@ function mask_id($id) {
         <?php endif; ?>
     </div>
     <?php endif; ?>
+    <!-- ══ WEB 版访问统计（新增 2026-08-16）══ -->
+    <div class="section" style="border-top:4px solid var(--accent);">
+        <h2>🌐 WEB 版访问统计 <span style="font-weight:400;font-size:12px;color:var(--text-secondary)">（谁访问了 · 访问量 · 浏览器/设备）</span></h2>
+        <form method="get" style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <input type="hidden" name="public" value="<?= htmlspecialchars($_GET['public'] ?? '') ?>">
+            <input type="hidden" name="key" value="<?= htmlspecialchars($_GET['key'] ?? '') ?>">
+            <select name="site" onchange="this.form.submit()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;">
+                <option value="">🌐 全部站点</option>
+                <?php foreach ($web_sites as $ws): ?>
+                <option value="<?= htmlspecialchars($ws['site']) ?>" <?= $web_filter_site === $ws['site'] ? 'selected' : '' ?>><?= htmlspecialchars($ws['site']) ?>（<?= $ws['cnt'] ?>次）</option>
+                <?php endforeach; ?>
+            </select>
+        </form>
+        <div class="cards">
+            <div class="card"><div class="number"><?= number_format((int)($web_total['pv'] ?? 0)) ?></div><div class="label">🌐 总访问量 PV</div></div>
+            <div class="card green"><div class="number"><?= number_format((int)($web_today['pv'] ?? 0)) ?></div><div class="label">📅 今日 PV</div></div>
+            <div class="card"><div class="number"><?= number_format((int)($web_total['uv'] ?? 0)) ?></div><div class="label">👥 独立访客 UV</div></div>
+            <div class="card orange"><div class="number"><?= number_format((int)($web_today['uv'] ?? 0)) ?></div><div class="label">📅 今日 UV</div></div>
+        </div>
+        <h2 style="font-size:14px;margin:16px 0 10px;">📈 近14日访问趋势</h2>
+        <?php if (empty($web_daily)): ?>
+            <div class="empty">暂无数据，打开一次网页版即自动记录</div>
+        <?php else: ?>
+            <div class="bar-chart">
+                <?php
+                $max_pv = 1;
+                foreach ($web_daily as $d) { $max_pv = max($max_pv, (int)$d['pv']); }
+                foreach ($web_daily as $d):
+                    $h = round((int)$d['pv'] / $max_pv * 100);
+                ?>
+                <div class="bar-wrap">
+                    <div class="bar-value"><?= (int)$d['pv'] ?></div>
+                    <div class="bar" style="height:<?= $h ?>px" title="<?= $d['dt'] ?>: PV <?= (int)$d['pv'] ?> / UV <?= (int)$d['uv'] ?>"></div>
+                    <div class="bar-label"><?= substr($d['dt'], 5) ?></div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:14px;">
+            <div>
+                <h3 style="font-size:13px;color:var(--text-secondary);margin-bottom:6px;">🧭 浏览器</h3>
+                <table>
+                    <?php foreach ($web_browser as $b): ?>
+                    <tr><td><?= htmlspecialchars($b['name']) ?></td><td style="text-align:right;"><?= (int)$b['cnt'] ?></td></tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+            <div>
+                <h3 style="font-size:13px;color:var(--text-secondary);margin-bottom:6px;">📱 设备</h3>
+                <table>
+                    <?php foreach ($web_device as $b): ?>
+                    <tr><td><?= htmlspecialchars($b['name']) ?></td><td style="text-align:right;"><?= (int)$b['cnt'] ?></td></tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+            <div>
+                <h3 style="font-size:13px;color:var(--text-secondary);margin-bottom:6px;">💻 系统</h3>
+                <table>
+                    <?php foreach ($web_os as $b): ?>
+                    <tr><td><?= htmlspecialchars($b['name']) ?></td><td style="text-align:right;"><?= (int)$b['cnt'] ?></td></tr>
+                    <?php endforeach; ?>
+                </table>
+            </div>
+        </div>
+        <h2 style="font-size:14px;margin:16px 0 10px;">🕘 最近访问记录</h2>
+        <?php if (empty($web_recent)): ?>
+            <div class="empty">暂无数据</div>
+        <?php else: ?>
+            <table>
+                <thead>
+                    <tr><th>时间</th><th>IP</th><th>站点</th><th>页面</th><th>来源</th><th>浏览器</th><th>设备</th><th>系统</th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($web_recent as $r): ?>
+                    <tr>
+                        <td style="white-space:nowrap;"><?= $r['visit_time'] ?></td>
+                        <td><code><?= htmlspecialchars($r['ip']) ?></code></td>
+                        <td><?= htmlspecialchars($r['site'] ?: '-') ?></td>
+                        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?= htmlspecialchars($r['page']) ?>"><?= htmlspecialchars($r['page'] ?: '-') ?></td>
+                        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?= htmlspecialchars($r['referrer']) ?>"><?= htmlspecialchars($r['referrer'] ?: '-') ?></td>
+                        <td><?= htmlspecialchars($r['browser']) ?></td>
+                        <td><?= htmlspecialchars($r['device']) ?></td>
+                        <td><?= htmlspecialchars($r['os']) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+    </div>
+
 </body>
 </html>

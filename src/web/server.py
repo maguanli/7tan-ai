@@ -110,6 +110,11 @@ async def auth_middleware(request: Request, call_next):
     if path == "/api/health" or path.startswith("/ws") or not path.startswith("/api/"):
         return await call_next(request)
 
+    # 会员登录/刷新接口豁免 Token 鉴权：登录是获取凭据的入口，
+    # 若也要求 API Token 会形成死锁（远程用户无法登录 → 无法获得会员身份 → 也无法使用功能）
+    if path in ("/api/license/login", "/api/license/refresh", "/api/license/status"):
+        return await call_next(request)
+
     # 本地请求放行
     if host in ("127.0.0.1", "::1", "localhost"):
         return await call_next(request)

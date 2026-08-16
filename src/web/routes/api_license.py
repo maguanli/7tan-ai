@@ -167,7 +167,11 @@ async def license_login(request: Request):
     except NetworkError as e:
         return {"success": False, "message": str(e)}
     except ServerError as e:
-        return {"success": False, "message": str(e)}
+        _msg = str(e)
+        # 编译版 auth_client 对 7tan.com 的 401 无法解析中文 message，统一转为友好提示
+        if "401" in _msg or "未授权" in _msg:
+            _msg = "账号或密码错误（7tan.com 拒绝登录），请检查账号密码是否正确"
+        return {"success": False, "message": _msg}
     except Exception as e:
         logger.error(f"[License] 登录失败: {e}")
         return {"success": False, "message": f"登录失败: {e}"}

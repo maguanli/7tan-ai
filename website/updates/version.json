@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "1.0.12",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.12.zip",
+      "md5": "1d86068290ce7f0e51baa529c778b747",
+      "size": 419628349,
+      "notes": "1.0.12 更新：网页版新增「一切皆由你！请看说明」入口与个性化改造指南——支持对话式升级进化、UI个性化、造插件、加功能；会话列表悬停显示完整标题与消息条数；指南更新为用户下载包视角，新增Windows版WEB版使用说明与改坏修复指引；插件白名单刷新（46个插件全部通过 SHA-256+HMAC 校验）。",
+      "release_date": "2026-08-16"
+    },
+    {
       "version": "1.0.11",
       "channel": "stable",
       "platform": "windows",

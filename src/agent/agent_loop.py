@@ -648,8 +648,8 @@ def run_agent_loop(
             }
         iteration += 1
         logger.info(f"🔄 Agent 迭代 {iteration}/{max_iterations}")
-        # 🛡️ 无进展循环检测：连续 50 轮只有工具调用、没有文本输出 → 疑似工具死循环，自动停止
-        if iteration >= 50 and (iteration - _last_text_iteration) >= 50:
+        # 🛡️ 无进展循环检测：连续 200 轮只有工具调用、没有文本输出 → 疑似工具死循环，自动停止
+        if iteration >= 200 and (iteration - _last_text_iteration) >= 200:
             logger.warning(f"🛑 [Agent] 检测到连续 {iteration - _last_text_iteration} 轮无文本输出（疑似工具循环），自动中止，会话: {session_id}")
             _cleanup_ctx_on_abort(ctx, messages)
             return {

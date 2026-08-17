@@ -44,8 +44,56 @@ logger = logging.getLogger(__name__)
 
 
 class AgentAbortedError(Exception):
-    """用户中止 Agent 任务时抛出（_call_llm 检测到 abort_event 后立即抛出）"""
-    pass
+    """系统中止 Agent 任务时抛出（_call_llm 检测到 abort_event 后立即抛出）。
+
+    reason 用于区分中止原因：user_aborted / timeout / disconnected / concurrent，
+    避免把「超时/断开/并发保护」等系统自动中止误报为「用户已终止任务」。
+    """
+    def __init__(self, reason: str = "user_aborted"):
+        self.reason = reason
+        super().__init__(reason)
+
+
+class AbortSignal:
+    """可携带中止原因的轻量信号，兼容 threading.Event 的 is_set/wait/set 接口。
+
+    用于区分「用户手动终止」与「超时/断开/并发保护等系统自动中止」。
+    """
+    def __init__(self, reason: str = "user_aborted"):
+        self._event = threading.Event()
+        self.reason = reason
+
+    def set(self, reason: str = None):
+        if reason:
+            self.reason = reason
+        self._event.set()
+
+    def is_set(self) -> bool:
+        return self._event.is_set()
+
+    def wait(self, timeout=None) -> bool:
+        return self._event.wait(timeout)
+
+    def clear(self):
+        self.reason = "user_aborted"
+        self._event.clear()
+
+
+_ABORT_DISPLAY = {
+    "user_aborted": "⏹ 用户已终止任务",
+    "timeout": "⏰ 任务超时，已自动中止",
+    "disconnected": "🔌 客户端连接断开，已自动中止",
+    "concurrent": "⚠️ 检测到并发新任务，旧任务已自动中止",
+}
+
+
+def _abort_display(reason: str) -> str:
+    return _ABORT_DISPLAY.get(reason, "⏹ 任务已中止")
+
+
+def _abort_reason(abort_event) -> str:
+    """从 abort 信号中提取中止原因码（兼容 threading.Event 与 AbortSignal）。"""
+    return getattr(abort_event, "reason", "user_aborted")
 
 # ── 重试与超时 ───────────────────────────────────────────
 MAX_RETRIES = 3           # 顶层兜底重试（底层 model.call_with_retry 已含 5 次，避免 5x11 嵌套爆炸）
@@ -248,10 +296,10 @@ def _call_llm(model, messages, tools, config, timeout=API_TIMEOUT, abort_event=N
         t.start()
         while t.is_alive():
             if abort_event.is_set():
-                raise AgentAbortedError("用户已终止任务")
+                raise AgentAbortedError(_abort_reason(abort_event))
             t.join(timeout=0.5)
         if holder.get("aborted"):
-            raise AgentAbortedError("用户已终止任务")
+            raise AgentAbortedError(_abort_reason(abort_event))
         if "error" in holder:
             raise holder["error"]
         return holder["result"]
@@ -636,15 +684,16 @@ def run_agent_loop(
     while iteration < max_iterations:
         # 检查用户是否中止
         if abort_event and abort_event.is_set():
-            logger.info(f"⏹ [Agent] 用户中止，会话: {session_id}")
+            _abort_reason_val = _abort_reason(abort_event)
+            logger.info(f"{_abort_display(_abort_reason_val)}，会话: {session_id}")
             _cleanup_ctx_on_abort(ctx, messages)
             return {
                 "success": False,
-                "result": "⏹ 用户已终止任务",
+                "result": _abort_display(_abort_reason_val),
                 "iterations": iteration,
                 "cost": total_cost,
                 "total_tokens": total_tokens,
-                "reason": "user_aborted",
+                "reason": _abort_reason_val,
             }
         iteration += 1
         logger.info(f"🔄 Agent 迭代 {iteration}/{max_iterations}")
@@ -671,17 +720,18 @@ def run_agent_loop(
         # 调用 LLM（支持用户中止：abort_event 触发时立即抛 AgentAbortedError）
         try:
             response = _call_llm(model, messages, tools, config, abort_event=abort_event)
-        except AgentAbortedError:
-            logger.info(f"\u23f9 [Agent] 用户中止（LLM 调用中），会话: {session_id}")
+        except AgentAbortedError as e:
+            _abort_reason_val = getattr(e, "reason", "user_aborted")
+            logger.info(f"{_abort_display(_abort_reason_val)}（LLM 调用中），会话: {session_id}")
             _cleanup_ctx_on_abort(ctx, messages)
             return {
                 "success": False,
-                "result": "\u23f9 用户已终止任务",
+                "result": _abort_display(_abort_reason_val),
                 "iterations": iteration,
                 "cost": total_cost,
                 "total_tokens": total_tokens,
                 "logs": all_logs,
-                "reason": "user_aborted",
+                "reason": _abort_reason_val,
             }
         except Exception as e:
             logger.error(f"❌ LLM 调用失败: {_fix_surrogates(str(e))}")
@@ -873,16 +923,17 @@ def run_agent_loop(
         
         # \U0001f514 中止检查：工具执行前（避免用户终止后还继续跑工具）
         if abort_event and abort_event.is_set():
-            logger.info(f"\u23f9 [Agent] 用户中止（工具执行前），会话: {session_id}")
+            _abort_reason_val = _abort_reason(abort_event)
+            logger.info(f"{_abort_display(_abort_reason_val)}（工具执行前），会话: {session_id}")
             _cleanup_ctx_on_abort(ctx, messages)
             return {
                 "success": False,
-                "result": "\u23f9 用户已终止任务",
+                "result": _abort_display(_abort_reason_val),
                 "iterations": iteration,
                 "cost": total_cost,
                 "total_tokens": total_tokens,
                 "logs": all_logs,
-                "reason": "user_aborted",
+                "reason": _abort_reason_val,
             }
 
         tool_results = execute_tools_parallel(tc_dicts, _execute_tool_optimized)

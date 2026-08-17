@@ -9,9 +9,9 @@ ai:
       model: ${DEEPSEEK_MODEL}
       provider: deepseek
   vision:
-    api_key: ${VISION_API_KEY}
+    api_key: ${ZHIPU_API_KEY}
     base_url: ${VISION_BASE_URL}
-    model: ${VISION_MODEL}
+    model: glm-5v-Turbo
 analytics:
   fallback: https://img.7tan.com/api/7tan_ping.php
   primary: https://img.7tan.cn/api/7tan_ping.php

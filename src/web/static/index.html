@@ -234,6 +234,7 @@
                 <button id="aiAdd" class="btn btn-sm">＋ 新建</button>
                 <button id="aiDel" class="btn btn-sm btn-danger">✕ 删除</button>
                 <button id="aiActivate" class="btn btn-sm">⭐ 启用</button>
+                <button id="aiQuickGlm" class="btn btn-sm" style="margin-top:6px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;">⚡ 一键添加 GLM-4.7-Flash</button>
               </div>
             </div>
             <div class="ai-config-form">
@@ -253,7 +254,7 @@
                     <option value="custom">custom</option>
                   </select>
                 </label>
-                <label>模型 <input id="aiModel" placeholder="如 deepseek-v4-flash"></label>
+                <label>模型 <input id="aiModel" placeholder="如 glm-4-flash / deepseek-chat"></label>
                 <label style="display:block;">API Key<span style="display:block;position:relative;margin-top:2px;"><input id="aiKey" type="password" placeholder="sk-...（留空保持不变）" style="width:100%;box-sizing:border-box;padding-right:38px;"><button onclick="toggleKeyVis('aiKey',this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;opacity:0.9;color:#f0f0f0;display:flex;align-items:center;" title="显示/隐藏"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></span></label>
                 <label>Base URL <input id="aiBase" placeholder="https://api.deepseek.com/v1"></label>
                 <button id="aiSave" class="btn btn-primary">💾 保存模型配置</button>

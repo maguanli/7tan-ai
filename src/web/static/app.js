@@ -1487,6 +1487,8 @@ function initSettingsTabs() {
   $("#aiDel").addEventListener("click", deleteAiConfig);
   $("#aiActivate").addEventListener("click", activateAiConfig);
   $("#aiSave").addEventListener("click", saveAiConfig);
+  $("#aiProvider").addEventListener("change", (e) => _onProviderChange(e.target.value));
+  $("#aiQuickGlm").addEventListener("click", quickAddGlmFlash);
   $("#visSave").addEventListener("click", saveVisionConfig);
   $("#siteSave").addEventListener("click", saveSiteSettings);
   $("#ossSave").addEventListener("click", saveOssSettings);
@@ -1556,6 +1558,39 @@ function addAiConfig() {
   aiConfigsCache[key] = { provider: "deepseek", model: "", api_key: "", base_url: "https://api.deepseek.com/v1" };
   refreshAiList(key);
   toast("已新建配置 " + key + "，填写后点保存");
+}
+/* 提供商切换时自动填写 Base URL 和默认模型 */
+function _onProviderChange(provider) {
+  const presets = {
+    deepseek:  { base: "https://api.deepseek.com/v1",              model: "" },
+    openai:    { base: "https://api.openai.com/v1",                model: "" },
+    zhipu:     { base: "https://open.bigmodel.cn/api/paas/v4",     model: "glm-4-flash" },
+    moonshot:  { base: "https://api.moonshot.cn/v1",               model: "" },
+    siliconflow:{ base: "https://api.siliconflow.cn/v1",           model: "" },
+    doubao:    { base: "https://ark.cn-beijing.volces.com/api/v3", model: "" },
+    qwen:      { base: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "" },
+    mimo:      { base: "https://api.mimo.ai/v1",                   model: "" },
+    ollama:    { base: "http://localhost:11434/v1",                 model: "" },
+  };
+  const p = presets[provider];
+  if (p) {
+    if (p.base) $("#aiBase").value = p.base;
+    if (p.model) $("#aiModel").value = p.model;
+  }
+}
+/* 一键添加 GLM-4.7-Flash */
+async function quickAddGlmFlash() {
+  const key = "zhipu";
+  const cfg = { provider: "zhipu", model: "glm-4-flash", api_key: "", base_url: "https://open.bigmodel.cn/api/paas/v4" };
+  if (!aiConfigsCache) aiConfigsCache = {};
+  if (aiConfigsCache[key]) {
+    toast("配置「zhipu」已存在，请在左侧列表选择编辑", true);
+    refreshAiList(key);
+    return;
+  }
+  aiConfigsCache[key] = cfg;
+  refreshAiList(key);
+  toast("✅ 已新建 GLM-4.7-Flash 配置，请填写 API Key 后点保存");
 }
 async function deleteAiConfig() {
   const key = $("#aiConfigList").value;

@@ -9,7 +9,7 @@ ai:
       model: ${DEEPSEEK_MODEL}
       provider: deepseek
   vision:
-    api_key: ${ZHIPU_API_KEY}
+    api_key: ${VISION_API_KEY}
     base_url: ${VISION_BASE_URL}
     model: ${VISION_MODEL}
 analytics:

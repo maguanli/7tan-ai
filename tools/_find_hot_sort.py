@@ -1,0 +1,57 @@
+# -*- coding: utf-8 -*-
+"""放大OCR：搜索顶部区域找"最热"排序选项"""
+import ctypes, sys, io, time
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+import pyautogui
+from PIL import Image
+import mss
+
+user32 = ctypes.windll.user32
+WX_HWND = 198562
+WL, WT = -8, -8
+
+def activate_wx():
+    user32.ShowWindow(WX_HWND, 9); time.sleep(0.2)
+    user32.SetForegroundWindow(WX_HWND); time.sleep(0.4)
+
+def grab(box=(WL, WT, 1936, 1056)):
+    with mss.mss() as sct:
+        shot = sct.grab({"left": box[0], "top": box[1], "width": box[2], "height": box[3]})
+    return Image.frombytes("RGB", shot.size, shot.rgb)
+
+def ocr(img, scale=3, region=None):
+    if region:
+        img = img.crop(region)
+    img2 = img.resize((img.width*scale, img.height*scale), Image.LANCZOS)
+    buf = io.BytesIO(); img2.save(buf, format="PNG"); data = buf.getvalue()
+    from winrt.windows.media.ocr import OcrEngine
+    from winrt.windows.globalization import Language
+    from winrt.windows.graphics.imaging import BitmapDecoder
+    from winrt.windows.storage.streams import InMemoryRandomAccessStream, DataWriter
+    engine = OcrEngine.try_create_from_language(Language("zh-CN"))
+    stream = InMemoryRandomAccessStream(); w = DataWriter(stream)
+    w.write_bytes(data)
+    if hasattr(w, "store"): w.store()
+    else: w.store_async().get()
+    stream.seek(0)
+    decoder = BitmapDecoder.create_async(stream).get()
+    bmp = decoder.get_software_bitmap_async().get()
+    res = engine.recognize_async(bmp).get()
+    return [(l.text, l.words[0].bounding_rect if l.words else None) for l in res.lines if l.text.strip()]
+
+activate_wx()
+time.sleep(0.3)
+img = grab()
+img.save(r"D:\7tan\7tanAI\data\screenshots\top_area.png")
+
+# 顶部区域：搜索框下方到文章列表上方 (x=1460~1936, y=90~260)
+print("=== 顶部区域放大OCR (1460,90)-(1936,260) ===")
+for t, r in ocr(img, 3, (1460, 90, 1936, 260)):
+    pos = f"({int(r.x/3)+1460},{int(r.y/3)+90})" if r else ""
+    print(f"  {t} {pos}")
+
+# 左侧区域也看看（可能有"最热"在左侧 Tab 下）
+print("\n=== 中部区域 (1400, 200)-(1936, 320) ===")
+for t, r in ocr(img, 3, (1400, 200, 1936, 320)):
+    pos = f"({int(r.x/3)+1400},{int(r.y/3)+200})" if r else ""
+    print(f"  {t} {pos}")

@@ -1,0 +1,156 @@
+# 加密密钥 - 绝对不能提交！
+data/.encryption_key
+data/.encryption_salt
+data/.api_token
+data/auth/token.dat
+data/auth/owner.dat
+data/auth/device_last_report.json
+website/config/private_key.pem
+*.pem
+
+# 数据库文件（含密码等敏感数据）
+data/games.db
+data/games.db-shm
+data/games.db-wal
+data/*.db
+
+# 用户数据与记忆（敏感个人数据，禁止提交）
+data/users/
+data/memory/
+data/state.json
+
+# 配置文件（含 API Key）
+config/config.yaml
+
+# 费用记录
+data/costs.json
+
+# 下载包和截图（体积大）
+downloads/
+data/screenshots/
+
+# 大型安装文件
+tools/*.exe
+
+# 编译产物 .pyd（授权/安全组件，通过发布包分发，不入库）
+*.pyd
+!src/**/*.py
+
+# 语音模型大文件
+data/plugins/tts_piper/models/
+
+# 沙盒临时文件
+data/sandbox/
+
+# 插件运行状态（含激活授权码等个人数据，禁止提交）
+data/plugins/*/state.json
+data/plugins/*/state_backup.json
+
+# 运行时数据与调试临时文件
+data/tmp/
+data/code_changes.jsonl
+data/.instance.lock
+data/.restart_lock
+
+# 备份文件
+*.bak
+backups/
+*.pyd.broken*
+*.pyd.bad*
+*.moved_from_security
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 临时文件
+*.tmp
+*.log
+downloads/temp/
+
+# 测试覆盖率
+.coverage
+.coverage.*
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# 构建产物
+dist/
+dist*.zip
+dist - */
+build/
+*.spec
+
+# 环境变量
+.env
+.env.local
+
+# 日志文件
+logs/*.txt
+
+# 视频编辑器缩略图缓存
+data/video_editor/thumbs/
+
+# 输出产物
+output/
+
+# WEB 服务进程 PID 文件（运行时生成，不入库）
+data/*.pid
+
+# 用户聊天上传的图片（个人数据，不入库）
+data/uploads/
+
+# 编译旧版残留（进程占用时临时改名）
+*.pyd.old
+\"tracked_list.txt\"  
+
+# 运行时状态：代码修改实时面板窗口几何
+data/panel_geometry.json
+
+# 调试临时脚本与运行时检查文件
+tmp/
+data/tasklist_check.txt
+src/security/auth_client_new.pyd
+filterrepo.log
+filterbranch.log  
+
+# 根目录调试垃圾（微信调试/临时脚本/截图）— 防止再次误提交
+/click_*.py
+/ocr_*.txt
+/verify_*.py
+/wechat_*.py
+/check_wechat*.py
+/find_wechat*.py
+/temp_*
+/test_*.py
+/_audit*.py
+/_test*.py
+/_screen*.png
+/_sidebar*.png
+/_crop*.py
+/_extract*.py
+/_fix*.py
+/_proc*.txt
+/analyze_layout.py
+/layout*.py
+/ocr_file.py
+/*.ps1
+# 调试用 bat（正式构建脚本 build.bat/rebuild.bat/start.bat 仍跟踪）
+/run_check.bat
+/test_debug.bat
+/output.txt
+/tracked_list.txt
+# 根目录数据库（敏感数据不入库）
+/games.db
+mobile/  
+data/plugins/adapt_report.json
+data/plugins/adapt_status.json
+data/adapt_running.lock
+data/plugins/*/variants/backup/
+data/plugins/*/variants/backup/**

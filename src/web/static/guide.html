@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>一切皆由你！—— 7Tan 升级进化指南</title>
+<link rel="icon" type="image/x-icon" href="/favicon.ico?v=20260816p">
+<link rel="icon" type="image/png" sizes="256x256" href="/favicon.png?v=20260816p">
+<link rel="apple-touch-icon" href="/favicon.png?v=20260816p">
+<style>
+  :root {
+    --bg: #0f1117; --panel: #161923; --panel2: #1a1e2a; --border: #262b3a;
+    --text: #e6e8ef; --muted: #8b91a5; --primary: #6366f1; --primary2: #8b5cf6;
+    --green: #22c55e; --red: #ef4444; --yellow: #eab308; --blue: #3b82f6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.8;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 40px 24px 60px; }
+
+  /* 头部 */
+  .hero {
+    text-align: center; padding: 36px 20px 30px;
+    background: linear-gradient(135deg, rgba(99,102,241,.18), rgba(139,92,246,.10));
+    border: 1px solid var(--border); border-radius: 16px; margin-bottom: 28px;
+  }
+  .hero h1 { font-size: 28px; margin-bottom: 10px;
+    background: linear-gradient(135deg, var(--primary), var(--primary2));
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p { color: var(--muted); max-width: 640px; margin: 0 auto; font-size: 14px; }
+  .hero .badge { display: inline-block; margin-top: 14px; padding: 4px 14px; font-size: 12px;
+    border-radius: 20px; background: rgba(34,197,94,.14); color: var(--green);
+    border: 1px solid rgba(34,197,94,.35); }
+
+  /* 导航锚点 */
+  .nav-anchors { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 34px; }
+  .nav-anchors a { color: var(--text); text-decoration: none; font-size: 13px;
+    padding: 6px 14px; border-radius: 20px; background: var(--panel);
+    border: 1px solid var(--border); transition: all .15s; }
+  .nav-anchors a:hover { border-color: var(--primary); color: #fff; background: var(--panel2); }
+
+  /* 板块卡片 */
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 26px 26px 20px; margin-bottom: 26px; }
+  .card h2 { font-size: 20px; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+  .card h2 .num { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, var(--primary), var(--primary2));
+    color: #fff; font-size: 15px; }
+  .card h3 { font-size: 15px; color: var(--primary2); margin: 18px 0 8px; }
+  .card p, .card li { color: #c8cde0; }
+  .card ul, .card ol { padding-left: 22px; margin: 8px 0; }
+  .card li { margin: 4px 0; }
+  .card code { background: var(--panel2); border: 1px solid var(--border);
+    padding: 2px 7px; border-radius: 5px; font-size: 13px; color: #a5b4fc;
+    font-family: Consolas, "Courier New", monospace; }
+  pre { background: #0b0d13; border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; overflow-x: auto; margin: 10px 0; font-size: 13px; line-height: 1.6; }
+  pre code { background: none; border: none; padding: 0; color: #c8d6f5; font-size: 13px; }
+
+  .tip { border-left: 3px solid var(--yellow); background: rgba(234,179,8,.08);
+    padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 12px 0; font-size: 13px; color: #e2d8b8; }
+  .tip.green { border-left-color: var(--green); background: rgba(34,197,94,.07); color: #c6e6d3; }
+  .tip.blue { border-left-color: var(--blue); background: rgba(59,130,246,.08); color: #c3d9f5; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px; }
+  .mini { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .mini h4 { font-size: 14px; margin-bottom: 6px; color: var(--text); }
+  .mini p { font-size: 13px; color: var(--muted); margin: 0; }
+
+  /* 底部 */
+  .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 30px; }
+  .footer a { color: var(--primary2); text-decoration: none; }
+
+  @media (max-width: 640px) {
+    .wrap { padding: 20px 14px 40px; }
+    .hero h1 { font-size: 22px; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .card { padding: 18px 16px 14px; }
+  }
+</style>
+
+<script>
+/* 7Tan WEB 版访问统计上报（2026-08-16） */
+(function(){try{var s=(location.hostname||'')+(location.port?':'+location.port:'');var u='https://img.7tan.cn/7tan_stats.php?action=track&site='+encodeURIComponent(s)+'&page='+encodeURIComponent(location.pathname+location.search)+'&ref='+encodeURIComponent(document.referrer||'');new Image().src=u;}catch(e){}})();
+</script>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 头部 -->
+  <div class="hero">
+    <h1>✨ 一切皆由你！</h1>
+    <p>7Tan 不是一个单纯的AI工具，而是一台你可以亲手改造的机器。<br>它可以让你实现AI个性化自由，可以放飞你的想象！<br>修改自己升级进化、设计UI、换皮肤、造插件、加功能——只要你想，它就能变成你想要的样子。<br><strong>一句话：你想怎么样，直接跟7Tan说。</strong></p>
+    <span class="badge">✅ 本机已开启「可修改」权限</span>
+  </div>
+
+  <div class="nav-anchors">
+    <a href="#evo">🚀 升级进化</a>
+    <a href="#ui">🎨 UI 个性化</a>
+    <a href="#plugin">🧩 制作插件</a>
+    <a href="#more">🌈 更多功能</a>
+    <a href="#faq">❓ 常见问题</a>
+  </div>
+
+  <!-- ① 升级进化 -->
+  <div class="card" id="evo">
+    <h2><span class="num">1</span> 🚀 修改 7Tan，让它不断升级进化</h2>
+    <p>7Tan 的全部代码就在你下载的包里，解压后（以 v1.0.13 为例）结构如下：</p>
+    <pre><code>📦  Windows版（7tan-editor-*.zip）
+├─ 7tan-editor\                  ← 主程序（exe + 运行时，双击即用）
+├─ 7tan-src\                     ← 全部源码与资源（可改造区）
+│  ├─ src\                       ← 主程序源码（Python）
+│  │  └─ web\static\             ← 网页版前端（HTML / CSS / JS）
+│  ├─ data\                      ← 数据与记忆（含 plugins\ 插件）
+│  └─ build.bat                  ← 重新构建
+├─ 7Tan使用说明书.html / .md
+└─ 启动网页版服务(Windows).bat
+
+📦 通用版（7tan-web-*.zip）
+├─ src\                          ← 主程序源码（Python）
+│  └─ web\static\                ← 网页版前端（HTML / CSS / JS）
+├─ data\                         ← 数据与记忆（含 plugins\ 插件）
+├─ config\                       ← 配置
+├─ tools\                        ← 内置工具
+├─ main.py / web_main.py         ← 程序入口
+└─ 启动网页版服务(Linux).sh / (macOS).command</code></pre>
+    <h3>💻 Windows 版里怎么用 WEB 版？</h3>
+    <ol>
+      <li><strong>启动</strong>：解压后双击根目录的 <code>启动网页版服务(Windows).bat</code>，脚本会自动安装网页服务<strong>开机自启</strong>并启动，随后自动打开浏览器进入 <code>http://127.0.0.1:9900/</code>。</li>
+      <li><strong>日常使用</strong>：自启安装成功后，以后每次开机网页版都会自动运行，直接访问 <code>http://127.0.0.1:9900/</code> 即可，无需再手动启动。</li>
+      <li><strong>手机访问</strong>：同一 WiFi 下用 <code>http://电脑IP:9900</code>（如 <code>http://192.168.2.10:9900</code>）即可；出门在外可用 Cloudflare 隧道公网地址。</li>
+      <li><strong>与桌面版互通</strong>：桌面版（<code>7tan-editor\</code>）和网页版共用同一份 <code>data\</code> 数据与插件，可随时切换、同时使用。</li>
+    </ol>
+    <div class="tip green">💡 <strong>Windows 用户一个包全搞定</strong>：要桌面版就双击 <code>7tan-editor\7tan-editor.exe</code>，要网页版就双击 <code>启动网页版服务(Windows).bat</code>，两个都能用，数据互通。</div>
+    <h3>三种改造方式（从易到难）</h3>
+    <ol>
+      <li><strong>改网页外观/文字</strong>：直接编辑 <code>src\web\static\</code>（桌面版为 <code>7tan-src\src\web\static\</code>）下的 <code>index.html</code>、<code>style.css</code>、<code>app.js</code>，保存后<strong>刷新浏览器（Ctrl+F5）立即生效</strong>，不用重启。</li>
+      <li><strong>改核心功能</strong>：修改 <code>src\</code>（桌面版为 <code>7tan-src\src\</code>）下的 Python 代码后，对 7Tan 说一句"<strong>重启生效</strong>"即可；桌面版如需重新打包，运行 <code>7tan-src\build.bat</code>。</li>
+      <li><strong>获取官方更新</strong>：重新下载新版压缩包，解压后覆盖到原目录即可（<code>data\</code> 里的数据与插件会保留）。</li>
+    </ol>
+    <div class="tip green">💡 <strong>最省事的升级方式</strong>：你不需要自己写代码！直接对 7Tan 说："<strong>帮我加一个 XX 功能 / 把 XX 改成 XX</strong>"，它会自己改代码、自己重启、自己测试，你只负责验收。</div>
+  </div>
+
+  <!-- ② UI 个性化 -->
+  <div class="card" id="ui">
+    <h2><span class="num">2</span> 🎨 UI 个性化设计，让界面长成你喜欢的样子</h2>
+    <p>不用懂代码，也不用改文件。你想让界面长成什么样子，直接在<strong>AI 工作台的对话框</strong>里跟 7Tan 说，它就会帮你改好，刷新页面就能看到效果。</p>
+    <div class="tip blue">💬 <strong>想改什么直接说</strong>：例如"<strong>把网页版改成绿色主题</strong>"、"<strong>侧边栏太宽，改窄一点</strong>"、"<strong>换一个更清爽的布局</strong>"、"<strong>把按钮改成圆角</strong>"……7Tan 会自动改好 CSS/HTML，你刷新查看，不满意继续说，改到满意为止。</div>
+  </div>
+
+  <!-- ③ 制作插件 -->
+  <div class="card" id="plugin">
+    <h2><span class="num">3</span> 🧩 给 7Tan 制作你自己想要的插件</h2>
+    <p>7Tan 支持<strong>插件体系</strong>：每个插件就是一组"工具代码"（<code>tools.py</code>），注册后 7Tan 就能调用它完成新任务。插件 = 新技能。</p>
+    <h3>插件由四个要素构成</h3>
+    <pre><code>plugin_id   : 唯一标识，如 "weather_plugin"
+plugin_name : 显示名称，如 "每日天气"
+description : 描述它能干什么（AI 靠这个决定何时调用）
+tools_code  : Python 代码，定义 1~N 个工具函数</code></pre>
+    <h3>方式一：让 7Tan 帮你做（推荐，零代码）</h3>
+    <p>直接在对话框里说：</p>
+    <pre><code>"创建一个天气插件，功能：输入城市名返回实时天气和穿衣建议"</code></pre>
+    <p>7Tan 会自动：编写插件代码 → 注册到系统 → 重启生效 → 告诉你测试方法。</p>
+    <h3>方式二：自己写一个最简单的插件</h3>
+    <p>在 <code>data\plugins\</code>（桌面版为 <code>7tan-src\data\plugins\</code>）下新建目录，写一个 <code>tools.py</code>，例如"今日一句"插件：</p>
+    <pre><code># data/plugins/quote_plugin/tools.py
+def daily_quote():
+    """返回一句今日名言（AI 会把这个函数注册为工具）"""
+    quotes = [
+        "行动是治愈恐惧的良药。",
+        "千里之行，始于足下。",
+        "种一棵树最好的时间是十年前，其次是现在。",
+    ]
+    import datetime
+    return quotes[datetime.date.today().day % len(quotes)]</code></pre>
+    <p>然后对 7Tan 说"<strong>注册我的 quote_plugin 插件</strong>"，它会把函数接入工具系统。</p>
+    <div class="tip">⚠️ <strong>注意</strong>：插件注册后通常需要<strong>重启</strong>才生效；写插件时注意函数要返回可序列化的文本/字典，别写死循环。</div>
+  </div>
+
+  <!-- ④ 更多功能 -->
+  <div class="card" id="more">
+    <h2><span class="num">4</span> 🌈 一句话，实现很多很多功能</h2>
+    <p>7Tan 自带大量能力，直接在对话框里说人话就行：</p>
+    <div class="grid-2">
+      <div class="mini"><h4>📦 资源采集发布</h4><p>"从 XX 站采集 10 款游戏，重写简介并发布到 7坛"</p></div>
+      <div class="mini"><h4>✍️ 写文章</h4><p>"写一篇关于 XX 的爆款文章，做成 HTML 配图"</p></div>
+      <div class="mini"><h4>📢 公众号</h4><p>"把这篇内容排版后发布到我的公众号"</p></div>
+      <div class="mini"><h4>📖 小说创作</h4><p>"按番茄小说的规则帮我写第 18 章，并质检"</p></div>
+      <div class="mini"><h4>🌐 网页浏览/翻译</h4><p>"打开 XX 页面，把内容翻译成中文总结给我"</p></div>
+      <div class="mini"><h4>🔮 易经/兵法</h4><p>"帮我占一卦" / "用孙子兵法分析我的处境"</p></div>
+      <div class="mini"><h4>📱 远程控制</h4><p>手机打开本页，随时让家里的 7Tan 干活（需填 API Token）</p></div>
+      <div class="mini"><h4>🔌 无限扩展</h4><p>任何新需求："帮我做一个 XX 插件 / 加一个 XX 功能"</p></div>
+    </div>
+    <div class="tip green">✨ <strong>核心理念</strong>：7Tan 不是固定的软件，而是会自我进化的工作伙伴。你把想法说给它，它把想法变成现实。</div>
+  </div>
+
+  <!-- FAQ -->
+  <div class="card" id="faq">
+    <h2><span class="num">?</span> ❓ 常见问题</h2>
+    <ul>
+      <li><strong>改坏了怎么办？</strong> 重新解压一份原始压缩包到<strong>另一个文件夹</strong>上，<strong>不要覆盖回去</strong>，再点击 EXE 叫它对改坏的进行修复；WEB 版可以重启后再进行修复。反正 7Tan 就像<strong>打不死的小强，随时可以满血复活</strong>。最后还可以找我们或网友大神帮忙，在界面左侧底部有 <strong>7坛社区、问题求助</strong> 等。</li>
+      <li><strong>改了网页没变化？</strong> 浏览器缓存了旧文件，按 <code>Ctrl+F5</code> 强制刷新即可。</li>
+      <li><strong>插件注册了不生效？</strong> 重启 7Tan 后再试；检查插件函数是否有语法错误（可在沙盒里先跑一遍）。</li>
+      <li><strong>远程访问总掉线？</strong> 那是 Cloudflare 免费隧道域名会变，可在「系统设置 → 远程访问」查看最新地址，或配置固定域名。</li>
+      <li><strong>完全不会编程能改吗？</strong> 能。所有改造都可以用对话完成——你只负责说想法，7Tan 负责写代码。</li>
+    </ul>
+  </div>
+
+  <div class="footer">
+    —— 7Tan 网页控制面板 · 升级进化指南 ——<br>
+    <a href="/" onclick="window.close();return false;">返回 7Tan 工作台</a> · © 7坛版权所有
+  </div>
+</div>
+</body>
+</html>

@@ -1,12 +1,12 @@
-# 7Tan 🎮
+# 7Tan AI 🤖
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+> **7Tan AI「盘古」** — 会自己改代码、自我进化升级的 AI 编程工具平台
 
+7Tan AI 是一个基于大语言模型的自进化 AI 工具平台：它能写代码、改代码、重构项目、自动构建重启，也能写作爆款文章、管理内容、自动化办公。核心能力是**编程辅助与自我升级**——你给它一个任务，它会调用 200+ 内置工具完成，甚至能修改自己的源码、重新打包、重启生效。
 
-> **7坛 AI 小编「盘古」** — 游戏内容自动化发布平台
-
-7Tan 是一个智能游戏编辑系统，能自动从游戏源站采集信息、撰写专业评测、翻译介绍、上传云存储，并一键发布到 7坛管理后台。
+🌐 **官方网站/社区：https://www.7tan.com/bbs/**
 
 ---
 
@@ -14,29 +14,33 @@
 
 | 功能 | 说明 |
 |:--|:--|
-| 🌐 智能采集 | 自动浏览游戏源站，提取详情、截图、下载链接 |
-| ✍️ AI 撰写 | 深度分析 + HTML 游戏简介，支持英译中 |
-| 📤 一键发布 | OSS 上传 + 7坛后台自动填表发布 |
-| 💬 对话界面 | PyQt6 聊天式交互，Markdown 渲染、流式输出、思考过程 |
-| 🧩 插件系统 | 47 插件、249 工具，热插拔扩展 |
+| 💻 AI 编程助手 | 写代码、补全、重构、代码审查、自动修 bug、跑测试、构建发布 |
+| 🧬 自我进化升级 | AI 可以修改自身源码 → 重新构建 → 自动重启，持续自我迭代 |
+| 🧩 插件系统 | 47 插件、249 工具，支持热插拔、动态创建新插件扩展能力 |
+| 🎭 多智能体 | 采集 / 改写 / 审核 / 发布 多角色流水线协作 |
+| ✍️ 爆款写作 | 选题生成、标题生成、大纲、正文撰写、质检，公众号一键发布 |
+| 📊 桌面自动化 | 操作微信/浏览器/屏幕，OCR 识别、模板匹配、自动点击 |
+| 🎮 内容自动化 | 游戏/软件资源采集、评测撰写、OSS 上传、自动发布 |
+| 📈 数据分析 | 龙头识别、情绪周期、MACD 买卖点、每日复盘 |
+| 🏛️ 传统文化 | 易经占卦、孙子兵法、每日一卦/兵法 |
 
 ---
 
 ## 🏗️ 技术栈
 
 - **语言**: Python 3.11+
-- **UI**: PyQt6
-- **AI**: DeepSeek / OpenAI 兼容 API
+- **UI**: PyQt6 / Web 控制台
+- **AI**: DeepSeek / 小米 MiMo / OpenAI 兼容 API / 智谱 GLM-4V 视觉
 - **数据库**: SQLite (SQLAlchemy ORM)
 - **云存储**: 阿里云 OSS / 腾讯云 COS / 七牛 Kodo
-- **构建**: PyInstaller
+- **构建**: PyInstaller / rebuild.bat
 
 ---
 
 ## 📦 安装
 
 ```bash
-git clone https://github.com/your-account/7tan-ai.git
+git clone https://github.com/maguanli/7tan-ai.git
 cd 7tan
 pip install -r requirements.txt
 ```
@@ -68,9 +72,10 @@ python main.py
 
 启动后进入对话界面，直接告诉 AI 你想做什么：
 
-- "帮我发布 Steam 上的 Stardew Valley"
-- "对比一下 Hollow Knight 和 Ori"
-- "抓取 TapTap 首页新游"
+- "帮我重构 src/ 里的爬虫模块，加上重试机制"
+- "写一个批量重命名文件的工具"
+- "生成10个爆款公众号选题"
+- "检查代码里的安全漏洞"
 
 ---
 
@@ -78,66 +83,33 @@ python main.py
 
 ```
 7tan/
-├── main.py                  # 入口
-├── .env.example             # 环境变量模板（含 API Key 等）
-├── src/
-│   ├── agent/               # AI Agent 核心 (prompts, agent_loop, api)
-│   ├── plugins/             # 插件管理器 (47 插件)
-│   ├── ui/                  # PyQt6 界面 (chat_page, sidebar, settings)
-│   │   ├── widgets/         # 独立 UI 组件
-│   │   └── workers/         # 后台线程
-│   ├── database/            # ORM 模型 + CRUD
-│   ├── config/              # 配置管理 + 加密
-│   └── utils/               # 工具函数
-├── data/
-│   ├── plugins/             # 插件注册清单
-│   └── prompts/             # 提示词模板
-├── dist/                    # PyInstaller 构建输出
-├── downloads/               # 下载缓存
-└── requirements.txt
+├── main.py              # 主入口（桌面版）
+├── web_main.py          # Web 控制台入口
+├── src/                 # 核心源码
+├── server/              # PHP 服务端
+├── extensions/          # 扩展
+├── mobile/              # 移动端
+├── www/                 # Web 前端
+├── docs/                # 文档
+└── tests/               # 测试
 ```
+
+---
+
+## 🧬 自我进化示例
+
+7Tan AI 不止是工具，它还能进化自己：
+
+1. 告诉它：「帮我加一个批量压缩图片的插件」
+2. AI 自动编写插件代码 → 注册到系统 → 重启生效
+3. 下次对话直接可用新能力
+
+这就是 7Tan AI 的核心理念：**AI 不只是被使用，而是可以持续升级自己。**
 
 ---
 
 ## 📄 License
 
-[MIT](LICENSE) © 7Tan Project
-```
+[MIT](LICENSE) © 7tan.com
 
----
-
-## 🔧 开发
-
-```bash
-# 安装开发依赖
-pip install -r requirements.txt
-
-# 运行测试
-pytest tests/
-
-# 构建
-python build.bat
-```
-
-### 分支策略
-
-- `master` — 稳定发布
-- `develop` — 开发集成
-- `feature/*` — 新功能分支
-
----
-
-## 📊 项目规模
-
-| 指标 | 数值 |
-|:--|:--|
-| Python 文件 | 116 (src)
-| 总行数 | ~37,800 |
-| 插件数 | 47 |
-| 工具数 | 249 |
-| 数据库表 | 12 |
-| API 端点 | 31 |
-
----
-
-*Made with ❤️ by 7Tan AI*
+🌐 **https://www.7tan.com/bbs/** — 欢迎来社区交流、反馈、贡献代码

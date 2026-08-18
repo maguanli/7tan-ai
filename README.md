@@ -64,6 +64,20 @@ pip install -r requirements.txt
 
 ---
 
+## ▶️ 一键启动（Windows / Linux / macOS）
+
+仓库根目录提供三个平台的启动脚本：
+
+| 平台 | 脚本 | 说明 |
+|:--|:--|:--|
+| Windows | `启动网页版服务(Windows).bat` | 双击运行，自动配置开机自启并打开 http://127.0.0.1:9900/ |
+| Linux | `启动网页版服务(Linux).sh` | 终端执行 `bash 启动网页版服务(Linux).sh` |
+| macOS | `启动网页版服务(macOS).command` | 双击或终端执行 |
+
+> Windows 绿色版（含 `7tan-editor.exe`）双击即用；开发模式需先 `pip install -r requirements.txt`。
+
+---
+
 ## 🚀 使用
 
 ```bash

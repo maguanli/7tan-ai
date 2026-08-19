@@ -1,0 +1,134 @@
+{
+  "versions": [
+    {
+      "version": "1.0.13",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.13.zip",
+      "md5": "127886c1ce8a60d47d3c91637255832d",
+      "size": 419728756,
+      "notes": "1.0.13 更新：新增WEB版访问统计系统（访问量/独立访客/浏览器/设备/来源，可前往 img.7tan.cn/7tan_stats.php 查看）；修复浏览器标签页7Tan图标（favicon）；「一切皆由你」说明页持续优化；插件白名单刷新（46个插件全部通过 SHA-256+HMAC 校验）。",
+      "release_date": "2026-08-16"
+    },
+    {
+      "version": "1.0.12",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.12.zip",
+      "md5": "1d86068290ce7f0e51baa529c778b747",
+      "size": 419628349,
+      "notes": "1.0.12 更新：网页版新增「一切皆由你！请看说明」入口与个性化改造指南——支持对话式升级进化、UI个性化、造插件、加功能；会话列表悬停显示完整标题与消息条数；指南更新为用户下载包视角，新增Windows版WEB版使用说明与改坏修复指引；插件白名单刷新（46个插件全部通过 SHA-256+HMAC 校验）。",
+      "release_date": "2026-08-16"
+    },
+    {
+      "version": "1.0.11",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.11.zip",
+      "md5": "db2bf7e9222f0277146a1cfafaef08c1",
+      "size": 416815850,
+      "notes": "1.0.11 更新：资源数据库更新（新增游戏/软件收录）；插件白名单刷新（45个插件全部通过 SHA-256+HMAC 校验）；热点文章素材与发布工具链完善；若干数据与稳定性优化。",
+      "release_date": "2026-08-10"
+    },
+    {
+      "version": "1.0.10",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.10.zip",
+      "md5": "1ae31293f978ed0c238483e6a54e6e1b",
+      "size": 416753390,
+      "notes": "1.0.10 更新：桌面视觉增强——新增「看懂屏幕」desktop_see（快速模式约1.4秒，含视觉大模型深度理解约8秒），屏幕截图+本地分析+OCR+视觉大模型一次截图全链路复用；新增摄像头视觉插件（camera_see/camera_watch 等，无摄像头自动降级为看屏幕）；修复插件白名单哈希导致 desktop_bot/camera_vision 插件未加载问题；插件设置界面新增 desktop_see/desktop_uia/desktop_snapshot 等16个桌面工具；微信自动发消息视觉验证链路优化（动态定位窗口与输入框，输入前+发送后双重视觉验证）。",
+      "release_date": "2026-08-08"
+    },
+    {
+      "version": "1.0.9",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.9-r4.zip",
+      "md5": "57bdf68526bcad3fe13e6ab1158324ed",
+      "size": 416414582,
+      "notes": "1.0.9 更新：《7Tan使用说明书》大改版——编程写代码置于首要章节；新增「版本历史」章节与「自我进化」说明；说明书明确：软件本体免费、核心功能全部开放，个别高级插件（如爆款写作等）需付费解锁；网址可点击、新增返回顶部按钮；README 同步更新。",
+      "release_date": "2026-08-08"
+    },
+    {
+      "version": "1.0.8",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.8.zip",
+      "md5": "7af3b418300cee98b71792da379138d9",
+      "size": 416390009,
+      "notes": "1.0.8 更新：修复点击「立即重启更新」报「无法启动更新程序: Read timed out」（更新下载/应用不再卡死 API 服务）；历史对话加载流畅性优化；修复忘记密码按钮点击无反应、左侧底部刷新报 404（API 域名修正 www.7tan.com）；界面文案「完整版」统一改为「完整版」。",
+      "release_date": "2026-08-08"
+    },
+    {
+      "version": "1.0.7",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.7.zip",
+      "md5": "acf225b7543f285facb9d6180116db00",
+      "size": 416392297,
+      "notes": "1.0.7 更新：修复登录错误提示——账号或密码错误时正确显示「账号或密码错误」，不再显示「服务器返回 401」；exe 版本信息同步更新。",
+      "release_date": "2026-08-08"
+    },
+    {
+      "version": "1.0.6",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.6.zip",
+      "md5": "de6f47bf1e1836e906676ab06e9f606e",
+      "size": 416388796,
+      "notes": "1.0.6 更新：修复语音功能（TTS引擎初始化失败）；exe 增加正规版本信息（公司/产品/版权，利于杀软识别）；构建修复（noarchive 恢复，解决打包卡死）；发布包移除打包脚本（仅保留构建，防转售）。",
+      "release_date": "2026-08-07"
+    },
+    {
+      "version": "1.0.5",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.5.zip",
+      "md5": "cacdc87f83cf2e7293fd50859977ea25",
+      "size": 354807002,
+      "notes": "1.0.5 更新：修复了一些BUG。",
+      "release_date": "2026-08-04"
+    },
+    {
+      "version": "1.0.3",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.3.zip",
+      "md5": "76a97f6b504f7de3bfe78ddc3338db6e",
+      "size": 324073390,
+      "notes": "1.0.3 更新：登录协议勾选默认不勾选强制同意(修复未勾选不可见)、侧边栏AI机器人图标、修复登录在线验证失效、安全加固P0-P2(设备指纹绑定/TLS证书固定/更新包RSA签名验证/源码pyd化)、更新包签名机制。",
+      "release_date": "2026-08-03"
+    },
+    {
+      "version": "1.0.2",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.2.zip",
+      "md5": "173f424697309ec1d6affe9e9795f2fa",
+      "size": 354140370,
+      "notes": "1.0.2 更新：修复协议链接点击无反应、侧边栏版本号不同步、删除对话不实时刷新；新增用户协议/隐私政策(登录勾选+关于页入口)；侧边栏新增问题求助/投诉建议入口；对话右上角显示Token；构建脚本自动同步版本号。",
+      "release_date": "2026-08-02"
+    },
+    {
+      "version": "1.0.1",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.1.zip",
+      "md5": "5f7559901d5c60fd5413dbab19f8c077",
+      "size": 354133511,
+      "notes": "1.0.1 更新：新增防转卖设备指纹系统、AI试用修复(DeepSeek-V4-Flash)、更新系统上线、流量统计增强、多项稳定性修复。",
+      "release_date": "2026-08-02"
+    },
+    {
+      "version": "1.0.0",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.0.zip",
+      "md5": "257d069788b8ef85f78e212dffec90dc",
+      "size": 354124641,
+      "notes": "首版发布：AI 工作台、游戏内容工厂、全栈开发助手、自我进化系统。",
+      "release_date": "2026-08-01"
+    }
+  ]
+}

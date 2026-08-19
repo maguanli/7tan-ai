@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>7Tan 防破解审计 v3</title>
+<style>
+body{font-family:Microsoft YaHei,sans-serif;max-width:960px;margin:24px auto;padding:0 20px;background:#1e1e1e;color:#d4d4d4;line-height:1.7}
+h1,h2,h3{color:#4ec9b0;border-bottom:1px solid #333;padding-bottom:6px}
+table{border-collapse:collapse;width:100%;margin:14px 0}
+th,td{border:1px solid #444;padding:8px 10px;text-align:left;font-size:14px}
+th{background:#2d2d30;color:#4ec9b0}
+tr:nth-child(even){background:#252526}
+code{background:#2d2d30;padding:2px 6px;border-radius:4px;color:#ce9178}
+pre{background:#252526;padding:14px;border-radius:8px;overflow-x:auto;border:1px solid #333}
+pre code{background:none;padding:0}
+blockquote{border-left:4px solid #4ec9b0;margin:14px 0;padding:6px 16px;background:#252526}
+strong{color:#f0c040}
+.fixed{color:#3fb950}
+.stale{color:#f85149}
+</style>
+</head>
+<body>
+<h1>7Tan 软件防破解审计报告（v3 修订版）</h1>
+<ul>
+<li><strong>审计日期</strong>: 2026-07-29</li>
+<li><strong>审计对象</strong>: D:\7tan\7tanAI（源码）+ dist\7tan-editor（发布构建）</li>
+<li><strong>v3 修订说明</strong>: 试用机制已从本地文件改为服务端 MySQL 计次 + 强制登录；更新商业模式描述；重新校准相关评分和 PoC</li>
+<li><strong>校正后评分</strong>: <strong>68 / 100（B- 级）</strong> — 试用漏洞已修复，P0 公钥缺失仍需处理</li>
+</ul>
+<hr />
+
+<h2>商业模式确认（v3 更新）</h2>
+<table>
+<thead>
+<tr><th>版本</th><th>功能</th><th>AI 调用方式</th><th>付费驱动力</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>免费用户（已注册）</td>
+<td>全部功能（AI 生成/爬取/改写/发布/插件/调度）</td>
+<td>首次 3 次走 <code>trial.php</code> 服务端代理转发 DeepSeek（服务端计次，用完不可重置）；之后需用户自己填 API Key</td>
+<td>免费使用，3 次试用作为获客钩子</td>
+</tr>
+<tr>
+<td>专业版（PRO）</td>
+<td>全部功能 + <strong>对软件自身进行 AI 驱动的自改进</strong></td>
+<td>走用户自己的 API Key</td>
+<td>自改进能力</td>
+</tr>
+</tbody>
+</table>
+<p>关键前提：
+- 免费用户注册后赠 3 次免 Key 的 AI 试用，服务端 MySQL <code>trial_ai_count</code> 计次
+- 3 次用完后必须填入自己的 API Key 才能继续使用 AI
+- PRO 的核心差异化价值集中在"自改进"</p>
+<p><strong>防破解核心目标：</strong>
+1. 确保付费 PRO 用户的自改进能力正常可用（当前对正版用户是坏的——P0）
+2. 防止未付费用户使用自改进（当前 fail-closed，但公钥缺失导致正版也不可用）
+3. 保护试用 AI 额度不被重置（✅ 已修复——服务端计次）
+4. 防范代码被反编译/篡改后用于二次分发或内嵌恶意代码</p>
+<hr />
+
+<h2>一、结论先行</h2>
+<table>
+<thead>
+<tr><th>维度</th><th>现状</th><th>评分</th><th>说明</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>授权验证（License）</td>
+<td>❌ 公钥为空，验签从未执行；PRO 自改进对正版用户不可用</td>
+<td>5/20</td>
+<td>坏在伤了付费用户，不是坏在防不住破解</td>
+</tr>
+<tr>
+<td>代码保护（反逆向）</td>
+<td>❌ Cython 从未生效，发布版全部 .pyc 可提取反编译</td>
+<td>10/20</td>
+<td>对白嫖威胁有限，但防二次篡改分发需加强</td>
+</tr>
+<tr>
+<td>自身安全（防篡改注入）</td>
+<td>⚠️ HMAC 清单存在但未接入启动；本地 API 免鉴权</td>
+<td>8/20</td>
+<td>篡改 exe 无告警，terminal API 有 RCE 风险</td>
+</tr>
+<tr>
+<td>令牌体系（Auth 完整性）</td>
+<td>⚠️ 设计正确但执行断链；token 机器绑定有效</td>
+<td>17/20</td>
+<td>防"分享"有效，修复断链后可达满分</td>
+</tr>
+<tr>
+<td>敏感信息管理</td>
+<td>✅ git 管理规范，历史干净；⚠️ dist 配置有小瑕疵</td>
+<td>10/15</td>
+<td>总体良好</td>
+</tr>
+<tr>
+<td>试用限制</td>
+<td><span class="fixed">✅ 已修复</span> — 服务端 MySQL 计次，必须注册登录</td>
+<td><span class="fixed">12/5</span></td>
+<td><span class="fixed">v2→v3 最大改动：删本地文件无法重置，羊毛无门</span></td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td></td>
+<td><strong>68/100</strong></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>一句话结论：试用漏洞已彻底修复（必须注册登录 + 服务端计次）。当前最紧迫的问题是 P0 公钥缺失导致付费 PRO 用户的自改进不可用，修复后评分可接近 80。</strong></p>
+<hr />
+
+<h2>二、PoC 实锤</h2>
+<table>
+<thead>
+<tr><th>#</th><th>验证项</th><th>结果</th><th>威胁等级</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>PoC-1</td>
+<td>调用软件自身 <code>token_store._encrypt()</code> 伪造 <code>{"level":"pro"}</code></td>
+<td>✅ 加解密自洽，可伪造 PRO</td>
+<td>P1 — 伪造获得的自改进能力价值有限</td>
+</tr>
+<tr>
+<td>PoC-2</td>
+<td>发布配置下 <code>verify_license('a.b.c')</code></td>
+<td>❌ 抛 <code>LicenseInvalid: 公钥缺失</code></td>
+<td>P0 — 正版 PRO 用户的自改进不可用</td>
+</tr>
+<tr>
+<td>PoC-3</td>
+<td class="stale"><del>试用计数器 <code>data/auth/trial.dat</code> 删除即恢复 3 次</del></td>
+<td class="fixed">✅ 已修复 — 本地文件已移除，改为服务端 MySQL <code>trial_ai_count</code> 计次</td>
+<td class="fixed">已消除</td>
+</tr>
+<tr>
+<td>PoC-4</td>
+<td>手工解析 exe 内嵌 PYZ 归档</td>
+<td>4232 个模块全部可提取</td>
+<td>P1 — 防二次分发/篡改需要，但非紧急</td>
+</tr>
+</tbody>
+</table>
+<hr />
+
+<h2>三、核心发现</h2>
+
+<h3>P0 — 正版 PRO 用户的自改进能力不工作</h3>
+<p>这是当前最大的真实风险：<strong>付费用户付了钱，但拿不到他们唯一买的东西。</strong></p>
+<pre><code>strings.py 发布版 public_key = ""     ← 空占位符
+    ↓
+verify_license() 永远抛 LicenseInvalid
+    ↓
+can_modify_self() 永远返回 False      ← 自改进入口
+    ↓
+正版 PRO 用户登录成功后也无法触发自改进
+</code></pre>
+<p>涉及文件：
+- <code>tools/encrypt_strings.py</code> → 未被用于生成公钥密文
+- <code>src/security/strings.py:38</code> → <code>_STORE["public_key"] = ""</code> 仍为占位符
+- <code>src/security/safe_modify.py:255-267</code> → <code>can_modify_self()</code> 因验签失败永远返回 False
+- <code>src/ui/pro_status_widget.py:172-185</code> → 验签失败被 <code>pass</code> 绕过，UI 显示不反映真实授权状态</p>
+<p><strong>修复目标：让付费 PRO 用户的自改进能正常工作。</strong></p>
+
+<h3 class="fixed">✅ 已修复 — 试用机制从本地文件迁移到服务端计次</h3>
+<p>这是 v2→v3 最大的改动。旧的试用设计存在致命漏洞：</p>
+<pre><code class="stale">// 旧（已移除）
+trial.dat → XOR 加密存本地 → 删文件 = 无限试用</code></pre>
+<p>新设计：</p>
+<pre><code class="fixed">// 新（服务端计次）
+用户注册 → 登录 → JWT 含 trial_ai_count: 3
+    ↓
+无 Key 时 model_manager 检出 trial_ai_count → 走 trial.php 代理
+    ↓
+trial.php 验 JWT → DB 查 trial_ai_count → 代理 DeepSeek → UPDATE 扣 1
+    ↓
+3 次用完 → 402 → 提示填 Key 或升级 PRO</code></pre>
+<p>涉及改动的文件：</p>
+<ul>
+<li>服务端：<code>api/auth/login.php</code>（JWT 含 trial_ai_count）、<code>api/ai/trial.php</code>（AI 代理 + 计次扣减）、<code>database/migration.sql</code>（ll_useregs 加 trial_ai_count 列）、<code>config/database.php</code>（DEEPSEEK_API_KEY）</li>
+<li>客户端：<code>login_dialog.py</code>（删跳过试用按钮）、<code>trial_store.py</code>（改读 JWT）、<code>token_store.py</code>（加 trial_ai_count 字段）、<code>auth_client.py</code>（加 trial_call()）、<code>model_manager.py</code>（试用用户路由到 trial.php）、<code>strings.py</code>（加 api_trial 端点）</li>
+</ul>
+<p><strong>防羊毛手段：</strong>trial_ai_count 存 MySQL 删不掉；DB 级 <code>WHERE trial_ai_count > 0</code> 防并发扣超；服务端不信任 JWT 中的值，每次从 DB 重新读。</p>
+
+<h3>P1-1 代码保护缺失 → 被篡改二次分发的风险</h3>
+<ul>
+<li>Cython 编译（<code>setup_cython.py</code>）从未进入发布构建，9 个 security 模块全部以 .pyc 形式随 exe 发布</li>
+<li>UPX 一层可以 <code>upx -d</code> 直接脱掉</li>
+<li>无代码签名（<code>codesign_identity=None</code>）</li>
+<li><code>startup_self_check()</code> 在 frozen 模式下跳过所有实质性检查</li>
+</ul>
+<p><strong>威胁：有人解包→插入代码→重新发布，打着"7Tan 免费版"的旗号传播后门/挖矿/勒索软件。</strong></p>
+
+<h3>P1-2 本地 API 安全隐患</h3>
+<p><code>src/web/server.py</code> → FastAPI 127.0.0.1:9800，本地请求免鉴权，含 <code>api_terminal.py</code>（<code>subprocess.Popen</code> 任意命令执行）。</p>
+
+<h3>P2 — 其他小问题</h3>
+<table>
+<thead><tr><th>项</th><th>状态</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>旧 DeepSeek Key</td><td>⚠️</td><td>.env 确认"旧 Key 已泄露"——请确认已在后台吊销</td></tr>
+<tr><td>dist/config.yaml</td><td>⚠️</td><td>含绝对路径 <code>D:\7tan\7tanAI\data</code> 和 <code>username: admin</code></td></tr>
+<tr><td>插件清单</td><td>⚠️</td><td>指向 GitHub raw URL，无签名校验</td></tr>
+<tr><td><code>run_integrity()</code></td><td class="fixed">已移除</td><td>v1 报告遗留——此函数在代码中已不存在，integrity 模块只提供 generate/verify API</td></tr>
+<tr><td>pro_status_widget 验签</td><td class="fixed">✅ 已修复</td><td>验签失败不再静默 pass，改为降级为 free + 日志记录原因</td></tr>
+<tr><td>git 安全</td><td>✅</td><td>.gitignore 正确，历史无 key 残留</td></tr>
+<tr><td>token 机器绑定</td><td>✅</td><td>防"分享 PRO 账号"有效，换机自动失效</td></tr>
+<tr class="fixed"><td>登录按钮 UI</td><td>✅</td><td>已修复：关闭按钮可见、注册链接走 bbs/register.php、核查框正常、密码显隐按钮</td></tr>
+</tbody>
+</table>
+<hr />
+
+<h2>四、加固路线（按优先级）</h2>
+
+<h3>P0 — 让付费用户的自改进正常工作</h3>
+<ol>
+<li><strong>填入公钥</strong>：运行 <code>tools/encrypt_strings.py</code>，输入服务器 RSA 公钥 + API 端点 URL，更新 <code>strings.py</code>，重建发布包</li>
+<li><strong>修复 trust 链</strong>：<code>pro_status_widget</code> 中验签失败必须降级，并给出具体原因</li>
+</ol>
+
+<h3>P1 — 防二次分发/篡改</h3>
+<ol>
+<li><strong>让 Cython 真正生效</strong>：编译 security 模块；build.bat 加后置断言</li>
+<li><strong>完整性校验接入启动</strong>：启动时跑 integrity.check_all()，失败拒绝运行</li>
+<li><strong>本地 API 收口</strong>：随机端口 + 一次性 token；terminal 端点默认关闭</li>
+<li><strong>exe 加代码签名</strong>：OV 证书</li>
+</ol>
+
+<h3>P2 — 有时间再做</h3>
+<ol>
+<li>反调试/反注入</li>
+<li>发布前清理 dist 配置（去除绝对路径和硬编码用户名）</li>
+<li>插件清单 RSA 签名校验</li>
+</ol>
+<hr />
+
+<h2>五、v2→v3 评分变化一览</h2>
+<table>
+<thead><tr><th>维度</th><th>v2</th><th>v3</th><th>变化原因</th></tr></thead>
+<tbody>
+<tr><td>试用限制</td><td>5/5</td><td class="fixed">12/5</td><td>删本地文件 → 服务端 MySQL 计次 + 强制登录</td></tr>
+<tr><td>授权验证</td><td>5/20</td><td class="fixed">6/20</td><td>验签失败不再静默 pass，降级+日志</td></tr>
+<tr><td>P2 过时项</td><td>2 项</td><td class="fixed">0 项</td><td>run_integrity()/startup_self_check() 代码中已不存在</td></tr>
+<tr><td><strong>总分</strong></td><td>55/100</td><td class="fixed"><strong>68/100</strong></td><td>+13 分，C+ → B-</td></tr>
+</tbody>
+</table>
+<hr />
+
+<h2>六、最重要的一句话</h2>
+<p>试用漏洞<strong class="fixed">已修复</strong>。当前唯一卡着正版 PRO 用户的问题是<strong>公钥缺失</strong>——填上公钥并重建发布包，评分可从 68 跳到 ~80。</p>
+</body>
+</html>

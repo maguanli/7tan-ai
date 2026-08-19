@@ -1,0 +1,78 @@
+# 7tan Game Community - AI Auto Update System
+# Python 3.11+
+
+# === AI ===
+openai>=1.0.0
+
+# === HTTP & Crawler ===
+httpx>=0.25.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+feedparser>=6.0.0
+
+# === Browser Automation ===
+playwright>=1.40.0
+
+# === Scheduler ===
+apscheduler>=3.10.0
+
+# === Cloud Storage ===
+oss2>=2.18.0
+cos-python-sdk-v5>=1.9.0
+qiniu>=7.12.0
+
+# === Database ===
+sqlalchemy>=2.0.0
+aiosqlite>=0.19.0
+
+# === Config ===
+pyyaml>=6.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# === Imaging ===
+Pillow>=10.0.0
+
+# === Logging ===
+loguru>=0.7.0
+
+# === Utilities ===
+jedi>=0.19.0  # LSP 语义分析（跳转定义/查找引用/智能补全）
+python-dotenv>=1.0.0
+tqdm>=4.66.0
+python-slugify>=8.0.0
+
+# === Security ===
+cryptography>=41.0.0
+
+# === Web Server ===
+fastapi>=0.104.0
+uvicorn>=0.24.0
+websockets>=12.0
+python-multipart>=0.0.9  # FastAPI 文件上传（聊天图片）
+
+# === Native Desktop (PyQt6 — 全原生控件) ===
+PyQt6>=6.5  # QtWidgets/QtNetwork/QtWebSockets
+PyQt6-WebEngine>=6.5
+PyQt6-Charts>=6.5  # QtCharts 图表扩展
+
+# === Screen Recording ===
+mss>=9.0
+pywin32>=306  # Windows 剪贴板/窗口（desktop_do.py 依赖，缺失时降级 PowerShell）
+pyaudio>=0.2
+imageio-ffmpeg>=0.5
+numpy>=1.24
+
+# === Build (PyInstaller) ===
+pyinstaller>=6.0
+
+# === UI 渲染（硬依赖，chat_page/message_bubble 顶层导入）===
+pygments>=2.0.0
+
+# === 可选功能增强（源码 try/except 导入，缺失时功能降级）===
+sounddevice>=0.4.0
+markdown>=3.0.0
+edge-tts>=6.0.0
+tiktoken>=0.5.0
+imageio>=2.0.0

@@ -1,0 +1,145 @@
+{
+  "name": "7tan-ai",
+  "displayName": "7Tan AI",
+  "description": "7Tan AI 助手 — 代码审查、生成、解释、对话，集成到 VS Code",
+  "version": "1.0.0",
+  "publisher": "7tan",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Chat",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "chat",
+    "code review",
+    "code generation",
+    "7tan"
+  ],
+  "activationEvents": [
+    "onView:7tan.sidebar"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "7tan-sidebar",
+          "title": "7Tan AI",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "7tan-sidebar": [
+        {
+          "type": "webview",
+          "id": "7tan.sidebar",
+          "name": "AI 对话"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "7tan.openChat",
+        "title": "7Tan: 打开 AI 对话",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "7tan.reviewCode",
+        "title": "7Tan: 审查代码",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "7tan.explainCode",
+        "title": "7Tan: 解释代码",
+        "icon": "$(book)"
+      },
+      {
+        "command": "7tan.generateCode",
+        "title": "7Tan: 生成代码",
+        "icon": "$(wand)"
+      },
+      {
+        "command": "7tan.optimizeCode",
+        "title": "7Tan: 优化代码",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "7tan.generateTests",
+        "title": "7Tan: 生成测试",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "7tan.insertToEditor",
+        "title": "7Tan: 插入代码到编辑器"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "7tan.reviewCode",
+          "group": "7tan",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "7tan.explainCode",
+          "group": "7tan",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "7tan.optimizeCode",
+          "group": "7tan",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "7tan.generateTests",
+          "group": "7tan",
+          "when": "editorHasSelection"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "7tan.insertToEditor",
+          "when": "false"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "7tan.reviewCode",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "editorHasSelection"
+      },
+      {
+        "command": "7tan.explainCode",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "7Tan AI",
+      "properties": {
+        "7tan.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:9800",
+          "description": "7Tan API 地址"
+        },
+        "7tan.autoStartServer": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否在扩展启动时自动启动 7Tan 服务"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "package": "vsce package"
+  }
+}

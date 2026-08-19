@@ -13,6 +13,7 @@ data/games.db
 data/games.db-shm
 data/games.db-wal
 data/*.db
+data/*.bak*
 
 # 用户数据与记忆（敏感个人数据，禁止提交）
 data/users/

@@ -1,0 +1,35 @@
+
+
+CommandLine="D:\\用户目录\下载\新建文件夹 123\chrome-win\chrome.exe"
+ProcessId=1552
+
+
+CommandLine="D:\用户目录\下载\新建文件夹 123\chrome-win\chrome.exe" --type=crashpad-handler "--user-data-dir=C:\Users\Administrator\AppData\Local\Chromium\User Data" /prefetch:7 --monitor-self-annotation=ptype=crashpad-handler "--database=C:\Users\Administrator\AppData\Local\Chromium\User Data\Crashpad" --annotation=plat=Win64 --annotation=prod=Chromium --annotation=ver=108.0.5351.0-devel --initial-client-data=0x130,0x134,0x138,0x10c,0x13c,0x7ff8204d6db8,0x7ff8204d6dc8,0x7ff8204d6dd8
+ProcessId=8304
+
+
+CommandLine="D:\用户目录\下载\新建文件夹 123\chrome-win\chrome.exe" --type=gpu-process --start-stack-profiler --gpu-preferences=UAAAAAAAAADgAAAYAAAAAAAAAAAAAAAAAABgAAAAAAAwAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAEgAAAAAAAAASAAAAAAAAAAYAAAAAgAAABAAAAAAAAAAGAAAAAAAAAAQAAAAAAAAAAAAAAAOAAAAEAAAAAAAAAABAAAADgAAAAgAAAAAAAAACAAAAAAAAAA= --mojo-platform-channel-handle=1924 --field-trial-handle=2124,i,6334611286577112550,5750820652416514153,131072 /prefetch:2
+ProcessId=6312
+
+
+CommandLine="D:\用户目录\下载\新建文件夹 123\chrome-win\chrome.exe" --type=utility --utility-sub-type=network.mojom.NetworkService --lang=zh-CN --service-sandbox-type=none --video-capture-use-gpu-memory-buffer --start-stack-profiler --mojo-platform-channel-handle=2248 --field-trial-handle=2124,i,6334611286577112550,5750820652416514153,131072 /prefetch:8
+ProcessId=9660
+
+
+CommandLine="D:\用户目录\下载\新建文件夹 123\chrome-win\chrome.exe" --type=utility --utility-sub-type=storage.mojom.StorageService --lang=zh-CN --service-sandbox-type=service --video-capture-use-gpu-memory-buffer --mojo-platform-channel-handle=2476 --field-trial-handle=2124,i,6334611286577112550,5750820652416514153,131072 /prefetch:8
+ProcessId=9796
+
+
+CommandLine="D:\用户目录\下载\新建文件夹 123\chrome-win\chrome.exe" --type=renderer --display-capture-permissions-policy-allowed --event-path-policy=0 --first-renderer-process --file-url-path-alias="/gen=D:\用户目录\下载\新建文件夹 123\chrome-win\gen" --video-capture-use-gpu-memory-buffer --lang=zh-CN --device-scale-factor=1 --num-raster-threads=2 --enable-main-frame-before-activation --renderer-client-id=6 --time-ticks-at-unix-epoch=-1787136442147321 --launch-time-ticks=3565551846 --mojo-platform-channel-handle=3268 --field-trial-handle=2124,i,6334611286577112550,5750820652416514153,131072 /prefetch:1
+ProcessId=6828
+
+
+CommandLine="D:\用户目录\下载\新建文件夹 123\chrome-win\chrome.exe" --type=renderer --display-capture-permissions-policy-allowed --event-path-policy=0 --file-url-path-alias="/gen=D:\用户目录\下载\新建文件夹 123\chrome-win\gen" --video-capture-use-gpu-memory-buffer --lang=zh-CN --device-scale-factor=1 --num-raster-threads=2 --enable-main-frame-before-activation --renderer-client-id=5 --time-ticks-at-unix-epoch=-1787136442147321 --launch-time-ticks=3565567193 --mojo-platform-channel-handle=3296 --field-trial-handle=2124,i,6334611286577112550,5750820652416514153,131072 /prefetch:1
+ProcessId=3568
+
+
+CommandLine="D:\用户目录\下载\新建文件夹 123\chrome-win\chrome.exe" --type=renderer --display-capture-permissions-policy-allowed --event-path-policy=0 --file-url-path-alias="/gen=D:\用户目录\下载\新建文件夹 123\chrome-win\gen" --video-capture-use-gpu-memory-buffer --lang=zh-CN --device-scale-factor=1 --num-raster-threads=2 --enable-main-frame-before-activation --renderer-client-id=7 --time-ticks-at-unix-epoch=-1787136442147321 --launch-time-ticks=3566027832 --mojo-platform-channel-handle=4716 --field-trial-handle=2124,i,6334611286577112550,5750820652416514153,131072 /prefetch:1
+ProcessId=5788
+
+
+

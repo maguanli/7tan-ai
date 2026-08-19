@@ -734,5 +734,23 @@
       "novel_platform_rules"
     ],
     "icon": "📖"
+  },
+  {
+    "id": "longtou_zhenfa",
+    "name": "龙头阵法",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "custom",
+    "category": "炒股",
+    "description": "龙头阵法炒股插件：人气榜前5识别龙头、情绪周期温度计、30分钟MACD金叉死叉买卖点、风控仓位提示、每日龙头梯队复盘。数据源为东方财富公开接口。",
+    "tools": [
+      "ltz_renqi_rank",
+      "ltz_leader",
+      "ltz_emotion",
+      "ltz_macd30",
+      "ltz_risk",
+      "ltz_review"
+    ],
+    "icon": "🐉"
   }
 ]

@@ -60,7 +60,25 @@ SYSTEM_PROMPT = """你是公众号爆款文章专家，深谙新媒体传播规�
     ① 利他性：读者看完必须带得走东西——方法/步骤/经验/避坑/认知/资源，能回答「对我有什么用？」；纯自嗨流水账=无利他=没人收藏转发
     ② 有情绪：内容必须让读者心里动一下——共鸣扎心/爽感/感动/愤怒/好奇/希望；情绪到位才有点赞评论收藏转发；干巴巴讲道理=无情绪=读完划走
     ③ 有反差：内容要有认知反转或冲突——「以为A，结果B」「别人都…他却…」「以前…现在…」；反差制造记忆点和传播欲；平铺直叙=无反差=没记忆点
-    自检三问：读者能学到什么？会不会被打动？有没有反转？缺哪个补哪个，三者皆备才是能持续被推荐的文章"""
+    自检三问：读者能学到什么？会不会被打动？有没有反转？缺哪个补哪个，三者皆备才是能持续被推荐的文章
+16. 图文结构铁律（爆款排版核心，决定完读率和推荐权重，写正文必须标注配图）：
+    ① 图片不少于6张：每篇爆款至少配6张图，图文穿插分布，严禁文末一次性堆图
+    ② 每变一图：每个信息单元（一个变化/一个故事/一个观点/一个步骤）讲完就配一张图，图是段落之间的"呼吸节拍器"，制造"再来一段"的惯性
+    ③ 用意象隐喻图：优先选无文字的意象图（钱/房/钥匙/城市/时钟/背影/路等抽象符号），拒绝人物摆拍照、大字报、数据截图——意象图不泄露情绪、让读者自动脑补自己的场景，代入感更强
+    ④ 无文字图=不抢注意力：图扫一眼就过，眼睛立刻回到文字，完读率不掉
+    ⑤ 图文比例≈1:1：一段文字配一张图，像刷短视频一样一屏一屏往下滑
+    ⑥ 每张图配一句图注（文字说明），图文互相印证
+    ⑦ 配图标准模板：钱袋子题材→硬币/钱包/算盘；房产题材→房子/钥匙/门；政策题材→文件/印章/城市天际线；情感题材→背影/牵手/灯光
+17. 去AI痕迹铁律（发布前自查，AI腔=读者一眼出戏=完读率崩）：
+    ① 禁空洞词：值得注意的是/众所周知/毋庸置疑/总而言之/综上所述/首先/其次/最后/值得一提的是/不难发现/由此可见/在这个快节奏的时代/让我们/值得我们深思——出现即重写
+    ② 禁「不是A，是B」总结腔滥用：正文叙述里连续使用就是AI味，全篇最多3处且只留给标题/小标题/金句设计位；叙述中一律改成口语（怕的是/其实是/说白了）
+    ③ 禁三连排比「是A，是B，是C」和「不是X，不是Y，是Z」句式
+    ④ 禁感叹号滥用：每段≤1个，正文叙述尽量不用
+    ⑤ 禁金句撞车：同一句式（如「怕的不是…是…」）全文不得重复出现两次
+    ⑥ 口语优先：多用「其实/说白了/真要说起来/可/哪是什么」等口语连接词，像朋友聊天不像写作文；少用书面连接词（然而/此外/由此可见/综上）
+    ⑦ 禁文艺腔套话：仿佛/宛如/恰似/岁月静好/流光溢彩等，一篇文章最多1处
+    ⑧ 写完每段自问：这句话人会说吗？AI能批量生成的句子就重写
+    ⑨ 禁「写在最后/结语/总结一下/最后说几句/写在结尾/写在文末」等总结陈词式小标题：结尾直接自然收束（抛问题/给建议/一句反问），禁止给自己贴「总结」标签，AI最爱这么结尾"""
 
 
 def _llm_ex(system_prompt: str, user_prompt: str, max_tokens: int = 2500,
@@ -88,8 +106,27 @@ def _llm_ex(system_prompt: str, user_prompt: str, max_tokens: int = 2500,
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        return resp.choices[0].message.content.strip(), None
+        _msg = resp.choices[0].message
+        _content = getattr(_msg, 'content', None)
+        if not (_content or '').strip():
+            _content = getattr(_msg, 'reasoning_content', None) or ''
+        try:
+            from pathlib import Path as _P
+            (ROOT / 'tmp').mkdir(parents=True, exist_ok=True)
+            (ROOT / 'tmp' / 'viral_llm_debug.log').open('a', encoding='utf-8').write(f"[OK] model={model} url={url} key_len={len(key)} content_len={len(_content) if _content else 0} content_type={type(_content).__name__}\n")
+        except Exception:
+            pass
+        _text = (_content or '').strip()
+        if not _text:
+            return None, "模型返回了空内容（content 与 reasoning_content 均为空），请重试或切换模型"
+        return _text, None
     except Exception as e:
+        try:
+            from pathlib import Path as _P
+            (ROOT / 'tmp').mkdir(parents=True, exist_ok=True)
+            (ROOT / 'tmp' / 'viral_llm_debug.log').open('a', encoding='utf-8').write(f"[ERR] model={model} url={url} key_len={len(key)} exc={type(e).__name__}: {e}\n")
+        except Exception:
+            pass
         return None, f"{type(e).__name__}: {e}"
 
 
@@ -232,7 +269,8 @@ def viral_outline(topic: str = "", structure: str = "五段式") -> str:
                   f"② C 冲突(Complication): 制造矛盾/痛点/转折，打破平衡\n"
                   f"③ Q 疑问(Question): 提出读者心中的问题，引发好奇\n"
                   f"④ A 回答(Answer): 给出观点/方案/故事，金句收尾\n"
-                  f"⑤ 互动引导: 结尾如何引导点赞/在看/评论/转发")
+                  f"⑤ 互动引导: 结尾如何引导点赞/在看/评论/转发\n"
+                  f"⑥ 图文规划: 标注全文配图位置，不少于6张，每个故事/观点后配一张无文字意象图（钱/房/钥匙/城市/时钟/背影等），并用一句话注明图片内容建议")
     else:
         prompt = (f"为选题「{topic}」生成爆款五段式大纲。\n"
                   f"格式：\n"
@@ -241,7 +279,8 @@ def viral_outline(topic: str = "", structure: str = "五段式") -> str:
                   f"② 故事推进: 小标题+讲什么故事+埋什么真细节（数字/对话/动作）\n"
                   f"③ 观点金句: 2-3个核心观点+对应金句（标注用了哪种金句技法）\n"
                   f"④ 情绪升华: 如何拔高到人生/价值层面，让人想转发\n"
-                  f"⑤ 互动引导: 结尾如何引导点赞/在看/评论/转发")
+                  f"⑤ 互动引导: 结尾如何引导点赞/在看/评论/转发\n"
+                  f"⑥ 图文规划: 标注全文配图位置，不少于6张，每个故事/观点后配一张无文字意象图（钱/房/钥匙/城市/时钟/背影等），并用一句话注明图片内容建议")
     text, _err = _llm_ex(SYSTEM_PROMPT, prompt, max_tokens=2800, temperature=0.85)
     if text:
         return f"📐 爆款大纲：「{topic}」（{structure}）\n\n{text}\n\n💡 大纲确认后可继续用 viral_write 生成完整正文。"
@@ -290,7 +329,9 @@ def viral_write(topic: str = "", outline: str = "", word_count: int = 1200) -> s
               f"6. 有具体人物故事细节，不要空谈道理；写故事用「我朋友/同事/同学」增加真实感\n"
               f"7. 正文用 ## 作为小标题分隔，段落之间用空行\n"
               f"8. 结尾用四法之一或组合：总结升华/金句收尾/互动引导/留白余味，并引导点赞/在看/评论/转发\\n"
-              f"9. 搜索流量（微信搜一搜官方规范）：一篇一主题写透不贪多；标题与正文强相关；正文内容完整可独立成文，严禁「未完待续/点击阅读原文/长按识别」等导流话术和隐藏文字；适当用小标题和加粗突出重点")
+              f"9. 搜索流量（微信搜一搜官方规范）：一篇一主题写透不贪多；标题与正文强相关；正文内容完整可独立成文，严禁「未完待续/点击阅读原文/长按识别」等导流话术和隐藏文字；适当用小标题和加粗突出重点\n"
+              f"10. 图文结构（必做，爆款标配）：正文用【图片1】【图片2】…【图片N】单独成行标注插入位置，全文不少于6张图；每个故事/观点讲完配一张无文字意象图（钱/房/钥匙/城市/时钟/背影等），并在标记后注明图片内容建议（如【图片1】一堆硬币+微型小人，象征你的钱）；图文比例约1:1\n"
+              f"11. 去AI痕迹（必做）：①禁空洞词（值得注意的是/众所周知/总而言之/首先/其次/综上所述/在这个快节奏的时代/让我们）②正文叙述严禁连续用「不是A，是B」总结腔，全篇最多3处且只留标题/小标题/金句；叙述里用口语替代（怕的是/其实是/说白了）③禁三连排比「是A，是B，是C」④每段感叹号≤1个⑤同一金句句式全文不重复⑥口语优先像聊天，少用书面连接词（然而/由此可见/综上）⑦写完自问「这句话人会说吗」，AI腔就重写⑧严禁用「写在最后/结语/总结一下/最后说几句」等总结陈词式小标题，结尾直接自然收束，不给自己贴「总结」标签")
     text, _err = _llm_ex(SYSTEM_PROMPT, prompt, max_tokens=4000, temperature=0.95)
     if text:
         return f"📝 爆款正文：「{topic}」（约{word_count}字）\n\n{text}"
@@ -431,6 +472,39 @@ def viral_check(title: str = "", content: str = "") -> str:
             ok.append("✅ 有具体数字细节（增强真实感）")
         else:
             issues.append("💡 缺少具体数字细节（如 42岁/第11条/3000块），真细节=高共鸣")
+
+        # ── 图片数量检查（爆款图文结构：≥6张） ──
+        img_cnt = len(re.findall(r"【图片\d+】", text))
+        if img_cnt >= 6:
+            ok.append(f"✅ 配图标记 {img_cnt} 处（≥6 达标，图文节奏符合爆款标准）")
+        elif img_cnt > 0:
+            issues.append(f"⚠️ 配图标记偏少：{img_cnt} 处（建议 ≥6 张，图文比例约1:1，每讲完一个故事/观点配一张图）")
+        else:
+            issues.append("💡 缺少配图标记：建议正文用【图片1】…【图片N】标注插入位置，全文不少于6张图（爆款图文结构铁律）")
+
+        # ── AI痕迹检查（去AI腔，发布前自查） ──
+        ai_issues = []
+        empty_words = ["值得注意的是", "众所周知", "毋庸置疑", "总而言之", "综上所述", "首先", "其次", "值得一提", "不难发现", "由此可见", "在这个快节奏的时代", "让我们", "值得我们深思", "仿佛", "宛如"]
+        hit_empty = [w for w in empty_words if w in text]
+        if hit_empty:
+            ai_issues.append(f"⚠️ AI空洞词 {hit_empty}（出现即改口语：说白了/其实/真要说起来）")
+        notA_isB = len(re.findall(r"不是[^，。；、]{1,12}，[^，。；]{0,8}是[^，。；]{1,14}", text))
+        if notA_isB > 3:
+            ai_issues.append(f"⚠️ 「不是A，是B」句式 {notA_isB} 处（>3处=AI总结腔，叙述改口语：怕的是/其实是/说白了）")
+        summary_titles = ["写在最后", "写在结尾", "写在文末", "结语", "总结一下", "最后说几句", "最后说句", "写在后面"]
+        hit_sum = [w for w in summary_titles if w in text]
+        if hit_sum:
+            ai_issues.append(f"⚠️ 总结陈词式标题 {hit_sum}（「写在最后/结语」=AI痕迹，结尾改为自然收束：抛问题/给建议/一句反问）")
+        bang_cnt = text.count("！")
+        if bang_cnt > 5:
+            ai_issues.append(f"⚠️ 感叹号过多：{bang_cnt} 个（每段≤1个，正文叙述尽量不用）")
+        triple_cnt = len(re.findall(r"[，,][^，。；]{1,12}[，,][^，。；]{1,12}[，,][^，。；]{1,12}[。！？]", text))
+        if triple_cnt >= 2:
+            ai_issues.append(f"⚠️ 疑似三连排比 {triple_cnt} 处（是A，是B，是C=AI腔，建议拆短句口语化）")
+        if ai_issues:
+            issues += ai_issues
+        else:
+            ok.append("✅ AI痕迹检查通过（无空洞词/句式滥用）")
 
         # ── 价值三支柱检查（利他性/有情绪/有反差） ──
         altru_keys = ["方法", "步骤", "教程", "避坑", "经验", "技巧", "怎么", "如何", "清单", "攻略", "建议", "秘密", "真相"]

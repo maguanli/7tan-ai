@@ -169,7 +169,7 @@ def desktop_ocr(region: str = "", engine: str = "auto") -> str:
 
 @register_tool(
     name="desktop_see",
-    description="看懂屏幕（桌面视觉·快+准）：一次截图→本地画面分析（主色调/亮度/红绿告警块，毫秒级）+ OCR + 视觉大模型语义理解（GLM-4V）。已优化：①快：干净界面 OCR 秒出，一次截图全链路复用；②准：乱码界面自动切换双引擎融合(RapidOCR)，VLM 元素坐标已换算为真实屏幕像素可直接点击，JSON 容错解析；③VLM 输出画面摘要/元素列表/状态/警告/操作建议。比 desktop_ocr 更全面，能看懂「画面里有什么、按钮是否可用、有没有弹窗」；看不清/识别不出时优先用这个。engine 可选 smart（默认，自适应快+准）/auto（最快）/fusion（最准但慢）。",
+    description="看懂屏幕（桌面视觉·快+准）：一次截图→本地画面分析（主色调/亮度/红绿告警块，毫秒级）+ OCR + 视觉大模型语义理解（GLM-4.6V）。已优化：①快：干净界面 OCR 秒出，一次截图全链路复用；②准：乱码界面自动切换双引擎融合(RapidOCR)，VLM 元素坐标已换算为真实屏幕像素可直接点击，JSON 容错解析；③VLM 输出画面摘要/元素列表/状态/警告/操作建议。比 desktop_ocr 更全面，能看懂「画面里有什么、按钮是否可用、有没有弹窗」；看不清/识别不出时优先用这个。engine 可选 smart（默认，自适应快+准）/auto（最快）/fusion（最准但慢）。",
     parameters={
         "type": "object",
         "properties": {

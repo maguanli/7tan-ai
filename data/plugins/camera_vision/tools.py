@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 摄像头视觉插件 📷 — 7Tan 桌面机器人的"眼睛"
-基于 tools/camera_vision/camera_do.py（OpenCV 采集 + 智谱 GLM-4V 视觉大模型理解）
+基于 tools/camera_vision/camera_do.py（OpenCV 采集 + 智谱 GLM-4.6V 视觉大模型理解）
 
 工具:
   camera_list             枚举摄像头设备
@@ -81,7 +81,7 @@ def camera_capture(index: int = -1, save: str = "", width: int = 1280, height: i
 
 @register_tool(
     name="camera_see",
-    description="📸 机器人的眼睛：摄像头拍照 + 视觉大模型（GLM-4V）理解画面，输出结构化JSON（场景/物体/人物/文字/异常/建议）。无摄像头时自动降级为屏幕截图+视觉理解。用于机器人'看'真实世界。",
+    description="📸 机器人的眼睛：摄像头拍照 + 视觉大模型（GLM-4.6V）理解画面，输出结构化JSON（场景/物体/人物/文字/异常/建议）。无摄像头时自动降级为屏幕截图+视觉理解。用于机器人'看'真实世界。",
     parameters={
         "type": "object",
         "properties": {
@@ -105,7 +105,7 @@ def camera_see(index: int = -1, image: str = "", prompt: str = "") -> str:
 
 @register_tool(
     name="vision_analyze_image",
-    description="用视觉大模型（GLM-4V）分析任意图片/截图文件：识别物体、场景、文字、人物、异常。不依赖摄像头，适合分析下载的截图、封面图、验证码等。",
+    description="用视觉大模型（GLM-4.6V）分析任意图片/截图文件：识别物体、场景、文字、人物、异常。不依赖摄像头，适合分析下载的截图、封面图、验证码等。",
     parameters={
         "type": "object",
         "properties": {

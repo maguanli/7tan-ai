@@ -154,12 +154,8 @@ def _player_worker():
                 _set_tts_busy(False)
         except Exception as e:
             logger.warning(f"[TTS] 播放失败（音频设备不可用？）: {wav_path}: {e}")
-            # 兜底：winsound 失败时用系统默认播放器，至少能出声
-            try:
-                if os.name == 'nt' and os.path.exists(wav_path):
-                    os.startfile(wav_path)
-            except Exception:
-                pass
+            # 兜底：winsound 失败时不再弹系统播放器窗口（避免打扰用户），仅记录日志
+            logger.warning(f"[TTS] winsound 播放失败，已停止播放（不弹窗）: {wav_path}")
         finally:
             # 从待播集合移除（允许同路径文件后续重新入队）
             with _player_lock:
@@ -437,6 +433,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
             # === MP3 → WAV（用于 winsound 播放） ===
             try:
                 _FFMPEG = _first_existing(
+                    r"D:\ffmpeg\bin\ffmpeg.exe",
                     r"E:\7tan_voice\ffmpeg\ffmpeg.exe",
                     r"G:\ffmpeg\bin\ffmpeg.exe",
                 )
@@ -450,7 +447,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                 # ffmpeg 二进制不存在
                 logger.warning("[TTS] ffmpeg 未找到，无法转换 MP3→WAV")
                 if play:
-                    os.startfile(mp3_path) if os.name == 'nt' else None
+                    logger.warning("[TTS] ffmpeg 不可用，winsound 仅支持 WAV，停止播放（不弹窗）")
                     _notify_tts_start(text)
                     _update_circuit_breaker(True)
                     return {
@@ -469,7 +466,7 @@ def _speak_edge_tts(text: str, play: bool) -> dict:
                 # ffmpeg 转换失败
                 logger.warning(f"[TTS] ffmpeg 转换失败: {e}")
                 if play:
-                    os.startfile(mp3_path) if os.name == 'nt' else None
+                    logger.warning("[TTS] ffmpeg 不可用，winsound 仅支持 WAV，停止播放（不弹窗）")
                     _notify_tts_start(text)
                     _update_circuit_breaker(True)
                     return {

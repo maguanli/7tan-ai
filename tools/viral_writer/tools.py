@@ -88,8 +88,27 @@ def _llm_ex(system_prompt: str, user_prompt: str, max_tokens: int = 2500,
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        return resp.choices[0].message.content.strip(), None
+        _msg = resp.choices[0].message
+        _content = getattr(_msg, 'content', None)
+        if not (_content or '').strip():
+            _content = getattr(_msg, 'reasoning_content', None) or ''
+        try:
+            from pathlib import Path as _P
+            (ROOT / 'tmp').mkdir(parents=True, exist_ok=True)
+            (ROOT / 'tmp' / 'viral_llm_debug.log').open('a', encoding='utf-8').write(f"[OK] model={model} url={url} key_len={len(key)} content_len={len(_content) if _content else 0} content_type={type(_content).__name__}\n")
+        except Exception:
+            pass
+        _text = (_content or '').strip()
+        if not _text:
+            return None, "模型返回了空内容（content 与 reasoning_content 均为空），请重试或切换模型"
+        return _text, None
     except Exception as e:
+        try:
+            from pathlib import Path as _P
+            (ROOT / 'tmp').mkdir(parents=True, exist_ok=True)
+            (ROOT / 'tmp' / 'viral_llm_debug.log').open('a', encoding='utf-8').write(f"[ERR] model={model} url={url} key_len={len(key)} exc={type(e).__name__}: {e}\n")
+        except Exception:
+            pass
         return None, f"{type(e).__name__}: {e}"
 
 

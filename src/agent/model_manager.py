@@ -124,7 +124,7 @@ class ModelManager:
         self._load_config_defaults()
         # 🔒 DB 加载后再检查一次（防止 DB 返回超限值或 DB 加载失败）
         if not self._provider_cap_applied:
-            cap = self._PROVIDER_MAX_TOKENS_CAP.get(getattr(self, 'provider', ''), 4096)
+            cap = self._resolve_max_tokens_cap()
             if self.max_tokens > cap:
                 logger.warning(f"⚠️ max_tokens {self.max_tokens} 超过 {getattr(self, 'provider', 'unknown')} 上限 {cap}，已自动限制")
                 self.max_tokens = cap
@@ -139,6 +139,17 @@ class ModelManager:
         "deepseek": 131072,     # DeepSeek: 高上限
     }
 
+    def _resolve_max_tokens_cap(self) -> int:
+        """按 模型→供应商 解析 max_tokens 安全上限
+
+        商汤免费额度模型（deepseek-v4-flash / glm-5.2）支持 65K+ 输出，
+        不受 sensetime 4096 通用限制；其余模型仍按供应商上限熔断。
+        """
+        prov = getattr(self, 'provider', '') or ''
+        if prov == 'sensetime' and getattr(self, 'model_name', '') in ('deepseek-v4-flash', 'glm-5.2'):
+            return 65536
+        return self._PROVIDER_MAX_TOKENS_CAP.get(prov, 4096)
+
     def _load_config_defaults(self):
         """从数据库加载 context_window / max_tokens / temperature / extra_config"""
         try:
@@ -150,7 +161,15 @@ class ModelManager:
                     from ..database.db import get_session, AiConfig
                     session = get_session()
                     try:
-                        row = session.query(AiConfig).filter(AiConfig.model == self.model_name).first()
+                        # 优先活跃配置（用户切换后的目标模型），其次取最新配置
+                        row = session.query(AiConfig).filter(
+                            AiConfig.model == self.model_name,
+                            AiConfig.is_active == 1
+                        ).first()
+                        if not row:
+                            row = session.query(AiConfig).filter(
+                                AiConfig.model == self.model_name
+                            ).order_by(AiConfig.id.desc()).first()
                         if row:
                             cfg = row.to_dict(mask_secrets=False)
                     finally:
@@ -172,7 +191,7 @@ class ModelManager:
                 self._db_api_key = cfg.get("api_key", "")  # 缓存 DB 中的 api_key
                 self._db_base_url = cfg.get("base_url", "")
                 # 🔒 供应商级 max_tokens 熔断：不超过 API 实际上限
-                cap = self._PROVIDER_MAX_TOKENS_CAP.get(self.provider, 4096)
+                cap = self._resolve_max_tokens_cap()
                 if self.max_tokens > cap:
                     logger.warning(f"⚠️ max_tokens {self.max_tokens} 超过 {self.provider} 上限 {cap}，已自动限制")
                     self.max_tokens = cap

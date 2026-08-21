@@ -128,7 +128,31 @@ class ModelManager:
             if self.max_tokens > cap:
                 logger.warning(f"⚠️ max_tokens {self.max_tokens} 超过 {getattr(self, 'provider', 'unknown')} 上限 {cap}，已自动限制")
                 self.max_tokens = cap
+        # 🔒 商汤(SenseNova)参数兼容：reasoning_effort 只接受 low/medium/high/xhigh/none
+        #    官方 DeepSeek 的 "max" 在商汤接口会 400 InvalidParameter，初始化后统一修正
+        if getattr(self, 'provider', '') == 'sensetime':
+            self._sanitize_reasoning_effort()
 
+    @staticmethod
+    def _sanitize_reasoning_effort(extra_config=None, kwargs=None):
+        """将 reasoning_effort 修正为供应商接受的合法值
+
+        商汤(SenseNova)接口仅接受 low/medium/high/xhigh/none，
+        官方 DeepSeek 的 "max" 在商汤会 400 InvalidParameter。
+        修改 extra_config（返回 dict）或 kwargs（就地修改）。
+        """
+        allowed = {"low", "medium", "high", "xhigh", "none"}
+        if kwargs is not None:
+            effort = kwargs.get("reasoning_effort")
+            if effort is not None and effort not in allowed:
+                logger.warning(f"⚠️ 商汤接口不识别 reasoning_effort={effort!r}，已自动改为 'high'")
+                kwargs["reasoning_effort"] = "high"
+        if extra_config is not None:
+            effort = extra_config.get("reasoning_effort")
+            if effort is not None and effort not in allowed:
+                logger.warning(f"⚠️ 商汤接口不识别 reasoning_effort={effort!r}，已自动改为 'high'")
+                extra_config["reasoning_effort"] = "high"
+        return extra_config
     # 🔒 供应商级别 max_tokens 安全上限（防止 API 400 错误）
     _PROVIDER_MAX_TOKENS_CAP = {
         "doubao": 4096,         # 豆包/火山引擎: max_tokens ≤ 4096
@@ -261,6 +285,10 @@ class ModelManager:
             if key in _LLM_EXTRA_WHITELIST:
                 kwargs.setdefault(key, value)
 
+        # 🔒 商汤(SenseNova)参数兼容兜底：无论 extra_config 来自哪（默认值/DB），
+        #    传给商汤前一律把 reasoning_effort 修正为合法值（low/medium/high/xhigh/none）
+        if self.provider == "sensetime":
+            self._sanitize_reasoning_effort(kwargs=kwargs)
         # 🔒 安全校验：确保所有 tools 的 schema 合法（防止 type: null 等 400 错误）
         if "tools" in kwargs:
             kwargs["tools"] = self._sanitize_tools(kwargs["tools"])

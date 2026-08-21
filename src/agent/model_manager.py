@@ -131,7 +131,7 @@ class ModelManager:
         # 🔒 商汤(SenseNova)参数兼容：reasoning_effort 只接受 low/medium/high/xhigh/none
         #    官方 DeepSeek 的 "max" 在商汤接口会 400 InvalidParameter，初始化后统一修正
         if getattr(self, 'provider', '') == 'sensetime':
-            self._sanitize_reasoning_effort()
+            self._sanitize_reasoning_effort(extra_config=self.extra_config)
 
     @staticmethod
     def _sanitize_reasoning_effort(extra_config=None, kwargs=None):

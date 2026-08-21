@@ -119,13 +119,45 @@ class ModelManager:
             self.max_tokens = 16384
             self.temperature = 0.25
             self.extra_config = {}
+        # 🔒 在加载 DB 配置前先设一个安全上限（provider 未知时用保守值）
+        self._provider_cap_applied = False
         self._load_config_defaults()
+        # 🔒 DB 加载后再检查一次（防止 DB 返回超限值或 DB 加载失败）
+        if not self._provider_cap_applied:
+            cap = self._PROVIDER_MAX_TOKENS_CAP.get(getattr(self, 'provider', ''), 4096)
+            if self.max_tokens > cap:
+                logger.warning(f"⚠️ max_tokens {self.max_tokens} 超过 {getattr(self, 'provider', 'unknown')} 上限 {cap}，已自动限制")
+                self.max_tokens = cap
+
+    # 🔒 供应商级别 max_tokens 安全上限（防止 API 400 错误）
+    _PROVIDER_MAX_TOKENS_CAP = {
+        "doubao": 4096,         # 豆包/火山引擎: max_tokens ≤ 4096
+        "zhipu": 4096,          # 智谱 GLM: 部分模型 ≤ 4096
+        "sensetime": 4096,      # 商汤: 部分模型 ≤ 4096
+        "mimo": 16384,          # 小米 MiMo: 较宽松
+        "moonshot": 16384,      # Kimi/Moonshot
+        "deepseek": 131072,     # DeepSeek: 高上限
+    }
 
     def _load_config_defaults(self):
         """从数据库加载 context_window / max_tokens / temperature / extra_config"""
         try:
             from ..database.db import get_ai_config_by_key, get_active_ai_config_raw
             cfg = get_ai_config_by_key(self.model_name)
+            # 🔧 第2步: 按 model 字段查找（解决 config_key ≠ model_name 的问题）
+            if not cfg:
+                try:
+                    from ..database.db import get_session, AiConfig
+                    session = get_session()
+                    try:
+                        row = session.query(AiConfig).filter(AiConfig.model == self.model_name).first()
+                        if row:
+                            cfg = row.to_dict(mask_secrets=False)
+                    finally:
+                        session.close()
+                except Exception:
+                    pass
+            # 🔧 第3步: 回退到活跃配置
             if not cfg:
                 cfg = get_active_ai_config_raw()
             if cfg:
@@ -139,6 +171,12 @@ class ModelManager:
                 self.provider = cfg.get("provider", "")
                 self._db_api_key = cfg.get("api_key", "")  # 缓存 DB 中的 api_key
                 self._db_base_url = cfg.get("base_url", "")
+                # 🔒 供应商级 max_tokens 熔断：不超过 API 实际上限
+                cap = self._PROVIDER_MAX_TOKENS_CAP.get(self.provider, 4096)
+                if self.max_tokens > cap:
+                    logger.warning(f"⚠️ max_tokens {self.max_tokens} 超过 {self.provider} 上限 {cap}，已自动限制")
+                    self.max_tokens = cap
+                self._provider_cap_applied = True
             else:
                 logger.warning("未找到 AI 配置，使用默认值")
                 # 不覆盖 __init__ 中的 extra_config 默认值

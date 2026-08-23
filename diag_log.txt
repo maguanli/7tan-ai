@@ -1,0 +1,50 @@
+=== D:\7tan\7tanAI 顶层目录 ===
+  DIR name='-p'
+  DIR name='.git'
+  DIR name='.github'
+  DIR name='.pytest_cache'
+  DIR name='.venv'
+  DIR name='.vscode'
+  DIR name='backups'
+  DIR name='build'
+  DIR name='config'
+  DIR name='data'
+  DIR name='designs'
+  DIR name='dist'
+  DIR name='docs'
+  DIR name='downloads'
+  DIR name='extensions'
+  DIR name='logs'
+  DIR name='mini_rts'
+  DIR name='mobile'
+  DIR name='novel_img'
+  DIR name='output'
+  DIR name='recordings'
+  DIR name='scripts'
+  DIR name='server'
+  DIR name='src'
+  DIR name='templates'
+  DIR name='tests'
+  DIR name='tmp'
+  DIR name='tools'
+  DIR name='vscode-extension'
+  DIR name='website'
+  DIR name='www'
+  DIR name='__pycache__'
+  DIR name='镜像同事_小说'
+
+=== 各子目录下 images/video 情况 ===
+[目录] '镜像同事_小说' -> 'D:\\7tan\\7tanAI\\镜像同事_小说'
+   子目录 'audio': 12 项 -> ['seg01.mp3', 'seg02.mp3', 'seg03.mp3', 'seg04.mp3', 'seg05.mp3', 'seg06.mp3', 'seg07.mp3', 'seg08.mp3', 'seg09.mp3', 'seg10.mp3', 'seg11.mp3', 'seg12.mp3']
+   子目录 'images': 1 项 -> ['第1章']
+   子目录 'video': 36 项 -> ['filelist.txt', 'filelist_v3.txt', 'gradient_v4.png', 'part01.mp4', 'part01_v3.mp4', 'part01_v4.ass', 'part01_v4.mp4', 'part02.mp4', 'part02_v3.mp4', 'part02_v4.ass', 'part03.mp4', 'part03_v3.mp4', 'part03_v4.ass', 'part04.mp4', 'part04_v3.mp4']
+   子目录 '定妆图': 4 项 -> ['character_jiangchen_face.png', 'character_jiangchen_full.png', 'character_jiangchen_npc_style.png', 'character_jiangchen_side.png']
+
+=== video 目录 mp4 ===
+
+=== 尝试多种中文名拼法 ===
+  拼法 '镜像同事_小说' (NFC=True NFD=True): exists=True
+  拼法 '镜像同事_小说' (NFC=True NFD=True): exists=True
+
+=== glob 搜索含'小说'的目录 ===
+  'D:\\7tan\\7tanAI\\镜像同事_小说' exists=True

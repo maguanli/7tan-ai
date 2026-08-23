@@ -2606,6 +2606,7 @@ class SettingsPage(QWidget):
             "zhipu": "https://open.bigmodel.cn/api/paas/v4",
             "moonshot": "https://api.moonshot.cn/v1",
             "mimo": "https://api.xiaomimimo.com/v1",
+            "sensetime": "https://token.sensenova.cn/v1",
             "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "ollama": "http://localhost:11434/v1",
             "custom": "",

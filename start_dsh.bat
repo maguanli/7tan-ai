@@ -5,5 +5,5 @@ netstat -ano | findstr ":3080" | findstr "LISTENING" >nul 2>nul
 if %errorlevel%==0 (
     exit /b 0
 )
-cd /d G:\nodejs\node-v24.19.0-win-x64
+cd /d D:\nodejs\node-v22.16.0-win-x64
 start "dsh-web" /min cmd /c "node.exe node_modules\@deepseek-ai\dsh\lib\bin.js web > D:\7tan\7tanAI\logs\dsh_web.log 2> D:\7tan\7tanAI\logs\dsh_web_err.log"

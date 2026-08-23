@@ -7,7 +7,7 @@ LOG_DIR = r"D:\7tan\7tanAI\logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 cmd = [
-    r"G:\nodejs\node.exe",
+    r"D:\nodejs\node-v22.16.0-win-x64\node.exe",
     r"node_modules\@deepseek-ai\dsh\lib\bin.js",
     "web",
 ]
@@ -17,7 +17,7 @@ err = open(os.path.join(LOG_DIR, "dsh_web_err.log"), "w", encoding="utf-8")
 
 p = subprocess.Popen(
     cmd,
-    cwd=r"G:\nodejs",
+    cwd=r"D:\nodejs\node-v22.16.0-win-x64",
     stdout=out,
     stderr=err,
     creationflags=subprocess.CREATE_NO_WINDOW,

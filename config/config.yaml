@@ -16,17 +16,17 @@ ai:
     sensetime-deepseek-v4-flash:
       api_key: sk-cPHNvAthZKKzaolF3va5s8MPPGWX3sZM
       base_url: https://token.sensenova.cn/v1
-      model: deepseek-v4-flash
-      provider: sensetime
       context_window: 1048576
       max_tokens: 65536
+      model: ${DEEPSEEK_MODEL}
+      provider: sensetime
     sensetime-glm-5.2:
       api_key: sk-cPHNvAthZKKzaolF3va5s8MPPGWX3sZM
       base_url: https://token.sensenova.cn/v1
-      model: glm-5.2
-      provider: sensetime
       context_window: 1048576
       max_tokens: 65536
+      model: glm-5.2
+      provider: sensetime
   vision:
     api_key: ${VISION_API_KEY}
     base_url: ${VISION_BASE_URL}

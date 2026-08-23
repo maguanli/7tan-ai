@@ -645,14 +645,141 @@ _AI_BAN_PATTERNS = [
 _DIALOG_TAGS = ["喊", "吼", "嚷", "嘟囔", "嘀咕", "喃喃", "冷哼", "嗤笑",
                 "接话", "插嘴", "应声", "咬牙", "压低声音", "扯着嗓子",
                 "反问", "追问", "打断", "附和", "劝", "吼回去"]
-_KEY_ENTITIES = [
-    "陈默", "黄毛", "王二毛", "秦朗", "苏晚", "苏航", "李大妈", "王桂芬", "王婶",
-    "无面者", "老周", "陈建国", "硬币", "命运硬币", "塔", "塔心", "寿命",
-    "00001", "00002", "00000", "七枚碎片", "锚点", "系统", "试炼之塔", "任务",
+# 角色名与设定红线不再硬编码，改为从用户自己的小说设定文件动态读取。
+# （历史 bug：此处曾硬编码另一部小说的角色「陈默/黄毛/秦朗/系统面板」，
+#   导致给《偏差》写蓝图时串味。现已修复为动态加载。）
+
+_NOVEL_SETTING_FILES = [
+    "人物定妆图设定.txt", "人物设定.txt", "定妆图提示词_江辰_老周.txt",
+    "主线伏笔投放表.txt", "伏笔表.txt", "伏笔投放表.txt",
 ]
 
 
-def _read_outline_text():
+def _find_novel_dir(outline="", prev_chapter=""):
+    """确定小说根目录（含 人物设定/伏笔表/大纲 的目录）。
+
+    优先级：outline 参数目录 > prev_chapter 参数目录 > 默认模板目录。
+    """
+    for src in (outline, prev_chapter):
+        if not src:
+            continue
+        p = Path(src)
+        try:
+            if p.exists():
+                d = p.parent if p.is_file() else p
+                if _has_novel_files(d):
+                    return d
+        except Exception:
+            continue
+    return _OUTLINE_PATH.parent
+
+
+def _has_novel_files(d):
+    """目录下是否存在小说设定文件（人物设定/伏笔表/大纲）"""
+    try:
+        names = [f.name for f in d.iterdir() if f.is_file()]
+    except Exception:
+        return False
+    return any(
+        any(key in fn for key in ("人物", "定妆", "伏笔", "大纲", "outline", "设定"))
+        for fn in names
+    )
+
+
+def _extract_characters(text):
+    """从人物定妆图设定文件提取角色名（如「一、江辰（男主）」→ 江辰）"""
+    chars, seen = [], set()
+    skip = ("清单", "制作", "模板", "用途", "使用", "提示词", "生图", "画风",
+            "优先级", "规范", "通用", "命名", "保存")
+    for line in text.splitlines():
+        m = re.match(r"^[一二三四五六七八九十0-9]+[、.．]([^（(：:，,\s/]{2,12})", line.strip())
+        if not m:
+            continue
+        name = m.group(1).strip()
+        if not name or name in seen or any(k in name for k in skip):
+            continue
+        chars.append(name)
+        seen.add(name)
+    return chars
+
+
+def _load_characters(novel_dir):
+    """加载本书角色名列表；找不到则返回空列表（蓝图会提示人工补充）"""
+    for fn in _NOVEL_SETTING_FILES:
+        p = novel_dir / fn
+        if not p.exists():
+            continue
+        try:
+            chars = _extract_characters(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if chars:
+            return chars
+    return []
+
+
+def _extract_redlines(text):
+    """从主线伏笔投放表提取设定红线：三条主线悬念(A/B/C) + 伏笔投放原则"""
+    lines = []
+    m = re.search(r"【三条主线悬念[^】]*】(.+?)【伏笔投放原则", text, re.S)
+    if m:
+        for line in m.group(1).splitlines():
+            s = line.strip()
+            if re.match(r"^[ABC]\.", s):
+                lines.append(s)
+            elif s.startswith("答案：") and lines:
+                lines[-1] = lines[-1] + " " + s
+    m2 = re.search(r"【伏笔投放原则[^】]*】(.+?)(?:={10,}|\Z)", text, re.S)
+    if m2:
+        for line in m2.group(1).splitlines():
+            s = line.strip()
+            if re.match(r"^\d\.", s):
+                lines.append(s)
+    return lines
+
+
+def _load_redlines(novel_dir):
+    """加载本书设定红线；找不到则返回空列表"""
+    for fn in _NOVEL_SETTING_FILES:
+        p = novel_dir / fn
+        if not p.exists():
+            continue
+        try:
+            lines = _extract_redlines(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if lines:
+            return lines
+    return []
+
+
+def _find_outline_file(novel_dir):
+    """在小说目录下找大纲文件（多部小说按目录隔离）"""
+    candidates = [
+        "novel_outline.txt", "novel_outline.md",
+        "outline_230chapters.md", "outline_10chapters.txt",
+        "大纲.txt", "细纲.txt", "outline.txt", "outline.md",
+    ]
+    for c in candidates:
+        p = novel_dir / c
+        if p.is_file():
+            return p
+    try:
+        for f in sorted(novel_dir.iterdir()):
+            if f.is_file() and "outline" in f.name.lower() and f.suffix.lower() in (".txt", ".md"):
+                return f
+    except Exception:
+        pass
+    return None
+
+
+def _read_outline_text(novel_dir):
+    p = _find_outline_file(novel_dir)
+    if p is not None:
+        try:
+            return p.read_text(encoding="utf-8")
+        except Exception:
+            pass
     try:
         return _OUTLINE_PATH.read_text(encoding="utf-8")
     except Exception:
@@ -666,9 +793,43 @@ def _extract_goal(outline_text, n):
     return m.group(1).strip() if m else "（细纲中未找到该章要点，请依据上下文自行设计）"
 
 
-def _prev_tail(n, tail_paras=3):
-    p = _CHAPTER1_PATH if n <= 2 else (_NOVEL_DIR_PATH / f"chapter{n-1:02d}.txt")
-    if not p.exists():
+def _find_prev_chapter(n, novel_dir):
+    """在小说目录下找第 n-1 章文件（兼容 novel_chapterNN / chapterNN / 第N章 命名）"""
+    prev = n - 1
+    if prev < 1:
+        return None
+    cands = []
+    for fmt in (f"novel_chapter{prev:02d}.txt", f"novel_chapter{prev}.txt",
+                f"chapter{prev:02d}.txt", f"chapter{prev}.txt", f"第{prev}章.txt"):
+        cands.append(novel_dir / fmt)
+    if prev == 1:
+        cands += [novel_dir / "chapter1_v2.txt", novel_dir / "chapter1.txt",
+                  novel_dir / "chapter01.txt", novel_dir / "novel_chapter1.txt"]
+    sub = novel_dir / "novel"
+    if sub.is_dir():
+        cands += [sub / f"chapter{prev:02d}.txt", sub / f"chapter{prev}.txt"]
+    for p in cands:
+        if p.is_file():
+            return p
+    try:
+        pat = re.compile(rf"chapter_{prev:02d}|chapter_{prev}(?![0-9])|chapter{prev:02d}|第{prev}章")
+        for f in novel_dir.iterdir():
+            if f.is_file() and pat.search(f.name):
+                return f
+    except Exception:
+        pass
+    return None
+
+
+def _prev_tail(n, novel_dir, tail_paras=3):
+    if n <= 1:
+        return "（无上一章，本章为开篇）"
+    p = _find_prev_chapter(n, novel_dir)
+    if p is None and n <= 2:
+        p = _CHAPTER1_PATH
+    if p is None and n > 2:
+        p = _NOVEL_DIR_PATH / f"chapter{n-1:02d}.txt"
+    if p is None or not p.exists():
         return "（无上一章，本章为开篇）"
     paras = [s.strip() for s in p.read_text(encoding="utf-8").split("\n") if s.strip()]
     paras = [s for s in paras if not re.match(r"^第[一二三四五六七八九十百0-9]+章", s)
@@ -676,7 +837,7 @@ def _prev_tail(n, tail_paras=3):
     return "\n".join(paras[-tail_paras:])
 
 
-def _build_blueprint(n, outline_text, prev_tail, goal):
+def _build_blueprint(n, outline_text, prev_tail, goal, novel_dir):
     beats = [
         ("开头钩子（前2-3段）",
          "承接上一章结尾的悬念，立刻推进。前400字内必须出现新信息或冲突升级（官方第一页法则：读者第一页看不到反差就划走）。"),
@@ -692,6 +853,13 @@ def _build_blueprint(n, outline_text, prev_tail, goal):
     avoid_list = "\n".join(f"- {w}" for w in _AI_BAN_WORDS)
     avoid_pat = "\n".join(f"- {p}（{d}）" for p, d in _AI_BAN_PATTERNS)
     tags = "、".join(_DIALOG_TAGS)
+
+    chars = _load_characters(novel_dir)
+    redlines = _load_redlines(novel_dir)
+    char_block = "\n".join("- " + c for c in chars) if chars else \
+        "- （未找到人物设定文件，请人工补充本书角色）"
+    redline_block = "\n".join("- " + r for r in redlines) if redlines else \
+        "- （未找到主线伏笔投放表，请人工补充本书设定红线）"
 
     bp = f"""# 第{n}章 写作蓝图（模块②章节生成器）
 
@@ -711,17 +879,10 @@ def _build_blueprint(n, outline_text, prev_tail, goal):
 
     bp += f"""
 ## 四、出场角色（全书已存在，禁止改名/改身份）
-{chr(10).join('- ' + e for e in _KEY_ENTITIES[:12])}
+{char_block}
 
 ## 五、设定红线
-- 寿命=任务货币，发任务扣寿命（系统代发翻倍；王婶觉醒+30天补偿）
-- 双NPC同城触发清除协议（分开行动可冻结，王婶完成协作任务已解除）
-- 硬币=实体锚点，共七枚碎片散落七处锚点（塔心是第一处，第二处在正北幸福小区方向）
-- 黄毛（王二毛）：第14章昏迷前留下'他是……'悬念
-- 秦朗：系统卧底（第14章自曝），第18章交给陈默一把钥匙后失踪，真假存疑
-- 父亲陈建国=上一任真正的NPC（第17章塔心日志），被系统抹杀
-- 00000=初代NPC沈砚，遗言'寿命是假的，代价是真的'（第18章）
-- 系统提示用【】面板，一章不超过4个，禁止用面板水字数
+{redline_block}
 
 ## 六、章末钩子要求
 - 最后一段必须是悬念/新信息/反转，禁止以场景描写或'他叹了口气'收尾
@@ -757,20 +918,28 @@ def _build_blueprint(n, outline_text, prev_tail, goal):
 def novel_chapter_blueprint(chapter: int = 18, outline: str = "", prev_chapter: str = "") -> str:
     """生成第N章写作蓝图，AI据此写正文"""
     n = int(chapter)
-    outline_text = _read_outline_text()
+    novel_dir = _find_novel_dir(outline, prev_chapter)
+
+    outline_text = ""
     if outline:
         try:
             outline_text = Path(outline).read_text(encoding="utf-8")
         except Exception:
-            pass
-    goal = _extract_goal(outline_text, n)
-    tail = _prev_tail(n)
+            outline_text = ""
+    if not outline_text:
+        outline_text = _read_outline_text(novel_dir)
+
+    tail = ""
     if prev_chapter:
         try:
             tail = Path(prev_chapter).read_text(encoding="utf-8")
         except Exception:
-            pass
-    return _build_blueprint(n, outline_text, tail, goal)
+            tail = ""
+    if not tail:
+        tail = _prev_tail(n, novel_dir)
+
+    goal = _extract_goal(outline_text, n)
+    return _build_blueprint(n, outline_text, tail, goal, novel_dir)
 
 
 @register_tool(

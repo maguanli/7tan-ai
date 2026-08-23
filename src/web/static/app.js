@@ -1570,6 +1570,7 @@ function _onProviderChange(provider) {
     doubao:    { base: "https://ark.cn-beijing.volces.com/api/v3", model: "" },
     qwen:      { base: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "" },
     mimo:      { base: "https://api.mimo.ai/v1",                   model: "" },
+    sensetime: { base: "https://token.sensenova.cn/v1",            model: "sensenova-6.8-flash-lite" },
     ollama:    { base: "http://localhost:11434/v1",                 model: "" },
   };
   const p = presets[provider];

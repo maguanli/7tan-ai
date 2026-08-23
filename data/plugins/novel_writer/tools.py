@@ -115,6 +115,57 @@ def _quote_check(text):
     return problems
 
 
+# ============ 6类AI写作软痕迹检测（补充硬痕迹检测盲区） ============
+# 硬痕迹（身体反应模板/节奏拖沓/空洞升华/比喻堆砌）查不出"软痕迹"，
+# 以下 6 类由实际改稿经验归纳，逐条可程序化判定，以不误报为原则。
+
+AI_POINT_WORDS = ["原来", "其实", "也就是说", "说白了", "换句话说", "这意味着",
+                  "说白了就是", "说穿了", "归根结底"]
+
+
+def _ai_style_hits(body):
+    """检测6类AI写作软痕迹，返回提示列表（每条格式同 ai_hits）"""
+    hits = []
+    paras = [p.strip() for p in body.split("\n") if p.strip()]
+
+    # 1. 金句点题独立成段：短句(≤15字)以段首总结/点题连接词开头，独立成段下结论
+    point_lead = ["原来", "其实", "所以", "因为", "只是", "不过", "说到底", "说白了",
+                  "换句话说", "这意味着", "这才是", "原来如此", "归根结底", "也许", "或许"]
+    aphorism = [p for p in paras if 2 < len(p) <= 15 and p[0] not in ("「", "“", "【")
+                and any(p.startswith(w) for w in point_lead)]
+    if len(aphorism) >= 3:
+        hits.append(f"金句点题×{len(aphorism)}（短句独立成段下结论过多，建议融入叙述）")
+
+    # 2. 破折号悬置：—— 出现过多，或句尾悬置（话说一半吊胃口）
+    dash = body.count("——")
+    dash_suspend = len(re.findall(r"[^。！？\n]{0,12}——\s*$", body, re.M))
+    if dash >= 4 or dash_suspend >= 3:
+        hits.append(f"破折号悬置×{dash}（话说一半吊胃口，全章建议≤2次）")
+
+    # 3. 三段式排比：同一段内 3 个以上相同骨架词（是/能说/不是/会/像）连接的短句
+    for p in paras:
+        if len(p) > 20 and len(re.findall(r"(?:是|能说|不是|会|像)[^，。！？]{0,14}[，。]", p)) >= 4:
+            hits.append("三段式排比（工整排比句式，建议打散成口语）")
+            break
+
+    # 4. 直白点题：作者解释标记词过多（作者跳出来下结论）
+    point_hits = [w for w in AI_POINT_WORDS if w in body]
+    if len(point_hits) >= 3:
+        hits.append(f"直白点题×{len(point_hits)}（{','.join(point_hits[:3])}，作者跳出来下结论，建议让读者自己品）")
+
+    # 5. 台词工具人：单段引号内≥60字，一口气说完像在递证据
+    long_quotes = re.findall(r"[“]([^”]{60,})[”]", body)
+    if long_quotes:
+        hits.append(f"台词过长×{len(long_quotes)}（单段≥60字像在递证据，建议拆成口语短句）")
+
+    # 6. 「我」主语重复：段首"我"开头段落过多（第一人称流水账）
+    wo_paras = [p for p in paras if p.startswith("我") and len(p) >= 6]
+    if len(wo_paras) >= 12:
+        hits.append(f"「我」开头段落×{len(wo_paras)}（第一人称主语重复，建议合并/换主语）")
+
+    return hits
+
+
 # ============ 6. 一致性检查（前后用词统一，模块⑤增强） ============
 
 # 关键实体：用于'疑似变体'检测（仅 3-4 字实体，2字误报率高）
@@ -395,9 +446,11 @@ def _scan_chapter(title, text, is_chapter_one=False):
         ms = re.findall(p, body)
         if ms:
             ai_hits.append(f"比喻堆砌「{ms[0]}」×{len(ms)}")
+    for h in _ai_style_hits(body):
+        ai_hits.append(h)
     stats["ai_hits"] = ai_hits
     if ai_hits:
-        problems.append({"level": "WARN", "rule": "AI痕迹", "msg": "; ".join(ai_hits[:8])})
+        problems.append({"level": "WARN", "rule": "AI痕迹", "msg": "; ".join(ai_hits[:10])})
 
     dialogs, dchars = _extract_dialog(body)
     ratio = dchars / total if total else 0
@@ -441,10 +494,13 @@ def _scan_chapter(title, text, is_chapter_one=False):
         lv = "ERROR" if "未成对" in qp else "INFO"
         problems.append({"level": lv, "rule": "引号规范", "msg": qp})
 
-    # 连续3段首词相同
+    # 连续3段首词相同（豁免「」引文/列表项、系统面板等刻意格式，避免把备忘录/清单误判为流水账）
     prev, streak, dup = None, 0, 0
     for p in paras:
         if len(p) < 4:
+            streak = 0
+            continue
+        if p[0] in ("「", "【", "“"):
             streak = 0
             continue
         first = p[:2]
@@ -982,6 +1038,13 @@ def _build_blueprint(n, outline_text, prev_tail, goal, novel_dir):
 禁用句式：\n{avoid_pat}
 对话标签至少用3种以上（可选：{tags}）
 全章比喻≤1个；段落≤120字；不写空洞升华（宿命/意义/初心）
+另6类软痕迹自查（质检引擎会报，写作时主动避开）：
+- 金句点题≤3个（"原来/其实/所以"开头下结论的短句别独立成段，融入叙述）
+- 破折号悬置≤2次（别老"话说一半——"吊胃口）
+- 忌三段式排比（是A、是B、是C的工整句式打散）
+- 忌直白点题（原来/其实/这意味着，作者别跳出来下结论）
+- 单段台词≤60字（配角别说太长像递证据）
+- 「我」开头段落≤12个（第一人称主语别重复）
 
 ## 八、字数与格式
 - 净字符 2000~2300（质检引擎按此判定）

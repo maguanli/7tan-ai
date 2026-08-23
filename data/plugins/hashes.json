@@ -3,7 +3,7 @@
   "plugins": {
     "ai_video": "832d8c0a949ae13a30121b76f875f9486af762b36b3bc3ab3f7596b675caece8",
     "auto_images": "9f482532fe47649ecdecdec56f589425175ec1da4841e901088b8eaa19a6af33",
-    "camera_vision": "58775c19ff6c6c3dab5671cda8b037004a6b5be70e045ad34d836bae419fb7c9",
+    "camera_vision": "324e8e5bdc1c10a6a34181b8366a6a2f0d9f7e832b3b604f88b9fdcd4e6d59f6",
     "ci_helper": "f53d07f9c6370723b011493a3b1f4a44b99dcadfd3fa49885a74ce0254c7595f",
     "cloud_ai": "187b4d8f7800c1609c19b7af41db68ec12d9732889ff0feadab999526aa5a001",
     "code_completion": "7a18cf4b8f9bf42404de7a1ed8e75b530b12ef2230208b2e13123120630bcab5",
@@ -15,7 +15,7 @@
     "debug_helper": "0dfdcf22f88ec8a2943618b3c7ba617477efabf335b244dec7251cfd78f5cf39",
     "deep_analysis": "641c90207d630675bd25e1c7e9e450bfb4697cef2156b7e6ab570b25bab6229d",
     "dependency_analyzer": "adbec7149edde719b72528ad63f109e225612d69833270eb94cfbc6fd821cd97",
-    "desktop_bot": "24f2c894da33d44af3e4557163e7068816f5db4ad664693b92d94e060b16272b",
+    "desktop_bot": "78f0f8025424a96b24424172ca3161e133abe0b0e53195c5f2426c3d971a525b",
     "diff_tools": "a26f0d7d05f36fc6a432b58f341c72edde90c89334b2ab0aece51eaa81344e4e",
     "doc_generator": "37986f03872742255ac369ee15a2fe0a8049ac19fccd804835b25f3f60bcc16e",
     "docker_k8s": "2631f02dfa302732a5414fdc2e3ecba406e3e987a9327d9006c0248dae4d01fe",
@@ -27,9 +27,10 @@
     "http_client": "4442fd3118fded738f1feab360b1fb26f3cb07af9407ea7c5c7f53bb845387f4",
     "iching": "9b2aeea0c3ef4199f322e125c8d09bf5a9ad1983dbef25bbc3ad3238f66dd21a",
     "ide_integration": "fdf6cc1ecb5826a49f2af2554e8d08a8d4d74d20c4a0ebbba22b89a75f92bdf8",
+    "longtou_zhenfa": "fbe45baec4dfdc58d5ea9181de514a30ec2bc8bc2e1fcb4553f063f010645025",
     "lsp_bridge": "f8a7a56102ac057beb76b452f8b99bd2224cbe8e9d0c2bced1e928069897cd27",
     "memory_enhance": "3cbc19f2a7ada2ae61c8d01e0e15a3d7f82cc1a4a03aa5b153be0ea10f0e8c80",
-    "novel_writer": "6f667d4f7a4664e2a34fecdb9ef7e28c99704d14a04ed2c050909f3a1caad813",
+    "novel_writer": "6fd93bec35ec66b97962e3df6a15e2ba6cda9178556236ac68a7ad8a15add1c1",
     "ocr_reader": "6f5525a5ef7129002021d21fba816abd99cb5848136d219e3897745f410e0f81",
     "perf_tools": "b459752afe5020f053b06c4df0d15d975063ae8c59245d590bbe9a2abefa3d67",
     "refactor_tools": "6da9a77212f9ad3878a68cb40b2863cfbc309ee9c54818ff728604616b05a106",
@@ -42,11 +43,11 @@
     "template_generator": "216003d9e0d268dd1d7a00a0664c43b45cd066c7810ea6ace8e4a89fe72ab633",
     "terminal_runner": "af564a2a364754395bb99f77015140e1488a99cf329ee834bba24a00e6bc6604",
     "test_runner": "19284b8bbcb7855daffeca5e8dca093916d55cc550c15679b6a599d140d84a72",
-    "tts_piper": "f5118ed9107e96c33a0a3b1cd2dd5112b8c859d51d9282bdb31e9350c01a98d2",
-    "viral_writer": "032bed4969ea38ef92bf7d8ca6c548dd32fce35c60222fcef30ac513059d874c",
+    "tts_piper": "71ce587b21fa545cf12923505d881a97c9702476def143bac3f2f11d6edcbe3a",
+    "viral_writer": "63423159bb2e3344cc2d81138444eb9fe514a002f0d480d80490aae5900cfba6",
     "web_search": "b5bdaea04c94fbb439b4e739aa7d82ca1d5d69f06726f3c750a989c0cb50eea6",
     "whisper_stt": "ba7805bce1a90b50d2d5557f5820e56cbc043b055a1417bb14c7fee6bec0d792",
     "zhanlizhi": "d25aca47c566fddb93ff6fc4251e9ec4ea89e4a79495fbc1ab30e9e82f68d0af"
   },
-  "sig": "c4c9161b900931ded737f6068ef05f097cb75251e50ec47f43b8b13a9b1bb61c"
+  "sig": "857fdbb37f729b8abe1db7827666befd9e24d19908c002717576e885e49a014c"
 }

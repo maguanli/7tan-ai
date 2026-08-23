@@ -498,6 +498,92 @@ def _scan_chapter(title, text, is_chapter_one=False):
     return {"title": title, "score": score, "grade": grade, "problems": problems, "stats": stats}
 
 
+def _cn_chapter(n):
+    """数字章号转中文，如 2 -> 二，12 -> 十二"""
+    _CN = "零一二三四五六七八九十"
+    try:
+        n = int(n)
+    except (ValueError, TypeError):
+        return str(n)
+    if n <= 0:
+        return str(n)
+    if n <= 10:
+        return _CN[n]
+    if n < 20:
+        return "十" + (_CN[n % 10] if n % 10 else "")
+    if n < 100:
+        tens, ones = n // 10, n % 10
+        return _CN[tens] + "十" + (_CN[ones] if ones else "")
+    return str(n)
+
+
+def _has_novel_files(d):
+    """判断目录是否是小说目录（含大纲/章节/设定文件）。"""
+    try:
+        names = [f.name for f in d.iterdir() if f.is_file()]
+    except Exception:
+        return False
+    def _has(pat):
+        return any(re.search(pat, n, re.I) for n in names)
+    return (
+        _has(r"outline.*\.(txt|md)$")
+        or _has(r"^chapter[0-9]*.*\.txt$")
+        or _has(r"^novel_chapter[0-9]*.*\.txt$")
+        or _has(r"^第[0-9一二三四五六七八九十]+章.*\.txt$")
+        or _has(r"人物.*\.txt$")
+        or _has(r"伏笔.*\.txt$")
+    )
+
+
+def _resolve_quality_dir(path="", first_file=""):
+    """质检用：确定小说根目录（跟随输入文件，不再写死 fanqie）。"""
+    for src in (path, first_file):
+        if not src:
+            continue
+        p = Path(src)
+        if not p.exists():
+            continue
+        d = p.parent if p.is_file() else p
+        cur = d
+        for _ in range(5):
+            if _has_novel_files(cur):
+                return cur
+            if cur.parent == cur:
+                break
+            cur = cur.parent
+        return d
+    return Path(ROOT) / "downloads" / "fanqie"
+
+
+def _find_first_chapter_file(base):
+    """在当前小说目录找第一章文件，找不到返回 None。"""
+    pats = [
+        re.compile(r"^chapter[0]*1([^0-9]|$)", re.I),
+        re.compile(r"^novel_chapter[0]*1([^0-9]|$)", re.I),
+        re.compile(r"^第[0]*1章", re.I),
+        re.compile(r"^第一章"),
+    ]
+    dirs = [base]
+    try:
+        dirs.append(base.parent)
+    except Exception:
+        pass
+    seen = set()
+    for d in dirs:
+        try:
+            cands = [f for f in d.iterdir() if f.is_file() and f.suffix.lower() == ".txt"]
+        except Exception:
+            continue
+        for f in cands:
+            key = str(f.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            if any(p.search(f.stem) for p in pats):
+                return f
+    return None
+
+
 def _collect_chapters(path):
     """收集章节文件：目录=扫描全部 chapter*.txt；文件=单章"""
     p = Path(path)
@@ -505,14 +591,16 @@ def _collect_chapters(path):
     if p.is_dir():
         candidates = sorted(p.glob("chapter*.txt"))
         if not candidates:
+            candidates = sorted(p.glob("novel_chapter*.txt"))
+        if not candidates:
             candidates = sorted(p.glob("*.txt"))
         for f in candidates:
             m = re.search(r"(\d+)", f.stem)
-            title = f"第{m.group(1)}章" if m else f.stem
+            title = f"第{_cn_chapter(m.group(1))}章" if m else f.stem
             files.append((title, f))
     elif p.is_file():
         m = re.search(r"(\d+)", p.stem)
-        title = f"第{m.group(1)}章" if m else p.stem
+        title = f"第{_cn_chapter(m.group(1))}章" if m else p.stem
         files.append((title, p))
     return files
 
@@ -533,7 +621,7 @@ def _collect_chapters(path):
 )
 def novel_quality_check(path: str = "", first_file: str = "", save_report: bool = True) -> str:
     """扫描小说章节并输出质检报告"""
-    base = Path(ROOT) / "downloads" / "fanqie"
+    base = _resolve_quality_dir(path, first_file)
     target = Path(path) if path else (base / "novel")
     if not target.exists():
         return f"❌ 路径不存在：{target}"
@@ -542,11 +630,12 @@ def novel_quality_check(path: str = "", first_file: str = "", save_report: bool 
     if not files:
         return f"❌ 未找到章节文件：{target}"
 
-    # 第一章特检
-    first_path = Path(first_file) if first_file else (base / "chapter1_v2.txt")
-    if first_path.exists():
-        files = [(t, f) for t, f in files if f.name != first_path.name]
-        files.insert(0, ("第一章", first_path))
+    # 第一章特检：仅整本扫描（目录）时插入，单文件复检不插入，避免串入别书第一章
+    if target.is_dir():
+        first_path = Path(first_file) if first_file else _find_first_chapter_file(base)
+        if first_path is not None and first_path.exists():
+            files = [(t, f) for t, f in files if f.name != first_path.name]
+            files.insert(0, ("第一章", first_path))
 
     results = []
     for title, f in files:
@@ -618,7 +707,7 @@ def novel_quality_check(path: str = "", first_file: str = "", save_report: bool 
         report += "\n\n⚠️ 一致性检查失败：{0}".format(e)
 
     if save_report:
-        out = Path(ROOT) / "downloads" / "fanqie" / "quality_report_latest.md"
+        out = base / "quality_report_latest.md"
         out.write_text(report, encoding="utf-8")
         return report + f"\n\n📁 报告已保存：{out}"
     return report

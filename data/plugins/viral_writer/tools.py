@@ -381,6 +381,54 @@ def viral_quotes(article: str = "") -> str:
             "[6] 愿你起落有致，归来仍是少年。\n    技法: 押韵\n    卡片标题: 少年\n    场景: 结尾")
 
 
+# ─────────────────── 6.0 AI风格软痕迹检测（移植自 novel_writer 6类检测，按公众号文体适配） ───────────────────
+AI_POINT_WORDS_VIRAL = ["原来", "其实", "也就是说", "说白了", "换句话说", "这意味着",
+                        "说白了就是", "说穿了", "归根结底"]
+
+
+def _viral_ai_style_hits(text):
+    """检测6类AI写作软痕迹（移植自 novel_writer._ai_style_hits，按公众号文体适配）。"""
+    hits = []
+    paras = [p.strip() for p in text.split("\n") if p.strip()]
+
+    # 1. 金句点题独立成段：短句(≤15字)以点题连接词开头，独立成段下结论
+    point_lead = ["原来", "其实", "所以", "因为", "只是", "不过", "说到底", "说白了",
+                  "换句话说", "这意味着", "这才是", "原来如此", "归根结底", "也许", "或许"]
+    aphorism = [p for p in paras if 2 < len(p) <= 15 and p[0] not in ("「", "“", "【")
+                and any(p.startswith(w) for w in point_lead)]
+    if len(aphorism) >= 4:
+        hits.append("⚠️ 金句点题×{}（点题词开头的短句独立成段过多，AI总结腔；公众号金句段可保留，但点题词开头需减少）".format(len(aphorism)))
+
+    # 2. 破折号悬置：—— 出现过多，或句尾悬置（话说一半吊胃口）
+    dash = text.count("——")
+    dash_suspend = len(re.findall(r"[^。！？\n]{0,12}——\s*$", text, re.M))
+    if dash >= 4 or dash_suspend >= 3:
+        hits.append("⚠️ 破折号悬置×{}（话说一半吊胃口，全文建议≤2次）".format(dash))
+
+    # 3. 三段式排比：同一段内 3 个以上相同骨架词（是/能说/不是/会/像）连接的短句
+    for p in paras:
+        if len(p) > 20 and len(re.findall(r"(?:是|能说|不是|会|像)[^，。！？]{0,14}[，。]", p)) >= 4:
+            hits.append("⚠️ 三段式排比（工整排比句式，建议打散成口语）")
+            break
+
+    # 4. 直白点题：作者解释标记词过多（作者跳出来下结论）
+    point_hits = [w for w in AI_POINT_WORDS_VIRAL if w in text]
+    if len(point_hits) >= 3:
+        hits.append("⚠️ 直白点题×{}（{}，作者跳出来下结论，建议让读者自己品）".format(len(point_hits), ",".join(point_hits[:3])))
+
+    # 5. 台词工具人：单段引号内≥60字，一口气说完像在递证据
+    long_quotes = re.findall(r"[“]([^”]{60,})[”]", text)
+    if long_quotes:
+        hits.append("⚠️ 台词过长×{}（单段≥60字像在递证据，建议拆成口语短句）".format(len(long_quotes)))
+
+    # 6. 「我」主语重复：公众号第一人称是常态，仅当段首「我」极度单一(≥18段)才提示
+    wo_paras = [p for p in paras if p.startswith("我") and len(p) >= 6]
+    if len(wo_paras) >= 18:
+        hits.append("⚠️ 「我」开头段落×{}（第一人称极度单一，建议穿插场景/他人视角）".format(len(wo_paras)))
+
+    return hits
+
+
 # ─────────────────── 6. 发布前检查 ───────────────────
 @register_tool(
     name="viral_check",
@@ -501,6 +549,7 @@ def viral_check(title: str = "", content: str = "") -> str:
         triple_cnt = len(re.findall(r"[，,][^，。；]{1,12}[，,][^，。；]{1,12}[，,][^，。；]{1,12}[。！？]", text))
         if triple_cnt >= 2:
             ai_issues.append(f"⚠️ 疑似三连排比 {triple_cnt} 处（是A，是B，是C=AI腔，建议拆短句口语化）")
+        ai_issues += _viral_ai_style_hits(text)
         if ai_issues:
             issues += ai_issues
         else:

@@ -591,6 +591,39 @@ def _has_novel_files(d):
     )
 
 
+_NOVEL_SUBDIR_NAMES = ("小说文本", "novel", "正文", "text", "章节")
+
+
+def _find_novel_subdir(d):
+    """在当前目录下找常见的小说子目录（含小说文件的子目录），找不到返回 None。"""
+    try:
+        for name in _NOVEL_SUBDIR_NAMES:
+            sub = d / name
+            if sub.is_dir() and _has_novel_files(sub):
+                return sub
+        for sub in sorted(d.iterdir()):
+            if sub.is_dir() and _has_novel_files(sub):
+                return sub
+    except Exception:
+        pass
+    return None
+
+
+def _try_resolve_in_subdirs(p):
+    """旧路径兼容：文件不存在时，尝试在父目录的常见子目录下找同名文件。"""
+    try:
+        parent = p.parent
+        if not parent.exists():
+            return p
+        for name in _NOVEL_SUBDIR_NAMES:
+            cand = parent / name / p.name
+            if cand.exists():
+                return cand
+    except Exception:
+        pass
+    return p
+
+
 def _resolve_quality_dir(path="", first_file=""):
     """质检用：确定小说根目录（跟随输入文件，不再写死 fanqie）。"""
     for src in (path, first_file):
@@ -598,12 +631,17 @@ def _resolve_quality_dir(path="", first_file=""):
             continue
         p = Path(src)
         if not p.exists():
+            p = _try_resolve_in_subdirs(p)
+        if not p.exists():
             continue
         d = p.parent if p.is_file() else p
         cur = d
         for _ in range(5):
             if _has_novel_files(cur):
                 return cur
+            sub = _find_novel_subdir(cur)
+            if sub is not None:
+                return sub
             if cur.parent == cur:
                 break
             cur = cur.parent
@@ -810,10 +848,15 @@ def _find_novel_dir(outline="", prev_chapter=""):
             continue
         p = Path(src)
         try:
+            if not p.exists():
+                p = _try_resolve_in_subdirs(p)
             if p.exists():
                 d = p.parent if p.is_file() else p
                 if _has_novel_files(d):
                     return d
+                sub = _find_novel_subdir(d)
+                if sub is not None:
+                    return sub
         except Exception:
             continue
     return _OUTLINE_PATH.parent

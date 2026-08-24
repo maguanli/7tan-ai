@@ -752,5 +752,18 @@
       "ltz_review"
     ],
     "icon": "🐉"
+  },
+  {
+    "id": "gzh_render",
+    "name": "公众号排版渲染",
+    "version": "1.0.0",
+    "author": "AI Self-Evolution",
+    "type": "custom",
+    "category": "自定义",
+    "description": "把轻量 Markdown 正文一键渲染成可直接复制到公众号的排版 HTML，只输出公众号能识别的基础样式。",
+    "tools": [
+      "gzh_render"
+    ],
+    "icon": "📄"
   }
 ]

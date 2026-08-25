@@ -84,6 +84,14 @@ def _hook_check(text):
     paras = [p.strip() for p in text.split("\n") if p.strip()]
     if not paras:
         return False, "无内容"
+    # 跳过章末互动引导等元信息段落（它们不属于正文悬念）。
+    # 原实现直接取最后一段，会把【章末互动】当成正文末句来检测，
+    # 导致钩子判定被互动文案里的“？/到底”等词干扰（误报或漏报）。
+    _interactive_re = re.compile(r"^【(章末互动|作者的话|彩蛋|题外话|下集预告|PS|备注)】")
+    while paras and _interactive_re.match(paras[-1]):
+        paras.pop()
+    if not paras:
+        return False, "无正文"
     last = paras[-1]
     markers = ["？", "!", "！", "竟然", "没想到", "突然", "忽然", "就在这时",
                "完蛋", "糟了", "不对劲", "来了", "露出", "浮现", "响起",

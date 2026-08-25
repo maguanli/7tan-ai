@@ -26,8 +26,13 @@ config/config.yaml
 # 费用记录
 data/costs.json
 
-# 下载包和截图（体积大）
-downloads/
+# 下载包和截图（体积大）—— 整体忽略，仅白名单放行两部小说
+downloads/*
+!downloads/fanqie/
+downloads/fanqie/*
+!downloads/fanqie/novel/
+!downloads/fanqie/html_global_npc/
+!downloads/fanqie/quality_report_latest.md
 data/screenshots/
 
 # 大型安装文件
@@ -106,6 +111,9 @@ data/*.pid
 
 # 用户聊天上传的图片（个人数据，不入库）
 data/uploads/
+
+# 文章/公众号封面等运行时下载图片（个人数据，不入库）
+data/downloads/
 
 # 编译旧版残留（进程占用时临时改名）
 *.pyd.old

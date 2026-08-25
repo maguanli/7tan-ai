@@ -1,0 +1,15 @@
+{
+  "count": 12,
+  "sizes": [
+    [
+      720,
+      1280
+    ]
+  ],
+  "fonts": {
+    "C:\\Windows\\Fonts\\msyh.ttc": true,
+    "C:\\Windows\\Fonts\\msyhbd.ttc": true,
+    "C:\\Windows\\Fonts\\simhei.ttf": true,
+    "C:\\Windows\\Fonts\\simsun.ttc": true
+  }
+}

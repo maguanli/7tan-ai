@@ -1,0 +1,27 @@
+{
+  "duration": 54.5,
+  "size_mb": 7.08,
+  "video": {
+    "codec": "h264",
+    "w": 720,
+    "h": 1280,
+    "fps": "25/1",
+    "pix_fmt": "yuv420p"
+  },
+  "audio": {
+    "codec": "aac",
+    "sample_rate": "44100",
+    "channels": 1
+  },
+  "faststart": true,
+  "qc_frames": [
+    "D:\\7tan\\7tanAI\\video_tmp\\qc2\\f0.png",
+    "D:\\7tan\\7tanAI\\video_tmp\\qc2\\f1.png",
+    "D:\\7tan\\7tanAI\\video_tmp\\qc2\\f2.png",
+    "D:\\7tan\\7tanAI\\video_tmp\\qc2\\f3.png",
+    "D:\\7tan\\7tanAI\\video_tmp\\qc2\\f4.png",
+    "D:\\7tan\\7tanAI\\video_tmp\\qc2\\f5.png",
+    "D:\\7tan\\7tanAI\\video_tmp\\qc2\\f6.png",
+    "D:\\7tan\\7tanAI\\video_tmp\\qc2\\f7.png"
+  ]
+}

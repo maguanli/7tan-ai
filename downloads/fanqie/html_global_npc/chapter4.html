@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第4章 系统剧本 - 全球只有我是NPC</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#f5efe0; color:#2c2c2c; font-family:"PingFang SC","Microsoft YaHei","Noto Serif SC",serif; }
+  .wrap { max-width:760px; margin:0 auto; padding:24px 20px 60px; }
+  .topbar { text-align:center; font-size:14px; color:#8a7a5a; padding:14px 0; border-bottom:1px solid #e0d6c0; margin-bottom:28px; }
+  .topbar a { color:#8a7a5a; text-decoration:none; margin:0 10px; }
+  .topbar a:hover { color:#c0392b; }
+  h1.chapter-title { font-size:26px; text-align:center; margin:10px 0 30px; color:#1f1f1f; letter-spacing:2px; }
+  .content { background:#fffdf7; border:1px solid #ece3d0; border-radius:12px; padding:34px 30px; box-shadow:0 2px 10px rgba(0,0,0,0.04); }
+  .content p { font-size:17px; line-height:2.0; margin:0 0 18px; text-indent:2em; }
+  .sysbox { display:block; background:#1c2333; color:#7fd4ff; border-radius:8px; padding:12px 16px; margin:14px 0; font-size:15px; line-height:1.9; text-indent:0; white-space:pre-wrap; font-family:"Consolas","Courier New",monospace; }
+  .content p.crisis .sysbox { color:#ff8a8a; background:#2a1a1a; }
+  .chapter-end { text-align:center; color:#aaa; font-size:14px; margin-top:26px; }
+  .nav { display:flex; justify-content:space-between; margin-top:34px; font-size:15px; }
+  .nav a { color:#8a6d3b; text-decoration:none; padding:8px 14px; border:1px solid #d8c9a8; border-radius:6px; background:#fffdf7; }
+  .nav a:hover { background:#f0e6cf; }
+  .nav .center { color:#999; padding:8px 14px; }
+  /* 目录页 */
+  .cover-box { text-align:center; margin-bottom:24px; }
+  .cover-box img { max-width:280px; border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,0.25); }
+  .book-title { font-size:32px; text-align:center; margin:20px 0 6px; letter-spacing:6px; color:#1f1f1f; }
+  .book-author { text-align:center; color:#8a7a5a; margin-bottom:26px; font-size:15px; }
+  .book-intro { background:#fffdf7; border:1px solid #ece3d0; border-radius:10px; padding:20px 22px; line-height:1.9; font-size:15px; color:#444; margin-bottom:26px; }
+  .ch-list { list-style:none; }
+  .ch-list li { border-bottom:1px dashed #e5dcc5; }
+  .ch-list a { display:flex; justify-content:space-between; align-items:center; padding:14px 8px; color:#333; text-decoration:none; font-size:16px; }
+  .ch-list a:hover { background:#f6efdd; color:#c0392b; }
+  .ch-list .num { color:#b08d57; font-weight:bold; margin-right:12px; }
+  .ch-list .tag { font-size:12px; color:#999; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="topbar"><a href="index.html">全球只有我是NPC</a> · 第4章</div><h1 class='chapter-title'>第4章 系统剧本</h1><div class="content"><p>天亮的时候，3栋的守门战终于消停了。</p><p>玩家们瘫在楼道里，东倒西歪地打瞌睡。秦朗靠在墙边，一夜没合眼，眼下青黑一片，精神头却好得出奇。</p><p>“老板，”他管陈默叫老板，“一晚上接了十七个任务，死了七个玩家，装备也掉了一地。你如今在幸福小区这片，算个人物了。”</p><p>陈默没接话。他盯着面板上的“存活点数”四个字发呆。</p><p>昨晚秦朗提醒他，NPC除了发布任务，还有一条路：接系统发布的“剧本任务”。系统会给NPC安排角色，让NPC在特定地点、特定时间，演一出戏给玩家看。演好了有存活点数，演砸了就得扣寿命。</p><p>“剧本任务，”陈默问，“是什么？”</p><p class=""><span class="sysbox">【剧本任务说明】</span>系统为NPC提供“剧情剧本”，NPC须在指定场景完成指定表演。玩家会将其视为“世界剧情”并参与互动。完成度越高，存活点数越多。存活点数可兑换寿命、道具与任务权限。</p><p>“表演？”陈默皱眉，“我演给玩家看？”</p><p>“对。”秦朗点头，“你想想，为什么玩家不怀疑你？因为他们觉得你是‘世界里的NPC’，有NPC，说明这个世界有剧情。你演得越像，越安全。”</p><p>“可我本来就是NPC啊。”陈默苦笑。</p><p>“那不一样。”秦朗摇头，“玩家眼里的NPC，就是块背景板。他们不会去碰背景板，因为背景板没神器。”</p><p>他指了指自己，“你可不一样，身上挂着命运硬币，杀了你有奖励。”他顿了顿，“所以你越演得越像普通NPC，越安全。”</p><p>陈默明白了。</p><p>他的生存策略，从“躲着玩家”，变成了“骗过玩家”。</p><p class=""><span class="sysbox">【剧本任务已刷新｜场景：幸福小区3栋楼下小卖部｜角色：小卖部老板｜剧情：玩家发现小卖部有隐藏任务，前来询问。NPC需给出“线索”，引导玩家前往城东钟楼｜要求：不得主动暴露NPC身份，不得拒绝玩家对话，完成度≥80%可获50存活点数】</span></p><p>“城东钟楼？”陈默一愣，“那里有什么？”</p><p>“钟楼是新手区，有个小BOSS。”秦朗说，“系统这是让你当新手引导员。去吧，我盯着这边。”</p><p>陈默换了件外套，把帽檐压低，又揣上秦朗给的五百块游戏币，晃进了楼下的小卖部。</p><p>老板娘正在打瞌睡。陈默往柜台后一坐，假装翻账本，等着玩家上门。</p><p>没等多久，两个玩家进来了。</p><p>“老板，有没有隐藏任务？”一个背着新手木剑的小年轻探头探脑。</p><p>陈默头也不抬：“买瓶水。”</p><p>“……不是，我们听说这有隐藏任务！”</p><p>“买瓶水，附赠情报。”陈默敲了敲柜台。</p><p>小年轻咬牙掏钱买了瓶矿泉水。陈默接过，慢悠悠拧开喝了一口，然后压低声音：</p><p>“城东钟楼，三更天，钟响十三下。运气好，能捡到‘生锈的钥匙’。”</p><p>“生锈的钥匙？那是啥？”</p><p>“不知道。反正有人出高价收。”陈默摆摆手，“爱信不信。”</p><p>两个玩家对视一眼，撒腿就跑。</p><p class=""><span class="sysbox">【剧本任务完成度85%，获得存活点数50，玩家已前往城东钟楼，参与剧情人数2】</span></p><p>陈默松了一口气。原来，当NPC也没那么难，只要把人往系统安排的地方引，就有点数拿。</p><p>他忽然冒出一个念头：如果每个玩家，他都往不同的地方引呢？</p><p>说干就干。接下来的半天，陈默化身“情报贩子”，见谁都神神秘秘地透露“线索”。</p><p>“听说地下仓库有宝箱？”“钟楼有钥匙！”“东区废墟出过金装！”“城南工厂闹鬼，有隐藏BOSS！”</p><p>玩家们被耍得满城乱窜，陈默的存活点数蹭蹭往上涨。</p><p class=""><span class="sysbox">【存活点数230｜兑换成功：存活点数100→寿命+10天｜当前剩余寿命：101天】</span></p><p>“够了。”陈默搓搓手，“先换点寿命保底。”</p><p>下午，秦朗传来消息：城东钟楼闹出了大动静，玩家为了抢“生锈的钥匙”互相砍了起来，死了二十多个。</p><p>“老板，”秦朗在语音里笑，“你这情报生意，做得比打怪都赚钱。”</p><p>陈默却笑不出来。他盯着系统面板角落一个不起眼的提示，心里发毛：</p><p class="crisis"><span class="sysbox">【警告：宿主连续发布虚假情报，已偏离系统设定剧情。若宿主长期偏离“剧本”，将被系统判定为“异常NPC”，触发净化协议。】</span></p><p>净化协议。</p><p>陈默后脊梁一凉，系统在监视他的一举一动。他赚得越多，离“异常”越近。</p><p>他强压住不安，跟着秦朗去了一趟城东钟楼废墟，想看看那帮玩家到底翻出了什么。</p><p>钟楼底下，尸体横七竖八，装备掉了一地。废墟中央，一扇被砸开的铁门露出黑漆漆的洞口，里面是个废弃仓库。</p><p>陈默借着手机光走进去，脚下一绊，踢到一个硬邦邦的箱子。</p><p>箱子是铁的，锈迹斑斑，锁扣被人撬开了一半。里面整整齐齐码着一摞发黄的笔记本。</p><p>陈默随手翻开一本，愣住了。</p><p>“第37天。今天又发了十七条任务，扣了四十三天寿命。玩家越来越精了，开始有人怀疑我。明天得换个地方住。”</p><p>“第58天。系统让我去演‘剧情’，我演了。演得越好，点数越多。可点数越多，系统看我的眼神越不对劲。它好像……在养我。”</p><p>“第91天。我找到了一本更早的日记。原来这个仓库，是上一任NPC的藏身点。上一任，上上任，上上上任……他们全在这里住过。”</p><p>“第132天。系统说，只要我好好扮演，就能获得自由。可我不信。自由，得靠自己去抢。”</p><p>陈默的手微微发抖，一页一页往后翻。</p><p>最后几页，字迹潦草得几乎认不出来：</p><p>“第147天。他们找到我了。玩家包围了仓库，带头的那个人，头顶没有名字，他是系统的人。”</p><p>“原来系统早就派人混在玩家里。我跑不掉了。”</p><p>“第148天。我把自己写进日记，留给下一个NPC。如果你看到这里……”</p><p>“别信系统。”</p><p>“别信任何玩家。”</p><p>“还有，活下去。”</p><p>日记的最后一页，画着一个简陋的符号，一枚硬币，正面朝上。</p><p>硬币上，刻着一张模糊的脸。</p><p>陈默盯着那张脸，浑身发冷。</p></div><div class="nav"><a href="chapter3.html">← 上一章</a><a href="index.html">📖 目录</a><a href="chapter5.html">下一章 →</a></div>
+</div>
+</body>
+</html>

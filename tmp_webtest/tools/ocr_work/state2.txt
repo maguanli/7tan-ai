@@ -1,4 +1,0 @@
-# window rect=(351, 149, 1319, 794) hwnd=657102
-=== OCR WORDS (x,y,w,h,text) ===
-
-=== FULL TEXT ===

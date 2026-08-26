@@ -56,7 +56,9 @@ a = Analysis(
     datas=[(os.path.join(SPECPATH, 'config'), 'config'),
            (os.path.join(SPECPATH, 'data/logo'), 'data/logo'),
            (os.path.join(SPECPATH, 'data/__init__.py'), 'data/'),
-           (os.path.join(SPECPATH, 'tools', 'web_autostart.py'), 'tools')]
+           (os.path.join(SPECPATH, 'tools', 'web_autostart.py'), 'tools'),
+           # 网页版前端静态资源（server.py WEB_STATIC_DIR 依赖，缺失会导致 404 web panel not found）
+           (os.path.join(SPECPATH, 'src/web/static'), 'src/web/static')]
           + _collect_plugins(SPECPATH),
     hiddenimports=['src.web.server', 'src.web.routes.api_chat', 'src.web.routes', 'src.agent.web_console_tts', 'sqlalchemy', 'sqlalchemy.pool', 'sqlalchemy.ext.declarative', 'fastapi', 'uvicorn', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.websockets', 'websockets', 'websockets.legacy', 'openai', 'httpx', 'yaml', 'apscheduler', 'loguru', 'pydantic', 'cryptography', 'PyQt6', 'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebEngineCore', 'PyQt6.QtWebChannel', 'PyQt6.QtCharts', 'unidecode', 'slugify', 'mss', 'numpy', 'src.security', 'src.security.rsa_verify', 'src.security.license_verify', 'src.security.safe_modify', 'src.security.strings', 'src.security.auth_client', 'src.security.token_store', 'src.security.integrity', 'src.security.sec_config', 'src.security.device_fingerprint', 'src.security.entry_auth', 'src.security.plugin_guard', 'src.core.updater', 'src.agent.prompts', 'src.ui.login_dialog', 'src.ui.theme', 'src.ui.update_dialog', 'src.ui.welcome_wizard', 'src.ui.onboarding', 'src.ui.pro_status_widget', 'src.config.loader',
         'piper', 'piper.voice', 'edge_tts', 'onnxruntime',

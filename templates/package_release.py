@@ -502,6 +502,14 @@ def main() -> int:
             print(f"  [OK] 7tan-editor/  {n1} 文件")
             n_total += n1
 
+            # 2.1.1 exe 旁 data/logo（server.py 的 /logo 静态目录与图标资源）
+            _logo_src = Path(__file__).resolve().parent.parent / "data" / "logo"
+            if _logo_src.exists():
+                n_logo = zip_dir(zf, _logo_src, "7tan-editor/data/logo",
+                                 exclude_files=EXCLUDE_FILE_PATTERNS)
+                print(f"  [OK] 7tan-editor/data/logo/  {n_logo} 文件")
+                n_total += n_logo
+
             # 2.2 水印说明
             if build_id:
                 zf.writestr("BUILD_INFO.txt",

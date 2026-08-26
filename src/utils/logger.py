@@ -1,5 +1,7 @@
 """日志配置"""
+import os
 import sys
+import tempfile
 import re
 import logging
 from datetime import datetime
@@ -84,11 +86,64 @@ def _install_std_file_handler(log_path: Path) -> None:
         logger.warning(f"标准 logging 文件 handler 安装失败: {e}")
 
 
+def _resolve_log_dir(log_dir):
+    """把日志目录解析为绝对路径，避免程序在无权限目录(如 system32)启动时崩溃。
+
+    - log_dir 为 None：打包运行(exe)写 exe 所在目录/logs，源码运行写项目根/logs；
+    - log_dir 为相对路径：基于程序所在目录解析，而不是当前工作目录；
+    - log_dir 为绝对路径：直接使用。
+    """
+    try:
+        if log_dir is None:
+            if getattr(sys, "frozen", False):
+                base = Path(sys.executable).resolve().parent
+            else:
+                base = Path(__file__).resolve().parent.parent.parent
+            return base / "logs"
+        p = Path(log_dir)
+        return p if p.is_absolute() else (Path(sys.argv[0]).resolve().parent / p)
+    except Exception:
+        return Path.cwd() / "logs"
+
+
+def _fallback_log_dir():
+    """降级日志目录：优先 %LOCALAPPDATA%/7Tan/logs，其次系统临时目录。"""
+    for base in (
+        Path(os.environ.get("LOCALAPPDATA") or ""),
+        Path(os.environ.get("APPDATA") or ""),
+        Path.home(),
+        Path(tempfile.gettempdir()),
+    ):
+        try:
+            d = base / "7Tan" / "logs"
+            d.mkdir(parents=True, exist_ok=True)
+            probe = d / ".write_test"
+            probe.touch()
+            probe.unlink()
+            return d
+        except Exception:
+            continue
+    return Path(tempfile.gettempdir()) / "7Tan" / "logs"
+
+
 def setup_logging(level: str = "INFO", retention: str = "30 days",
-                  rotation: str = "100 MB", log_dir: str = "./logs"):
-    """初始化日志系统"""
-    log_path = Path(log_dir)
-    log_path.mkdir(parents=True, exist_ok=True)
+                  rotation: str = "100 MB", log_dir=None):
+    """初始化日志系统
+
+    日志目录自动解析为绝对路径并做可写性校验：
+    程序在 system32 等无权限工作目录启动时，自动降级到用户可写目录，
+    避免 PermissionError 导致整个程序启动崩溃。
+    """
+    log_path = _resolve_log_dir(log_dir)
+    try:
+        log_path.mkdir(parents=True, exist_ok=True)
+        probe = log_path / ".write_test"
+        probe.touch()
+        probe.unlink()
+    except Exception:
+        logger.warning(f"日志目录不可写: {log_path}，降级到用户目录")
+        log_path = _fallback_log_dir()
+        log_path.mkdir(parents=True, exist_ok=True)
 
     logger.remove()
 

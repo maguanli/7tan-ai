@@ -5,9 +5,9 @@
       "channel": "stable",
       "platform": "windows",
       "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.15.zip",
-      "md5": "82b3ba97cea7f7ad0d9508541847b2a8",
-      "size": 422263326,
-      "notes": "1.0.15 更新：修复网页版启动报错（web panel not found）——exe 内置网页版前端资源缺失导致访问 127.0.0.1:9900 返回 404，已补全打包 src/web/static 与 logo 资源；其余含：46个插件全部正确打包、网页版新增Windows启动脚本、环境引擎默认清单内置、修复登录后程序卡死、界面版本号显示同步。",
+      "md5": "461b6548cafdc17131faf9f707f9ee9c",
+      "size": 422266971,
+      "notes": "1.0.15 更新：修复网页版启动报错（web panel not found）——exe 内置网页版前端资源缺失导致访问 127.0.0.1:9900 返回 404，已补全打包 src/web/static 与 logo 资源；其余含：46个插件全部正确打包、网页版新增Windows启动脚本、环境引擎默认清单内置、修复登录后程序卡死、界面版本号显示同步。；环境引擎软件安装清单扩充至76条（打包全面，覆盖编程语言/开发工具/数据库/浏览器/影音/AI绘画/游戏引擎/移动开发/自动化/压缩/系统工具）",
       "release_date": "2026-08-27"
     },
     {

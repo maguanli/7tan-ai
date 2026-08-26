@@ -279,7 +279,51 @@ _WEB_ROOT_FILES = [
     ("requirements-web.txt",            "requirements-web.txt"),
     ("启动网页版服务(macOS).command",    "启动网页版服务(macOS).command"),
     ("启动网页版服务(Linux).sh",        "启动网页版服务(Linux).sh"),
+    ("启动网页版服务(Windows).bat",     "启动网页版服务(Windows).bat"),
 ]
+
+# WEB 版 Windows 启动脚本（WEB 包专用：检测 Python → 装依赖 → 起服务 → 开浏览器）
+_WEB_WINDOWS_BAT = (
+    "@echo off\r\n"
+    "chcp 65001 >nul\r\n"
+    "setlocal\r\n"
+    "cd /d \"%~dp0\"\r\n"
+    "title 7Tan WEB 版启动器 (Windows)\r\n"
+    "\r\n"
+    "echo ==========================================\r\n"
+    "echo   7Tan WEB 版 - Windows 启动\r\n"
+    "echo   地址: http://127.0.0.1:9900/\r\n"
+    "echo ==========================================\r\n"
+    "echo.\r\n"
+    "\r\n"
+    "where python >nul 2>&1\r\n"
+    "if errorlevel 1 (\r\n"
+    "    echo [错误] 未检测到 Python。\r\n"
+    "    echo        请先安装 Python 3.10+（安装时勾选 Add python.exe to PATH）:\r\n"
+    "    echo        https://www.python.org/downloads/\r\n"
+    "    pause\r\n"
+    "    exit /b 1\r\n"
+    ")\r\n"
+    "\r\n"
+    "echo [1/3] 检查依赖...\r\n"
+    "python -c \"import fastapi, uvicorn, yaml, sqlalchemy, requests, loguru\" >nul 2>&1\r\n"
+    "if errorlevel 1 (\r\n"
+    "    echo        正在安装依赖（首次运行，需联网，约1-2分钟）...\r\n"
+    "    python -m pip install -r requirements-web.txt\r\n"
+    "    if errorlevel 1 (\r\n"
+    "        echo [错误] 依赖安装失败，请检查网络后重试。\r\n"
+    "        pause\r\n"
+    "        exit /b 1\r\n"
+    "    )\r\n"
+    ")\r\n"
+    "\r\n"
+    "echo [2/3] 正在启动服务...\r\n"
+    "start \"\" http://127.0.0.1:9900/\r\n"
+    "python web_main.py --host 127.0.0.1 --port 9900\r\n"
+    "\r\n"
+    "echo [3/3] 服务已退出。\r\n"
+    "pause\r\n"
+)
 
 # WEB 版目录清单：(项目内相对路径, zip 内路径, 额外排除目录名)
 _WEB_DIRS = [
@@ -369,6 +413,10 @@ def build_web_only_zip(out: Path, ver: str, uid: str, project_root) -> int:
                             f"说明       : 本文件用于分发溯源，请勿删除。\n")
             # 4. 使用说明
             zf.writestr("README_WEB.txt", _WEB_README)
+            # 4.1 Windows 启动脚本（始终用内置模板：源码根目录同名 bat 是
+            #     完整版 exe 专用，web 包无 exe/.venv，必须用 web 适配模板）
+            zf.writestr("启动网页版服务(Windows).bat", _WEB_WINDOWS_BAT)
+            print(f"  [OK] 启动网页版服务(Windows).bat (web 内置模板)")
             # 5. 说明书
             for _doc_name in ["7Tan使用说明书.md", "7Tan使用说明书.html"]:
                 _doc_src = root / "templates" / _doc_name

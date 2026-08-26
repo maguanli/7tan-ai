@@ -17,18 +17,35 @@ _SENSITIVE_NAMES = ('gen_license.py',)
 
 
 def _collect_plugins(specpath):
-    """收集 data/plugins 下所有文件到包，排除作者专用/敏感文件。"""
+    """收集 data/plugins 下所有文件到包，排除作者专用/敏感文件。
+
+    ⚠️ 关键：datas 条目格式为 (源文件, 目标【目录】)，
+       PyInstaller 会把源文件放进目标目录并保留文件名。
+       目标绝不能写成完整文件路径，否则会产生 tools.py/tools.py 嵌套，
+       导致插件管理器按 data/plugins/<id>/tools.py 找不到文件、全部加载失败。
+    """
     base = os.path.join(specpath, 'data', 'plugins')
     files = []
     if os.path.isdir(base):
         for root, dirs, names in os.walk(base):
+            rel_root = os.path.relpath(root, base)
+            parts = rel_root.split(os.sep)
+            # 跳过缓存目录与平台适配备份（variants/backup 带旧文件，不应进包）
+            if '__pycache__' in parts or 'backup' in parts or '_source_backup' in parts:
+                continue
             for n in names:
                 low = n.lower()
                 if low.endswith(_SENSITIVE_EXT) or low in _SENSITIVE_NAMES:
                     continue
+                if n.endswith(('.pyc', '.pyo')):
+                    continue
                 p = os.path.join(root, n)
-                rel = os.path.relpath(p, base)
-                files.append((p, os.path.join('data', 'plugins', rel)))
+                # 目标必须是目录：data/plugins/<相对目录>/
+                if rel_root == '.':
+                    dest_dir = 'data/plugins'
+                else:
+                    dest_dir = os.path.join('data', 'plugins', rel_root)
+                files.append((p, dest_dir))
     return files
 
 

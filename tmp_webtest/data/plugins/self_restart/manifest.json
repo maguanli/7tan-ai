@@ -1,0 +1,11 @@
+{
+  "id": "self_restart",
+  "name": "自我重启",
+  "version": "1.0.0",
+  "author": "AI Self-Evolution",
+  "type": "custom",
+  "category": "系统",
+  "description": "允许 AI 自动重启应用程序，以及诊断修复自身问题。",
+  "tools": ["self_restart", "self_fix_sandbox"],
+  "icon": "🔄"
+}

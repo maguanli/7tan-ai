@@ -1,0 +1,123 @@
+agent:
+  loop_timeout: 7200
+ai:
+  active: from_database
+  configs:
+    deepseek:
+      api_key: ${DEEPSEEK_API_KEY}
+      base_url: https://api.deepseek.com/v1
+      model: ${DEEPSEEK_MODEL}
+      provider: deepseek
+    sensetime:
+      api_key: sk-cPHNvAthZKKzaolF3va5s8MPPGWX3sZM
+      base_url: https://token.sensenova.cn/v1
+      model: sensenova-6.8-flash-lite
+      provider: sensetime
+    sensetime-deepseek-v4-flash:
+      api_key: sk-cPHNvAthZKKzaolF3va5s8MPPGWX3sZM
+      base_url: https://token.sensenova.cn/v1
+      context_window: 1048576
+      max_tokens: 65536
+      model: ${DEEPSEEK_MODEL}
+      provider: sensetime
+    sensetime-glm-5.2:
+      api_key: sk-cPHNvAthZKKzaolF3va5s8MPPGWX3sZM
+      base_url: https://token.sensenova.cn/v1
+      context_window: 1048576
+      max_tokens: 65536
+      model: glm-5.2
+      provider: sensetime
+  vision:
+    api_key: ${VISION_API_KEY}
+    base_url: ${VISION_BASE_URL}
+    model: glm-5v-Turbo
+analytics:
+  fallback: https://img.7tan.com/api/7tan_ping.php
+  primary: https://img.7tan.cn/api/7tan_ping.php
+app: {}
+browser:
+  proxy: null
+integrity:
+  auto_repair: false
+  confirm_phrase: 我已知晓风险并信任此次修改
+  developer_mode: false
+  enabled: true
+  log_all_checks: true
+  mode: core
+  show_status: true
+  tamper_alert_email: ''
+logging:
+  level: INFO
+  retention: 30 days
+  rotation: 100 MB
+network:
+  browser_path: ''
+  browser_type: chromium
+  connect_timeout: 30
+  download_timeout: 7200
+  headless: false
+  http_proxy: ''
+  https_proxy: ''
+  spider_download: false
+  spider_list: all
+oss:
+  access_key: ${OSS_ACCESS_KEY}
+  bucket: ${OSS_BUCKET}
+  domain: ${OSS_DOMAIN}
+  provider: ${OSS_PROVIDER}
+  region: ${OSS_REGION}
+  secret_key: ${OSS_SECRET_KEY}
+plugins:
+  remote_manifest_url: https://raw.githubusercontent.com/7tan/7tan-plugins/main/manifest.json
+scheduler:
+  auto_publish: false
+  cron_jobs:
+  - cron: 0 8 * * *
+    name: 每日早间更新
+    task: 每日早间更新
+  - cron: 0 12 * * *
+    name: 每日午间更新
+    task: 每日午间更新
+  - cron: 0 18 * * *
+    name: 每日晚间更新
+    task: 每日晚间更新
+  daemon: false
+score:
+  account_level: 0.2
+  ai_model: 0.25
+  plugins_tools: 0.45
+  system_health: 0.1
+security:
+  allow_modify_core: false
+  allow_modify_tools: true
+  self_modify_confirm: true
+  sensitive_words_filter: true
+site_7tan:
+  base_url: https://img.7tan.cn
+  login_url: https://img.7tan.cn/login.php/login.php
+  password: ''
+  publish_delay_max: 120
+  publish_delay_min: 30
+  username: admin
+sources:
+  crawl_interval: 360
+  max_resources_per_run: 5
+storage:
+  data_dir: D:\7tan\7tanAI\data
+  delete_after_upload: true
+  disk_cleanup_threshold_gb: 10
+  image_retention_days: 30
+telemetry:
+  enabled: true
+tts:
+  voice_gender: female
+update:
+  auto_check: true
+  channel: stable
+  enabled: true
+web:
+  allow_lan: true
+  auto_open_browser: true
+  language: zh-CN
+  port: 9800
+  theme: dark

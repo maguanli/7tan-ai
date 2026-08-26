@@ -1,0 +1,37 @@
+{
+  "adapted_at": "2026-08-15 12:37:01",
+  "platform": "darwin",
+  "platform_name": "macOS",
+  "os_detail": "Windows 10 (AMD64)",
+  "stats": {
+    "total": 44,
+    "ok": 42,
+    "adapted": 2,
+    "skipped": 0,
+    "failed": 0
+  },
+  "adapted": [
+    {
+      "id": "gzh_publish",
+      "steps": [
+        "复制变体文件 3 个（覆盖 3 个）",
+        "依赖 requirements-darwin.txt: ✅",
+        "自测: ✅ 导入成功: tools.py"
+      ],
+      "ok": true,
+      "msg": "导入成功: tools.py"
+    },
+    {
+      "id": "desktop_bot",
+      "steps": [
+        "复制变体文件 3 个（覆盖 3 个）",
+        "依赖 requirements-darwin.txt: ✅",
+        "自测: ✅ 导入成功: tools.py"
+      ],
+      "ok": true,
+      "msg": "导入成功: tools.py"
+    }
+  ],
+  "skipped": [],
+  "failed": []
+}

@@ -490,6 +490,11 @@ def init_db(db_path: str = None):
         migrate_prompts_txt_to_db()
     except Exception as e:
         logger.warning(f"提示词迁移跳过: {e}")
+    # 环境引擎：空库时预置默认软件/引擎清单（发布包不含 db，首次运行此表为空）
+    try:
+        seed_default_installed_software()
+    except Exception as e:
+        logger.warning(f"环境引擎默认清单预置跳过: {e}")
     logger.info("✅ 数据库初始化完成")
 
 
@@ -977,6 +982,44 @@ def get_installed_software_by_name(name: str):
     try:
         sw = session.query(InstalledSoftware).filter(InstalledSoftware.name == name).first()
         return sw.to_dict() if sw else None
+    finally:
+        session.close()
+
+
+def seed_default_installed_software():
+    """环境引擎：数据库为空时预置默认软件/引擎清单，避免新装用户看到空白页。
+
+    发布包按安全策略剔除 *.db，用户首次运行 init_db 建表后此表为空；
+    这里预置常用开发环境/引擎条目（版本待检测），用户点「重新扫描」后更新为真实结果。
+    """
+    _DEFAULT_SOFTWARE_SEED = [
+        ("Python",         "💻 编程语言", "🐍", "待检测（点击重新扫描更新）"),
+        ("Pip",            "💻 编程语言", "📦", "待检测"),
+        ("Git",            "🛠 开发工具", "🔀", "待检测"),
+        ("Node.js",        "💻 编程语言", "🟢", "待检测"),
+        ("FFmpeg",         "🎬 影音工具", "🎬", "待检测"),
+        ("Google Chrome",  "🌐 浏览器",   "🌐", "待检测"),
+        ("7-Zip",          "🗜 压缩工具", "🗜", "待检测"),
+        ("OpenSSL",        "🔐 安全工具", "🔐", "待检测"),
+        ("curl",           "🌐 网络工具", "🌐", "待检测"),
+        ("SQLite",         "🗄 数据库",   "🗄", "待检测"),
+    ]
+    session = get_session()
+    try:
+        cnt = session.query(InstalledSoftware).count()
+        if cnt > 0:
+            return
+        for name, cat, icon, notes in _DEFAULT_SOFTWARE_SEED:
+            session.add(InstalledSoftware(
+                category=cat, icon=icon, name=name, version="",
+                install_path="", executable="",
+                is_in_path=0, is_working=0, notes=notes,
+            ))
+        session.commit()
+        logger.info("✅ 环境引擎：已预置默认软件/引擎清单（可点重新扫描更新）")
+    except Exception as e:
+        session.rollback()
+        logger.warning(f"环境引擎默认清单预置失败: {e}")
     finally:
         session.close()
 

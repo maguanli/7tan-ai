@@ -5,10 +5,10 @@
       "channel": "stable",
       "platform": "windows",
       "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.15.zip",
-      "md5": "e0ea67bb33bae3e5c81cbdaf5b17974a",
-      "size": 420643760,
-      "notes": "1.0.15 更新：修复部分用户登录后程序卡死/无法启动问题（日志目录写入权限异常——日志文件位置不再依赖当前工作目录，自动改用程序目录/用户数据目录，彻底解决 C:\\WINDOWS\\system32 无权限写入导致的启动崩溃）；修复软件界面底部版本号显示为旧版问题（内置页面硬编码版本号已同步为 1.0.15，登录/界面版本显示正常）；插件白名单刷新（48个插件全部通过 SHA-256+HMAC 校验）；exe 版本信息同步更新（FileVersion 1.0.15.0 / ProductVersion 1.0.15）。；修复发布包打包问题（46个插件全部正确打包、网页版新增Windows启动脚本、环境引擎默认清单内置）",
-      "release_date": "2026-08-26"
+      "md5": "82b3ba97cea7f7ad0d9508541847b2a8",
+      "size": 422263326,
+      "notes": "1.0.15 更新：修复网页版启动报错（web panel not found）——exe 内置网页版前端资源缺失导致访问 127.0.0.1:9900 返回 404，已补全打包 src/web/static 与 logo 资源；其余含：46个插件全部正确打包、网页版新增Windows启动脚本、环境引擎默认清单内置、修复登录后程序卡死、界面版本号显示同步。",
+      "release_date": "2026-08-27"
     },
     {
       "version": "1.0.14",

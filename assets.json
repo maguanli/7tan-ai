@@ -1,8 +1,8 @@
 [
   {
-    "url": "https://api.github.com/repos/maguanli/7tan-ai/releases/assets/531280122",
-    "id": 531280122,
-    "node_id": "RA_kwDOT8VpH84fqrD6",
+    "url": "https://api.github.com/repos/maguanli/7tan-ai/releases/assets/531303228",
+    "id": 531303228,
+    "node_id": "RA_kwDOT8VpH84fqws8",
     "name": "7tan-editor-free-v1.0.15.zip",
     "label": "",
     "uploader": {
@@ -28,17 +28,17 @@
     },
     "content_type": "application/zip",
     "state": "uploaded",
-    "size": 420643760,
-    "digest": "sha256:c6e195654e424c0e6485cc309c24f57d9756d7254aaabbd7b870a5dcd263a432",
+    "size": 422263326,
+    "digest": "sha256:1809c1f1fc73764260d8d78889047663a4f9330522bac3df7ec2e6c9eb383e98",
     "download_count": 0,
-    "created_at": "2026-08-26T20:04:40Z",
-    "updated_at": "2026-08-26T20:06:10Z",
+    "created_at": "2026-08-26T20:25:56Z",
+    "updated_at": "2026-08-26T20:27:33Z",
     "browser_download_url": "https://github.com/maguanli/7tan-ai/releases/download/v1.0.15/7tan-editor-free-v1.0.15.zip"
   },
   {
-    "url": "https://api.github.com/repos/maguanli/7tan-ai/releases/assets/531281624",
-    "id": 531281624,
-    "node_id": "RA_kwDOT8VpH84fqrbY",
+    "url": "https://api.github.com/repos/maguanli/7tan-ai/releases/assets/531304867",
+    "id": 531304867,
+    "node_id": "RA_kwDOT8VpH84fqxGj",
     "name": "7tan-editor-free-v1.0.15.zip.sig",
     "label": "",
     "uploader": {
@@ -65,16 +65,16 @@
     "content_type": "application/octet-stream",
     "state": "uploaded",
     "size": 344,
-    "digest": "sha256:719583f23b513e603a13c5f17272d08bb74df0b65b2ed32d9c0d411082978603",
+    "digest": "sha256:9aae4a9dc91f35d0bfae7468ede4ba541de18f600d6001f730bb63340ca023c5",
     "download_count": 0,
-    "created_at": "2026-08-26T20:06:11Z",
-    "updated_at": "2026-08-26T20:06:11Z",
+    "created_at": "2026-08-26T20:27:34Z",
+    "updated_at": "2026-08-26T20:27:34Z",
     "browser_download_url": "https://github.com/maguanli/7tan-ai/releases/download/v1.0.15/7tan-editor-free-v1.0.15.zip.sig"
   },
   {
-    "url": "https://api.github.com/repos/maguanli/7tan-ai/releases/assets/531281664",
-    "id": 531281664,
-    "node_id": "RA_kwDOT8VpH84fqrcA",
+    "url": "https://api.github.com/repos/maguanli/7tan-ai/releases/assets/531304887",
+    "id": 531304887,
+    "node_id": "RA_kwDOT8VpH84fqxG3",
     "name": "7tan-web-v1.0.15.zip",
     "label": "",
     "uploader": {
@@ -101,10 +101,10 @@
     "content_type": "application/zip",
     "state": "uploaded",
     "size": 119315604,
-    "digest": "sha256:a3246361d6eb6dac2b8318218ee6c595ca64ee93d8d68477d176b956eb9f0ee9",
+    "digest": "sha256:50e4ad7be5f8c5b7c984a4076705f0002563273213f7727ea959996c4c5bc191",
     "download_count": 0,
-    "created_at": "2026-08-26T20:06:12Z",
-    "updated_at": "2026-08-26T20:06:35Z",
+    "created_at": "2026-08-26T20:27:35Z",
+    "updated_at": "2026-08-26T20:27:59Z",
     "browser_download_url": "https://github.com/maguanli/7tan-ai/releases/download/v1.0.15/7tan-web-v1.0.15.zip"
   },
   {

@@ -257,7 +257,7 @@ AI 会自动完成：读资料 → 压缩图片 → 登录后台 → 上传 LOGO
       
       AI 模型：DeepSeek-V4-Flash
       
-      后台：img.7tan.cn ✅
+      后台：已配置 ✅
       
       OSS：已配置 ✅
       

@@ -16,6 +16,7 @@
     "deep_analysis": "641c90207d630675bd25e1c7e9e450bfb4697cef2156b7e6ab570b25bab6229d",
     "dependency_analyzer": "adbec7149edde719b72528ad63f109e225612d69833270eb94cfbc6fd821cd97",
     "desktop_bot": "78f0f8025424a96b24424172ca3161e133abe0b0e53195c5f2426c3d971a525b",
+    "desktop_watch": "d15e4bd6222ab64d8774e0d2271074598d8ad7173d49dd9ffe1f2a1ad77c2267",
     "diff_tools": "a26f0d7d05f36fc6a432b58f341c72edde90c89334b2ab0aece51eaa81344e4e",
     "doc_generator": "37986f03872742255ac369ee15a2fe0a8049ac19fccd804835b25f3f60bcc16e",
     "docker_k8s": "2631f02dfa302732a5414fdc2e3ecba406e3e987a9327d9006c0248dae4d01fe",
@@ -50,5 +51,5 @@
     "whisper_stt": "ba7805bce1a90b50d2d5557f5820e56cbc043b055a1417bb14c7fee6bec0d792",
     "zhanlizhi": "d25aca47c566fddb93ff6fc4251e9ec4ea89e4a79495fbc1ab30e9e82f68d0af"
   },
-  "sig": "bf76cb1c56a22eead67c468abe0bae00b0b6db606ff1d431201eb4796bdfdeb7"
+  "sig": "95b3bfb099bb915b6dc2bc4a1941df2db24ba7eda0a8c94d86c28ee3a93c15e6"
 }

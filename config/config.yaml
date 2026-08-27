@@ -9,19 +9,19 @@ ai:
       model: ${DEEPSEEK_MODEL}
       provider: deepseek
     sensetime:
-      api_key: ${SENSETIME_API_KEY}
+      api_key: sk-cPHNvAthZKKzaolF3va5s8MPPGWX3sZM
       base_url: https://token.sensenova.cn/v1
       model: sensenova-6.8-flash-lite
       provider: sensetime
     sensetime-deepseek-v4-flash:
-      api_key: ${SENSETIME_API_KEY}
+      api_key: sk-cPHNvAthZKKzaolF3va5s8MPPGWX3sZM
       base_url: https://token.sensenova.cn/v1
       context_window: 1048576
       max_tokens: 65536
       model: ${DEEPSEEK_MODEL}
       provider: sensetime
     sensetime-glm-5.2:
-      api_key: ${SENSETIME_API_KEY}
+      api_key: sk-cPHNvAthZKKzaolF3va5s8MPPGWX3sZM
       base_url: https://token.sensenova.cn/v1
       context_window: 1048576
       max_tokens: 65536
@@ -32,8 +32,8 @@ ai:
     base_url: ${VISION_BASE_URL}
     model: glm-5v-Turbo
 analytics:
-  fallback: ${TANTAN_PING_FALLBACK}
-  primary: ${TANTAN_PING_URL}
+  fallback: https://img.7tan.com/api/7tan_ping.php
+  primary: https://img.7tan.cn/api/7tan_ping.php
 app: {}
 browser:
   proxy: null
@@ -93,12 +93,12 @@ security:
   self_modify_confirm: true
   sensitive_words_filter: true
 site_7tan:
-  base_url: ${TANTAN_BASE_URL}
-  login_url: ${TANTAN_LOGIN_URL}
+  base_url: https://img.7tan.cn
+  login_url: https://img.7tan.cn/login.php/login.php
   password: ''
   publish_delay_max: 120
   publish_delay_min: 30
-  username: ${TANTAN_USERNAME}
+  username: admin
 sources:
   crawl_interval: 360
   max_resources_per_run: 5

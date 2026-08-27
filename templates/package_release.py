@@ -91,6 +91,8 @@ EXCLUDE_FILE_PATTERNS = {
     "*.tmp",
     "test_*.py",
     "tmp_*.py",
+    "_tmp_*.py",
+    "_verify_*.py",
     "verify_*.py",
     "extract_*.py",
     "inspect_*.py",

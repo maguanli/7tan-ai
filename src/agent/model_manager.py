@@ -170,8 +170,11 @@ class ModelManager:
         不受 sensetime 4096 通用限制；其余模型仍按供应商上限熔断。
         """
         prov = getattr(self, 'provider', '') or ''
-        if prov == 'sensetime' and getattr(self, 'model_name', '') in ('deepseek-v4-flash', 'glm-5.2'):
+        mname = getattr(self, 'model_name', '') or ''
+        if prov == 'sensetime' and mname in ('deepseek-v4-flash', 'glm-5.2'):
             return 65536
+        if prov == 'zhipu' and mname in ('glm-5.2', 'glm-5.3', 'glm-5.3-flash', 'glm-5.3-flash-250828'):
+            return 131072
         return self._PROVIDER_MAX_TOKENS_CAP.get(prov, 4096)
 
     def _load_config_defaults(self):

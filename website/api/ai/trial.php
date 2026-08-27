@@ -332,7 +332,7 @@ if (empty($api_key) || strpos($api_key, 'your-') === 0) {
 
     http_response_code(500);
 
-    echo json_encode(['code' => -1, 'message' => '服务端 DeepSeek API Key 未配置（ll_api_keys 表无可用记录），请在 https://img.7tan.cn/api-keys.php 后台配置']);
+    echo json_encode(['code' => -1, 'message' => '服务端 DeepSeek API Key 未配置（ll_api_keys 表无可用记录），请在后台 api-keys.php 配置']);
 
     exit;
 

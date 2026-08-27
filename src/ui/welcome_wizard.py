@@ -579,9 +579,10 @@ class WelcomeWizard(QDialog):
 
         layout.addStretch()
 
-        # 打勾 — 不再提示复选框
-        self._chk_disable = QCheckBox()
+        # 打勾 — 不再提示复选框（勾选即持久化，真正生效）
+        self._chk_disable = QCheckBox("不再提示（下次登录不再显示）")
         self._chk_disable.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._chk_disable.toggled.connect(self._on_chk_toggled)
         self._chk_disable.setStyleSheet(f"""
             QCheckBox {{
                 background: transparent;
@@ -685,8 +686,9 @@ class WelcomeWizard(QDialog):
         self._btn_prev.setVisible(not is_first)
         self._btn_skip.setVisible(not is_last)
         # 打勾 + 不再提示 仅在第一页显示
-        self._chk_disable.setVisible(is_first)
-        self._btn_disable.setVisible(is_first)
+        # 复选框与「不再提示」按钮在第1~3页可见（完成页无需再提示）
+        self._chk_disable.setVisible(not is_last)
+        self._btn_disable.setVisible(not is_last)
 
         if is_last:
             self._btn_next.setText("🎉 开始使用")
@@ -703,23 +705,36 @@ class WelcomeWizard(QDialog):
             self._current_step += 1
             self._update_ui()
         else:
-            # 完成 → 保存 API Key
+            # 完成 → 保存 API Key；若勾选「不再提示」则持久化禁用（双保险）
+            if self._chk_disable.isChecked():
+                self._persist_disable()
             self._save_key()
             self.accept()
 
     def _skip(self):
-        """跳过引导"""
+        """跳过引导（若勾选「不再提示」则持久化禁用）"""
+        if self._chk_disable.isChecked():
+            self._persist_disable()
         self._save_key()
         self.accept()
 
-    def _disable_wizard(self):
-        """不再提示 — 仅对当前用户禁用新手引导"""
+    def _persist_disable(self):
+        """持久化「不再提示」标记（仅当前用户）"""
         try:
             from ..utils.user_prefs import set_user_pref
             set_user_pref(self._username, "wizard_disabled", True)
             logger.info(f"[Wizard] 用户 {self._username or 'default'} 选择不再提示，已禁用")
         except Exception as e:
             logger.warning(f"[Wizard] 保存禁用设置失败: {e}")
+
+    def _on_chk_toggled(self, checked: bool):
+        """复选框勾选 → 立即持久化禁用（即点即生效，不依赖后续按钮）"""
+        if checked:
+            self._persist_disable()
+
+    def _disable_wizard(self):
+        """不再提示 — 仅对当前用户禁用新手引导"""
+        self._persist_disable()
         self._save_key()
         self.accept()
 

@@ -198,11 +198,12 @@ def interactive_input() -> dict[str, str]:
     print("\n─" * 60)
     print("2. API 端点 URL")
 
+    _tan_base = __import__("os").environ.get("TANTAN_BASE_URL", "").rstrip("/")
     defaults = {
-        "api_login": "https://img.7tan.cn/api/auth/login.php",
-        "api_verify": "https://img.7tan.cn/api/auth/verify.php",
-        "api_refresh": "https://img.7tan.cn/api/auth/refresh.php",
-        "api_trial": "https://img.7tan.cn/api/ai/trial.php",
+        "api_login": f"{_tan_base}/api/auth/login.php" if _tan_base else "",
+        "api_verify": f"{_tan_base}/api/auth/verify.php" if _tan_base else "",
+        "api_refresh": f"{_tan_base}/api/auth/refresh.php" if _tan_base else "",
+        "api_trial": f"{_tan_base}/api/ai/trial.php" if _tan_base else "",
     }
 
     for key, default_url in defaults.items():

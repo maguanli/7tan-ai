@@ -68,6 +68,17 @@ if exist "tools\gen_plugin_hashes.py" (
 )
 echo.
 
+REM ===== Step 0.9: Sanitize config (发布前脱敏，防 API Key 泄露) =====
+echo [0.9/4] Sanitizing config secrets before build...
+"%ROOT%.venv\Scripts\python.exe" tools\sanitize_config_for_build.py --apply
+if errorlevel 1 (
+    echo [ERROR] Sanitize failed! Abort to avoid leaking secrets.
+    if not defined SKIP_PAUSE pause
+    exit /b 1
+)
+echo [0.9/4] Sanitize OK
+echo.
+
 REM ===== Step 0.75: Clean old dist output (fix COLLECT not-empty failure) =====
 echo [0.75/4] Cleaning old dist\7tan-editor...
 if not defined SKIP_BUILD (
@@ -99,6 +110,7 @@ if defined SKIP_BUILD (
     if errorlevel 1 (
         echo.
         echo [ERROR] Build failed. Check output above.
+        "%ROOT%.venv\Scripts\python.exe" tools\sanitize_config_for_build.py --restore >nul 2>&1
         if not defined SKIP_PAUSE pause
         exit /b 1
     )
@@ -145,6 +157,7 @@ if not exist "dist\release" mkdir "dist\release"
 if errorlevel 2 (
     echo.
     echo [ERROR] Release packaging failed: file locked / antivirus scanning.
+    "%ROOT%.venv\Scripts\python.exe" tools\sanitize_config_for_build.py --restore >nul 2>&1
     echo         Close opened zip in dist\release, or whitelist dist in antivirus, then retry.
     if not defined SKIP_PAUSE pause
     exit /b 2
@@ -152,6 +165,7 @@ if errorlevel 2 (
 if errorlevel 1 (
     echo.
     echo [ERROR] Release packaging failed. Check log above for details.
+    "%ROOT%.venv\Scripts\python.exe" tools\sanitize_config_for_build.py --restore >nul 2>&1
     if not defined SKIP_PAUSE pause
     exit /b 1
 )
@@ -164,6 +178,7 @@ echo [4/4] Packaging other-OS web-only zip (macOS/Linux/Harmony)...
 if errorlevel 2 (
     echo.
     echo [ERROR] Web-only packaging failed: file locked / antivirus scanning.
+    "%ROOT%.venv\Scripts\python.exe" tools\sanitize_config_for_build.py --restore >nul 2>&1
     echo         Close opened zip in dist\release, or whitelist dist in antivirus, then retry.
     if not defined SKIP_PAUSE pause
     exit /b 2
@@ -171,10 +186,22 @@ if errorlevel 2 (
 if errorlevel 1 (
     echo.
     echo [ERROR] Web-only packaging failed. Check log above for details.
+    "%ROOT%.venv\Scripts\python.exe" tools\sanitize_config_for_build.py --restore >nul 2>&1
     if not defined SKIP_PAUSE pause
     exit /b 1
 )
 echo [4/4] Other-OS web-only zip generated in dist\release
+echo.
+
+REM ===== Step 5: Restore local real config + scan release zip for secrets =====
+echo [5/4] Restoring local real config...
+"%ROOT%.venv\Scripts\python.exe" tools\sanitize_config_for_build.py --restore
+echo [5/4] Scanning release zips for secrets...
+"%ROOT%.venv\Scripts\python.exe" check_zip_secrets.py
+if errorlevel 1 (
+    echo [WARN] ⚠️ Release zip contains secrets! Do NOT distribute this build. Fix config and rebuild.
+)
+echo [5/4] Secret scan done (see output above)
 echo.
 
 echo ==========================================

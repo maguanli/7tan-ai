@@ -26,10 +26,10 @@ def _get_site_base_url() -> str:
 
 
 def _get_api_url(endpoint: str) -> str:
-    """获取 API 端点 URL：内置官方端点优先（www.7tan.com/api/*）。
+    """获取 API 端点 URL：内置官方端点优先（主站 /api/*）。
 
     内置端点为空时才回退到 config 的 base_url（兼容自建服务器）。
-    修复：config base_url 指向管理后台域名（img.7tan.cn），
+    修复：config base_url 指向管理后台域名时，
     直接传 fallback 会把 API 请求拼到错误域名导致 404。
     """
     url = get_api_url(endpoint)

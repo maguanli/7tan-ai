@@ -575,8 +575,8 @@ def _activate_window(keyword):
 # ---------------------------------------------------------------
 def _pyautogui():
     import pyautogui
-    pyautogui.FAILSAFE = False
-    pyautogui.PAUSE = 0.05
+    pyautogui.FAILSAFE = True   # P0 安全急停：鼠标甩到屏幕左上角(0,0)立即终止自动化（防失控乱点）
+    pyautogui.PAUSE = 0.08      # 从0.05适度放宽，给系统反应时间
     return pyautogui
 
 
@@ -800,6 +800,36 @@ def _parse_vlm_json(resp):
     return out or None
 
 
+def _zoom_reocr_lines(img, ox=0, oy=0, scale=2.0):
+    """P2 小字自动放大二次识别：把已抓取的 PIL 图像放大 scale 倍后用 RapidOCR 重识，
+    返回还原到原坐标系的 lines（engine 标记 rapid-zoom）。引擎不可用/出错返回 []。"""
+    eng = _get_rapid_engine()
+    if eng is None:
+        return []
+    try:
+        import numpy as np
+        from PIL import Image
+        big = img.resize((max(1, int(img.width * scale)),
+                          max(1, int(img.height * scale))), Image.LANCZOS)
+        arr = np.array(big.convert('RGB'))
+        result, _ = eng(arr)
+        lines = []
+        if result:
+            for box, text, score in result:
+                if not text or not str(text).strip():
+                    continue
+                t = str(text).strip()
+                xs = [p[0] for p in box]
+                ys = [p[1] for p in box]
+                cx = (min(xs) + max(xs)) / 2 / scale + ox
+                cy = (min(ys) + max(ys)) / 2 / scale + oy
+                lines.append({'text': t, 'cx': cx, 'cy': cy, 'engine': 'rapid-zoom'})
+        return lines
+    except Exception as e:
+        print(f'  ⚠️ 放大二次识别出错: {e}')
+        return []
+
+
 def cmd_see(region=None, save=None, engine='smart', vlm=True):
     """看懂屏幕（快+准）：一次截图 → 本地分析(毫秒级) + OCR +（已配置时）多模态模型理解。
 
@@ -836,8 +866,17 @@ def cmd_see(region=None, save=None, engine='smart', vlm=True):
         # 🔧 纯本地快看：Windows OCR 全空时用半分辨率 RapidOCR 兜底（避免全分辨率 35s+）
         lines = _ocr_screen_rapid(region, scale=0.5)
     # vlm=True 且 OCR 空：不跑 RapidOCR 兜底，语义理解交给视觉大模型（快）
+    # P2 小字自动放大闭环：大区域却几乎没字/碎片化严重 → 放大2x二次识别，取更优结果
+    zoomed = False
+    if sw * sh >= 500 * 400 and (not lines or len(lines) < 3 or
+                                 sum(1 for x in lines if len(x['text']) <= 2) / max(1, len(lines)) > 0.5):
+        zlines = _zoom_reocr_lines(img, ox, oy, scale=2.0)
+        if zlines and (len(zlines) > len(lines or []) or
+                       sum(len(x['text']) for x in zlines) > sum(len(x['text']) for x in (lines or []))):
+            lines = zlines
+            zoomed = True
     if lines:
-        out.append(f'【识别文字】{len(lines)} 行:')
+        out.append(f'【识别文字】{len(lines)} 行:' + (' 🔍[小字已2x放大增强]' if zoomed else ''))
         for ln in lines[:80]:
             out.append(f'  ({int(ln["cx"])},{int(ln["cy"])}) {ln["text"]}')
     else:
@@ -883,7 +922,22 @@ def cmd_see(region=None, save=None, engine='smart', vlm=True):
             else:
                 out.append(resp)
         except Exception as e:
-            out.append(f'（视觉模型调用失败: {e}）')
+            out.append(f'（视觉模型不可用: {e}）')
+            # P4 断网降级：网络类错误自动切 fusion 双引擎 OCR 重识补文字；配置类错误(401等)跳过（重试无意义）
+            emsg = str(e).lower()
+            if any(k in emsg for k in ('timeout', 'timed out', 'connection', 'network',
+                                       'ssl', 'unreachable', 'resolve', 'remote', 'max retries')) \
+                    and engine != 'fusion':
+                try:
+                    flines = _ocr_screen(region, engine='fusion')
+                    if len(flines) > len(lines or []):
+                        merged = _merge_ocr_lines(lines or [], flines)
+                        out.append(f'  🛟 断网降级: 已自动切换 fusion 双引擎OCR重识 → 补出 {len(merged) - len(lines or [])} 行:')
+                        for ln in merged[len(lines or []):][:20]:
+                            out.append(f'    ({int(ln["cx"])},{int(ln["cy"])}) {ln["text"]}')
+                except Exception:
+                    pass
+            out.append('  🛟 降级建议: 可追加 desktop_uia 读取控件树补齐结构信息（纯本地、不依赖网络）')
     elif vlm:
         out.append('【视觉理解】未配置视觉模型 → 仅本地分析+OCR。')
         out.append('  启用方法：在 .env 设置 VISION_API_KEY / VISION_BASE_URL / VISION_MODEL')

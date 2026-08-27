@@ -22,10 +22,13 @@ KEY = _KEY_PART1 + _KEY_PART2
 # ============ P2-10: TLS 证书固定指纹（SPKI SHA-256） ============
 # 获取方式: python -c "import ssl,socket,hashlib; ..."（见 tools/_get_pins.py）
 # ⚠️ 证书续期若更换密钥对，必须更新此表并随版本发布
+# img 管理后台域名从环境变量读取（.env: TANTAN_BASE_URL），源码不写死具体域名
+_img_domain = os.environ.get("TANTAN_BASE_URL", "").split("//")[-1].split("/")[0].strip()
 TLS_PINS = {
     "www.7tan.com": ["700ba1b9835cfaeaf6b393fe68f20838e05181a3e03d9bd2ae8a8860c7d161ef"],
-    "img.7tan.cn": ["75c10287891d402d3dc32ba03ff7452b31afe6cda09219d491299ac75f30bb27"],
 }
+if _img_domain:
+    TLS_PINS[_img_domain] = ["75c10287891d402d3dc32ba03ff7452b31afe6cda09219d491299ac75f30bb27"]
 
 
 def encrypt(plaintext: str) -> str:

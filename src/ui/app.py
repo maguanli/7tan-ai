@@ -704,7 +704,8 @@ class Sidebar(QFrame):
         _cfg4 = _load_cfg4()
         _base4 = _cfg4.get("site_7tan", {}).get("base_url", "")
         _site_root4 = _base4.replace("/api", "") if _base4 else "https://www.7tan.com"
-        _site_root4 = _site_root4.replace("img.7tan.cn", "www.7tan.com")
+        import re as _re4
+        _site_root4 = _re4.sub(r"^(https?://)(?:img|cdn|api)\.", r"\1www.", _site_root4)
         version.setToolTip(f"在浏览器中打开 {_site_root4}")
         version.mousePressEvent = lambda e: self.open_url.emit(_site_root4 + "/")
         layout.addWidget(version)
@@ -4550,7 +4551,8 @@ class SettingsPage(QWidget):
             _cfg_policy = _load_cfg_policy()
             _base_policy = _cfg_policy.get("site_7tan", {}).get("base_url", "")
             _site_root_policy = _base_policy.replace("/api", "") if _base_policy else "https://www.7tan.com"
-            _site_root_policy = _site_root_policy.replace("img.7tan.cn", "www.7tan.com")
+            import re as _re_policy
+            _site_root_policy = _re_policy.sub(r"^(https?://)(?:img|cdn|api)\.", r"\1www.", _site_root_policy)
         except Exception:
             _site_root_policy = "https://www.7tan.com"
         agree_row.addWidget(_make_policy_btn("《用户协议》", _site_root_policy + "/agreement.php"))

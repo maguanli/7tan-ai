@@ -765,5 +765,20 @@
       "gzh_render"
     ],
     "icon": "📄"
+  },
+  {
+    "id": "desktop_watch",
+    "name": "桌面监控哨兵",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "custom",
+    "category": "桌面自动化",
+    "description": "P1+P3：桌面连续帧差监控，画面变化自动存截图并写入观察流水(SQLite)，支持关键词触发检测；流水可按关键词/事件类型回查。工具：desktop_watch / desktop_watch_log / desktop_watch_status。",
+    "tools": [
+      "desktop_watch",
+      "desktop_watch_log",
+      "desktop_watch_status"
+    ],
+    "icon": "👁"
   }
 ]

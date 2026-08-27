@@ -234,7 +234,8 @@ class LoginDialog(QDialog):
         _cfg_agree = _load_cfg_agree()
         _base_agree = _cfg_agree.get("site_7tan", {}).get("base_url", "")
         _site_root_agree = _base_agree.replace("/api", "") if _base_agree else "https://www.7tan.com"
-        _site_root_agree = _site_root_agree.replace("img.7tan.cn", "www.7tan.com")
+        import re as _re_agree
+        _site_root_agree = _re_agree.sub(r"^(https?://)(?:img|cdn|api)\.", r"\1www.", _site_root_agree)
         _url_agreement = _site_root_agree + "/agreement.php"
         _url_privacy = _site_root_agree + "/privacy.php"
 
@@ -294,7 +295,8 @@ class LoginDialog(QDialog):
         _cfg5 = _load_cfg5()
         _base5 = _cfg5.get("site_7tan", {}).get("base_url", "")
         _site_root5 = _base5.replace("/api", "") if _base5 else "https://www.7tan.com"
-        _site_root5 = _site_root5.replace("img.7tan.cn", "www.7tan.com")
+        import re as _re5
+        _site_root5 = _re5.sub(r"^(https?://)(?:img|cdn|api)\.", r"\1www.", _site_root5)
         footer.clicked.connect(lambda: self._open_url(_site_root5 + "/bbs/register.php"))
         footer.setStyleSheet(f"""
             QPushButton#btnLink {{
@@ -491,7 +493,8 @@ class LoginDialog(QDialog):
             _cfg6 = _load_cfg6()
             _base6 = _cfg6.get("site_7tan", dict()).get("base_url", "") if _cfg6 else ""
             _site_root6 = _base6.replace("/api", "") if _base6 else "https://www.7tan.com"
-            _site_root6 = _site_root6.replace("img.7tan.cn", "www.7tan.com")
+            import re as _re6
+            _site_root6 = _re6.sub(r"^(https?://)(?:img|cdn|api)\.", r"\1www.", _site_root6)
             _url6 = _site_root6 + "/bbs/77562/"
             logger.info("[Login] 忘记密码 -> " + _url6)
             self._open_url(_url6)

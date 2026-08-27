@@ -100,8 +100,8 @@ def _get_ping_urls() -> list:
     独立于 site_7tan.base_url，域名迁移不受影响。
     配置示例:
       analytics:
-        primary: https://img.7tan.cn/api/7tan_ping.php
-        fallback: https://img.7tan.com/api/7tan_ping.php
+        primary: ${TANTAN_PING_URL}
+        fallback: ${TANTAN_PING_FALLBACK}
     """
     config = load_config()
     analytics_cfg = config.get("analytics", {})
@@ -117,7 +117,7 @@ def _get_ping_urls() -> list:
 
     # 兼容旧配置：如果 analytics 段不存在，回退到 site_7tan.base_url
     if not urls:
-        base_url = config.get("site_7tan", {}).get("base_url", "https://img.7tan.cn")
+        base_url = config.get("site_7tan", {}).get("base_url", "")
         if "/api" in base_url:
             base_url = base_url.split("/api")[0]
         urls.append(f"{base_url}/api/7tan_ping.php")

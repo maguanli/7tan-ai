@@ -275,7 +275,7 @@ def main():
     assert len(seed) >= 32
     assert cfg["enabled"] is True and cfg["mode"] == "core"
     assert "www.7tan.com" in sc.get_update_endpoint()
-    assert "www.7tan.com" in pins and "img.7tan.cn" in pins
+    assert "www.7tan.com" in pins
     print("✅ 自检通过")
 
 

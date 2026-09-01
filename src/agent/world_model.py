@@ -222,6 +222,15 @@ class TanModel:
         except Exception as e:
             logger.warning(f"模块F 初始化失败（退回原行为）: {e}")
             self.selflearn = None
+        # ── 模块D：自我进化安全底座（Git/沙盒/回退；总开关默认关闭） ──
+        self.evolve = None
+        try:
+            from .self_evolution import MetaEvolutionLayer
+            self.evolve = MetaEvolutionLayer(self.memory)
+            logger.info("🔧 模块D 已启用：自我进化安全底座（总开关默认关闭）")
+        except Exception as e:
+            logger.warning(f"模块D 初始化失败（退回原行为）: {e}")
+            self.evolve = None
 
     # ---------------- 预测核心（忠实移植） ----------------
     def virtual_predict(self, scene, action) -> dict:
@@ -300,6 +309,12 @@ class TanModel:
                 self.selflearn.f_selflearn_tick()
             except Exception as e:
                 logger.warning(f"模块F tick 异常（忽略，不影响回复）: {e}")
+        # ⑤ 模块D 自我进化 tick（总开关默认关闭时零开销直接返回）
+        if self.evolve is not None:
+            try:
+                self.evolve.tick()
+            except Exception as e:
+                logger.warning(f"模块D tick 异常（忽略，不影响回复）: {e}")
         return reply
 
     # ---------------- 思考循环：上下文吸收 / 观察回写 / 记忆检索推理 ----------------
@@ -775,6 +790,8 @@ class SpeechGenerator:
             handlers["thinking_ability"] = self.speak_thinking_ability
         if self.model.selflearn is not None:
             handlers["hypothesis"] = self.speak_hypothesis
+        if getattr(self.model, "evolve", None) is not None:
+            handlers["evolution"] = self.speak_evolution
         handlers["context"] = self.speak_context
         return handlers[kind]()
 
@@ -786,6 +803,11 @@ class SpeechGenerator:
         if any(k in text for k in ("我叫", "叫我", "名字叫", "名叫", "可以叫我", "就叫我",
                                    "喊我", "我的名字是", "我的称呼是", "我是老", "我是小")):
             return "user_name"
+        # 0.0.5 进化 / 升级（模块D 存在时识别；须在 capability/meta 等宽泛分支之前）
+        if getattr(self.model, "evolve", None) is not None and any(
+                k in text for k in ("进化", "升级", "自我进化", "自我升级", "改自己",
+                                   "改代码", "改参数", "进化功能", "提升能力")):
+            return "evolution"
         # 0.1 认识/见过某人（「你认识老马吗」→ 查工作记忆对话槽位）
         if any(k in text for k in ("认识", "见过", "认不认识", "认识不认识")):
             return "acquaintance"
@@ -1094,9 +1116,38 @@ class SpeechGenerator:
             lines.append("⑤ 自我学习引擎（模块F）— 假设验证→落地记忆的完整闭环。")
             lines.append(f"   当前 {len(reg)} 个假设在验证流程中。")
             lines.append("   规则：验证通过才写入长期记忆，热记忆只降权不删除。")
+        if getattr(self.model, "evolve", None) is not None:
+            lines.append("")
+            lines.append("⑥ 自我进化安全底座（模块D）— Git/沙盒/回退，总开关默认关闭。")
+            lines.append("    允许在沙盒验证后调整学习阈值常量，恶化自动回退。")
         lines.append("")
         lines.append("这些部分的关系：记忆库喂数据给预测引擎，预测引擎的误差驱动工作记忆生成猜想，")
         lines.append("猜想经自我学习验证后反馈回记忆库——形成闭环。")
+        return "\n".join(lines)
+
+    def speak_evolution(self) -> str:
+        """描述自我进化能力（模块D 真实状态）"""
+        evolve = getattr(self.model, "evolve", None)
+        if evolve is None:
+            return "我现在还没有自我进化模块。"
+        st = evolve.status()
+        enabled = st.get("enabled")
+        lines = [
+            "我有「自我进化」的安全底座（模块D），但它不是随便就动的：",
+            "",
+            f"· 总开关：{'已开启' if enabled else '默认关闭'}（ENABLE_7TAN_SELF_CODE_EVOLVE）",
+            "· 进化方式：先用记忆库历史轨迹做留一法回测，把改进方案放进沙盒子进程验证，",
+            "  只有指标变好才落地；崩溃或变差就自动回退（Git 或 .bak）。",
+            "· 允许改动的范围：只有 self_learn.py 里的 5 个学习阈值常量，其它代码一律不碰。",
+        ]
+        if st.get("last_result"):
+            r = st["last_result"]
+            tail = f"（{r.get('reason')}）" if r.get("reason") else ""
+            lines.append(f"· 最近一次进化尝试：{r.get('action')} → {r.get('status')}{tail}")
+        if not enabled:
+            lines.append("")
+            lines.append("开关默认关着——因为改自己的参数/代码是最危险的动作，")
+            lines.append("必须由你明确开启，我才会在沙盒里尝试进化。")
         return "\n".join(lines)
 
     def speak_growth(self) -> str:

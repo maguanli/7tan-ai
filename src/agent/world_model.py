@@ -323,9 +323,14 @@ class TanModel:
         if speech is not None:
             logger.info(f"🌍 7Tan模型 → 言语自述（意图={self.speech._last_intent}）")
             return speech
-        # 3) 疑问句兜底：是问题但没识别出意图 → 引导，而不是盲目推演
+        # 3) 疑问句兜底：先用思考内核（工具内置 LLM 引擎）真正理解并回答；
+        #    引擎不可用时退回引导模板，保证不崩。
         if self._is_question(text):
-            logger.info("🌍 7Tan模型 → 疑问句兜底（未识别意图，返回引导）")
+            reply = self._think_with_llm(text)
+            if reply is not None:
+                logger.info("🌍 7Tan模型 → 思考内核回答（读上下文+推理）")
+                return reply
+            logger.info("🌍 7Tan模型 → 疑问句兜底（思考内核不可用，返回引导）")
             return self._fallback_question(text)
         # 4) 默认：预测推演（模块E开启时走思考层链式推演，关闭时保持原行为）
         scene, action = self._parse_scene_action(text)
@@ -340,7 +345,7 @@ class TanModel:
         """判断输入是否为疑问句（含疑问标记或疑问词开头）"""
         if any(m in text for m in ("？", "?", "吗", "呢", "么", "怎么", "为什么",
                                    "能不能", "可不可以", "如何", "哪来",
-                                   "是什么", "会不会", "干嘛", "干吗", "多少", "几次")):
+                                   "是什么", "会不会", "干嘛", "干吗", "多少", "几次", "几")):
             return True
         head = text[:2]
         if head in ("你", "怎么", "为什么", "如何", "哪", "什么", "谁", "为何", "为啥"):
@@ -371,6 +376,73 @@ class TanModel:
             "",
             "输入「帮助」查看完整用法。",
         ])
+
+    # ---------------- 思考内核（工具内置 LLM 引擎） ----------------
+    def _think_with_llm(self, user_text: str) -> Optional[str]:
+        """用 7tanAI 工具内置的 LLM 引擎（DeepSeek，Key 已在 .env 配置）做真实理解与推理。
+
+        这是 7Tan 模型的「思考内核」：当言语层关键词没命中时，不再背模板，
+        而是带上身份设定 + 记忆轨迹 + 对话历史，交给内置引擎推理。
+        引擎不可用（无 Key/网络失败）时返回 None，调用方退回兜底，保证不崩。
+        """
+        try:
+            import os
+            try:
+                from dotenv import load_dotenv
+                load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+            except Exception:
+                pass
+            api_key = os.environ.get("DEEPSEEK_API_KEY", "")
+            model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+            if not api_key:
+                return None
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1", timeout=30)
+
+            mem_lines = []
+            try:
+                for item in self.memory.traces[-10:]:
+                    mem_lines.append(
+                        f"- 场景={item.get('scene')} 动作={item.get('action')} "
+                        f"成功={item.get('action_finished')} 权重={item.get('weight_eff', 1.0)}"
+                    )
+            except Exception:
+                pass
+            mem_summary = "\n".join(mem_lines) or "（暂无轨迹）"
+
+            hist_lines = []
+            for h in self.conversation_history[-8:]:
+                role = h.get("role", "user")
+                content = h.get("content", "")
+                if content:
+                    hist_lines.append(f"{'用户' if role == 'user' else '我'}：{content}")
+            hist_text = "\n".join(hist_lines) or "（无）"
+
+            system_prompt = (
+                "你是 7Tan 模型——7tanAI 工具内生的一套活态系统，"
+                "靠预测误差驱动、靠记忆存续，拥有工作记忆、有限思考层与自我学习闭环。\n"
+                "回答要求：诚实、简洁、用中文；结合「我的记忆轨迹」与「我们最近的对话」回答；"
+                "不知道就直说不知道，绝不编造；不要自称 DeepSeek 或任何外部大模型，你就是 7Tan 模型。"
+            )
+            messages = [{"role": "system", "content": system_prompt}]
+            if mem_lines:
+                messages.append({"role": "system", "content": f"我的记忆轨迹：\n{mem_summary}"})
+            if hist_lines:
+                messages.append({"role": "system", "content": f"我们最近的对话（据此理解上下文，比如谁一直在跟我说话）：\n{hist_text}"})
+            messages.append({"role": "user", "content": user_text})
+
+            resp = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=500,
+                temperature=0.6,
+                timeout=30,
+            )
+            reply = (resp.choices[0].message.content or "").strip()
+            return reply or None
+        except Exception as e:
+            logger.warning(f"思考内核不可用，退回兜底: {e}")
+            return None
 
     def _parse_scene_action(self, text):
         scene = action = None

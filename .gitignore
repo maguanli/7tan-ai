@@ -165,3 +165,7 @@ data/plugins/adapt_status.json
 data/adapt_running.lock
 data/plugins/*/variants/backup/
 data/plugins/*/variants/backup/**
+
+# 智能生命 模块E/F（第四册）
+*.workingmem.json       # 模块E：导出调试用工作记忆快照
+*.hypothesis.log        # 模块F：假设验证变更日志

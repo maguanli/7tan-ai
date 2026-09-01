@@ -18,7 +18,7 @@ import subprocess
 from pathlib import Path
 
 from ...agent.agent_loop import run_agent_loop, run_agent_loop_streaming, AbortSignal
-from ...agent.world_model import is_7tan_model, ensure_7tan_model_config, TanModel
+from ...agent.world_model import is_7tan_model, ensure_7tan_model_config, get_tan_model
 from ...tools.registry import get_all_tools
 from ... import tools as _tools  # noqa: F401 触发 @register_tool 装饰器
 from ...agent.conversation import (
@@ -180,7 +180,7 @@ def _7tan_model_reply(used_model: str, user_message: str) -> str:
     ensure_7tan_model_config()
     logger.info(f"🌍 7Tan模型（本地引擎）处理消息: {user_message[:50]}")
     try:
-        return TanModel().respond(user_message)
+        return get_tan_model().respond(user_message)
     except Exception as e:
         logger.error(f"7Tan 模型响应失败: {e}")
         return f"❌ 7Tan 模型引擎异常: {e}"

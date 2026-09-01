@@ -34,6 +34,14 @@ T7_MODEL_DISPLAY = "7Tan模型"
 _MEMORY_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "tan_model_memory.json"
 _OLD_MEMORY_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "world_model_memory.json"
 
+# ═══ 模块E/F 全局开关（第四册 · 统一全局配置区；默认关闭，支持A/B对照实验） ═══
+try:
+    from .working_memory import ENABLE_WORKING_MEMORY          # 模块E：工作记忆+有限思考层
+    from .self_learn import ENABLE_L1_MEMORY_SELF_LEARN        # 模块F：L1记忆级自我学习闭环
+except Exception:  # 独立加载/打包环境兜底：开关视为关闭，行为与旧版完全一致
+    ENABLE_WORKING_MEMORY = False
+    ENABLE_L1_MEMORY_SELF_LEARN = False
+
 # 场景关键词 → 归一化场景标签（用于自由文本输入）
 SCENE_KEYWORDS = [
     ("unknown_interface", ["未知", "unknown", "空白", "桌面", "desktop"]),
@@ -198,6 +206,29 @@ class TanModel:
     def __init__(self, memory: Optional[TanModelMemory] = None):
         self.memory = memory or TanModelMemory()
         self.speech = SpeechGenerator(self)
+        # ── 模块E/F（第四册）：开关默认关闭，关闭时与原行为完全一致 ──
+        self.wm = None                       # 模块E：工作记忆
+        self.thinking = None                 # 模块E：三层思考
+        self.selflearn = None                # 模块F：自我学习闭环引擎
+        self._last_predictions: dict = {}    # {(scene,action): feat} 供闭环计算PE
+        self._last_record: Optional[dict] = None  # 最近一条真实标注轨迹（闭环观测用）
+        if ENABLE_WORKING_MEMORY:
+            try:
+                from .working_memory import WorkingMemory, ThinkingLayer
+                self.wm = WorkingMemory()
+                self.thinking = ThinkingLayer(self, self.wm)
+                logger.info("🧠 模块E 已启用：工作记忆 + 有限思考层")
+            except Exception as e:
+                logger.warning(f"模块E 初始化失败（退回原行为）: {e}")
+                self.wm = self.thinking = None
+        if ENABLE_L1_MEMORY_SELF_LEARN:
+            try:
+                from .self_learn import SelfLearnEngine
+                self.selflearn = SelfLearnEngine(self.memory)
+                logger.info("🧪 模块F 已启用：L1记忆级自我学习闭环")
+            except Exception as e:
+                logger.warning(f"模块F 初始化失败（退回原行为）: {e}")
+                self.selflearn = None
 
     # ---------------- 预测核心（忠实移植） ----------------
     def virtual_predict(self, scene, action) -> dict:
@@ -252,6 +283,17 @@ class TanModel:
 
     # ---------------- 对话接口 ----------------
     def respond(self, user_text: str) -> str:
+        """对话入口。末尾挂模块F主循环钩子 f_selflearn_tick（每轮调用一次；
+        开关 ENABLE_L1_MEMORY_SELF_LEARN=False 时钩子内部直接 return，零开销）。"""
+        reply = self._respond_impl(user_text)
+        if self.selflearn is not None:
+            try:
+                self.selflearn.f_selflearn_tick()
+            except Exception as e:
+                logger.warning(f"模块F tick 异常（忽略，不影响回复）: {e}")
+        return reply
+
+    def _respond_impl(self, user_text: str) -> str:
         text = (user_text or "").strip()
         logger.info(f"🌍 7Tan模型 · 收到输入: {text[:80]}")
         if not text:
@@ -266,11 +308,17 @@ class TanModel:
             return self._report_memory()
         if low.startswith(("清空", "clear", "重置", "reset")):
             self.memory.clear()
+            if self.wm is not None:
+                self.wm.reset()  # 会话重置：工作记忆草稿全部销毁（易失性）
             logger.info("🌍 7Tan模型 → 记忆库已清空")
             return "🧹 记忆库已清空。可重新输入场景+动作开始测试。"
         if low.startswith(("记录", "record", "标注")):
             reply = self._handle_record(text)
             logger.info("🌍 7Tan模型 → 已记录真实轨迹（学习）")
+            if self.selflearn is not None:
+                extra = self._selflearn_after_record()
+                if extra:
+                    reply = reply + "\n" + extra
             return reply
         # 2) 言语层（自述类问题）
         speech = self.speech.respond(text)
@@ -281,8 +329,11 @@ class TanModel:
         if self._is_question(text):
             logger.info("🌍 7Tan模型 → 疑问句兜底（未识别意图，返回引导）")
             return self._fallback_question(text)
-        # 4) 默认：预测推演
+        # 4) 默认：预测推演（模块E开启时走思考层链式推演，关闭时保持原行为）
         scene, action = self._parse_scene_action(text)
+        if self.thinking is not None:
+            logger.info(f"🌍 7Tan模型 → 思考层推演（场景={scene} 动作={action}）")
+            return self._report_predict_with_thinking(scene, action)
         logger.info(f"🌍 7Tan模型 → 预测推演（场景={scene} 动作={action}）")
         return self._report_predict(scene, action)
 
@@ -362,15 +413,84 @@ class TanModel:
         changed = ("变化" in text) or ("changed" in low)
         reduced = ("缺陷" in text) or ("降低" in text)
         gained = ("知识" in text) or ("学到" in text)
-        self.memory.add_trace(scene, action, finished=finished,
-                              changed=changed, reduced=reduced, gained=gained)
+        rec = self.memory.add_trace(scene, action, finished=finished,
+                                    changed=changed, reduced=reduced, gained=gained)
+        self._last_record = rec  # 供模块F闭环计算PE（开关关闭时无行为影响）
         state = "成功" if finished else "失败"
         return (f"✅ 已记录轨迹：场景={scene} 动作={action} 结果={state}\n"
                 f"   7Tan 模型已把这次真实结果纳入记忆，下次预测会参考它。")
 
+    # ---------------- 模块F：L1记忆级自我学习闭环（第四册） ----------------
+    def _selflearn_after_record(self) -> str:
+        """现实观测后的闭环执行（仅模块F开启时被调用）：
+
+        预测(B.predict_outcome) → 现实观测(记录) → compute_pe/compute_lp
+        → PE/LP送入模块E工作记忆 → 反思桥接生成猜想草稿(E)
+        → 注册进模块F → 本次观测作为验证反馈 → f_selflearn_tick评估/落地（respond末尾统一执行）
+        """
+        lines = []
+        rec = self._last_record
+        if rec is None:
+            return ""
+        scene = str(rec.get("scene", "?"))
+        action = str(rec.get("action", "?"))
+        # 现实观测特征向量（与 predict_outcome 同一4维口径）
+        actual = [
+            1.0 if rec.get("action_finished") else 0.0,
+            1.0 if rec.get("scene_changed") else 0.0,
+            1.0 if rec.get("defect_reduced") else 0.0,
+            1.0 if rec.get("knowledge_gained") else 0.0,
+        ]
+        predicted = self._last_predictions.get((scene, action))
+        pe = self.compute_pe(predicted, actual)
+        prev_pe = self.memory.pe_history[-1] if self.memory.pe_history else pe
+        lp = self.compute_lp(pe, prev_pe)
+        self.memory.pe_history.append(pe)   # 误差不再只是读数：正式进入历史
+        lines.append(f"📈 闭环学习：本次预测误差 PE={pe}，学习进度 LP={lp}"
+                     + ("" if predicted is not None else "（此前无预测记录，PE按满误差计）"))
+
+        # PE/LP 送入模块E工作记忆；PE偏高 → 反思桥接生成猜想草稿
+        draft = None
+        if self.thinking is not None:
+            draft = self.thinking.reflect_bridge(pe, lp)
+            if draft is not None:
+                lines.append(f"🧠 反思桥接：PE 偏高 → 已生成猜想草稿（待验证，不直接写入长期记忆）")
+
+        # 猜想注册进模块F + 本次观测作为第一条验证反馈
+        if draft is not None and self.selflearn is not None:
+            registered = self.selflearn.register_hypothesis(draft)
+            if registered is not None:
+                self.selflearn.submit_feedback(registered.hypothesis_id, {"pe": pe})
+                lines.append(f"🧪 假设 {registered.hypothesis_id} 已注册进入验证流程"
+                             f"（≥{2}次验证且置信度达标才会固化进记忆库）")
+        return "\n".join(lines)
+
+    # ---------------- 模块E：思考层推演报告（第四册） ----------------
+    def _report_predict_with_thinking(self, scene, action) -> str:
+        """模块E开启时的推演：目标拆解 → 链式推演 → 基础报告 + 思考过程。"""
+        # 思考层2：把本次预测作为目标拆解（写入 active_goals）
+        self.thinking.decompose_goals({
+            "goal": f"预测：场景{scene} 动作{action}", "source": "user", "priority": 0.7,
+        })
+        # 思考层1：链式推演（热记忆事实 → 跨场景迁移 → 综合结论，结果回栈）
+        cr = self.thinking.chain_reason(scene, action)
+        # 基础报告（数据源与原版完全一致）
+        base = self._report_predict(scene, action)
+        lines = ["", "🧠 思考过程（模块E · 链式推演）"]
+        for s in cr["steps"]:
+            lines.append(f"  第{s['step']}步 · {s['fact']}")
+        if cr.get("hypothesis_id"):
+            lines.append(f"  ✎ 已生成待验证假设 {cr['hypothesis_id']}（存入草稿区，"
+                         f"未经现实验证不会写入长期记忆）")
+        if cr.get("stopped_by_limit"):
+            lines.append("  ⏹ 达到最大推理步数，强制停止（防无限推演）")
+        return base + "\n" + "\n".join(lines)
+
     def _report_predict(self, scene, action) -> str:
         pred = self.virtual_predict(scene, action)
         feat, gap = self.predict_outcome(scene, action)
+        if feat is not None:
+            self._last_predictions[(scene, action)] = feat  # 供模块F闭环计算PE
 
         if pred["knowledge_gap"]:
             verdict = "❓ 未知（知识缺口）"
@@ -478,11 +598,23 @@ class SpeechGenerator:
             "learning": self.speak_learning,
             "repeat": self.speak_repeat,
         }
+        # 模块E/F 开启时追加的言语能力（开关关闭 → 完全不访问，退回旧版）
+        if self.model.wm is not None:
+            handlers["thinking"] = self.speak_thinking
+        if self.model.selflearn is not None:
+            handlers["hypothesis"] = self.speak_hypothesis
         return handlers[kind]()
 
     def _classify(self, text: str) -> Optional[str]:
         low = text.lower()
         stripped = re.sub(r"[\s?？!！。.，,、]+", "", text)
+        # 0) 模块E/F 专属意图（对应模块未启用时不识别，保持旧版行为）
+        if self.model.wm is not None and any(
+                k in text for k in ("你在想", "思考过程", "工作记忆", "思考什么", "脑内", "怎么想")):
+            return "thinking"
+        if self.model.selflearn is not None and any(
+                k in text for k in ("假设", "猜想", "验证得怎样", "验证状态", "学习闭环")):
+            return "hypothesis"
         # 1) 来源 / 创造者（须在 meta 之前：因为「你是谁创造的」也含「你是谁」）
         if any(k in text for k in ("谁创造", "谁造", "谁写", "谁开发", "谁做", "谁生",
                                    "哪来", "怎么来", "怎么诞生", "出身", "来自哪", "来源",
@@ -720,4 +852,71 @@ class SpeechGenerator:
             "你可以先用这几句稳定地触发我：",
             "  你是谁 / 你记得什么 / 你什么感觉 / 你能做什么 / 帮助",
         ])
+
+    def speak_thinking(self) -> str:
+        """模块E开启时：读取 context_stack 输出思考过程（第四册E4）。"""
+        wm = self.model.wm
+        if not wm.context_stack and not wm.active_goals and not wm.scratch_pad:
+            return ("我的工作记忆现在是空的——这一轮我还没开始想什么。\n"
+                    "给我一个「场景 + 动作」让我推演，你就能看到我的思考步骤了。")
+        lines = ["🧠 我现在的思考工作台（模块E · 会话内易失，草稿不进长期记忆）：", ""]
+        if wm.active_goals:
+            lines.append(f"【活跃目标】{len(wm.active_goals)} 个")
+            for g in wm.active_goals[-3:]:
+                subs = "；".join(s["sub"] for s in g.get("sub_goals", [])[:3]) or "（未拆解）"
+                lines.append(f"  · {g['goal']}（来源:{g['source']}）→ 子目标：{subs}")
+            lines.append("")
+        if wm.context_stack:
+            kept = wm.wm_focus_filter()
+            lines.append(f"【思考栈】{len(wm.context_stack)} 步（注意力≥{wm.focus_weight} 保留 {len(kept)} 步）")
+            for t in wm.context_stack[-4:]:
+                f = t["fragment"]
+                lines.append(f"  第{f.get('step', '?')}步 · {f.get('fact', f)}")
+            lines.append("")
+        if wm.intermediate_pe_lp:
+            pe = wm.intermediate_pe_lp.get("pe")
+            lp = wm.intermediate_pe_lp.get("lp")
+            lines.append(f"【本轮误差】PE={pe}  LP={lp}")
+        if wm.scratch_pad:
+            n_pending = sum(1 for d in wm.scratch_pad.values()
+                            if isinstance(d, dict) and d.get("status") in ("pending", "suspended"))
+            lines.append(f"【草稿区】{len(wm.scratch_pad)} 条假设（待验证 {n_pending} 条——"
+                         f"未经现实验证，我不会让它们进长期记忆）")
+        return "\n".join(lines)
+
+    def speak_hypothesis(self) -> str:
+        """模块F开启时：读取 hypothesis_registry 输出假设验证状态（第四册F3）。"""
+        engine = self.model.selflearn
+        registry = engine.status_report()
+        if not registry:
+            return ("我目前没有正在验证的假设。\n"
+                    "当我预测误差偏高、或你让我推演并标注真实结果时，"
+                    "我会自动生成猜想并进入「验证 → 达标才固化进记忆」的流程。")
+        lines = [f"🧪 我有 {len(registry)} 个假设在验证流程里（模块F · 记忆级自我学习）：", ""]
+        for h in registry[-5:]:
+            c = h["content"]
+            brief = c.get("guess") or f"场景{c.get('scene')}动作{c.get('action')}成功率≈{c.get('predicted_success_rate')}"
+            status_cn = {"pending": "待验证", "suspended": "证据不足暂停",
+                         "verified": "已验证通过", "rejected": "已证伪丢弃"}.get(h["status"], h["status"])
+            lines.append(f"  · [{status_cn}] {brief[:60]}")
+            lines.append(f"    验证 {h['test_count']} 次（{h['success_count']}成/{h['fail_count']}败）"
+                         f" 置信度 {h['confidence_raw']} → {h['final_confidence']}")
+        lines.append("")
+        lines.append("规则：验证次数≥2 且置信度≥0.6 才会写入长期记忆；≤0.3 直接丢弃；"
+                     "热记忆只降权、永不删除。")
+        return "\n".join(lines)
+
+
+# ── 进程级单例：让工作记忆/假设注册表在多轮对话间存活（会话 = 进程生命周期） ──
+# 说明：web 入口每条消息曾各自 new TanModel()，工作记忆会随请求销毁；
+# 改用单例后，模块E/F 的会话内状态得以跨消息延续。开关关闭时单例与逐次实例化行为完全一致。
+_TAN_MODEL_SINGLETON: Optional["TanModel"] = None
+
+
+def get_tan_model() -> "TanModel":
+    """获取进程级 TanModel 单例（模块E/F 会话状态的载体）。"""
+    global _TAN_MODEL_SINGLETON
+    if _TAN_MODEL_SINGLETON is None:
+        _TAN_MODEL_SINGLETON = TanModel()
+    return _TAN_MODEL_SINGLETON
 

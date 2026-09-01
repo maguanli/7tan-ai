@@ -562,12 +562,12 @@ async def _handle_chat(ws: WebSocket, client_id: str, data: dict):
         try:
             save_message(session_id, "user", message)
             # 本地 7Tan 模型分支：不走 LLM API，直接调用本地预测引擎 + 言语系统
-            from ..agent.world_model import is_7tan_model, TanModel, ensure_7tan_model_config
+            from ..agent.world_model import is_7tan_model, get_tan_model, ensure_7tan_model_config
             if is_7tan_model(model):
                 ensure_7tan_model_config()
                 logger.info(f"🌍 7Tan模型（本地引擎）处理消息: {message[:50]}")
                 try:
-                    reply = TanModel().respond(message)
+                    reply = get_tan_model().respond(message)
                 except Exception as e:
                     logger.error(f"7Tan 模型响应失败: {e}")
                     reply = f"❌ 7Tan 模型引擎异常: {e}"

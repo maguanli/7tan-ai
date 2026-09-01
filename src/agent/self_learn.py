@@ -107,6 +107,7 @@ class SelfLearnEngine:
         try:
             topic = (str(user_text or "").strip())[:40] or "?"
             act = f"answer_{intent}" if intent else "answer_unknown"
+            # 连同对话原文（截断）一起入库：让「记得对话内容」成为可检索的真实记忆
             self.memory.add_trace(
                 scene="dialog",
                 action=act,
@@ -114,6 +115,9 @@ class SelfLearnEngine:
                 changed=False,
                 reduced=False,
                 gained=True,   # 每次对话都有知识增益
+                user_text=(str(user_text or "").strip())[:60],
+                reply=(str(reply or "").strip())[:80],
+                intent=str(intent or "unknown"),
             )
             _log_change(f"对话经验入库: 主题={topic[:20]} 答复方式={act}")
             return True

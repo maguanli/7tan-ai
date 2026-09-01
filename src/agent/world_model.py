@@ -200,13 +200,15 @@ class TanModelMemory:
             })
 
     def add_trace(self, scene, action, finished=True, changed=False,
-                  reduced=False, gained=False) -> dict:
+                  reduced=False, gained=False, **extra) -> dict:
         rec = {
             "scene": scene, "action": action,
             "action_finished": bool(finished), "scene_changed": bool(changed),
             "defect_reduced": bool(reduced), "knowledge_gained": bool(gained),
             "weight_eff": 1.0, "ts": time.time(),
         }
+        if extra:
+            rec.update(extra)   # 允许携带对话原文等附加字段（供记忆检索展示）
         self.traces.append(rec)
         self.save()
         return rec
@@ -798,6 +800,8 @@ class SpeechGenerator:
             "meta": self.speak_meta,
             "perception": self.speak_perception,
             "memory": self.speak_memory,
+            "memory_list": self.speak_memory_list,
+            "memory_count": self.speak_memory_count,
             "prediction": self.speak_prediction,
             "motive": self.speak_motive,
             "emotion": self.speak_emotion,
@@ -901,8 +905,14 @@ class SpeechGenerator:
         # 9) 反思
         if any(k in text for k in ("复盘", "反思", "做得对", "做得怎么样", "回顾")):
             return "reflection"
-        # 10) 记忆（口语化）
-        if any(k in text for k in ("记得", "回忆", "记忆里", "以前", "印象")):
+        # 10) 记忆（口语化）细分：列明细 / 统计条数 / 概述
+        if any(k in text for k in ("记得", "回忆", "记忆", "以前", "印象", "经历")):
+            if any(k in text for k in ("显示", "列出", "列表", "明细", "详细", "都是些",
+                                       "具体", "全部", "给我看", "展示", "翻出", "看一下",
+                                       "都有", "有哪些", "看看", "内容")):
+                return "memory_list"
+            if any(k in text for k in ("几条", "多少", "几个", "几次", "多少段", "多少条")):
+                return "memory_count"
             return "memory"
         # 11) 预测（口语化疑问）
         if any(k in text for k in ("会怎样", "能成吗", "会成功吗", "你觉得", "预测一下", "有把握吗")):
@@ -975,6 +985,54 @@ class SpeechGenerator:
         if n_dialog:
             lines.append(f"另外，我还和你对话了 {n_dialog} 次，这些也都在我的记忆里。")
         return "\n".join(lines)
+
+    def speak_memory_list(self) -> str:
+        """记忆明细：把记忆库里的经历按场景逐条列出（真实检索数据库内容）。"""
+        traces = self.model.memory.traces
+        if not traces:
+            return "我的记忆还是空的，什么都想不起来。"
+        lines = [f"好，我把记忆里的 {len(traces)} 段经历全部翻出来给你看：", ""]
+        for i, t in enumerate(traces, 1):
+            scene = t.get("scene", "?")
+            action = t.get("action", "?")
+            ts = t.get("ts")
+            ts_str = time.strftime("%m-%d %H:%M", time.localtime(ts)) if ts else "?"
+            if scene == "dialog":
+                ut = (t.get("user_text") or "").strip()
+                rp = (t.get("reply") or "").strip()
+                intent = t.get("intent") or str(action).replace("answer_", "")
+                if ut and rp:
+                    shown = rp if len(rp) <= 60 else rp[:60] + "…"
+                    lines.append(f"  {i}. 【对话】你说：「{ut}」 → 我答「{shown}」")
+                else:
+                    lines.append(f"  {i}. 【对话】早期对话（未存原文，类型：{intent}，{ts_str}）")
+            else:
+                result = "成功" if t.get("action_finished") else "失败"
+                extra = []
+                if t.get("scene_changed"):
+                    extra.append("切换了场景")
+                if t.get("defect_reduced"):
+                    extra.append("缺陷减少")
+                if t.get("knowledge_gained"):
+                    extra.append("学到东西")
+                tail = ("，" + "、".join(extra)) if extra else ""
+                lines.append(f"  {i}. 【{scene}】做「{action}」→ {result}{tail}（{ts_str}）")
+        return "\n".join(lines)
+
+    def speak_memory_count(self) -> str:
+        """记忆统计：按场景统计条数（回答「你记得几条/多少段」）。"""
+        traces = self.model.memory.traces
+        if not traces:
+            return "我的记忆还是空的。"
+        scenes: dict = {}
+        for t in traces:
+            s = t.get("scene", "?")
+            scenes[s] = scenes.get(s, 0) + 1
+        parts = "、".join(f"「{s}」{c}条" for s, c in
+                         sorted(scenes.items(), key=lambda x: -x[1]))
+        n_dialog = scenes.get("dialog", 0)
+        return (f"我总共记得 {len(traces)} 段经历：{parts}。"
+                f"其中和你有关的对话有 {n_dialog} 次。")
 
     def speak_prediction(self) -> str:
         traces = self.model.memory.traces

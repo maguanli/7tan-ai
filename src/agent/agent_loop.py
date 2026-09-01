@@ -775,9 +775,10 @@ def run_agent_loop(
             msg_dict["content"] = msg.content
         if reasoning_content:
             msg_dict["reasoning_content"] = reasoning_content
-        if msg.tool_calls:
+        tool_calls_raw = getattr(msg, "tool_calls", None)
+        if tool_calls_raw:
             safe_calls = []
-            for tc in msg.tool_calls:
+            for tc in tool_calls_raw:
                 fn = tc.function
                 safe_calls.append({
                     "id": tc.id,
@@ -797,7 +798,6 @@ def run_agent_loop(
         content = msg.content or ""
         if content:
             _last_text_iteration = iteration
-        tool_calls_raw = msg.tool_calls
         log_entry = {
             "iteration": iteration,
             "role": "assistant",

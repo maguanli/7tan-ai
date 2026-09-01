@@ -561,6 +561,26 @@ async def _handle_chat(ws: WebSocket, client_id: str, data: dict):
     def run_and_report():
         try:
             save_message(session_id, "user", message)
+            # 本地世界模型分支：不走 LLM API，直接调用本地预测引擎
+            from ..agent.world_model import is_world_model, WorldModel, ensure_world_model_config
+            if is_world_model(model):
+                ensure_world_model_config()
+                try:
+                    reply = WorldModel().respond(message)
+                except Exception as e:
+                    logger.error(f"世界模型响应失败: {e}")
+                    reply = f"❌ 世界模型引擎异常: {e}"
+                save_message(session_id, "assistant", reply, model=model)
+                asyncio.run_coroutine_threadsafe(
+                    ws.send_json({
+                        "type": "chat_done",
+                        "session_id": session_id,
+                        "success": True,
+                        "result": reply,
+                        "cost": 0,
+                    }), loop
+                )
+                return
             result = run_agent_loop(task=message, model_name=model, session_id=session_id, max_iterations=1000)  # 迭代上限1000（按用户要求恢复）
             save_message(session_id, "assistant", result.get("result", ""), model=model)
             asyncio.run_coroutine_threadsafe(

@@ -346,6 +346,7 @@ class ModelManager:
                 'message': type('Message', (), {
                     'content': msg.get('content', ''),
                     'role': msg.get('role', 'assistant'),
+                    'tool_calls': msg.get('tool_calls'),
                 })(),
                 'finish_reason': c.get('finish_reason', 'stop'),
                 'index': c.get('index', 0),

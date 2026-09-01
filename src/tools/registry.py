@@ -1,8 +1,7 @@
 """
 工具注册中心 — 统一管理和注册 AI 可调用的工具
 
-Pro 等级门控：self_modify 类工具仅完整版（pro）用户可调用。
-基础版（free）用户调用时会被拦截并返回提示。
+2026-09-01 起：7Tan AI 已开源，移除 Pro 门控，self_modify 类工具对所有用户开放。
 """
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -21,7 +20,7 @@ class Tool:
     dangerous: bool = False
     requires_browser: bool = False
     requires_db: bool = False
-    pro_only: bool = False       # 仅完整版可用（self_modify 类自动设为 True）
+    pro_only: bool = False       # 已废弃：开源后无门控，保留字段仅为兼容
 
 
 # 全局注册表
@@ -35,40 +34,12 @@ _gate_cache: dict = {"checked": False, "is_pro": False, "pro_license": ""}
 
 
 def _check_pro_status() -> bool:
-    """检查当前用户是否为完整版（带缓存）。"""
-    global _gate_cache
+    """检查当前用户等级（门控已废弃）。
 
-    # 每次重新检查，最多缓存 60 秒
-    import time
-    now = time.time()
-    if _gate_cache.get("checked") and (now - _gate_cache.get("ts", 0) < 60):
-        return _gate_cache["is_pro"]
-
-    try:
-        from ..security.token_store import load_token
-        from ..security.license_verify import verify_license, LicenseError
-
-        token_data = load_token()
-        pro_license = (token_data.get("pro_license") or "") if token_data else ""
-
-        if pro_license:
-            try:
-                result = verify_license(pro_license)
-                is_pro = result.get("level") == "pro"
-                _gate_cache = {"checked": True, "is_pro": is_pro, "pro_license": pro_license, "ts": now}
-                return is_pro
-            except LicenseError:
-                pass
-
-        # ⚠️ 安全修复：不再信任 token 中的本地 level 字段（可被本地文件篡改伪造 Pro）
-        # 仅接受 license 验签结果；验签失败一律按非 Pro 处理
-
-        _gate_cache = {"checked": True, "is_pro": False, "pro_license": "", "ts": now}
-        return False
-    except Exception as e:
-        logger.debug(f"[ProGate] 状态检查异常: {e}")
-        _gate_cache = {"checked": True, "is_pro": False, "pro_license": "", "ts": now}
-        return False
+    2026-09-01 起：7Tan AI 已开源，移除 Pro 门控。
+    本函数恒返回 True，保留仅为兼容旧调用点（get_all_tools / execute_tool / UI）。
+    """
+    return True
 
 
 def invalidate_pro_cache() -> None:
@@ -128,7 +99,7 @@ def register_tool(
                 pro_only=(category == "self_modify"),
             )
         TOOL_REGISTRY[tool.name] = tool
-        logger.debug(f"🔧 注册工具: {tool.name} ({tool.category}) {'🔒PRO' if tool.pro_only else ''}")
+        logger.debug(f"🔧 注册工具: {tool.name} ({tool.category})")
         return target
     return decorator
 
@@ -137,7 +108,7 @@ def get_all_tools(include_pro_only: bool = None) -> list[dict]:
     """返回 OpenAI 兼容的 tools 数组。
     
     Args:
-        include_pro_only: 是否包含完整版专属工具。
+        include_pro_only: 已废弃参数（开源后无门控）。
             None (默认): 自动检测当前用户等级
             True: 始终包含
             False: 始终排除
@@ -209,26 +180,10 @@ def get_tool(name: str) -> Tool:
 
 def execute_tool(name: str, args: dict) -> str:
     """执行工具并返回结果字符串。
-    
-    Pro 门控：self_modify 类工具仅完整版用户可调用。
     """
     tool = TOOL_REGISTRY.get(name)
     if not tool:
         return f"❌ 未知工具: {name}"
-
-    # ── Pro 等级门控 ───────────────────────────────────────
-    # 通过 Tool.pro_only 属性判断（比 category 判断更可靠）
-    is_pro_only = getattr(tool, 'pro_only', False) or getattr(tool, 'category', '') == 'self_modify'
-
-    if is_pro_only and not _check_pro_status():
-        logger.warning(f"🔒 [ProGate] 拦截 free 用户调用完整版工具: {name}")
-        return (
-            f"🔒 权限不足：`{name}` 是完整版专属功能。\n\n"
-            "基础版（free）用户无法使用自修改类工具（self_modify_config / sandbox_execute / "
-            "self_rebuild / self_update_prompt 等）。\n\n"
-            "💡 **升级到完整版**即可解锁：https://www.7tan.com/pro.php\n"
-            "完整版权益：自我修改、自定义提示词、自动重建、优先支持。"
-        )
 
     # 兼容 dict 类型 — 现在理论上不会出现，但保留兜底
     if hasattr(tool, 'function'):

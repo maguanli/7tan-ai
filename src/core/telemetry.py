@@ -1,10 +1,8 @@
 """
-运行时遥测上报 — 完整版水印回传（P2 第③层）
+运行时遥测 — 已禁用
 
-- 仅完整版（BUILD_ID 以 PRO- 开头）上报，免费版（FREE）不上报
-- 只上报：build_id / build_user / 构建时间 / 平台 / 时间戳（无隐私数据）
-- 静默失败：网络异常、超时、配置缺失一律不影响软件启动与使用
-- 节流：同一机器 24 小时内最多上报 1 次（记录于 data/telemetry_last.json）
+2026-09-01 起：7Tan AI 已开源，不再做构建水印回传。
+_report() 直接返回，本模块保留仅为兼容旧调用点（report_async）。
 """
 import json
 import logging
@@ -23,7 +21,7 @@ REPORT_INTERVAL_HOURS = 24
 try:
     from src.config.build_info import BUILD_ID, BUILD_TIME, BUILD_USER
 except Exception:  # 极端情况：水印文件缺失
-    BUILD_ID, BUILD_TIME, BUILD_USER = "FREE", "", ""
+    BUILD_ID, BUILD_TIME, BUILD_USER = "OSS", "", ""
 
 
 def _endpoint() -> str:
@@ -65,8 +63,7 @@ def _should_report() -> bool:
 
 
 def _report() -> None:
-    if not BUILD_ID or BUILD_ID.startswith("FREE"):
-        return  # 免费版不上报
+    return  # 2026-09-01 开源后禁用遥测回传
     url = _endpoint()
     if not url:
         return

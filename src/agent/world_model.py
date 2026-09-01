@@ -56,7 +56,8 @@ DEFAULT_ACTION = "explore"
 def is_7tan_model(model_name: str) -> bool:
     """判断模型名是否指向本地 7Tan 模型"""
     m = (model_name or "").strip().lower()
-    return m in ("7tan模型", "7tan", "7tan-model", "7tan_model", "7tanmodel", "tan-model")
+    return m in ("7tan模型", "7tan", "7tan-model", "7tan_model", "7tanmodel", "tan-model",
+                 "world-model", "world_model", "worldmodel", "世界模型")
 
 
 # 兼容旧引用（防止遗漏调用点）

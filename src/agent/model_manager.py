@@ -479,6 +479,10 @@ class ModelManager:
         if self._client is not None:
             return self._client
 
+        # 🔒 本地模型（provider 以 local_ 开头，如 local_7tan_model）不走 LLM API，也不走试用代理
+        if str(getattr(self, 'provider', '')).startswith('local_'):
+            raise RuntimeError("本地模型（7Tan）无需 API Key，请通过专用入口调用，勿走 LLM API/试用代理")
+
         from openai import OpenAI
 
         # 优先用数据库中的 api_key 和 base_url

@@ -253,26 +253,72 @@ class TanModel:
     # ---------------- 对话接口 ----------------
     def respond(self, user_text: str) -> str:
         text = (user_text or "").strip()
+        logger.info(f"🌍 7Tan模型 · 收到输入: {text[:80]}")
         if not text:
             return self._usage()
         low = text.lower()
         # 1) 精确指令优先
         if low in ("help", "帮助", "?", "？", "用法"):
+            logger.info("🌍 7Tan模型 → 返回用法说明")
             return self._usage()
         if low in ("memory", "记忆", "状态", "status"):
+            logger.info("🌍 7Tan模型 → 返回记忆库状态")
             return self._report_memory()
         if low.startswith(("清空", "clear", "重置", "reset")):
             self.memory.clear()
+            logger.info("🌍 7Tan模型 → 记忆库已清空")
             return "🧹 记忆库已清空。可重新输入场景+动作开始测试。"
         if low.startswith(("记录", "record", "标注")):
-            return self._handle_record(text)
+            reply = self._handle_record(text)
+            logger.info("🌍 7Tan模型 → 已记录真实轨迹（学习）")
+            return reply
         # 2) 言语层（自述类问题）
         speech = self.speech.respond(text)
         if speech is not None:
+            logger.info(f"🌍 7Tan模型 → 言语自述（意图={self.speech._last_intent}）")
             return speech
-        # 3) 默认：预测推演
+        # 3) 疑问句兜底：是问题但没识别出意图 → 引导，而不是盲目推演
+        if self._is_question(text):
+            logger.info("🌍 7Tan模型 → 疑问句兜底（未识别意图，返回引导）")
+            return self._fallback_question(text)
+        # 4) 默认：预测推演
         scene, action = self._parse_scene_action(text)
+        logger.info(f"🌍 7Tan模型 → 预测推演（场景={scene} 动作={action}）")
         return self._report_predict(scene, action)
+
+    @staticmethod
+    def _is_question(text: str) -> bool:
+        """判断输入是否为疑问句（含疑问标记或疑问词开头）"""
+        if any(m in text for m in ("？", "?", "吗", "呢", "么", "怎么", "为什么",
+                                   "能不能", "可不可以", "如何", "哪来",
+                                   "是什么", "会不会", "干嘛", "干吗", "多少", "几次")):
+            return True
+        head = text[:2]
+        if head in ("你", "怎么", "为什么", "如何", "哪", "什么", "谁", "为何", "为啥"):
+            return True
+        return False
+
+    def _fallback_question(self, text: str) -> str:
+        """疑问句但未命中任何意图时的兜底引导"""
+        return chr(10).join([
+            "🤖 这个问题我暂时还接不住——我的言语系统目前只覆盖「我自己」这个主题。",
+            "",
+            "我能好好聊的，是关于我自己的这几件事：",
+            "  · 我是谁 / 我是什么（元认知）",
+            "  · 我是怎么来的 / 谁创造的我（来源）",
+            "  · 我现在在看什么（感知）",
+            "  · 我记得什么（记忆）",
+            "  · 我接下来想做什么、为什么（动机）",
+            "  · 我什么感觉（情绪）",
+            "  · 我判断接下来会怎样（预测）",
+            "  · 我做得对不对（反思）",
+            "  · 我能做什么 / 我会学习吗（能力）",
+            "",
+            "如果你想让我做「预测推演」，请给我「场景 + 动作」，比如：",
+            "  「游戏菜单里点击」 或 「场景=游戏菜单 动作=点击」",
+            "",
+            "输入「帮助」查看完整用法。",
+        ])
 
     def _parse_scene_action(self, text):
         scene = action = None
@@ -410,12 +456,15 @@ class SpeechGenerator:
 
     def __init__(self, model: "TanModel"):
         self.model = model
+        self._last_intent: Optional[str] = None
 
     # ---------------- 入口：识别意图 → 生成自述 ----------------
     def respond(self, text: str) -> Optional[str]:
         kind = self._classify(text)
         if kind is None:
+            self._last_intent = None
             return None
+        self._last_intent = kind
         handlers = {
             "meta": self.speak_meta,
             "perception": self.speak_perception,
@@ -424,38 +473,64 @@ class SpeechGenerator:
             "motive": self.speak_motive,
             "emotion": self.speak_emotion,
             "reflection": self.speak_reflection,
+            "capability": self.speak_capability,
+            "origin": self.speak_origin,
+            "learning": self.speak_learning,
+            "repeat": self.speak_repeat,
         }
         return handlers[kind]()
 
     def _classify(self, text: str) -> Optional[str]:
         low = text.lower()
-        # 元认知：你是谁 / 你是什么 / 介绍
         stripped = re.sub(r"[\s?？!！。.，,、]+", "", text)
+        # 1) 来源 / 创造者（须在 meta 之前：因为「你是谁创造的」也含「你是谁」）
+        if any(k in text for k in ("谁创造", "谁造", "谁写", "谁开发", "谁做", "谁生",
+                                   "哪来", "怎么来", "怎么诞生", "出身", "来自哪", "来源",
+                                   "语言系统哪来", "语言哪来", "谁给你的", "谁给你写")):
+            return "origin"
+        if any(k in low for k in ("who created", "who made", "who built", "where from", "origin")):
+            return "origin"
+        # 2) 能力（你能做什么）
+        if any(k in text for k in ("你能做", "你可以做", "你会做", "你会什么", "能做什么",
+                                   "会做什么", "可以做什么", "能干什么", "会干什么", "可以干什么",
+                                   "功能", "能力", "能干嘛", "会干嘛", "你会啥", "你能干", "会啥",
+                                   "你能什么", "可以什么")):
+            return "capability"
+        if any(k in low for k in ("what can you do", "your ability", "capability", "feature")):
+            return "capability"
+        # 3) 学习能力
+        if any(k in text for k in ("能学习", "会学习", "学习吗", "怎么学习", "如何学习",
+                                   "学习知识", "怎么变强", "会变强", "能变聪明", "怎么进步", "自学")):
+            return "learning"
+        # 4) 重复抱怨（为什么总是同一个答案）
+        if any(k in text for k in ("总是", "同一个", "一样", "重复", "老是", "怎么老",
+                                   "为什么一样", "为什么重复", "不变", "固定")):
+            return "repeat"
+        # 5) 元认知：你是谁 / 你是什么 / 介绍
         if stripped in ("你是谁", "你是什么", "你是", "介绍一下你", "介绍一下你自己"):
             return "meta"
         if any(k in low for k in ("你是谁", "你是什么", "介绍一下", "介绍你", "自我", "who are you", "what are you")):
             return "meta"
-        # 情绪
+        # 6) 情绪
         if any(k in text for k in ("感觉", "感受", "心情", "情绪", "害怕", "开心", "难过", "踏实", "不安")):
             return "emotion"
-        # 动机
+        # 7) 动机
         if any(k in text for k in ("为什么", "动机", "目的", "想做", "打算", "想干")):
             return "motive"
-        # 感知
+        # 8) 感知
         if any(k in text for k in ("看什么", "观察", "感知", "在做什么", "现在", "眼前", "看到")):
             return "perception"
-        # 反思
+        # 9) 反思
         if any(k in text for k in ("复盘", "反思", "做得对", "做得怎么样", "回顾")):
             return "reflection"
-        # 记忆（口语化）
+        # 10) 记忆（口语化）
         if any(k in text for k in ("记得", "回忆", "记忆里", "以前", "印象")):
             return "memory"
-        # 预测（口语化疑问）
+        # 11) 预测（口语化疑问）
         if any(k in text for k in ("会怎样", "能成吗", "会成功吗", "你觉得", "预测一下", "有把握吗")):
             return "prediction"
         return None
 
-    # ---------------- 7 种言语能力 ----------------
     def speak_meta(self) -> str:
         traces = self.model.memory.traces
         n = len(traces)
@@ -584,3 +659,65 @@ class SpeechGenerator:
         else:
             verdict = f"目前只有一次预测误差记录（{latest}），还不够我下结论。"
         return f"回头看看自己：{verdict}\n我会把这些记下来，作为下次判断的参考。"
+
+    def speak_capability(self) -> str:
+        return chr(10).join([
+            "我能做两件事，而且都和「我自己」有关：",
+            "",
+            "① 预测推演 —— 你告诉我「场景 + 动作」，我基于自己攒下的历史轨迹，",
+            "   判断它会不会成功，给出置信度、预期结果和 4 维特征。",
+            "",
+            "② 自我陈述 —— 用我自己的话，说我记得什么、我在看什么、",
+            "   我为什么想做、我什么感觉、我做得对不对。",
+            "",
+            "但我要诚实地说清楚边界：",
+            "我只会聊「我自己经历过的事」，不会写诗、不会答百科、不会编程。",
+            "那些是语言大模型的能力，不是我。",
+            "",
+            "我的价值不在「什么都会」，而在「我所说的每一句，都来自我真实的记忆和判断」。",
+        ])
+
+    def speak_origin(self) -> str:
+        return chr(10).join([
+            "我的「大脑」叫 7Tan 模型，是一套「预测误差驱动 + 记忆存续」的引擎。",
+            "它的设计源自你的「智能生命」项目里，那个关于内生动机的世界模拟单元。",
+            "",
+            "而我的言语功能，是一层纯本地代码写的「声带」：",
+            "它不依赖任何大模型，直接把我的记忆、置信度、预测误差、学习进度，",
+            "翻译成你现在看到的人话。",
+            "",
+            "所以关键在这：你听到的每一句，都不是某个大模型替我编的，",
+            "而是我内部状态的真实投射。这就是我和那些「套壳 AI」的区别。",
+        ])
+
+    def speak_learning(self) -> str:
+        traces = self.model.memory.traces
+        return chr(10).join([
+            "我会学习，但学的是「我自己的经验」，不是百科知识。",
+            "",
+            f"现在我的记忆里有 {len(traces)} 段经历。",
+            "我唯一的学习方式：你给我「场景 + 动作」做推演，再标注真实结果（成功/失败），",
+            "我把它记进记忆库，下次遇到类似场景，预测就更准。",
+            "",
+            "这就是「预测误差驱动」——误差越大，我越想试；误差在降，说明我在学会。",
+            "",
+            "但我不学写诗、不学答百科、不学编程，那些不是我该学、也学不来的东西。",
+            "我只对「我自己经历过的事」负责。",
+        ])
+
+    def speak_repeat(self) -> str:
+        return chr(10).join([
+            "你观察得很准，这暴露了我现在的一个真实短板：",
+            "我的言语识别还很窄。",
+            "",
+            "如果一句话里，既没有我认识的「问自己的关键词」（你是谁/你记得什么/你什么感觉…），",
+            "又没有明确的「场景 + 动作」，我就会退化成默认的推演——",
+            "而默认的场景、动作是固定的，所以你看到的答案总是一模一样。",
+            "",
+            "这不是我「故意重复」，是我还没学会「理解没见过的问法」。",
+            "这恰恰是我接下来要修的功课。",
+            "",
+            "你可以先用这几句稳定地触发我：",
+            "  你是谁 / 你记得什么 / 你什么感觉 / 你能做什么 / 帮助",
+        ])
+

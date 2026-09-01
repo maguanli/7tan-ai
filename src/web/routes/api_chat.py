@@ -178,6 +178,7 @@ def _resolve_model_name(model_name: str) -> str:
 def _7tan_model_reply(used_model: str, user_message: str) -> str:
     """调用本地 7Tan 模型引擎，返回预测报告 / 言语自述文本"""
     ensure_7tan_model_config()
+    logger.info(f"🌍 7Tan模型（本地引擎）处理消息: {user_message[:50]}")
     try:
         return TanModel().respond(user_message)
     except Exception as e:

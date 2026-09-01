@@ -18,6 +18,7 @@ import subprocess
 from pathlib import Path
 
 from ...agent.agent_loop import run_agent_loop, run_agent_loop_streaming, AbortSignal
+from ...agent.world_model import is_world_model, ensure_world_model_config, WorldModel
 from ...tools.registry import get_all_tools
 from ... import tools as _tools  # noqa: F401 触发 @register_tool 装饰器
 from ...agent.conversation import (
@@ -174,6 +175,16 @@ def _resolve_model_name(model_name: str) -> str:
         return ""
 
 
+def _world_model_reply(used_model: str, user_message: str) -> str:
+    """调用本地世界模型引擎，返回预测报告文本"""
+    ensure_world_model_config()
+    try:
+        return WorldModel().respond(user_message)
+    except Exception as e:
+        logger.error(f"世界模型响应失败: {e}")
+        return f"❌ 世界模型引擎异常: {e}"
+
+
 def _load_system_prompt() -> str:
     """加载系统提示词：数据库优先 → 文件回退 → 内置默认"""
     # 1. 数据库（管理员在设置页面修改的）
@@ -218,6 +229,13 @@ async def send_message(req: ChatRequest):
 
     # 保存用户消息
     save_message(session_id, "user", user_message)
+
+    # 本地世界模型分支：不走 LLM API，直接调用本地预测引擎
+    if is_world_model(used_model):
+        reply = _world_model_reply(used_model, user_message)
+        save_message(session_id, "assistant", reply, model=used_model)
+        return ChatResponse(session_id=session_id, success=True, result=reply,
+                            cost=0, iterations=0, tokens=0, model=used_model)
 
     # 创建中止标志（供 abort 端点和 agent_loop 检查）
     abort_event = AbortSignal()
@@ -300,6 +318,23 @@ async def send_message_stream(req: ChatRequest, request: Request):
     user_message = _compose_message(req)
     save_message(session_id, "user", user_message)
     
+    # 本地世界模型分支：不走 LLM API，直接调用本地预测引擎
+    if is_world_model(used_model):
+        reply = _world_model_reply(used_model, user_message)
+
+        async def _wm_stream():
+            _nl = chr(10)
+            yield f"data: {json.dumps({'type': 'text_chunk', 'content': reply}, ensure_ascii=False)}{_nl}{_nl}"
+            save_message(session_id, "assistant", reply, model=used_model)
+            yield f"data: {json.dumps({'type': 'done', 'result': reply, 'model': used_model}, ensure_ascii=False)}{_nl}{_nl}"
+            yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}{_nl}{_nl}"
+
+        return StreamingResponse(
+            _wm_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+        )
+
     # 创建中止标志
     abort_event = AbortSignal()
     # 🛡️ 并发保护：同一会话已有任务在跑 → 先中止旧任务，避免多个 agent 同时空转

@@ -96,6 +96,31 @@ class SelfLearnEngine:
         self.memory = memory                    # 模块A：TanModelMemory
         self.hypothesis_registry: list = []     # 全部待评估 hypothesis_obj 引用
 
+    # ---------------- F6 对话经验入库（对话成为长期记忆的一部分） ----------------
+    def learn_from_dialog(self, user_text: str, reply: str, intent=None) -> bool:
+        """把一轮对话作为「对话经验」写入长期记忆（scene=dialog）。
+
+        目的：让对话本身成为模型经历的一部分——对话轮数越多、类型越多样，
+        模型对「与人对话」这件事的经验越丰富。
+        只记客观事实（输入主题 + 答复方式），不记隐私内容。
+        """
+        try:
+            topic = (str(user_text or "").strip())[:40] or "?"
+            act = f"answer_{intent}" if intent else "answer_unknown"
+            self.memory.add_trace(
+                scene="dialog",
+                action=act,
+                finished=True,
+                changed=False,
+                reduced=False,
+                gained=True,   # 每次对话都有知识增益
+            )
+            _log_change(f"对话经验入库: 主题={topic[:20]} 答复方式={act}")
+            return True
+        except Exception as e:
+            logger.warning(f"对话经验入库失败: {e}")
+            return False
+
     # ---------------- F2-1 注册假设 ----------------
     def register_hypothesis(self, hypothesis_obj) -> Optional[Hypothesis]:
         """注册假设进入 hypothesis_registry，初始化计数器；做基础格式校验。

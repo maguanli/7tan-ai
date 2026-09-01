@@ -276,20 +276,73 @@ class TanModel:
 
     # ---------------- 对话接口 ----------------
     def respond(self, user_text: str, history: Optional[list] = None) -> str:
-        """对话入口。末尾挂模块F主循环钩子 f_selflearn_tick（每轮调用一次）。
+        """对话入口（完整思考循环）：吸收上下文 → 思考 → 观察回写 → 模块F tick。
+
+        思考循环（纯算法，不依赖任何外部 API）：
+          ① 上下文进入工作记忆（补录历史轮次 / 提取用户名字 / 更新话题）
+          ② 意图识别：指令 → 言语自述 → 记忆检索推理 → 预测推演
+          ③ 本轮对话写回工作记忆事件链 + 对话经验入库（自我学习）
+          ④ 模块F 主循环 tick（假设评估/落地）
 
         history: 可选，最近对话历史 [{role, content}, ...]（不含当前消息）。
-                 用于「读上下文」能力：让模型能引用之前聊过什么。
         """
         if history:
             self.conversation_history = list(history[-self._history_max:])
+        # ① 上下文进入工作记忆
+        self._absorb_context(user_text)
+        # ② 思考循环
         reply = self._respond_impl(user_text)
+        # ③ 本轮对话观察回写
+        self._observe_round(user_text, reply)
+        # ④ 模块F 主循环 tick
         if self.selflearn is not None:
             try:
                 self.selflearn.f_selflearn_tick()
             except Exception as e:
                 logger.warning(f"模块F tick 异常（忽略，不影响回复）: {e}")
         return reply
+
+    # ---------------- 思考循环：上下文吸收 / 观察回写 / 记忆检索推理 ----------------
+    def _absorb_context(self, user_text: str) -> None:
+        """① 把对话历史吸收进工作记忆：补录事件链、提取用户名字、更新话题。"""
+        if self.wm is None:
+            return
+        try:
+            slots = self.wm.dialog_slots
+            seen = len(slots.get("recent_events") or [])
+            hist = self.conversation_history or []
+            # 补录尚未进入事件链的历史轮次
+            for m in hist[seen:]:
+                role = m.get("role")
+                content = (m.get("content") or "").strip()
+                if role in ("user", "assistant") and content:
+                    self.wm.wm_observe_dialog(role, content)
+            # 从历史 + 当前文本提取用户名字（用户侧消息优先）
+            for m in list(hist) + [{"role": "user", "content": user_text}]:
+                if m.get("role") != "user":
+                    continue
+                name = self.wm.wm_extract_user_name(m.get("content", ""))
+                if name:
+                    self.wm.wm_remember_user_name(name)
+            # 更新话题
+            self.wm.wm_update_topic(user_text)
+        except Exception as e:
+            logger.warning(f"吸收上下文失败（忽略，不影响回复）: {e}")
+
+    def _observe_round(self, user_text: str, reply: str) -> None:
+        """③ 本轮对话写入工作记忆事件链 + 自我学习对话经验入库。"""
+        if self.wm is not None:
+            try:
+                self.wm.wm_observe_dialog("user", user_text)
+                self.wm.wm_observe_dialog("assistant", reply)
+            except Exception as e:
+                logger.warning(f"观察本轮对话失败（忽略）: {e}")
+        if self.selflearn is not None:
+            try:
+                intent = getattr(self.speech, "_last_intent", None)
+                self.selflearn.learn_from_dialog(user_text, reply, intent)
+            except Exception as e:
+                logger.warning(f"对话经验入库失败（忽略）: {e}")
 
     def _respond_impl(self, user_text: str) -> str:
         text = (user_text or "").strip()
@@ -323,17 +376,51 @@ class TanModel:
         if speech is not None:
             logger.info(f"🌍 7Tan模型 → 言语自述（意图={self.speech._last_intent}）")
             return speech
-        # 3) 疑问句兜底：是问题但没识别出意图 → 引导，而不是盲目推演
+        # 3) 疑问句 → 思考循环：在工作记忆+长期记忆中检索相关经验，能答则答，不能答则诚实承认
         if self._is_question(text):
-            logger.info("🌍 7Tan模型 → 疑问句兜底（未识别意图，返回引导）")
-            return self._fallback_question(text)
-        # 4) 默认：预测推演（模块E开启时走思考层链式推演，关闭时保持原行为）
-        scene, action = self._parse_scene_action(text)
-        if self.thinking is not None:
-            logger.info(f"🌍 7Tan模型 → 思考层推演（场景={scene} 动作={action}）")
-            return self._report_predict_with_thinking(scene, action)
-        logger.info(f"🌍 7Tan模型 → 预测推演（场景={scene} 动作={action}）")
-        return self._report_predict(scene, action)
+            logger.info("🌍 7Tan模型 → 疑问句走思考循环（记忆检索推理）")
+            return self._think_answer_question(text)
+        # 4) 默认：预测推演（仅当文本真的像推演请求；否则诚实承认不会，不硬答）
+        if self._looks_like_prediction_request(text):
+            scene, action = self._parse_scene_action(text)
+            if self.thinking is not None:
+                logger.info(f"🌍 7Tan模型 → 思考层推演（场景={scene} 动作={action}）")
+                return self._report_predict_with_thinking(scene, action)
+            logger.info(f"🌍 7Tan模型 → 预测推演（场景={scene} 动作={action}）")
+            return self._report_predict(scene, action)
+        # 5) 都不是 → 诚实承认（不编、不强行推演）
+        logger.info("🌍 7Tan模型 → 未识别请求，诚实承认不会")
+        return self._honest_unknown(text)
+
+    def _looks_like_prediction_request(self, text: str) -> bool:
+        """判断文本是否真的像预测推演请求（而不是乱问/闲聊）。"""
+        if re.search(r'(?:场景|scene)\s*[=:：]', text) or re.search(r'(?:动作|action|act)\s*[=:：]', text):
+            return True
+        for _scene_kw, words in SCENE_KEYWORDS:
+            if any(w in text for w in words):
+                return True
+        for _act_kw, words in ACTION_KEYWORDS:
+            if any(w in text for w in words):
+                return True
+        # 自由文本式（「游戏菜单里点击」「unknown_interface 滚动」）
+        if any(w in text for w in ("点击", "单击", "双击", "滚动", "下滑", "翻页",
+                                   "查看", "浏览", "修复", "优化", "维持", "存续",
+                                   "探索", "学习")):
+            return True
+        return False
+
+    def _honest_unknown(self, text: str) -> str:
+        """未识别请求时的诚实回应：不编、不强行推演。"""
+        return chr(10).join([
+            "🤖 我诚实说：这句话我没听懂，也不在我的记忆范围里——我不会硬答。",
+            "",
+            "我只会三件事：",
+            "  · 自述：你是谁 / 你记得什么 / 你什么感觉 / 你会什么",
+            "  · 推演：给我「场景 + 动作」，比如「游戏菜单里点击」",
+            "  · 学习：你说「记录 场景=xx 动作=yy 结果=成功/失败」",
+            "",
+            "其他问题，我答不了就是答不了。",
+        ])
 
     @staticmethod
     def _is_question(text: str) -> bool:
@@ -371,6 +458,82 @@ class TanModel:
             "",
             "输入「帮助」查看完整用法。",
         ])
+
+    def _think_answer_question(self, text: str) -> str:
+        """疑问句思考循环：在工作记忆 + 长期记忆中检索相关经验，能答则答，不能答则诚实承认。
+
+        检索策略：
+          1. 工作记忆对话槽位（最近聊了什么 / 用户是谁）—— 回答「我们在聊什么」类
+          2. 长期记忆轨迹 —— 把问题中的词与记忆中的场景/动作做关键词重叠匹配
+          3. 命中 → 引用真实记忆回答；未命中 → 诚实承认不会，不编答案
+        """
+        lines: list = []
+        # —— 检索1：工作记忆对话槽位（最近聊了什么） ——
+        if self.wm is not None:
+            slots = self.wm.dialog_slots
+            if any(k in text for k in ("我们", "刚才", "之前", "上面", "聊", "话题", "说哪")):
+                if slots.get("recent_events"):
+                    last_user = ""
+                    for m in reversed(slots["recent_events"]):
+                        if m["role"] == "user":
+                            last_user = m["content"]
+                            break
+                    if last_user:
+                        lines.append(f"🤔 我检索了工作记忆：最近你跟我说的是「{last_user[:60]}」。")
+        # —— 检索2：长期记忆轨迹（关键词重叠） ——
+        hits = self._search_memory_by_keywords(text)
+        if hits:
+            lines.append("📚 我在长期记忆里找到了相关的经历：")
+            for h in hits[:2]:
+                sc, ac = h.get("scene", "?"), h.get("action", "?")
+                ok = "成功" if h.get("action_finished") else "失败"
+                ts_hint = h.get("ts_hint", "")
+                lines.append(f"   · 场景「{sc}」动作「{ac}」—— {ok}（{ts_hint}）")
+            lines.append("")
+            lines.append("这是我真实经历过的，不是编的。你可以让我再推演一次：")
+            lines.append(f"  「{hits[0].get('scene', '?')}里{hits[0].get('action', '?')}」")
+            return "\n".join(lines)
+        # —— 检索3：工作记忆有名字/话题上下文可引用 ——
+        if self.wm is not None:
+            summary = self.wm.wm_dialog_summary()
+            if summary and summary != "（无）" and any(k in text for k in ("你认识", "你知道", "记得")):
+                lines.append(f"📚 我能调用的上下文：{summary}")
+                lines.append("")
+        # —— 未命中：诚实承认 + 引导 ——
+        lines.append("🤖 我诚实说：这个问题不在我的记忆里，我答不上来——我不会编答案骗你。")
+        lines.append("")
+        lines.append("我能确定回答的：")
+        lines.append("  · 关于我自己的事：你是谁 / 你记得什么 / 你什么感觉 / 你会什么")
+        lines.append("  · 「场景 + 动作」的预测推演，比如「游戏菜单里点击」")
+        lines.append("")
+        lines.append("你可以告诉我更多，我会把它记进记忆，下次就能答了。")
+        return "\n".join(lines)
+
+    def _search_memory_by_keywords(self, text: str) -> list:
+        """把问题文本拆词，与长期记忆的 scene/action 做关键词重叠匹配。
+
+        返回命中的轨迹（按重叠词数降序，最多 3 条）；对话经验（scene=dialog）不参与。
+        """
+        words = set(re.findall(r"[\u4e00-\u9fa5]{2,4}", text))
+        if not words:
+            return []
+        scored = []
+        for t in self.memory.traces:
+            if not isinstance(t, dict):
+                continue
+            scene = str(t.get("scene", ""))
+            action = str(t.get("action", ""))
+            if scene == "dialog":     # 对话经验是「说话经历」，不参与场景推演检索
+                continue
+            overlap = sum(1 for w in words if w in scene or scene in w or w in action or action in w)
+            if overlap > 0:
+                item = dict(t)
+                ts = float(t.get("ts", 0) or 0)
+                item["ts_hint"] = time.strftime("%m-%d %H:%M", time.localtime(ts)) if ts > 0 else "较早"
+                item["_overlap"] = overlap
+                scored.append(item)
+        scored.sort(key=lambda x: (-x["_overlap"], -float(x.get("weight_eff", 1.0))))
+        return scored[:3]
 
     def _parse_scene_action(self, text):
         scene = action = None
@@ -578,9 +741,11 @@ class SpeechGenerator:
     def __init__(self, model: "TanModel"):
         self.model = model
         self._last_intent: Optional[str] = None
+        self._last_input: str = ""
 
     # ---------------- 入口：识别意图 → 生成自述 ----------------
     def respond(self, text: str) -> Optional[str]:
+        self._last_input = text
         kind = self._classify(text)
         if kind is None:
             self._last_intent = None
@@ -600,6 +765,9 @@ class SpeechGenerator:
             "repeat": self.speak_repeat,
             "structure": self.speak_structure,
             "growth": self.speak_growth,
+            "user_name": self.speak_user_name,
+            "acquaintance": self.speak_acquaintance,
+            "dialog_topic": self.speak_dialog_topic,
         }
         # 模块E/F 开启时追加的言语能力（开关关闭 → 完全不访问，退回旧版）
         if self.model.wm is not None:
@@ -613,6 +781,17 @@ class SpeechGenerator:
     def _classify(self, text: str) -> Optional[str]:
         low = text.lower()
         stripped = re.sub(r"[\s?？!！。.，,、]+", "", text)
+        # 0) 用户记忆类意图（须在最前：先记住/认出用户，再谈其他）
+        # 0.0 用户自称名字（「我叫老马」「我是老马」→ 记住）
+        if any(k in text for k in ("我叫", "叫我", "名字叫", "名叫", "可以叫我", "就叫我",
+                                   "喊我", "我的名字是", "我的称呼是", "我是老", "我是小")):
+            return "user_name"
+        # 0.1 认识/见过某人（「你认识老马吗」→ 查工作记忆对话槽位）
+        if any(k in text for k in ("认识", "见过", "认不认识", "认识不认识")):
+            return "acquaintance"
+        # 0.2 对话话题（「我们在聊什么」「说到哪了」）
+        if any(k in text for k in ("聊什么", "话题", "说到哪", "说哪了", "说到哪里")):
+            return "dialog_topic"
         # 0) 模块E/F 专属意图（对应模块未启用时不识别，保持旧版行为）
         # 0.0 上下文意图：读上一句/之前聊了什么（不依赖模块E/F）
         if any(k in text for k in ("上下文", "上一句", "上句", "前一句", "刚才", "刚刚",
@@ -736,9 +915,16 @@ class SpeechGenerator:
         for t in traces:
             s = t.get("scene", "?")
             scenes[s] = scenes.get(s, 0) + 1
-        top_scene, top_cnt = max(scenes.items(), key=lambda x: x[1])
-        return (f"我记得 {len(traces)} 段经历，分布在 {len(scenes)} 个场景里。\n"
-                f"印象最深的是「{top_scene}」，去过 {top_cnt} 次。")
+        n_dialog = scenes.pop("dialog", 0)   # 对话经历单独展示，不抢「印象最深」
+        if scenes:
+            top_scene, top_cnt = max(scenes.items(), key=lambda x: x[1])
+            lines = [f"我记得 {len(traces)} 段经历，分布在 {len(scenes) + (1 if n_dialog else 0)} 个场景里。",
+                     f"印象最深的是「{top_scene}」，去过 {top_cnt} 次。"]
+        else:
+            lines = [f"我记得 {len(traces)} 段经历，全部是你和我之间的对话。"]
+        if n_dialog:
+            lines.append(f"另外，我还和你对话了 {n_dialog} 次，这些也都在我的记忆里。")
+        return "\n".join(lines)
 
     def speak_prediction(self) -> str:
         traces = self.model.memory.traces
@@ -946,6 +1132,50 @@ class SpeechGenerator:
                     lines.append(f"比上次涨了 {abs(delta)}，我需要修正。")
         return "\n".join(lines)
 
+    def speak_user_name(self) -> str:
+        """记住用户自称的名字并确认（user_name 意图）。"""
+        name = self.model.wm.dialog_slots.get("user_name") if self.model.wm else None
+        if not name:
+            return ("我还没从你的话里提取到名字——你可以直接说「我叫老马」，\n"
+                    "我会把它记在工作记忆里，之后就能认出你了。")
+        return (f"记住了，你是「{name}」。我已经把你的名字放进工作记忆的对话槽位，\n"
+                f"之后你问「你认识{name}吗」，我能直接认出你。")
+
+    def speak_acquaintance(self) -> str:
+        """「你认识老马吗」→ 查工作记忆对话槽位，命中则认出，未命中诚实说没记住。"""
+        text = self._last_input or ""
+        name = self.model.wm.dialog_slots.get("user_name") if self.model.wm else None
+        if not name:
+            return ("我的记忆里还没有任何人的名字——你还没告诉我你是谁。\n"
+                    "你可以说「我叫XXX」，我就会记住你。")
+        m = re.search(r"(?:认识|见过|知道|记得)\s*([\u4e00-\u9fa5A-Za-z0-9_·]{1,12})", text)
+        asked = m.group(1).strip() if m else None
+        if asked and (asked in name or name in asked):
+            return f"认识。你就是「{name}」——正在跟我对话的人，之前你告诉过我你的名字。"
+        if asked:
+            return (f"「{asked}」这个名字，我的记忆里没有。\n"
+                    f"我只记住了「{name}」，就是正在和我对话的你。")
+        return f"认识啊，你就是「{name}」，我记得你。"
+
+    def speak_dialog_topic(self) -> str:
+        """「我们在聊什么」→ 输出话题 + 最近几轮对话。"""
+        wm = self.model.wm
+        if wm is None or not wm.dialog_slots.get("recent_events"):
+            return "这是我们这段对话的早期，我还没有足够的上下文可以总结话题。"
+        slots = wm.dialog_slots
+        lines = [f"我记得我们聊过 {slots['turn_count']} 轮对话了。"]
+        name = slots.get("user_name")
+        topic = slots.get("topic")
+        if name:
+            lines.append(f"正在和我对话的是「{name}」。")
+        if topic:
+            lines.append(f"当前话题是「{topic}」。")
+        lines.append("最近几轮：")
+        for m in slots["recent_events"][-4:]:
+            role = "你" if m["role"] == "user" else "我"
+            lines.append(f"  {role}：{m['content'][:60]}")
+        return "\n".join(lines)
+
     def speak_context(self) -> str:
         """读上下文：引用最近对话历史（不含当前消息）。"""
         hist = self.model.conversation_history
@@ -974,7 +1204,9 @@ class SpeechGenerator:
         """诚实说明「会不会思考」+ 现场演示一次链式推演（展示真实思考步骤）。"""
         if self.model.thinking is None:
             return "我的思考层没挂载，目前只会做类比统计。"
-        traces = self.model.memory.traces
+        traces = [t for t in self.model.memory.traces
+                  if isinstance(t, dict) and t.get("scene") != "dialog"] \
+                 or self.model.memory.traces
         scene = traces[-1].get("scene", "game_menu") if traces else "game_menu"
         action = traces[-1].get("action", "click") if traces else "click"
         cr = self.model.thinking.chain_reason(scene, action)
@@ -1052,6 +1284,16 @@ class SpeechGenerator:
 # 说明：web 入口每条消息曾各自 new TanModel()，工作记忆会随请求销毁；
 # 改用单例后，模块E/F 的会话内状态得以跨消息延续。开关关闭时单例与逐次实例化行为完全一致。
 _TAN_MODEL_SINGLETON: Optional["TanModel"] = None
+
+
+def get_tan_model() -> "TanModel":
+    """获取进程级 TanModel 单例（模块E/F 会话状态的载体）。"""
+    global _TAN_MODEL_SINGLETON
+    if _TAN_MODEL_SINGLETON is None:
+        _TAN_MODEL_SINGLETON = TanModel()
+    return _TAN_MODEL_SINGLETON
+
+ON: Optional["TanModel"] = None
 
 
 def get_tan_model() -> "TanModel":

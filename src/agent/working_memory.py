@@ -21,6 +21,7 @@
 """
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from typing import Optional
@@ -44,6 +45,14 @@ class WorkingMemory:
         self.scratch_pad: dict = {}          # 草稿区：未验证假设、猜想、待测试思路
         self.stack_max = max(1, int(stack_max))
         self.created_ts = time.time()
+        # ── 对话上下文槽位（读上下文 + 记住用户，跨消息存活，进程内） ──
+        self.dialog_slots: dict = {
+            "user_name": None,       # 用户自称/被称呼的名字（如 老马）
+            "topic": None,           # 当前话题
+            "recent_events": [],     # 最近事件链 [{role, content, ts}]
+            "turn_count": 0,         # 累计对话轮数
+        }
+        self.dialog_events_max = 20
 
     # ---------------- E2 对外接口 ----------------
     def wm_push_thought(self, thought_fragment: dict, focus: Optional[float] = None) -> bool:
@@ -131,6 +140,90 @@ class WorkingMemory:
             except Exception as e:
                 logger.warning(f"工作记忆固化失败（跳过）: {e}")
         return persisted
+
+    # ---------------- 对话上下文槽位（E1.5 读上下文 + 用户记忆） ----------------
+    def wm_observe_dialog(self, role: str, content: str) -> None:
+        """记录一轮对话到事件链（容量保护：只保留最近 N 轮）。"""
+        if not content or not str(content).strip():
+            return
+        self.dialog_slots["recent_events"].append({
+            "role": "user" if str(role) == "user" else "assistant",
+            "content": str(content).strip()[:200],
+            "ts": time.time(),
+        })
+        self.dialog_slots["turn_count"] += 1
+        while len(self.dialog_slots["recent_events"]) > self.dialog_events_max:
+            self.dialog_slots["recent_events"].pop(0)
+
+    def wm_remember_user_name(self, name: str) -> bool:
+        """记住用户名字（去重）。"""
+        name = (name or "").strip()
+        if not name or len(name) > 12:
+            return False
+        if self.dialog_slots["user_name"] == name:
+            return True
+        self.dialog_slots["user_name"] = name
+        logger.info(f"🧠 工作记忆记住用户名字: {name}")
+        return True
+
+    def wm_extract_user_name(self, text: str) -> Optional[str]:
+        """从文本中提取用户自称/被称呼的名字。
+
+        识别模式：
+          「我叫老马」「我是老马」「叫我老马」「名字叫老马」「可以叫我老马」
+          「老马」（单句自称短词）
+        返回 None 表示没提取到。
+        """
+        if not text:
+            return None
+        t = str(text).strip()
+        patterns = [
+            r"(?:我叫|我是|叫我|名字叫|名叫|可以叫我|就叫我|喊我|我的名字是|我的称呼是|你就叫(?:我)?)\s*([\u4e00-\u9fa5A-Za-z0-9_·]{1,12})",
+            r"^([\u4e00-\u9fa5]{1,3}哥|[" + "\u4e00-\u9fa5" + "]{1,3}姐|老[\u4e00-\u9fa5]{1,3}|小[\u4e00-\u9fa5]{1,3}[\u4e00-\u9fa5]{0,2})[，,。!！?？]?$",
+        ]
+        for p in patterns:
+            m = re.search(p, t)
+            if m:
+                name = m.group(1).strip()
+                name = re.sub(r"[的了是吗啊呢吧，。！？,.!?]$", "", name)
+                if name and len(name) <= 12 and not name.isdigit():
+                    return name
+        return None
+
+    def wm_update_topic(self, text: str) -> None:
+        """根据用户输入更新当前话题槽位（简单话题跟踪）。"""
+        if not text or not str(text).strip():
+            return
+        t = str(text).strip()
+        m = re.search(r"(?:我们在聊|刚才在聊|在聊|关于|讨论|话题是)\s*([\u4e00-\u9fa5A-Za-z0-9_·]{1,20})", t)
+        if m:
+            topic = m.group(1).strip()
+            # 显式匹配也要排除疑问词（「我们在聊什么」的「什么」不是话题）
+            if not any(q in topic for q in ("吗", "什么", "怎么", "为什么", "哪", "如何")):
+                self.dialog_slots["topic"] = topic
+            return
+        if not self.dialog_slots["topic"]:
+            # 疑问句不当话题（「我们在聊什么」的「什么」不是话题）
+            if any(q in t for q in ("吗", "什么", "怎么", "为什么", "多少", "几",
+                                    "哪", "能不能", "如何", "？", "?")):
+                return
+            clean = re.sub(r"[\s?？!！。.，,、：:；;]+", "", t)[:12]
+            if clean:
+                self.dialog_slots["topic"] = clean
+
+    def wm_dialog_summary(self) -> str:
+        """生成对话上下文摘要（供言语层引用）。"""
+        slots = self.dialog_slots
+        parts = []
+        if slots["user_name"]:
+            parts.append(f"正在和我对话的人自称「{slots['user_name']}」")
+        if slots["topic"]:
+            parts.append(f"当前话题：{slots['topic']}")
+        if slots["recent_events"]:
+            last = slots["recent_events"][-1]
+            who = "你" if last["role"] == "user" else "我"
+            parts.append(f"上一轮：{who}说「{last['content'][:60]}」")
+        return "；".join(parts) if parts else "（无）"
 
     # ---------------- 生命周期 ----------------
     def reset(self):

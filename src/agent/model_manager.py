@@ -161,6 +161,7 @@ class ModelManager:
         "mimo": 16384,          # 小米 MiMo: 较宽松
         "moonshot": 16384,      # Kimi/Moonshot
         "deepseek": 131072,     # DeepSeek: 高上限
+        "local_7tan_model": 16384,  # 本地 7Tan 模型：不受 API 限制
     }
 
     def _resolve_max_tokens_cap(self) -> int:

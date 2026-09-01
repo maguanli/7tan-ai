@@ -1034,8 +1034,8 @@ class ChatPage(QWidget):
         """加载 AI 模型列表（从数据库）"""
         try:
             from ..database.db import get_all_ai_configs, get_active_ai_config
-            from ..agent.world_model import ensure_world_model_config
-            ensure_world_model_config()
+            from ..agent.world_model import ensure_7tan_model_config
+            ensure_7tan_model_config()
             configs = get_all_ai_configs(mask_secrets=True)
             active_cfg = get_active_ai_config(mask_secrets=True)
             active_key = active_cfg.get("config_key", "") if active_cfg else ""

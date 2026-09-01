@@ -19,6 +19,7 @@ data/*.bak*
 data/users/
 data/memory/
 data/state.json
+data/tan_model_memory.json
 data/world_model_memory.json
 
 # 配置文件（含 API Key）

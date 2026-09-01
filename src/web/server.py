@@ -561,15 +561,15 @@ async def _handle_chat(ws: WebSocket, client_id: str, data: dict):
     def run_and_report():
         try:
             save_message(session_id, "user", message)
-            # 本地世界模型分支：不走 LLM API，直接调用本地预测引擎
-            from ..agent.world_model import is_world_model, WorldModel, ensure_world_model_config
-            if is_world_model(model):
-                ensure_world_model_config()
+            # 本地 7Tan 模型分支：不走 LLM API，直接调用本地预测引擎 + 言语系统
+            from ..agent.world_model import is_7tan_model, TanModel, ensure_7tan_model_config
+            if is_7tan_model(model):
+                ensure_7tan_model_config()
                 try:
-                    reply = WorldModel().respond(message)
+                    reply = TanModel().respond(message)
                 except Exception as e:
-                    logger.error(f"世界模型响应失败: {e}")
-                    reply = f"❌ 世界模型引擎异常: {e}"
+                    logger.error(f"7Tan 模型响应失败: {e}")
+                    reply = f"❌ 7Tan 模型引擎异常: {e}"
                 save_message(session_id, "assistant", reply, model=model)
                 asyncio.run_coroutine_threadsafe(
                     ws.send_json({

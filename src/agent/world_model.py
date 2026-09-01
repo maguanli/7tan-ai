@@ -118,6 +118,7 @@ class TanModelMemory:
         self.path = path or _MEMORY_PATH
         self.traces: list = []      # 决策轨迹
         self.pe_history: list = []  # 预测误差历史
+        self.knowledge: list = []   # 知识条目（内容型记忆：事实/定义/规则）
         self.load()
 
     def load(self):
@@ -132,6 +133,7 @@ class TanModelMemory:
         if db_data is not None and (db_data.get("traces") or db_data.get("pe_history")):
             self.traces = db_data["traces"] or []
             self.pe_history = db_data["pe_history"] or []
+            self.knowledge = db_data.get("knowledge") or []
             if not self.traces:
                 self._seed_demo_traces()
                 self.save()
@@ -152,6 +154,7 @@ class TanModelMemory:
                 raw = json.loads(src.read_text(encoding="utf-8"))
                 self.traces = raw.get("traces") or []
                 self.pe_history = raw.get("pe_history") or []
+                self.knowledge = raw.get("knowledge") or []
                 if not self.traces:
                     self._seed_demo_traces()
             else:
@@ -162,18 +165,20 @@ class TanModelMemory:
             logger.warning(f"7Tan 模型记忆加载失败，使用空库: {e}")
             self.traces = []
             self.pe_history = []
+            self.knowledge = []
 
     def save(self):
         """保存记忆：数据库（主存储） + JSON 镜像（备份/兼容模块D 沙盒回测）"""
         try:
             from ..database.db import save_tan_model_memory
-            save_tan_model_memory(self.traces, self.pe_history)
+            save_tan_model_memory(self.traces, self.pe_history, self.knowledge)
         except Exception as e:
             logger.warning(f"7Tan 模型记忆保存数据库失败: {e}")
         # JSON 镜像备份（模块D 沙盒回测与人工查看仍依赖该文件，保持实时同步）
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            payload = {"traces": self.traces, "pe_history": self.pe_history}
+            payload = {"traces": self.traces, "pe_history": self.pe_history,
+                      "knowledge": self.knowledge}
             self.path.write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
             )
@@ -216,9 +221,94 @@ class TanModelMemory:
     def find_similar(self, scene) -> list:
         return [t for t in self.traces if isinstance(t, dict) and str(t.get("scene")) == scene]
 
+    # ---------------- 内容型记忆：知识库（事实/定义/规则） ----------------
+    def add_knowledge(self, key: str, content: str, source: str = "dialog",
+                      confidence: float = 1.0) -> dict:
+        """新增/更新一条知识。同 key 已存在则更新内容与时间；否则追加。
+
+        key 形如 'user_name' / 'what_is_7tan' / 'capability_boundary'。
+        只存客观事实，不存隐私细节；内容截断到 300 字。
+        """
+        key = (key or "").strip()
+        content = (str(content or "").strip())[:300]
+        if not key or not content:
+            return {}
+        now = time.time()
+        for k in self.knowledge:
+            if k.get("key") == key:
+                k["content"] = content
+                k["source"] = source
+                k["confidence"] = float(confidence)
+                k["ts"] = now
+                self.save()
+                return k
+        rec = {"key": key, "content": content, "source": source,
+               "confidence": float(confidence), "ts": now}
+        self.knowledge.append(rec)
+        self.save()
+        return rec
+
+    @staticmethod
+    def _tokenize(text: str) -> set:
+        """分词：中文整词 + 2-gram（让「老马是谁」也能匹配到知识里的「老马」）。"""
+        words = set()
+        for m in re.findall(r"[\u4e00-\u9fa5]{2,6}|[A-Za-z0-9_]{2,}", text or ""):
+            words.add(m)
+            if len(m) >= 3:
+                for i in range(len(m) - 1):
+                    words.add(m[i:i + 2])
+        return words
+
+    def search_knowledge(self, query: str) -> list:
+        """按关键词在知识库中检索（key/content 重叠匹配），返回命中条目（最多 5 条）。"""
+        query = (query or "").strip()
+        if not query:
+            return list(self.knowledge)
+        words = self._tokenize(query)
+        if not words:
+            return []
+        scored = []
+        for k in self.knowledge:
+            hay = str(k.get("key", "")) + " " + str(k.get("content", ""))
+            hit = sum(1 for w in words if w.lower() in hay.lower())
+            if hit > 0:
+                scored.append((hit, k))
+        scored.sort(key=lambda x: (-x[0], -float(x[1].get("confidence", 1.0)),
+                                   -float(x[1].get("ts", 0))))
+        return [k for _h, k in scored[:5]]
+
+    def search_content(self, query: str) -> list:
+        """内容检索：在全部轨迹的原文（user_text/reply/params/result/action）中做关键词匹配。
+
+        返回命中轨迹（按重叠词数降序，最多 5 条）；这是「记得聊过什么」的真实检索入口。
+        """
+        query = (query or "").strip()
+        if not query:
+            return []
+        words = self._tokenize(query)
+        if not words:
+            return []
+        scored = []
+        for t in self.traces:
+            if not isinstance(t, dict):
+                continue
+            hay_parts = [str(t.get("scene", "")), str(t.get("action", "")),
+                         str(t.get("user_text", "")), str(t.get("reply", "")),
+                         str(t.get("params", "")), str(t.get("result", "")),
+                         str(t.get("intent", ""))]
+            hay = " ".join(hay_parts)
+            hit = sum(1 for w in words if w.lower() in hay.lower())
+            if hit > 0:
+                item = dict(t)
+                item["_overlap"] = hit
+                scored.append(item)
+        scored.sort(key=lambda x: (-x["_overlap"], -float(x.get("weight_eff", 1.0))))
+        return scored[:5]
+
     def clear(self):
         self.traces = []
         self.pe_history = []
+        self.knowledge = []
         self.save()
 
 
@@ -421,6 +511,18 @@ class TanModel:
         if speech is not None:
             logger.info(f"🌍 7Tan模型 → 言语自述（意图={self.speech._last_intent}）")
             return speech
+        # 2.5) 知识库优先：任何输入先查事实条目（用户身份/定义/边界），命中直接引用真实知识回答
+        k_hits = self.memory.search_knowledge(text)
+        if k_hits:
+            logger.info(f"🌍 7Tan模型 → 知识库命中 {len(k_hits)} 条（内容型记忆）")
+            lines = ["📌 这个问题我知识库里有答案（来自真实对话提取）："]
+            for k in k_hits[:3]:
+                lines.append(f"   · {k.get('content', '')}")
+            if len(k_hits) > 3:
+                lines.append(f"   ……（还有 {len(k_hits) - 3} 条相关）")
+            lines.append("")
+            lines.append("这是我从之前对话里抽出来并固化的事实，不是现编的。")
+            return "\n".join(lines)
         # 3) 疑问句 → 思考循环：在工作记忆+长期记忆中检索相关经验，能答则答，不能答则诚实承认
         if self._is_question(text):
             logger.info("🌍 7Tan模型 → 疑问句走思考循环（记忆检索推理）")
@@ -471,8 +573,8 @@ class TanModel:
     def _is_question(text: str) -> bool:
         """判断输入是否为疑问句（含疑问标记或疑问词开头）"""
         if any(m in text for m in ("？", "?", "吗", "呢", "么", "怎么", "为什么",
-                                   "能不能", "可不可以", "如何", "哪来",
-                                   "是什么", "会不会", "干嘛", "干吗", "多少", "几次")):
+                                   "能不能", "可不可以", "如何", "哪来", "哪",
+                                   "是什么", "是谁", "会不会", "干嘛", "干吗", "多少", "几次")):
             return True
         head = text[:2]
         if head in ("你", "怎么", "为什么", "如何", "哪", "什么", "谁", "为何", "为啥"):
@@ -513,6 +615,17 @@ class TanModel:
           3. 命中 → 引用真实记忆回答；未命中 → 诚实承认不会，不编答案
         """
         lines: list = []
+        # —— 检索0：知识库优先（事实条目直接命中，如「老马是谁」「7Tan 是什么」） ——
+        k_hits = self.memory.search_knowledge(text)
+        if k_hits:
+            lines.append("📌 这个问题我知识库里有答案（来自真实对话提取）：")
+            for k in k_hits[:3]:
+                lines.append(f"   · {k.get('content', '')}")
+            if len(k_hits) > 3:
+                lines.append(f"   ……（还有 {len(k_hits) - 3} 条相关）")
+            lines.append("")
+            lines.append("这是我从之前对话里抽出来并固化的事实，不是现编的。")
+            return "\n".join(lines)
         # —— 检索1：工作记忆对话槽位（最近聊了什么） ——
         if self.wm is not None:
             slots = self.wm.dialog_slots
@@ -537,6 +650,21 @@ class TanModel:
             lines.append("")
             lines.append("这是我真实经历过的，不是编的。你可以让我再推演一次：")
             lines.append(f"  「{hits[0].get('scene', '?')}里{hits[0].get('action', '?')}」")
+            return "\n".join(lines)
+        # —— 检索2.5：对话内容检索（在 user_text/reply 原文里找关键词，回答「我们聊过什么」） ——
+        c_hits = self.memory.search_content(text)
+        if c_hits:
+            lines.append("📚 我在对话原文里找到了相关的内容（真实记忆，不是编的）：")
+            for h in c_hits[:3]:
+                ut = (h.get("user_text") or "").strip()
+                rp = (h.get("reply") or "").strip()
+                if ut:
+                    shown_ut = ut if len(ut) <= 60 else ut[:60] + "…"
+                    shown_rp = (rp if len(rp) <= 50 else rp[:50] + "…") if rp else ""
+                    lines.append(f"   · 你说：「{shown_ut}」→ 我答「{shown_rp}」")
+                else:
+                    lines.append(f"   · 【{h.get('scene', '?')}】做「{h.get('action', '?')}」")
+            lines.append("")
             return "\n".join(lines)
         # —— 检索3：工作记忆有名字/话题上下文可引用 ——
         if self.wm is not None:
@@ -802,6 +930,7 @@ class SpeechGenerator:
             "memory": self.speak_memory,
             "memory_list": self.speak_memory_list,
             "memory_count": self.speak_memory_count,
+            "knowledge": self.speak_knowledge,
             "prediction": self.speak_prediction,
             "motive": self.speak_motive,
             "emotion": self.speak_emotion,
@@ -914,6 +1043,11 @@ class SpeechGenerator:
             if any(k in text for k in ("几条", "多少", "几个", "几次", "多少段", "多少条")):
                 return "memory_count"
             return "memory"
+        # 10.5) 知识库（你学到了什么 / 知道哪些事 / 记住了什么）
+        if any(k in text for k in ("知识", "学到了什么", "学到什么", "知道哪些", "知道什么",
+                                   "知道了什么", "记住了什么", "记住什么", "知道些什么",
+                                   "会哪些事", "你学到了", "你记住了")):
+            return "knowledge"
         # 11) 预测（口语化疑问）
         if any(k in text for k in ("会怎样", "能成吗", "会成功吗", "你觉得", "预测一下", "有把握吗")):
             return "prediction"
@@ -1033,6 +1167,23 @@ class SpeechGenerator:
         n_dialog = scenes.get("dialog", 0)
         return (f"我总共记得 {len(traces)} 段经历：{parts}。"
                 f"其中和你有关的对话有 {n_dialog} 次。")
+
+    def speak_knowledge(self) -> str:
+        """知识库自述：把内容型记忆里的事实条目逐条列出（回答「你学到了什么/知道哪些事」）。"""
+        knowledge = self.model.memory.knowledge
+        if not knowledge:
+            return ("我目前的知识库里还没有固化的条目——我只存「验证过的事实」，"
+                    "不会把没把握的话当知识记下来。")
+        lines = [f"我记住的知识有 {len(knowledge)} 条，都是我从对话里抽出来的事实：", ""]
+        for i, k in enumerate(knowledge, 1):
+            key = k.get("key", "?")
+            content = (k.get("content") or "").strip()
+            ts = k.get("ts")
+            ts_str = time.strftime("%m-%d %H:%M", time.localtime(ts)) if ts else ""
+            lines.append(f"  {i}. 【{key}】{content}{'（' + ts_str + '）' if ts_str else ''}")
+        lines.append("")
+        lines.append("这些只来自我经历过的对话，不是编的。")
+        return "\n".join(lines)
 
     def speak_prediction(self) -> str:
         traces = self.model.memory.traces

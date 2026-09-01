@@ -1444,7 +1444,7 @@ def load_tan_model_memory() -> dict:
     返回 {'traces': [...], 'pe_history': [...]}；无数据/异常返回空结构。
     """
     _ensure_tan_model_memory_table()
-    out = {"traces": [], "pe_history": []}
+    out = {"traces": [], "pe_history": [], "knowledge": []}
     session = get_session()
     try:
         rows = session.query(TanModelMemoryEntry).all()
@@ -1461,13 +1461,13 @@ def load_tan_model_memory() -> dict:
     return out
 
 
-def save_tan_model_memory(traces: list, pe_history: list) -> bool:
+def save_tan_model_memory(traces: list, pe_history: list, knowledge: list = None) -> bool:
     """保存 7Tan 模型记忆（整体覆盖 traces / pe_history 两条记录）"""
     _ensure_tan_model_memory_table()
     session = get_session()
     ok = True
     try:
-        for kind, data in (("traces", traces), ("pe_history", pe_history)):
+        for kind, data in (("traces", traces), ("pe_history", pe_history), ("knowledge", knowledge or [])):
             payload = json.dumps(data or [], ensure_ascii=False)
             existing = session.query(TanModelMemoryEntry).filter(
                 TanModelMemoryEntry.kind == kind

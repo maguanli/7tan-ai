@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from pathlib import Path
@@ -100,14 +101,16 @@ class SelfLearnEngine:
     def learn_from_dialog(self, user_text: str, reply: str, intent=None) -> bool:
         """把一轮对话作为「对话经验」写入长期记忆（scene=dialog）。
 
-        目的：让对话本身成为模型经历的一部分——对话轮数越多、类型越多样，
-        模型对「与人对话」这件事的经验越丰富。
-        只记客观事实（输入主题 + 答复方式），不记隐私内容。
+        内容型记忆：
+          1. 对话原文（截断）入库 —— 让「记得聊过什么」成为可检索的真实记忆；
+          2. 规则型知识提取 —— 从对话中抽出事实条目（我是谁 / 7Tan 是什么 /
+             能力边界），存入知识库（knowledge），供后续直接引用回答。
+        只记客观事实，不记隐私细节。
         """
         try:
             topic = (str(user_text or "").strip())[:40] or "?"
             act = f"answer_{intent}" if intent else "answer_unknown"
-            # 连同对话原文（截断）一起入库：让「记得对话内容」成为可检索的真实记忆
+            # ① 对话原文（放宽截断）入库：内容型记忆的原料
             self.memory.add_trace(
                 scene="dialog",
                 action=act,
@@ -115,15 +118,59 @@ class SelfLearnEngine:
                 changed=False,
                 reduced=False,
                 gained=True,   # 每次对话都有知识增益
-                user_text=(str(user_text or "").strip())[:60],
-                reply=(str(reply or "").strip())[:80],
+                user_text=(str(user_text or "").strip())[:120],
+                reply=(str(reply or "").strip())[:200],
                 intent=str(intent or "unknown"),
             )
+            # ② 规则型知识提取：从本轮对话中抽出事实，存入知识库
+            try:
+                facts = self._extract_knowledge(str(user_text or ""), str(reply or ""), intent)
+                for key, content in facts.items():
+                    self.memory.add_knowledge(key, content, source="dialog", confidence=0.9)
+            except Exception as e:
+                logger.warning(f"对话知识提取失败（不影响入库）: {e}")
             _log_change(f"对话经验入库: 主题={topic[:20]} 答复方式={act}")
             return True
         except Exception as e:
             logger.warning(f"对话经验入库失败: {e}")
             return False
+
+    def _extract_knowledge(self, user_text: str, reply: str, intent=None) -> dict:
+        """规则型事实提取（纯本地，不接外部引擎）。
+
+        只做高置信度的显式模式，避免误提取：
+          - 「我叫X / 我是X / 记住我叫X」 → user_name（用户身份）
+          - 用户主动纠正能力边界（「你不会X / 你答非所问」） → capability_boundary
+          - 「7Tan 是什么」类提问 + 回复要点 → what_is_7tan（模型自我认知）
+        """
+        facts: dict = {}
+        ut = (user_text or "").strip()
+        rp = (reply or "").strip()
+        # 1) 用户身份：我叫X / 我是X / 记住我叫X / 我（就）是老X
+        m = None
+        for pat in (r"记住?\s*我\s*(?:叫|是)\s*([\u4e00-\u9fa5A-Za-z0-9_]{1,12})",
+                    r"我\s*(?:叫|是)\s*([\u4e00-\u9fa5A-Za-z0-9_]{1,12})"):
+            m = m or re.search(pat, ut)
+        if m:
+            name = m.group(1).strip()
+            if name and name not in ("7Tan", "模型", "机器人", "你"):
+                facts["user_name"] = f"和我对话的用户叫「{name}」。"
+        # 2) 能力边界：用户指出我做不到的事
+        for pat in (r"你(?:不会|不懂|没有|缺乏)\s*([\u4e00-\u9fa5A-Za-z0-9_]{2,16})",
+                    r"(?:答非所问|答不对题|没(?:有)?思考能力)"):
+            if re.search(pat, ut):
+                facts["capability_boundary"] = (
+                    "我的能力边界：纯本地规则引擎，没有语义理解与真推理；"
+                    "用户指出过我会「答非所问/答不对题」，我不会编程、不会写诗。"
+                )
+                break
+        # 3) 自我认知：7Tan 是什么
+        if re.search(r"7[_-]?tan|7坛模型|7Tan模型", ut, re.I) and re.search(r"是什么|你是谁|你是什么|介绍一下", ut):
+            facts["what_is_7tan"] = (
+                "7Tan 模型是本地预测引擎 + 言语系统：基于记忆轨迹做预测推演，"
+                "记忆存 SQLite 数据库；能自述、能推演、能诚实说不知道。"
+            )
+        return facts
 
     # ---------------- F2-1 注册假设 ----------------
     def register_hypothesis(self, hypothesis_obj) -> Optional[Hypothesis]:

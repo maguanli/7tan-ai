@@ -16,7 +16,7 @@
 ⚠️ 边界：E 只负责「生成猜想与待验证目标」，不自动修改策略；
    完整自我学习闭环（评估+落地记忆）由模块F（self_learn.py）实现。
 
-开关：ENABLE_WORKING_MEMORY = False（默认关闭，保持原有原型行为不变，支持A/B对照实验）。
+模块E 无条件启用，无需开关。
 本模块自包含（仅依赖标准库 + loguru）。
 """
 from __future__ import annotations
@@ -27,10 +27,7 @@ from typing import Optional
 
 from loguru import logger
 
-# ═══════════════ 全局开关（统一全局配置区 · 第四册F4） ═══════════════
-ENABLE_WORKING_MEMORY = False   # 默认关闭：开启后 respond() 走思考层，关闭则完全走原行为
-
-# 容量保护参数
+# ═══════════════ 容量保护参数 ═══════════════
 WM_STACK_MAX = 10               # context_stack 最大步数（设计稿建议 8-12，取 10）
 WM_FOCUS_DEFAULT = 0.5          # 默认注意力权重 0-1
 WM_HOT_WEIGHT_MIN = 0.5         # 热记忆判定阈值：weight_eff >= 此值才算热记忆

@@ -175,12 +175,30 @@ def _resolve_model_name(model_name: str) -> str:
         return ""
 
 
-def _7tan_model_reply(used_model: str, user_message: str) -> str:
-    """调用本地 7Tan 模型引擎，返回预测报告 / 言语自述文本"""
+def _7tan_model_reply(used_model: str, user_message: str, session_id: str = "") -> str:
+    """调用本地 7Tan 模型引擎，返回预测报告 / 言语自述文本
+
+    session_id: 用于读取该会话的历史（读上下文能力）；为空则退化为无上下文。
+    """
     ensure_7tan_model_config()
     logger.info(f"🌍 7Tan模型（本地引擎）处理消息: {user_message[:50]}")
+    history: list = []
+    if session_id:
+        try:
+            from ...agent.conversation import get_session_messages
+            msgs = get_session_messages(session_id, limit=50)
+            history = [
+                {"role": m.get("role"), "content": m.get("content", "")}
+                for m in msgs
+                if m.get("role") in ("user", "assistant")
+            ]
+            # 去掉最后一条（当前消息，已作为 user_message 传入，避免重复）
+            if history and history[-1].get("role") == "user" and history[-1].get("content", "").strip() == user_message.strip():
+                history = history[:-1]
+        except Exception as e:
+            logger.warning(f"读取会话历史失败（退化为无上下文）: {e}")
     try:
-        return get_tan_model().respond(user_message)
+        return get_tan_model().respond(user_message, history=history)
     except Exception as e:
         logger.error(f"7Tan 模型响应失败: {e}")
         return f"❌ 7Tan 模型引擎异常: {e}"
@@ -233,7 +251,7 @@ async def send_message(req: ChatRequest):
 
     # 本地 7Tan 模型分支：不走 LLM API，直接调用本地预测引擎 + 言语系统
     if is_7tan_model(used_model):
-        reply = _7tan_model_reply(used_model, user_message)
+        reply = _7tan_model_reply(used_model, user_message, session_id)
         save_message(session_id, "assistant", reply, model=used_model)
         return ChatResponse(session_id=session_id, success=True, result=reply,
                             cost=0, iterations=0, tokens=0, model=used_model)
@@ -321,7 +339,7 @@ async def send_message_stream(req: ChatRequest, request: Request):
     
     # 本地 7Tan 模型分支：不走 LLM API，直接调用本地预测引擎 + 言语系统
     if is_7tan_model(used_model):
-        reply = _7tan_model_reply(used_model, user_message)
+        reply = _7tan_model_reply(used_model, user_message, session_id)
 
         async def _wm_stream():
             _nl = chr(10)

@@ -34,14 +34,6 @@ T7_MODEL_DISPLAY = "7Tan模型"
 _MEMORY_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "tan_model_memory.json"
 _OLD_MEMORY_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "world_model_memory.json"
 
-# ═══ 模块E/F 全局开关（第四册 · 统一全局配置区；默认关闭，支持A/B对照实验） ═══
-try:
-    from .working_memory import ENABLE_WORKING_MEMORY          # 模块E：工作记忆+有限思考层
-    from .self_learn import ENABLE_L1_MEMORY_SELF_LEARN        # 模块F：L1记忆级自我学习闭环
-except Exception:  # 独立加载/打包环境兜底：开关视为关闭，行为与旧版完全一致
-    ENABLE_WORKING_MEMORY = False
-    ENABLE_L1_MEMORY_SELF_LEARN = False
-
 # 场景关键词 → 归一化场景标签（用于自由文本输入）
 SCENE_KEYWORDS = [
     ("unknown_interface", ["未知", "unknown", "空白", "桌面", "desktop"]),
@@ -206,29 +198,30 @@ class TanModel:
     def __init__(self, memory: Optional[TanModelMemory] = None):
         self.memory = memory or TanModelMemory()
         self.speech = SpeechGenerator(self)
-        # ── 模块E/F（第四册）：开关默认关闭，关闭时与原行为完全一致 ──
+        # ── 模块E/F：无条件启用（无开关） ──
         self.wm = None                       # 模块E：工作记忆
         self.thinking = None                 # 模块E：三层思考
         self.selflearn = None                # 模块F：自我学习闭环引擎
         self._last_predictions: dict = {}    # {(scene,action): feat} 供闭环计算PE
         self._last_record: Optional[dict] = None  # 最近一条真实标注轨迹（闭环观测用）
-        if ENABLE_WORKING_MEMORY:
-            try:
-                from .working_memory import WorkingMemory, ThinkingLayer
-                self.wm = WorkingMemory()
-                self.thinking = ThinkingLayer(self, self.wm)
-                logger.info("🧠 模块E 已启用：工作记忆 + 有限思考层")
-            except Exception as e:
-                logger.warning(f"模块E 初始化失败（退回原行为）: {e}")
-                self.wm = self.thinking = None
-        if ENABLE_L1_MEMORY_SELF_LEARN:
-            try:
-                from .self_learn import SelfLearnEngine
-                self.selflearn = SelfLearnEngine(self.memory)
-                logger.info("🧪 模块F 已启用：L1记忆级自我学习闭环")
-            except Exception as e:
-                logger.warning(f"模块F 初始化失败（退回原行为）: {e}")
-                self.selflearn = None
+        # ── 对话上下文记忆（读上下文能力）：最近对话历史，进程级跨消息存活 ──
+        self.conversation_history: list = []
+        self._history_max = 20
+        try:
+            from .working_memory import WorkingMemory, ThinkingLayer
+            self.wm = WorkingMemory()
+            self.thinking = ThinkingLayer(self, self.wm)
+            logger.info("🧠 模块E 已启用：工作记忆 + 有限思考层")
+        except Exception as e:
+            logger.warning(f"模块E 初始化失败（退回原行为）: {e}")
+            self.wm = self.thinking = None
+        try:
+            from .self_learn import SelfLearnEngine
+            self.selflearn = SelfLearnEngine(self.memory)
+            logger.info("🧪 模块F 已启用：L1记忆级自我学习闭环")
+        except Exception as e:
+            logger.warning(f"模块F 初始化失败（退回原行为）: {e}")
+            self.selflearn = None
 
     # ---------------- 预测核心（忠实移植） ----------------
     def virtual_predict(self, scene, action) -> dict:
@@ -282,9 +275,14 @@ class TanModel:
         return round(pe_prev - pe_now, 4)
 
     # ---------------- 对话接口 ----------------
-    def respond(self, user_text: str) -> str:
-        """对话入口。末尾挂模块F主循环钩子 f_selflearn_tick（每轮调用一次；
-        开关 ENABLE_L1_MEMORY_SELF_LEARN=False 时钩子内部直接 return，零开销）。"""
+    def respond(self, user_text: str, history: Optional[list] = None) -> str:
+        """对话入口。末尾挂模块F主循环钩子 f_selflearn_tick（每轮调用一次）。
+
+        history: 可选，最近对话历史 [{role, content}, ...]（不含当前消息）。
+                 用于「读上下文」能力：让模型能引用之前聊过什么。
+        """
+        if history:
+            self.conversation_history = list(history[-self._history_max:])
         reply = self._respond_impl(user_text)
         if self.selflearn is not None:
             try:
@@ -346,6 +344,9 @@ class TanModel:
             return True
         head = text[:2]
         if head in ("你", "怎么", "为什么", "如何", "哪", "什么", "谁", "为何", "为啥"):
+            return True
+        # 「说一下/讲一下/介绍一下 + 你的」也算疑问
+        if any(text.startswith(h) for h in ("说一下", "讲一下", "介绍一下", "说说", "聊聊")):
             return True
         return False
 
@@ -597,18 +598,32 @@ class SpeechGenerator:
             "origin": self.speak_origin,
             "learning": self.speak_learning,
             "repeat": self.speak_repeat,
+            "structure": self.speak_structure,
+            "growth": self.speak_growth,
         }
         # 模块E/F 开启时追加的言语能力（开关关闭 → 完全不访问，退回旧版）
         if self.model.wm is not None:
             handlers["thinking"] = self.speak_thinking
+            handlers["thinking_ability"] = self.speak_thinking_ability
         if self.model.selflearn is not None:
             handlers["hypothesis"] = self.speak_hypothesis
+        handlers["context"] = self.speak_context
         return handlers[kind]()
 
     def _classify(self, text: str) -> Optional[str]:
         low = text.lower()
         stripped = re.sub(r"[\s?？!！。.，,、]+", "", text)
         # 0) 模块E/F 专属意图（对应模块未启用时不识别，保持旧版行为）
+        # 0.0 上下文意图：读上一句/之前聊了什么（不依赖模块E/F）
+        if any(k in text for k in ("上下文", "上一句", "上句", "前一句", "刚才", "刚刚",
+                                   "读取上下文", "记住我", "记得我", "记住我们", "之前聊",
+                                   "以前说", "前面说", "聊过", "说过什么", "能读上下文",
+                                   "会读上下文", "有上下文", "记住上面", "接着上面", "接上面")):
+            return "context"
+        if self.model.wm is not None and any(
+                k in text for k in ("你会思考", "思考能力", "能思考", "会思考", "有思考",
+                                   "有思想", "会想吗", "能想吗")):
+            return "thinking_ability"
         if self.model.wm is not None and any(
                 k in text for k in ("你在想", "思考过程", "工作记忆", "思考什么", "脑内", "怎么想")):
             return "thinking"
@@ -622,17 +637,19 @@ class SpeechGenerator:
             return "origin"
         if any(k in low for k in ("who created", "who made", "who built", "where from", "origin")):
             return "origin"
-        # 2) 能力（你能做什么）
+        # 2) 能力（你能做什么）— 关键词覆盖自然口语变体
         if any(k in text for k in ("你能做", "你可以做", "你会做", "你会什么", "能做什么",
                                    "会做什么", "可以做什么", "能干什么", "会干什么", "可以干什么",
                                    "功能", "能力", "能干嘛", "会干嘛", "你会啥", "你能干", "会啥",
-                                   "你能什么", "可以什么")):
+                                   "你能什么", "可以什么",
+                                   "你会些", "能做些", "会做些", "能啥")):
             return "capability"
         if any(k in low for k in ("what can you do", "your ability", "capability", "feature")):
             return "capability"
         # 3) 学习能力
         if any(k in text for k in ("能学习", "会学习", "学习吗", "怎么学习", "如何学习",
-                                   "学习知识", "怎么变强", "会变强", "能变聪明", "怎么进步", "自学")):
+                                   "学习知识", "怎么变强", "会变强", "能变聪明", "怎么进步", "自学",
+                                   "会学吗", "能学会", "可以学")):
             return "learning"
         # 4) 重复抱怨（为什么总是同一个答案）
         if any(k in text for k in ("总是", "同一个", "一样", "重复", "老是", "怎么老",
@@ -661,6 +678,15 @@ class SpeechGenerator:
         # 11) 预测（口语化疑问）
         if any(k in text for k in ("会怎样", "能成吗", "会成功吗", "你觉得", "预测一下", "有把握吗")):
             return "prediction"
+        # 12) 结构 / 架构 / 组成
+        if any(k in text for k in ("结构", "架构", "组成", "组成部分", "模块",
+                                   "你有哪些部分", "你由什么组成", "你的系统", "怎么构成")):
+            return "structure"
+        # 13) 变强 / 进化 / 成长
+        if any(k in text for k in ("怎么变强", "越来越强", "如何成长", "怎么进化",
+                                   "怎样才能", "变强大", "提升自己", "自我改进",
+                                   "如何变强", "成长")):
+            return "growth"
         return None
 
     def speak_meta(self) -> str:
@@ -852,6 +878,121 @@ class SpeechGenerator:
             "你可以先用这几句稳定地触发我：",
             "  你是谁 / 你记得什么 / 你什么感觉 / 你能做什么 / 帮助",
         ])
+
+    def speak_structure(self) -> str:
+        """描述模型内部结构（结构意图）"""
+        wm_on = self.model.wm is not None
+        sl_on = self.model.selflearn is not None
+        n_traces = len(self.model.memory.traces)
+        n_pe = len(self.model.memory.pe_history)
+        lines = [
+            "我的内部结构由这几个部分组成：",
+            "",
+            "① 记忆库（模块A）— 存储决策轨迹和预测误差历史，持久化到 JSON 文件。",
+            f"   目前有 {n_traces} 条轨迹、{n_pe} 条预测误差记录。",
+            "",
+            "② 预测引擎 — 给定「场景+动作」，从历史轨迹中加权计算置信度和预期结果。",
+            "",
+            "③ 言语系统 — 把内部状态翻译成自然语言自述（你正在和它对话）。",
+        ]
+        if wm_on:
+            wm = self.model.wm
+            lines.append("")
+            lines.append("④ 工作记忆（模块E）— 短时思考工作台：思考栈、活跃目标、草稿区。")
+            lines.append(f"   当前栈深 {len(wm.context_stack)}，目标 {len(wm.active_goals)} 个。")
+            lines.append("   能力：链式推演 / 目标拆解 / 反思桥接。")
+        if sl_on:
+            engine = self.model.selflearn
+            reg = engine.status_report()
+            lines.append("")
+            lines.append("⑤ 自我学习引擎（模块F）— 假设验证→落地记忆的完整闭环。")
+            lines.append(f"   当前 {len(reg)} 个假设在验证流程中。")
+            lines.append("   规则：验证通过才写入长期记忆，热记忆只降权不删除。")
+        lines.append("")
+        lines.append("这些部分的关系：记忆库喂数据给预测引擎，预测引擎的误差驱动工作记忆生成猜想，")
+        lines.append("猜想经自我学习验证后反馈回记忆库——形成闭环。")
+        return "\n".join(lines)
+
+    def speak_growth(self) -> str:
+        """描述如何变强（成长意图）"""
+        traces = self.model.memory.traces
+        pe = self.model.memory.pe_history
+        n = len(traces)
+        lines = [
+            "我能变强的唯一路径：积累更多真实经验，让预测误差持续下降。",
+            "",
+            "具体来说：",
+            "  1. 你给我「场景+动作」做推演，然后标注真实结果（成功/失败）",  
+            "  2. 我把结果记进记忆库，下次遇到类似场景，预测就更准",
+            "  3. 预测误差下降 = 我在变强",
+        ]
+        if self.model.wm is not None:
+            lines.append("")
+            lines.append("而且我现在有了「工作记忆」——能链式推演、拆解目标、")
+            lines.append("在误差偏高时自动生成猜想来修正自己的判断。")
+        if self.model.selflearn is not None:
+            lines.append("")
+            lines.append("再加上「自我学习引擎」——猜想不是直接写进记忆，")
+            lines.append("而是要经过验证、达标后才固化，防止错误污染。")
+        if pe:
+            latest = pe[-1]
+            lines.append("")
+            lines.append(f"目前我的最新预测误差是 {latest}。",)
+            if len(pe) >= 2:
+                delta = round(pe[-2] - pe[-1], 4)
+                if delta > 0:
+                    lines.append(f"比上次降了 {delta}，方向是对的。")
+                elif delta < 0:
+                    lines.append(f"比上次涨了 {abs(delta)}，我需要修正。")
+        return "\n".join(lines)
+
+    def speak_context(self) -> str:
+        """读上下文：引用最近对话历史（不含当前消息）。"""
+        hist = self.model.conversation_history
+        if not hist:
+            return ("我现在没有可读的上下文——这是我们这段对话的第一句，"
+                    "我前面什么都没记住。等你多说几句，我就能接上你的话往下聊了。")
+        msgs = [m for m in hist if m.get("role") in ("user", "assistant")
+                and (m.get("content") or "").strip()]
+        if not msgs:
+            return "我翻了下上下文，前面没有实质内容可引用。"
+        recent = msgs[-6:]
+        lines = ["📚 我能读到上下文。最近我们聊过这些：", ""]
+        for m in recent:
+            role = "你" if m["role"] == "user" else "我"
+            content = (m.get("content") or "").strip().replace(chr(10), " ")
+            if len(content) > 80:
+                content = content[:80] + "…"
+            lines.append(f"  {role}：{content}")
+        last = recent[-1]
+        last_txt = (last.get("content") or "").strip().replace(chr(10), " ")
+        lines.append("")
+        lines.append(f"所以——你上一句是「{last_txt[:60]}」，我是记得的。")
+        return chr(10).join(lines)
+
+    def speak_thinking_ability(self) -> str:
+        """诚实说明「会不会思考」+ 现场演示一次链式推演（展示真实思考步骤）。"""
+        if self.model.thinking is None:
+            return "我的思考层没挂载，目前只会做类比统计。"
+        traces = self.model.memory.traces
+        scene = traces[-1].get("scene", "game_menu") if traces else "game_menu"
+        action = traces[-1].get("action", "click") if traces else "click"
+        cr = self.model.thinking.chain_reason(scene, action)
+        lines = ["我先诚实说边界：", ""]
+        lines.append("我会的「思考」，是链式推演——从热记忆里找相似场景、统计成功率、"
+                     "再跨场景迁移，三步拼出一个结论。")
+        lines.append("它不是真正的推理，本质是「类比 + 统计」。但这三步是真实跑出来的，"
+                     "不是背模板。")
+        lines.append("")
+        lines.append(f"给你现场推演一次「场景={scene} 动作={action}」：")
+        for s in cr["steps"]:
+            lines.append(f"  第{s['step']}步 · {s['fact']}")
+        if cr.get("stopped_by_limit"):
+            lines.append("  ⏹ 达到最大推理步数，强制停止")
+        lines.append("")
+        lines.append("所以：我会「有限思考」，但不会像人那样真的理解、真的推理。")
+        lines.append("我能保证的是——每一步都来自我自己记忆里的真实数据。")
+        return chr(10).join(lines)
 
     def speak_thinking(self) -> str:
         """模块E开启时：读取 context_stack 输出思考过程（第四册E4）。"""

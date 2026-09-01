@@ -22,7 +22,7 @@
   ✔ 所有修改操作产生变更日志记录到本地日志文件（*.hypothesis.log），便于回溯调试。
   ✔ 不修改源码、不修改全局超参数。
 
-开关：ENABLE_L1_MEMORY_SELF_LEARN = False（默认关闭，保护原有行为，支持A/B对照实验）。
+模块F 无条件启用，无需开关。
 本模块自包含（仅依赖标准库 + loguru）。
 """
 from __future__ import annotations
@@ -35,9 +35,7 @@ from typing import Optional
 
 from loguru import logger
 
-# ═══════════════ 全局开关与阈值参数（统一全局配置区 · 第四册F4） ═══════════════
-ENABLE_L1_MEMORY_SELF_LEARN = False  # 默认关闭：开启后启用记忆级自我学习闭环
-
+# ═══════════════ 阈值参数 ═══════════════
 HYPO_MIN_TESTS = 2            # 最少验证次数，低于则 suspended
 HYPO_PASS_THRESHOLD = 0.6     # 通过阈值 → verified
 HYPO_REJECT_THRESHOLD = 0.3   # 拒绝阈值 → rejected
@@ -295,10 +293,8 @@ class SelfLearnEngine:
 
         遍历 hypothesis_registry；对有新观测反馈的假设执行 evaluate_hypothesis；
         对 verified 状态执行 apply_memory_update；清理过期 suspended/pending 假设。
-        开关 ENABLE_L1_MEMORY_SELF_LEARN=False 时直接 return，不执行任何逻辑。
+        本钩子无条件执行（无开关）。
         """
-        if not ENABLE_L1_MEMORY_SELF_LEARN:
-            return {"enabled": False, "evaluated": 0, "applied": 0, "cleaned": 0}
         evaluated = applied = cleaned = 0
         for hypo in list(self.hypothesis_registry):
             # 1) 消费待处理反馈

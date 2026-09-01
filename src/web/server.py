@@ -567,7 +567,20 @@ async def _handle_chat(ws: WebSocket, client_id: str, data: dict):
                 ensure_7tan_model_config()
                 logger.info(f"🌍 7Tan模型（本地引擎）处理消息: {message[:50]}")
                 try:
-                    reply = get_tan_model().respond(message)
+                    _hist = []
+                    try:
+                        from ..agent.conversation import get_session_messages
+                        _msgs = get_session_messages(session_id, limit=50)
+                        _hist = [
+                            {"role": m.get("role"), "content": m.get("content", "")}
+                            for m in _msgs
+                            if m.get("role") in ("user", "assistant")
+                        ]
+                        if _hist and _hist[-1].get("role") == "user" and _hist[-1].get("content", "").strip() == message.strip():
+                            _hist = _hist[:-1]
+                    except Exception:
+                        _hist = []
+                    reply = get_tan_model().respond(message, history=_hist)
                 except Exception as e:
                     logger.error(f"7Tan 模型响应失败: {e}")
                     reply = f"❌ 7Tan 模型引擎异常: {e}"

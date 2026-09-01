@@ -3,6 +3,7 @@
 五张表: resources / task_logs / source_sites / ai_configs / conversation_history
 """
 import base64
+import json
 import os
 import sys
 from datetime import datetime
@@ -1404,6 +1405,86 @@ def delete_memory(section: str, key: str) -> bool:
         raise e
     finally:
         session.close()
+
+
+# ===== 7Tan 模型记忆（tan_model_memory 表） =====
+
+class TanModelMemoryEntry(Base):
+    """7Tan 模型记忆存储 — 决策轨迹 / 预测误差历史（替代 JSON 文件持久化）
+
+    结构：kind 区分两类数据，payload 存 JSON 序列化内容。
+      - kind='traces'     → payload = [ {scene, action, action_finished, ...}, ... ]
+      - kind='pe_history' → payload = [ 预测误差记录, ... ]
+    """
+    __tablename__ = "tan_model_memory"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    kind = Column(String, nullable=False, unique=True, index=True)
+    payload = Column(Text, nullable=False)   # JSON 序列化
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id, "kind": self.kind,
+            "updated_at": str(self.updated_at)[:19] if self.updated_at else "",
+        }
+
+
+def _ensure_tan_model_memory_table():
+    """确保 tan_model_memory 表存在（幂等，仅建缺失表）"""
+    try:
+        Base.metadata.create_all(get_engine())
+    except Exception as e:
+        logger.warning(f"创建 tan_model_memory 表失败: {e}")
+
+
+def load_tan_model_memory() -> dict:
+    """读取 7Tan 模型记忆（数据库主存储）
+
+    返回 {'traces': [...], 'pe_history': [...]}；无数据/异常返回空结构。
+    """
+    _ensure_tan_model_memory_table()
+    out = {"traces": [], "pe_history": []}
+    session = get_session()
+    try:
+        rows = session.query(TanModelMemoryEntry).all()
+        for r in rows:
+            try:
+                out[r.kind] = json.loads(r.payload or "[]")
+            except Exception:
+                logger.warning(f"解析 7Tan 模型记忆 kind={r.kind} 失败，置空")
+                out[r.kind] = []
+    except Exception as e:
+        logger.warning(f"读取 7Tan 模型记忆失败: {e}")
+    finally:
+        session.close()
+    return out
+
+
+def save_tan_model_memory(traces: list, pe_history: list) -> bool:
+    """保存 7Tan 模型记忆（整体覆盖 traces / pe_history 两条记录）"""
+    _ensure_tan_model_memory_table()
+    session = get_session()
+    ok = True
+    try:
+        for kind, data in (("traces", traces), ("pe_history", pe_history)):
+            payload = json.dumps(data or [], ensure_ascii=False)
+            existing = session.query(TanModelMemoryEntry).filter(
+                TanModelMemoryEntry.kind == kind
+            ).first()
+            if existing:
+                existing.payload = payload
+                existing.updated_at = datetime.now()
+            else:
+                session.add(TanModelMemoryEntry(kind=kind, payload=payload))
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        logger.warning(f"保存 7Tan 模型记忆失败: {e}")
+        ok = False
+    finally:
+        session.close()
+    return ok
 
 
 # ===== Site Credential =====

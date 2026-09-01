@@ -8,7 +8,8 @@
   2) 言语功能系统（SpeechGenerator）—— 把内部状态（感知/记忆/预测/动机/情绪/
      反思/元认知）翻译成自然语言「自述」，让 7Tan 模型能用自己的话开口说话。
 
-本模块自包含（仅依赖标准库 + loguru），记忆持久化到 data/tan_model_memory.json。
+本模块自包含（仅依赖标准库 + loguru），记忆主存储为 SQLite 数据库
+（data/games.db → tan_model_memory 表），并保留 data/tan_model_memory.json 作为镜像备份。
 接入 AI 工作台后，用户在「当前模型」下拉框选中「7Tan模型」即可对话测试。
 
 对话用法：
@@ -107,7 +108,11 @@ def ensure_world_model_config() -> bool:
 
 
 class TanModelMemory:
-    """7Tan 模型的记忆库：决策轨迹 + 预测误差历史（持久化 JSON）"""
+    """7Tan 模型的记忆库：决策轨迹 + 预测误差历史
+
+    持久化：主存储 = SQLite 数据库 data/games.db → tan_model_memory 表；
+    同时保留 data/tan_model_memory.json 作为镜像备份（模块D 沙盒回测兼容）。
+    """
 
     def __init__(self, path: Optional[Path] = None):
         self.path = path or _MEMORY_PATH
@@ -116,7 +121,23 @@ class TanModelMemory:
         self.load()
 
     def load(self):
-        # 旧记忆文件迁移：新路径不存在但旧路径存在时，从旧文件读取
+        """加载记忆：优先数据库（主存储）；数据库为空/不可用时从 JSON 文件迁移导入"""
+        # ① 尝试从数据库读取（主存储）
+        db_data = None
+        try:
+            from ..database.db import load_tan_model_memory
+            db_data = load_tan_model_memory()
+        except Exception as e:
+            logger.warning(f"7Tan 模型记忆读取数据库失败（回退 JSON）: {e}")
+        if db_data is not None and (db_data.get("traces") or db_data.get("pe_history")):
+            self.traces = db_data["traces"] or []
+            self.pe_history = db_data["pe_history"] or []
+            if not self.traces:
+                self._seed_demo_traces()
+                self.save()
+            return
+
+        # ② 数据库为空/不可用 → 从 JSON 文件加载（含旧记忆文件迁移）
         src = self.path
         migrated = False
         try:
@@ -136,13 +157,20 @@ class TanModelMemory:
             else:
                 self._seed_demo_traces()
             if migrated or not self.path.exists():
-                self.save()
+                self.save()   # 迁移：写入数据库（主存储）+ JSON 镜像
         except Exception as e:
             logger.warning(f"7Tan 模型记忆加载失败，使用空库: {e}")
             self.traces = []
             self.pe_history = []
 
     def save(self):
+        """保存记忆：数据库（主存储） + JSON 镜像（备份/兼容模块D 沙盒回测）"""
+        try:
+            from ..database.db import save_tan_model_memory
+            save_tan_model_memory(self.traces, self.pe_history)
+        except Exception as e:
+            logger.warning(f"7Tan 模型记忆保存数据库失败: {e}")
+        # JSON 镜像备份（模块D 沙盒回测与人工查看仍依赖该文件，保持实时同步）
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             payload = {"traces": self.traces, "pe_history": self.pe_history}
@@ -150,7 +178,7 @@ class TanModelMemory:
                 json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
             )
         except Exception as e:
-            logger.warning(f"7Tan 模型记忆保存失败: {e}")
+            logger.warning(f"7Tan 模型记忆 JSON 镜像备份失败: {e}")
 
     def _seed_demo_traces(self):
         """首次启动预置示例轨迹，让预测立即可用（模拟已有经验）"""

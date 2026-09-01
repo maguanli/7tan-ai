@@ -200,6 +200,14 @@ class BacktestEvaluator:
 
     @staticmethod
     def load_traces() -> list:
+        # 主存储：SQLite 数据库（tan_model_memory 表）；回退：JSON 镜像
+        try:
+            from ..database.db import load_tan_model_memory
+            data = load_tan_model_memory()
+            if data.get("traces"):
+                return data["traces"]
+        except Exception as e:
+            logger.warning(f"从数据库读取 7Tan 模型记忆失败（回退 JSON 镜像）: {e}")
         try:
             if _MEMORY_PATH.exists():
                 raw = json.loads(_MEMORY_PATH.read_text(encoding="utf-8"))

@@ -511,6 +511,18 @@ def run_web_only(args):
     from src.database.db import init_db
     init_db()
 
+    # ===== 流量统计：后台线程发送 ping，绝不阻塞服务启动（与桌面版 launch_app 一致） =====
+    import threading as _thr
+
+    def _bg_ping():
+        try:
+            from src.utils.user_stats import ping_analytics
+            success = ping_analytics()
+            logger.info(f"[Traffic] 统计 ping 结果: {'成功' if success else '失败'}")
+        except Exception as _ping_err:
+            logger.debug(f"[Traffic] ping 异常: {_ping_err}")
+    _thr.Thread(target=_bg_ping, daemon=True, name="stats-ping").start()
+
     host = getattr(args, 'host', '0.0.0.0') or '0.0.0.0'
     port = getattr(args, 'port', 9800)
 

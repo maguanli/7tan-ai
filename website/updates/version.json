@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "1.0.16",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.16.zip",
+      "md5": "2516dd4fb0464ca0c8135f745439639b",
+      "size": 422304797,
+      "notes": "1.0.16 更新：安全加固——发布包内置配置全面脱敏（API Key 改为占位符、移除后台网址与默认用户名），构建流程新增自动脱敏与泄露扫描；修复引导窗口勾选「不再提示」后下次登录仍显示的问题；桌面自动化增强（紧急停止保护、桌面监控哨兵、小字自动放大识别、观察流水落盘与回查、断网自动降级）。",
+      "release_date": "2026-08-27"
+    },
+    {
       "version": "1.0.15",
       "channel": "stable",
       "platform": "windows",

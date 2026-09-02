@@ -20,6 +20,8 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Dict, Any, Optional, List
 
+from loguru import logger
+
 
 # ====================== 基础数据结构 仿生器官框架 ======================
 
@@ -54,6 +56,9 @@ _event_log: List[Dict[str, Any]] = []            # 已分发事件历史（调�
 _subscriptions: Dict[str, List[str]] = {}         # event_type -> [organ_code, ...]
 _inboxes: Dict[str, List[Dict[str, Any]]] = {}    # organ_code -> 待处理事件收件箱
 
+# 事件总线观测日志开关：True=每次分发打印一行日志（肉眼可见信号流入），False=静默。
+_BUS_LOG_ENABLED = True
+
 
 def emit_event(event_type: str, payload: Optional[Dict[str, Any]] = None,
                source: str = "", subjective_ts: float = 0.0,
@@ -81,16 +86,28 @@ def subscribe_event(event_type: str, organ_code: str) -> None:
 
 
 def _dispatch_events() -> None:
-    """tick 结束后统一分发：按订阅表投递到各器官收件箱（防递归）。"""
+    """tick 结束后统一分发：按订阅表投递到各器官收件箱（防递归）。
+
+    分发时按开关打印观测日志，让「事件流入总线」肉眼可见。"""
     global _event_log
     for ev in _event_queue:
         etype = ev["event_type"]
-        for code in _subscriptions.get(etype, []):
+        subs = _subscriptions.get(etype, [])
+        for code in subs:
             _inboxes.setdefault(code, []).append(ev)
+        if _BUS_LOG_ENABLED:
+            mark = "🌐EXT" if ev.get("origin") == "external" else "🧠INT"
+            dest = ",".join(subs) if subs else "(无订阅)"
+            logger.info(f"🫀[bus] {mark} {etype} → {dest}")
     _event_log.extend(_event_queue)
     if len(_event_log) > 500:
         _event_log = _event_log[-300:]
     _event_queue.clear()
+
+
+def recent_bus_events(n: int = 10) -> List[Dict[str, Any]]:
+    """返回最近 n 条已分发事件（供调试/观测接口调用，肉眼可见信号流入）。"""
+    return _event_log[-n:]
 
 
 def poll_events(organ_code: str) -> List[Dict[str, Any]]:
@@ -111,9 +128,13 @@ def bus_stats() -> Dict[str, Any]:
 
 
 def organ_tick_all(ctx=None):
-    """系统主循环：顺序驱动所有已开启器官执行 tick，结束后统一分发事件。
+    """系统主循环：先分发已入队事件 → 顺序驱动所有已开启器官执行 tick → 末尾再分发本 tick 新事件。
 
-    ctx 可选：传 world_model 的 memory 实例，使器官作用于真实状态。"""
+    ctx 可选：传 world_model 的 memory 实例，使器官作用于真实状态。
+
+    关键：开头先 dispatch 一次，把 respond() 开头 emit 的 external 事件（user_input/tool_result）
+    在本轮器官 tick 前就送进收件箱，消除「本轮投递、下一轮才生效」的一轮延迟。"""
+    _dispatch_events()
     for code, org in organ_registry.items():
         if not (org.enabled and org.tick_func is not None):
             continue

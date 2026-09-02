@@ -361,7 +361,7 @@ class TanModel:
         if ENABLE_LOCAL_LLM:
             try:
                 self.local_llm = LocalLLMBridge()
-                logger.info("🧠 本地LLM器官已挂载（llama.cpp 内核 · 失败自动降级）")
+                logger.info("🧠 本地LLM器官已挂载（llama.cpp 内核 v3 · 失败自动降级）")
             except Exception as e:
                 logger.warning(f"本地LLM器官初始化失败: {e}")
                 self.local_llm = None
@@ -537,8 +537,14 @@ class TanModel:
             lines.append("")
             lines.append("这是我从之前对话里抽出来并固化的事实，不是现编的。")
             return "\n".join(lines)
-        # 3) 疑问句 → 思考循环：在工作记忆+长期记忆中检索相关经验，能答则答，不能答则诚实承认
+        # 3) 疑问句 → 记忆类问题走思考循环（检索真实记忆）；常识/闲聊优先本地 LLM 大脑
         if self._is_question(text):
+            if self._is_memory_question(text):
+                logger.info("🌍 7Tan模型 → 记忆类疑问句走思考循环（记忆检索推理）")
+                return self._think_answer_question(text)
+            llm_reply = self._llm_answer(text)
+            if llm_reply:
+                return llm_reply
             logger.info("🌍 7Tan模型 → 疑问句走思考循环（记忆检索推理）")
             return self._think_answer_question(text)
         # 4) 默认：预测推演（仅当文本真的像推演请求；否则诚实承认不会，不硬答）
@@ -614,15 +620,18 @@ class TanModel:
     def _llm_answer(self, text: str) -> Optional[str]:
         """本地模型兜底：基于 7Tan 自己的记忆材料生成回答；失败返回 None（降级）。"""
         if self.local_llm is None:
+            logger.warning("本地LLM未挂载（local_llm=None），本次降级为纯算法")
             return None
         if not self.local_llm.is_available():
             now = time.monotonic()
             # TTL 锁：30 秒内只尝试拉起一次（避免每次消息都阻塞等待）；超时后允许重新尝试，服务晚起也能被感知
             if self._llm_launch_tried and (now - self._llm_launch_ts) < 30.0:
+                logger.info("本地LLM服务不可用且30秒内已尝试过拉起，本次降级")
                 return None
             self._llm_launch_tried = True
             self._llm_launch_ts = now
             if not self.local_llm.ensure_server():
+                logger.warning("本地LLM服务拉起失败，本次降级为纯算法")
                 return None
         materials = self._collect_memory_materials(text)
         sys_prompt = LocalLLMBridge.build_system_prompt(materials)
@@ -662,6 +671,14 @@ class TanModel:
         if any(text.startswith(h) for h in ("说一下", "讲一下", "介绍一下", "说说", "聊聊")):
             return True
         return False
+
+    @staticmethod
+    def _is_memory_question(text: str) -> bool:
+        """判断是否为「关于我们聊过什么/你记得什么」的记忆类问题（走真实记忆检索）"""
+        memory_markers = ("我们聊", "聊过", "你说过", "你之前说", "之前说", "刚才",
+                          "上面", "你答", "对话", "原文", "记得", "记忆", "经历",
+                          "你还知道", "你认识", "你学过", "你说", "你回过", "回答过")
+        return any(m in text for m in memory_markers)
 
     def _fallback_question(self, text: str) -> str:
         """疑问句但未命中任何意图时的兜底引导"""

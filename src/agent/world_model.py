@@ -357,6 +357,7 @@ class TanModel:
         # ── 本地 LLM 内核器官（1.1GB 方案）：理解+生成；不可用自动降级 ──
         self.local_llm = None
         self._llm_launch_tried = False
+        self._llm_launch_ts = 0.0
         if ENABLE_LOCAL_LLM:
             try:
                 self.local_llm = LocalLLMBridge()
@@ -615,9 +616,12 @@ class TanModel:
         if self.local_llm is None:
             return None
         if not self.local_llm.is_available():
-            if self._llm_launch_tried:
+            now = time.monotonic()
+            # TTL 锁：30 秒内只尝试拉起一次（避免每次消息都阻塞等待）；超时后允许重新尝试，服务晚起也能被感知
+            if self._llm_launch_tried and (now - self._llm_launch_ts) < 30.0:
                 return None
             self._llm_launch_tried = True
+            self._llm_launch_ts = now
             if not self.local_llm.ensure_server():
                 return None
         materials = self._collect_memory_materials(text)
@@ -726,6 +730,11 @@ class TanModel:
             lines.append("这是我真实经历过的，不是编的。你可以让我再推演一次：")
             lines.append(f"  「{hits[0].get('scene', '?')}里{hits[0].get('action', '?')}」")
             return "\n".join(lines)
+        # —— 检索2.4：本地 LLM 兜底（常识/闲聊优先用大脑，避免翻旧账；「我们聊过什么」类问题除外） ——
+        if not any(k in text for k in ("我们聊", "你说过", "之前说", "刚才", "上面", "你答", "对话", "聊过")):
+            llm_reply = self._llm_answer(text)
+            if llm_reply:
+                return llm_reply
         # —— 检索2.5：对话内容检索（在 user_text/reply 原文里找关键词，回答「我们聊过什么」） ——
         c_hits = self.memory.search_content(text)
         if c_hits:
@@ -747,10 +756,6 @@ class TanModel:
             if summary and summary != "（无）" and any(k in text for k in ("你认识", "你知道", "记得")):
                 lines.append(f"📚 我能调用的上下文：{summary}")
                 lines.append("")
-        # —— 本地 LLM 兜底：用自身记忆材料让内核器官理解并组织语言 ——
-        llm_reply = self._llm_answer(text)
-        if llm_reply:
-            return llm_reply
         # —— 未命中：诚实承认 + 引导 ——
         lines.append("🤖 我诚实说：这个问题不在我的记忆里，我答不上来——我不会编答案骗你。")
         lines.append("")

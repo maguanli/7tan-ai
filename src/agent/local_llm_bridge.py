@@ -48,11 +48,14 @@ class LocalLLMBridge:
         self.timeout = timeout
         self.max_tokens = max_tokens
         self._alive: bool | None = None  # None=未探测；True/False=上次结果
+        self._alive_ts: float = 0.0     # 上次探测时间戳（配合 TTL 缓存）
+        self._alive_ttl: float = 5.0    # 探活结果缓存有效期（秒），到期自动重新探测
 
     # ---------------- 探活 / 拉起 ----------------
     def is_available(self) -> bool:
-        """探测本地 llama-server 是否健康（带短缓存，避免频繁请求）。"""
-        if self._alive is not None:
+        """探测本地 llama-server 是否健康（带 TTL 缓存，到期自动重新探测）。"""
+        now = time.monotonic()
+        if self._alive is not None and (now - self._alive_ts) < self._alive_ttl:
             return self._alive
         try:
             with urllib.request.urlopen(
@@ -62,6 +65,7 @@ class LocalLLMBridge:
         except Exception:
             ok = False
         self._alive = ok
+        self._alive_ts = now
         return ok
 
     def _port_open(self) -> bool:
@@ -140,14 +144,18 @@ class LocalLLMBridge:
                 return None
             # 清理可能带出的思考/结束标记
             content = content.replace("<|im_end|>", "").replace("<|endoftext|>", "").strip()
+            self._alive = True
+            self._alive_ts = time.monotonic()
             return content
         except urllib.error.HTTPError as e:
             logger.warning(f"本地模型 HTTP {e.code}: {e.read()[:200]}")
-            self._alive = False  # 触发下次重新探测
+            self._alive = False
+            self._alive_ts = time.monotonic()  # 立即过期，下次调用重新探测
             return None
         except Exception as e:
             logger.warning(f"本地模型调用失败（降级）: {e}")
             self._alive = False
+            self._alive_ts = time.monotonic()  # 立即过期，下次调用重新探测
             return None
 
     # ---------------- 7Tan 身份与记忆材料的系统上下文 ----------------

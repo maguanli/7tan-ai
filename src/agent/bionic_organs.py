@@ -105,6 +105,7 @@ def _dispatch_events() -> None:
             mark = "🌐EXT" if ev.get("origin") == "external" else "🧠INT"
             dest = ",".join(subs) if subs else "(无订阅)"
             logger.info(f"🫀[bus] {mark} {etype} → {dest}")
+            logger.info(f"[EVENT] type={etype}, origin={ev.get('origin')}")
     _event_log.extend(_event_queue)
     if len(_event_log) > 500:
         _event_log = _event_log[-300:]
@@ -185,19 +186,38 @@ def module_a_tick(ctx=None):
         # 1. 接收新记忆条目（来自 CONSOLIDATE 的 mem_consolidated 事件）
         for ev in poll_events("ORG-A"):
             if ev["event_type"] == "mem_consolidated":
-                items = ev.get("payload", {}).get("items", [])
-                for item in items:
-                    if isinstance(item, dict) and item.get("scene") and item.get("action"):
-                        if ctx is not None and hasattr(ctx, "add_trace"):
-                            ctx.add_trace(
-                                item.get("scene"), item.get("action"),
-                                finished=bool(item.get("action_finished", True)),
-                                changed=bool(item.get("scene_changed", False)),
-                                reduced=bool(item.get("defect_reduced", False)),
-                                gained=bool(item.get("knowledge_gained", False)),
-                                origin=item.get("origin", "internal"),
-                                consolidated=True,   # 标记已固化，避免巩固层反复采样
-                            )
+                payload = ev.get("payload", {})
+                items = payload.get("items")
+                if items is not None:
+                    # 旧结构：轨迹巩固（scene/action）
+                    for item in items:
+                        if isinstance(item, dict) and item.get("scene") and item.get("action"):
+                            if ctx is not None and hasattr(ctx, "add_trace"):
+                                ctx.add_trace(
+                                    item.get("scene"), item.get("action"),
+                                    finished=bool(item.get("action_finished", True)),
+                                    changed=bool(item.get("scene_changed", False)),
+                                    reduced=bool(item.get("defect_reduced", False)),
+                                    gained=bool(item.get("knowledge_gained", False)),
+                                    origin=item.get("origin", "internal"),
+                                    consolidated=True,   # 标记已固化，避免巩固层反复采样
+                                )
+                elif isinstance(payload, dict) and payload.get("thought_fragment"):
+                    # 新结构（伪代码）：思想碎片巩固（thought_fragment）
+                    memory_library.append({
+                        "thought": payload.get("thought_fragment"),
+                        "focus": payload.get("focus"),
+                        "valence": payload.get("valence"),
+                        "origin": payload.get("origin", "internal"),
+                        "subjective_time": payload.get("subjective_time"),
+                        "weight_eff": payload.get("weight_eff", 1.0),
+                        "goal_tag": payload.get("goal_tag"),
+                        "pe": payload.get("pe"),
+                        "success": payload.get("success"),
+                    })
+                    # 控制思想记忆库规模（防止无限增长）
+                    while len(memory_library) > 200:
+                        memory_library.pop(0)
         # 2. 权重衰减（冷端）
         target = getattr(ctx, "traces", None) if ctx is not None else None
         if target is None:
@@ -355,12 +375,17 @@ working_memory = {
 }
 
 
-def wm_push_thought(thought_fragment, focus):
-    """把思想碎片压入工作记忆 context_stack。"""
+def wm_push_thought(thought_fragment, focus, valence=0.0, origin="internal"):
+    """把思想碎片压入工作记忆 context_stack（碎片自带 focus/valence/origin，供 CONSOLIDATE 筛选）。"""
     max_step = 12
     if len(working_memory["context_stack"]) >= max_step:
         working_memory["context_stack"].pop(0)
-    working_memory["context_stack"].append({"thought": thought_fragment, "focus": focus})
+    working_memory["context_stack"].append({
+        "thought": thought_fragment,
+        "focus": focus,
+        "valence": valence,
+        "origin": origin,
+    })
 
 
 def module_e_tick(ctx=None):
@@ -390,13 +415,21 @@ def module_e_tick(ctx=None):
                 scene = p.get("scene")
                 action = p.get("action")
                 if scene and action:
-                    wm_push_thought(f"replay:{scene}:{action}", 0.5)
+                    wm_push_thought(f"replay:{scene}:{action}", 0.5, origin=str(p.get("origin", "internal")))
+            elif et == "replay_thought_fragment":
+                # 伪代码配套：ORG-CONSOLIDATE 重放的历史思想碎片压入工作记忆（focus 已衰减、origin 透传）
+                wm_push_thought(
+                    str(p.get("thought", "")),
+                    float(p.get("focus", 0.3)),
+                    valence=float(p.get("valence", 0.0)),
+                    origin=str(p.get("origin", "internal")),
+                )
             elif et == "user_input":
                 # 阶段一：外部输入进入工作记忆草稿区（我-非我边界：external 信号）
-                wm_push_thought(f"user:{str(p.get('text', ''))[:40]}", 0.6)
+                wm_push_thought(f"user:{str(p.get('text', ''))[:40]}", 0.6, origin="external")
             elif et == "tool_result":
                 # 阶段一：工具返回结果作为 external 信号进入工作记忆
-                wm_push_thought(f"tool:{str(p.get('tool', ''))}:{str(p.get('summary', ''))[:40]}", 0.5)
+                wm_push_thought(f"tool:{str(p.get('tool', ''))}:{str(p.get('summary', ''))[:40]}", 0.5, origin="external")
         # 2. focus 自然衰减
         working_memory["focus_weight"] = max(0.1, round(float(working_memory.get("focus_weight", 0.5)) * 0.98, 4))
         # 3. scratch_pad 清理
@@ -409,6 +442,7 @@ def module_e_tick(ctx=None):
             "focus_weight": working_memory["focus_weight"],
             "active_goals": list(working_memory.get("active_goals", [])),
             "context_size": len(working_memory.get("context_stack", [])),
+            "context_stack": list(working_memory.get("context_stack", [])),
         }, source="ORG-E")
     except Exception:
         pass
@@ -716,92 +750,90 @@ def organ_inhibit_tick(ctx=None):
 
 # ====================== 阶段3：ORG-CONSOLIDATE 记忆重放巩固器官（核心） ======================
 
-replay_buffer: List[Dict[str, Any]] = []
-_consolidate_counter: int = 0        # 重放周期计数器（阶段二）
-REPLAY_INTERVAL = 5                   # 每隔 N 个 tick 重放一次历史记忆
-REPLAY_BATCH = 3                      # 每次重放采样条数
+_consolidate_counter: int = 0        # 记忆重放周期计数器
 
 
 def organ_consolidate_tick(ctx=None):
-    """巩固 + 重放：筛选高权重碎片固化进 ORG-A；每隔 N tick 重放历史记忆送入 ORG-E。
+    """巩固 + 重放（严格按 7Tan_origin验收_ORG_CONSOLIDATE 伪代码）：
 
-    阶段二落地：
-      - 数据流打通：从 ctx.traces 采样「未巩固」轨迹 → replay_buffer（不再空转）
-      - 巩固筛选：高 focus + 高 abs(valence) 优先固化；低权重直接丢弃（模拟幼年失忆）
-      - 每条 mem_consolidated 必须携带 subjective_time / valence / origin
-      - 记忆重放：每隔 REPLAY_INTERVAL 个 tick 随机采样历史记忆 → memory_replay 事件
+      1. 订阅 wm_snapshot（ORG-E 工作记忆快照），遍历 context_stack 思想碎片；
+         筛选 focus、效价达标的写入长期记忆（emit mem_consolidated 给 ORG-A）。
+      2. 每 REPLAY_INTERVAL_TICKS 从 mem_consolidated 历史事件采样，重放回 ORG-E。
+
+      筛选规则（伪代码原逻辑，AND）：
+        if focus < FOCUS_THRESHOLD and abs(valence) < VALENCE_ABS_THRESHOLD: 跳过
+      即：focus 达标 OR 效价达标 才巩固，两者都低则遗忘（幼年失忆）。
     """
     global _consolidate_counter
     try:
-        # 1. 收集本 tick 的效价标签、工作记忆快照、主观时间
-        valences: Dict[str, float] = {}
-        focus_weight = 0.5
-        subj_ts = float(subjective_time.get("subjective_clock", 0.0))
-        for ev in poll_events("ORG-CONSOLIDATE"):
-            et = ev["event_type"]
-            p = ev.get("payload", {})
-            if et == "valence_tag":
-                item = p.get("item", "")
-                valences[item] = float(p.get("valence", 0.0))
-            elif et == "wm_snapshot":
-                focus_weight = float(p.get("focus_weight", 0.5))
-            elif et == "subjective_tick":
-                subj_ts = float(p.get("subjective_clock", subj_ts))
-        # 1.5 数据流打通：从真实记忆库采样「未巩固」的新轨迹 → replay_buffer
-        traces = getattr(ctx, "traces", None) if ctx is not None else None
-        if traces:
-            for t in traces[-20:]:
-                if not isinstance(t, dict):
+        cfg = get_organ("ORG-CONSOLIDATE").config
+        focus_thr = float(cfg.get("FOCUS_THRESHOLD", 0.3))
+        valence_thr = float(cfg.get("VALENCE_ABS_THRESHOLD", 0.2))
+        replay_interval = int(cfg.get("REPLAY_INTERVAL_TICKS", 100))
+        replay_sample = int(cfg.get("REPLAY_SAMPLE_COUNT", 8))
+
+        # 1. 订阅 wm_snapshot（ORG-E 工作记忆快照）
+        wm_snap = poll_latest_event("wm_snapshot")
+        if wm_snap is not None:
+            snap_payload = wm_snap.get("payload", {})
+            context_stack = snap_payload.get("context_stack", [])
+            subj_tick_evt = poll_latest_event("subjective_tick")
+            if not subj_tick_evt:
+                return
+            now_subj_time = subj_tick_evt["payload"]["subjective_clock"]
+
+            # 遍历工作记忆碎片，筛选满足条件的写入长期记忆
+            for thought_item in context_stack:
+                if not isinstance(thought_item, dict):
                     continue
-                if t.get("consolidated"):
+                focus = float(thought_item.get("focus", 0.0))
+                valence = float(thought_item.get("valence", 0.0))
+                origin = thought_item.get("origin", "internal")
+                # 筛选：focus 与效价都低于阈值才跳过（模拟遗忘/幼年失忆）
+                if focus < focus_thr and abs(valence) < valence_thr:
                     continue
-                scene = t.get("scene")
-                action = t.get("action")
-                if not (scene and action):
-                    continue
-                key = f"{scene}:{action}"
-                v = valences.get(key, (0.5 if t.get("action_finished") else -0.5))
-                replay_buffer.append({
-                    "scene": scene,
-                    "action": action,
-                    "focus": float(t.get("weight_eff", focus_weight)),
-                    "valence": v,
-                    "origin": str(t.get("origin", "internal")),
-                    "subjective_time": subj_ts,
-                    "action_finished": bool(t.get("action_finished", False)),
-                    "scene_changed": bool(t.get("scene_changed", False)),
-                    "defect_reduced": bool(t.get("defect_reduced", False)),
-                    "knowledge_gained": bool(t.get("knowledge_gained", False)),
-                })
-                t["consolidated"] = True  # 标记已采样，避免重复巩固
-        # 2. 从重放缓冲筛选高权重 + 显著效价碎片（低权重直接丢弃 = 遗忘 / 幼年失忆）
-        to_consolidate = []
-        for frag in list(replay_buffer):
-            if not isinstance(frag, dict):
-                continue
-            fw = float(frag.get("focus", focus_weight))
-            v = float(frag.get("valence", 0.0))
-            if fw > 0.5 and abs(v) > 0.2:
-                to_consolidate.append(frag)
-        replay_buffer.clear()
-        # 3. 产出 mem_consolidated 事件（携带 subjective_time / valence / origin）
-        if to_consolidate:
-            emit_event("mem_consolidated", {"items": to_consolidate},
-                       source="ORG-CONSOLIDATE", origin="internal")
-        # 4. 记忆重放（阶段二）：每隔 N tick 随机采样历史记忆 → 送入 ORG-E 工作记忆
+
+                mem_payload = {
+                    "thought_fragment": thought_item.get("thought", ""),
+                    "focus": focus,
+                    "valence": valence,
+                    "origin": origin,
+                    "subjective_time": now_subj_time,
+                    "weight_eff": 1.0,
+                    "goal_tag": thought_item.get("goal_tag"),
+                    "pe": thought_item.get("pe"),
+                    "success": thought_item.get("success"),
+                }
+                # 发出记忆巩固事件，交给 ORG-A 写入记忆库
+                emit_event(
+                    event_type="mem_consolidated",
+                    payload=mem_payload,
+                    source="ORG-CONSOLIDATE",
+                    origin="internal",
+                )
+
+        # 2. 记忆后台重放：周期触发
         _consolidate_counter += 1
-        if traces and _consolidate_counter % REPLAY_INTERVAL == 0:
-            candidates = [t for t in traces if isinstance(t, dict)
-                          and t.get("scene") and t.get("action")]
-            if candidates:
-                batch = random.sample(candidates, min(REPLAY_BATCH, len(candidates)))
-                for t in batch:
-                    emit_event("memory_replay", {
-                        "scene": t.get("scene"),
-                        "action": t.get("action"),
-                        "origin": str(t.get("origin", "internal")),
-                        "subjective_time": float(t.get("ts", subj_ts)),
-                    }, source="ORG-CONSOLIDATE", origin="internal")
+        if _consolidate_counter % replay_interval == 0:
+            old_mem_events = poll_replay_events("mem_consolidated", replay_sample)
+            for mem_evt in old_mem_events:
+                mem_data = mem_evt.get("payload", {})
+                if not isinstance(mem_data, dict):
+                    continue
+                replay_thought = {
+                    "thought": mem_data.get("thought_fragment", ""),
+                    "focus": float(mem_data.get("focus", 0.5)) * 0.6,  # 重放 focus 衰减，防抢占工作记忆
+                    "valence": float(mem_data.get("valence", 0.0)),
+                    "origin": mem_data.get("origin", "internal"),  # 必须继承原始 origin，禁止硬编码
+                    "goal_tag": mem_data.get("goal_tag"),
+                    "pe": mem_data.get("pe"),
+                }
+                emit_event(
+                    event_type="replay_thought_fragment",
+                    payload=replay_thought,
+                    source="ORG-CONSOLIDATE",
+                    origin="internal",
+                )
     except Exception:
         pass
 
@@ -1063,7 +1095,12 @@ def register_extra_core_organs():
         bio_analogy="海马-皮层睡眠记忆巩固回路",
         enabled=True,
         tick_func=organ_consolidate_tick,
-        config={}
+        config={
+            "REPLAY_INTERVAL_TICKS": 100,   # 每 100 tick 执行一次记忆重放
+            "REPLAY_SAMPLE_COUNT": 8,       # 每次重放采样几条高权重记忆
+            "FOCUS_THRESHOLD": 0.3,         # focus 低于该值且效价低才不写入长期记忆
+            "VALENCE_ABS_THRESHOLD": 0.2,   # 效价绝对值过低且 focus 低才不写入长期记忆
+        }
     ))
     register_organ(BionicOrgan(
         organ_code="ORG-TIMESENSE",
@@ -1128,6 +1165,7 @@ def _setup_subscriptions():
     subscribe_event("selfmodel_update", "ORG-SIMULATE")
     # 记忆重放 → 前额叶工作记忆（阶段二）
     subscribe_event("memory_replay", "ORG-E")
+    subscribe_event("replay_thought_fragment", "ORG-E")
     # 模拟结果 → 动机(算PE)
     subscribe_event("simulation_result", "ORG-B")
     # 外部信号流入（阶段一：我-非我边界——用户输入/工具返回作为 external 事件进入总线）

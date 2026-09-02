@@ -61,26 +61,42 @@ def grep_code(pattern: str, path: str = ".", file_types: str = "",
             compiled = re.compile(pattern)
         except re.error:
             return f"错误: 无效的正则表达式 '{pattern}'"
-        for root, dirs, files in os.walk(path):
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in
-                       ("node_modules", "__pycache__", ".git", "venv", ".venv", "dist", "build")]
-            for fname in files:
-                if file_types:
-                    ext = os.path.splitext(fname)[1]
-                    if f"*{ext}" not in file_types:
-                        continue
-                fpath = os.path.join(root, fname)
-                try:
-                    with open(fpath, "r", encoding="utf-8", errors="replace") as fp:
-                        for i, line in enumerate(fp, 1):
-                            if compiled.search(line):
-                                results.append(f"{fpath}:{i}: {line.rstrip()}")
-                                if len(results) >= max_results:
-                                    break
-                        if len(results) >= max_results:
-                            break
-                except Exception:
-                    pass
+
+        # 收集目标文件：支持单文件路径（os.walk 对单文件返回空，需特殊处理）
+        target_files = []
+        if os.path.isfile(path):
+            target_files = [path]
+        else:
+            for root, dirs, files in os.walk(path):
+                dirs[:] = [d for d in dirs if not d.startswith(".") and d not in
+                           ("node_modules", "__pycache__", ".git", "venv", ".venv", "dist", "build")]
+                for fname in files:
+                    if file_types:
+                        ext = os.path.splitext(fname)[1]
+                        if f"*{ext}" not in file_types:
+                            continue
+                    target_files.append(os.path.join(root, fname))
+
+        for fpath in target_files:
+            try:
+                with open(fpath, "r", encoding="utf-8", errors="replace") as fp:
+                    lines = fp.readlines()
+            except Exception:
+                continue
+            for i, line in enumerate(lines, 1):
+                if compiled.search(line):
+                    if context > 0:
+                        start = max(0, i - context - 1)
+                        end = min(len(lines), i + context)
+                        for j in range(start, end):
+                            mark = ">" if j == i - 1 else " "
+                            results.append(f"{fpath}:{j+1}:{mark} {lines[j].rstrip()}")
+                    else:
+                        results.append(f"{fpath}:{i}: {line.rstrip()}")
+                    if len(results) >= max_results:
+                        break
+            if len(results) >= max_results:
+                break
         return "\n".join(results) if results else "未找到匹配结果"
 
     try:

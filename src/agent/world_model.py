@@ -28,8 +28,6 @@ from typing import Optional
 
 from loguru import logger
 
-# 本地 LLM 内核器官（1.1GB 方案）：理解+生成；不可用时自动降级
-from .local_llm_bridge import ENABLE_LOCAL_LLM, LocalLLMBridge  # noqa: E402
 
 # 7Tan 模型的唯一标识（对应数据库 ai_configs 表 config_key 与 model 字段）
 T7_MODEL_NAME = "7tan-model"
@@ -354,22 +352,34 @@ class TanModel:
         except Exception as e:
             logger.warning(f"模块D 初始化失败（退回原行为）: {e}")
             self.evolve = None
-        # ── 本地 LLM 内核器官（1.1GB 方案）：理解+生成；不可用自动降级 ──
-        self.local_llm = None
-        self._llm_launch_tried = False
-        self._llm_launch_ts = 0.0
-        if ENABLE_LOCAL_LLM:
-            try:
-                self.local_llm = LocalLLMBridge()
-                logger.info("🧠 本地LLM器官已挂载（llama.cpp 内核 v3 · 失败自动降级）")
-            except Exception as e:
-                logger.warning(f"本地LLM器官初始化失败: {e}")
-                self.local_llm = None
+        # ── 本地 LLM 内核已彻底移除（用户决定）──
+        # ── 仿生器官框架（15 器官架构，来自 7Tan_All_Organs 蓝图）──
+        self.organ_registry = {}
+        try:
+            from .bionic_organs import init_all_organs, organ_registry
+            init_all_organs()
+            self.organ_registry = organ_registry
+            logger.info(f"🫀 仿生器官框架已挂载：{len(organ_registry)} 个器官")
+        except Exception as e:
+            logger.warning(f"仿生器官框架挂载失败（不影响对话）: {e}")
+            self.organ_registry = {}
+
+    def _bump_memory_hit(self, scene, action=None, strength=0.05):
+        """记忆命中增强：调用仿生器官 ORG?A 的 module_a_bump（冷热闭环的"热"端）。
+
+        scene 命中时（action=None）增强该场景下所有轨迹；否则精确匹配 (scene, action)。"""
+        try:
+            from .bionic_organs import module_a_bump
+            module_a_bump(self.memory, scene, action, strength)
+        except Exception:
+            pass
 
     # ---------------- 预测核心（忠实移植） ----------------
     def virtual_predict(self, scene, action) -> dict:
         """单步推演：基于历史相似轨迹的加权成功率 → 置信度/预期结果/知识缺口"""
         similar = self.memory.find_similar(scene)
+        if similar:
+            self._bump_memory_hit(scene, None, 0.05)
         result = {
             "scene": scene, "action": action,
             "similar_count": len(similar),
@@ -449,6 +459,18 @@ class TanModel:
                 self.evolve.tick()
             except Exception as e:
                 logger.warning(f"模块D tick 异常（忽略，不影响回复）: {e}")
+        # ⑥ 仿生器官主循环 tick（启用的器官每轮对话呼吸一次）
+        try:
+            from .bionic_organs import organ_tick_all
+            organ_tick_all(self.memory)
+        except Exception as e:
+            logger.warning(f"仿生器官 tick 异常（忽略，不影响回复）: {e}")
+        # ⑥.5 言语输出器官：把本轮回复写入输出日志（ORG?SPEECH 真实工作）
+        try:
+            from .bionic_organs import module_speech_push
+            module_speech_push(reply)
+        except Exception:
+            pass
         return reply
 
     # ---------------- 思考循环：上下文吸收 / 观察回写 / 记忆检索推理 ----------------
@@ -539,12 +561,7 @@ class TanModel:
             return "\n".join(lines)
         # 3) 疑问句 → 记忆类问题走思考循环（检索真实记忆）；常识/闲聊优先本地 LLM 大脑
         if self._is_question(text):
-            if self._is_memory_question(text):
-                logger.info("🌍 7Tan模型 → 记忆类疑问句走思考循环（记忆检索推理）")
-                return self._think_answer_question(text)
-            llm_reply = self._llm_answer(text)
-            if llm_reply:
-                return llm_reply
+            # 本地 LLM 已移除：疑问句统一走思考循环（记忆检索推理）
             logger.info("🌍 7Tan模型 → 疑问句走思考循环（记忆检索推理）")
             return self._think_answer_question(text)
         # 4) 默认：预测推演（仅当文本真的像推演请求；否则诚实承认不会，不硬答）
@@ -555,10 +572,11 @@ class TanModel:
                 return self._report_predict_with_thinking(scene, action)
             logger.info(f"🌍 7Tan模型 → 预测推演（场景={scene} 动作={action}）")
             return self._report_predict(scene, action)
-        # 4.5) 本地 LLM 兜底（非疑问句的闲聊/开放陈述）：基于自身记忆生成
-        llm_reply = self._llm_answer(text)
-        if llm_reply:
-            return llm_reply
+        # 4.5) 工具增强：非疑问请求（如「统计 data 目录」「查新闻」）也先尝试调用工具
+        tool_reply = self._try_tool_answer(text)
+        if tool_reply:
+            logger.info("🌍 7Tan模型 → 未识别意图，转工具实时查证")
+            return tool_reply
         # 5) 都不是 → 诚实承认（不编、不强行推演）
         logger.info("🌍 7Tan模型 → 未识别请求，诚实承认不会")
         return self._honest_unknown(text)
@@ -580,76 +598,179 @@ class TanModel:
             return True
         return False
 
-    # ---------------- 本地 LLM 内核（理解+生成器官，防套壳：基于自身记忆作答） ----------------
-    def _collect_memory_materials(self, text: str) -> dict:
-        """收集 7Tan 自己的记忆材料，供本地模型作答时引用。"""
-        materials: dict = {"knowledge": [], "traces": [], "wm": ""}
+    # ---------------- 工具调用层（模块G：主模型调用只读工具查证，不硬答） ----------------
+    def _call_tool_safe(self, name: str, args: dict):
+        """调用系统工具注册表执行工具；失败/无结果返回 None（绝不抛异常影响对话）。"""
         try:
-            knows = getattr(self.memory, "knowledge", None) or []
-            for item in list(knows)[:6]:
-                if isinstance(item, dict):
-                    content = item.get("content", "") or ""
-                    if content:
-                        materials["knowledge"].append(content)
-        except Exception:
-            pass
-        try:
-            for t in self.memory.traces[-6:]:
-                if not isinstance(t, dict):
-                    continue
-                sc, ac = t.get("scene", "?"), t.get("action", "?")
-                ok = "成功" if t.get("action_finished") else "失败"
-                ts = float(t.get("ts", 0) or 0)
-                hint = time.strftime("%m-%d %H:%M", time.localtime(ts)) if ts > 0 else ""
-                ut = (t.get("user_text") or "").strip()[:50]
-                if ut:
-                    materials["traces"].append(f"对话「{ut}」（{hint}）")
-                else:
-                    materials["traces"].append(f"场景「{sc}」动作「{ac}」→ {ok}（{hint}）")
-        except Exception:
-            pass
-        try:
-            if self.wm is not None:
-                s = self.wm.wm_dialog_summary()
-                if s and s != "（无）":
-                    materials["wm"] = s[:200]
-        except Exception:
-            pass
-        return materials
-
-    def _llm_answer(self, text: str) -> Optional[str]:
-        """本地模型兜底：基于 7Tan 自己的记忆材料生成回答；失败返回 None（降级）。"""
-        if self.local_llm is None:
-            logger.warning("本地LLM未挂载（local_llm=None），本次降级为纯算法")
-            return None
-        if not self.local_llm.is_available():
-            now = time.monotonic()
-            # TTL 锁：30 秒内只尝试拉起一次（避免每次消息都阻塞等待）；超时后允许重新尝试，服务晚起也能被感知
-            if self._llm_launch_tried and (now - self._llm_launch_ts) < 30.0:
-                logger.info("本地LLM服务不可用且30秒内已尝试过拉起，本次降级")
+            from ..tools.registry import execute_tool
+            result = execute_tool(name, args or {})
+            if result is None:
                 return None
-            self._llm_launch_tried = True
-            self._llm_launch_ts = now
-            if not self.local_llm.ensure_server():
-                logger.warning("本地LLM服务拉起失败，本次降级为纯算法")
+            s = str(result)
+            if s.startswith("❌"):
                 return None
-        materials = self._collect_memory_materials(text)
-        sys_prompt = LocalLLMBridge.build_system_prompt(materials)
-        try:
-            reply = self.local_llm.generate(text, sys_prompt)
+            return s
         except Exception as e:
-            logger.warning(f"本地LLM生成异常（降级）: {e}")
+            logger.warning(f"🔧 7Tan模型工具调用异常 {name}: {e}")
             return None
-        if not reply:
+
+    def _wrap_tool_reply(self, source: str, content: str) -> str:
+        """把工具真实返回结果包装成主模型回答（截断防爆，注明工具来源）。"""
+        MAX_LEN = 1600
+        body = content if len(content) <= MAX_LEN else content[:MAX_LEN] + chr(10) + "……（结果较长，已截断）"
+        return chr(10).join([
+            f"🔧 这个问题我不在记忆里硬猜——我调用了「{source}」工具实时查证：",
+            "",
+            body,
+            "",
+            "（以上是工具返回的真实信息，不是我编的。需要进一步处理可以继续告诉我。）",
+        ])
+
+    def _try_tool_answer(self, text: str):
+        """主模型工具增强层：多工具协同 + 智能降级 + 搜索引擎兜底（不再「命中即停」）。
+
+        流程：
+          1. 本地时间（零工具，直接返回）
+          2. 识别意图，收集【所有】候选工具调用
+          3. 逐个执行，收集有效结果
+          4. 资源库查空 → 降级联网搜索；无工具命中 → 联网搜索兜底
+          5. 整合结果返回；清洗不出查询词才返回 None（走诚实承认）
+        """
+        t = (text or "").strip()
+        if not t:
             return None
-        return "🧠（本地模型基于我的记忆生成）\n" + reply
+        low = t.lower()
+        try:
+            # 1) 本地时间/日期（零工具，直接系统时间）
+            if re.search(r"(几点|时间|日期|星期几|几号|现在.*点)", t) and not any(k in t for k in ("你", "我", "耗时", "上线", "运行")):
+                now = time.strftime("%Y-%m-%d %H:%M:%S")
+                wd = {"Mon": "一", "Tue": "二", "Wed": "三", "Thu": "四",
+                      "Fri": "五", "Sat": "六", "Sun": "日"}.get(time.strftime("%a"), "?")
+                return f"🕐 现在是 {now}，星期{wd}（本机系统时间，真实可靠）。"
+
+            # 2) 收集候选工具调用（一个请求可能触发多个工具，命中不再立即返回）
+            calls = []  # (source_label, tool_name, args_dict)
+
+            # 2.1 新闻/资讯类
+            if any(k in t for k in ("新闻", "资讯", "最新消息", "行业动态", "新游", "发生了什么")):
+                topic = "游戏"
+                m = re.search(r"(游戏|手游|Steam|steam|AI|人工智能|科技|财经|数码)", t)
+                if m:
+                    topic = m.group(1)
+                calls.append(("新闻资讯", "fetch_news", {"topic": topic, "count": 5}))
+
+            # 2.2 游戏/软件资源类（查本地资源库）
+            if any(k in t for k in ("游戏", "软件", "资源", "下载", "应用", "app")):
+                kw = re.sub(r"[？?，。、的有什么哪些推荐一下介绍给我看看帮我找]|(游戏|软件|资源|下载|应用|app|有|吗|呢|么|啥|什么|最新|好玩)", "", t)
+                kw = (kw or "").strip()[:20]
+                if len(kw) < 2:
+                    kw = t[:20]
+                calls.append(("7Tan资源库", "db_query_resources", {"keyword": kw, "limit": 5}))
+
+            # 2.3 目录/文件统计类
+            if any(k in t for k in ("统计", "列出", "看看", "查看", "数一数", "有几个文件")) and re.search(r"(目录|文件夹|文件|路径)", t):
+                root = Path(__file__).resolve().parent.parent.parent
+                dir_part = ""
+                for seg in re.split(r"[，。；;、]+", t):
+                    for token in seg.split():
+                        if ":" in token:
+                            cand = Path(token)
+                            if cand.exists() and cand.is_dir():
+                                dir_part = str(cand)
+                                break
+                    if dir_part:
+                        break
+                if not dir_part:
+                    if "data" in low:
+                        dir_part = str(root / "data")
+                    elif "下载" in t:
+                        dir_part = str(root / "downloads")
+                    elif "tmp" in low:
+                        dir_part = str(root / "tmp")
+                    else:
+                        dir_part = str(root / "data")
+                calls.append(("文件系统", "list_files", {"directory": dir_part}))
+
+            # 3) 逐个执行，收集有效结果（不再命中即停）
+            results = []          # [(source_label, content)]
+            resource_empty = False
+            for source, name, args in calls:
+                res = self._call_tool_safe(name, args)
+                if not res or not res.strip():
+                    continue
+                if name == "db_query_resources" and self._is_empty_db_result(res):
+                    resource_empty = True   # 资源库查空，标记待降级
+                    continue
+                results.append((source, res))
+
+            # 4) 有有效结果 → 整合返回
+            if results:
+                return self._merge_tool_replies(results)
+
+            # 5) 资源库查空 / 无任何工具命中 → 联网搜索兜底（仅疑问句或明确搜索任务才搜，陈述句/闲聊不搜）
+            if resource_empty or self._is_question(t) or any(k in t for k in ("搜索", "搜一下", "查一下", "找一下", "是什么", "怎么回事", "介绍", "推荐", "帮我找", "帮我查")):
+                query = self._clean_search_query(t)
+                if query:
+                    res = self._call_tool_safe("web_search", {"query": query, "num_results": 5})
+                    if res:
+                        src = "联网搜索（资源库无记录，已自动转搜索）" if resource_empty else "联网搜索"
+                        return self._wrap_tool_reply(src, res)
+            return None
+        except Exception as e:
+            logger.warning(f"🔧 7Tan模型工具增强异常（忽略，不影响回复）: {e}")
+            return None
+
+    def _is_empty_db_result(self, res: str) -> bool:
+        """判断 db_query_resources 是否返回空结果（资源库无记录）。"""
+        if not res:
+            return True
+        return any(k in res for k in ("没有符合条件的资源", "📭", "没有找到", "暂无", "无结果", "0 条"))
+
+    def _clean_search_query(self, text: str) -> str:
+        """把用户口语/祈使句清洗成搜索引擎可用的核心查询词。
+
+        去掉：客套前缀（帮我/请/麻烦…）、疑问引导词（是什么/怎么/为什么…）、
+        句末语气词（吗/呢/啊/？…）。保留核心名词与主题。清洗不出有效词则返回空串。
+        """
+        q = (text or "").strip()
+        if not q:
+            return ""
+        # 去祈使/客套前缀（长的在前，避免只匹配到「帮我」留下「找一下」）
+        q = re.sub(r"^(帮我找一下|帮我查一下|帮我搜一下|帮我查查|帮我查|帮我搜|帮我找|帮我|麻烦你|麻烦|请你|请|给我|替我|查找一下|查一下|搜一下|找一下|搜索一下|查询一下|搜索|查找|看看|请问|问一下|我想知道|我想问|告诉我|说说|介绍一下|推荐一下|给我推荐|来一个|来个|想知道|问下)", "", q)
+        # 去句末标点
+        q = re.sub(r"[？?。！!，,、；;：:]+$", "", q)
+        # 去句末语气词
+        q = re.sub(r"(?<!什)(吗|呢|么|啊|呀|吧|哦|哈|呗|啦|咯|喔)+$", "", q)
+        # 去开头的疑问引导词
+        q = re.sub(r"^(什么是|是什么|是谁|为什么|为啥|为何|怎么样|怎么|如何|能不能|可不可以|会不会|是不是|有没有|有哪些|哪里|哪儿|多少|几点|几号|干嘛|干吗)", "", q)
+        # 去首尾残留的助词/标点
+        q = q.strip(" ？?。，,、 ")
+        if len(q) < 2:
+            return ""
+        return q[:60]
+
+    def _merge_tool_replies(self, results: list) -> str:
+        """整合多个工具的返回结果为一个回答（多工具协同，择优输出）。"""
+        if not results:
+            return ""
+        if len(results) == 1:
+            return self._wrap_tool_reply(results[0][0], results[0][1])
+        # 多工具结果合并
+        lines = ["🔧 这个问题我不在记忆里硬猜——我同时调用了多个工具查证，综合结果如下：", ""]
+        for idx, (source, content) in enumerate(results, 1):
+            body = content if len(content) <= 700 else content[:700] + "……（截断）"
+            lines.append(f"【{idx}】{source}：")
+            lines.append(body)
+            lines.append("")
+        lines.append("（以上是工具返回的真实信息，不是我编的。）")
+        return "\n".join(lines)
 
     def _honest_unknown(self, text: str) -> str:
         """未识别请求时的诚实回应：不编、不强行推演。"""
         return chr(10).join([
-            "🤖 我诚实说：这句话我没听懂，也不在我的记忆范围里——我不会硬答。",
+            "🤖 我诚实说：这句话不在我的记忆里——我已经先试过调用工具查证，没查到可靠答案，所以诚实告诉你：我不会硬答。",
             "",
-            "我只会三件事：",
+            "我能做的（含实时工具查证）：",
             "  · 自述：你是谁 / 你记得什么 / 你什么感觉 / 你会什么",
             "  · 推演：给我「场景 + 动作」，比如「游戏菜单里点击」",
             "  · 学习：你说「记录 场景=xx 动作=yy 结果=成功/失败」",
@@ -662,7 +783,9 @@ class TanModel:
         """判断输入是否为疑问句（含疑问标记或疑问词开头）"""
         if any(m in text for m in ("？", "?", "吗", "呢", "么", "怎么", "为什么",
                                    "能不能", "可不可以", "如何", "哪来", "哪",
-                                   "是什么", "是谁", "会不会", "干嘛", "干吗", "多少", "几次")):
+                                   "是什么", "是谁", "会不会", "干嘛", "干吗", "多少", "几次",
+                                   "几个", "哪些", "有哪些", "有没有", "是不是", "啥",
+                                   "多远", "多久", "多大", "几大")):
             return True
         head = text[:2]
         if head in ("你", "怎么", "为什么", "如何", "哪", "什么", "谁", "为何", "为啥"):
@@ -672,13 +795,6 @@ class TanModel:
             return True
         return False
 
-    @staticmethod
-    def _is_memory_question(text: str) -> bool:
-        """判断是否为「关于我们聊过什么/你记得什么」的记忆类问题（走真实记忆检索）"""
-        memory_markers = ("我们聊", "聊过", "你说过", "你之前说", "之前说", "刚才",
-                          "上面", "你答", "对话", "原文", "记得", "记忆", "经历",
-                          "你还知道", "你认识", "你学过", "你说", "你回过", "回答过")
-        return any(m in text for m in memory_markers)
 
     def _fallback_question(self, text: str) -> str:
         """疑问句但未命中任何意图时的兜底引导"""
@@ -736,22 +852,34 @@ class TanModel:
                         lines.append(f"🤔 我检索了工作记忆：最近你跟我说的是「{last_user[:60]}」。")
         # —— 检索2：长期记忆轨迹（关键词重叠） ——
         hits = self._search_memory_by_keywords(text)
+        weak_memory = []   # 弱相关痕迹（只重叠1个词，疑似撞词），存下待工具查证后整合
         if hits:
-            lines.append("📚 我在长期记忆里找到了相关的经历：")
-            for h in hits[:2]:
-                sc, ac = h.get("scene", "?"), h.get("action", "?")
-                ok = "成功" if h.get("action_finished") else "失败"
-                ts_hint = h.get("ts_hint", "")
-                lines.append(f"   · 场景「{sc}」动作「{ac}」—— {ok}（{ts_hint}）")
-            lines.append("")
-            lines.append("这是我真实经历过的，不是编的。你可以让我再推演一次：")
-            lines.append(f"  「{hits[0].get('scene', '?')}里{hits[0].get('action', '?')}」")
-            return "\n".join(lines)
-        # —— 检索2.4：本地 LLM 兜底（常识/闲聊优先用大脑，避免翻旧账；「我们聊过什么」类问题除外） ——
-        if not any(k in text for k in ("我们聊", "你说过", "之前说", "刚才", "上面", "你答", "对话", "聊过")):
-            llm_reply = self._llm_answer(text)
-            if llm_reply:
-                return llm_reply
+            strong = hits[0].get("_overlap", 0) >= 2
+            if strong:
+                lines.append("📚 我在长期记忆里找到了相关的经历：")
+                for h in hits[:2]:
+                    sc, ac = h.get("scene", "?"), h.get("action", "?")
+                    ok = "成功" if h.get("action_finished") else "失败"
+                    ts_hint = h.get("ts_hint", "")
+                    lines.append(f"   · 场景「{sc}」动作「{ac}」—— {ok}（{ts_hint}）")
+                lines.append("")
+                lines.append("这是我真实经历过的，不是编的。你可以让我再推演一次：")
+                lines.append(f"  「{hits[0].get('scene', '?')}里{hits[0].get('action', '?')}」")
+                return "\n".join(lines)
+            # 弱相关：不阻塞，先走工具查证，再把记忆痕迹一起整合给用户
+            weak_memory = hits[:2]
+        # —— 检索2.4：工具增强 —— 记忆未命中/弱相关时，调用工具实时查证（知识/新闻/文件/联网搜索）
+        tool_reply = self._try_tool_answer(text)
+        if tool_reply:
+            if weak_memory:
+                logger.info("🌍 7Tan模型 → 记忆弱相关，工具查证 + 记忆痕迹整合")
+                hint = "\n".join(
+                    f"   · 场景「{h.get('scene', '?')}」动作「{h.get('action', '?')}」" for h in weak_memory
+                )
+                return ("📚 我记忆里只有零星相关的痕迹（不够确定，所以我又上网查了）：\n"
+                        + hint + "\n\n" + tool_reply)
+            logger.info("🌍 7Tan模型 → 记忆轨迹未命中，转工具实时查证")
+            return tool_reply
         # —— 检索2.5：对话内容检索（在 user_text/reply 原文里找关键词，回答「我们聊过什么」） ——
         c_hits = self.memory.search_content(text)
         if c_hits:
@@ -799,6 +927,8 @@ class TanModel:
             action = str(t.get("action", ""))
             if scene == "dialog":     # 对话经验是「说话经历」，不参与场景推演检索
                 continue
+            if scene.startswith("tool:"):  # 工具调用轨迹是「我用过什么工具」的记录，不是知识/答案，不当作问题答案返回
+                continue
             overlap = sum(1 for w in words if w in scene or scene in w or w in action or action in w)
             if overlap > 0:
                 item = dict(t)
@@ -807,6 +937,8 @@ class TanModel:
                 item["_overlap"] = overlap
                 scored.append(item)
         scored.sort(key=lambda x: (-x["_overlap"], -float(x.get("weight_eff", 1.0))))
+        if scored:
+            self._bump_memory_hit(scored[0].get("scene"), scored[0].get("action"), 0.05)
         return scored[:3]
 
     def _parse_scene_action(self, text):

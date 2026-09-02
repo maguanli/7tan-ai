@@ -178,6 +178,51 @@ def get_tool(name: str) -> Tool:
     return TOOL_REGISTRY.get(name)
 
 
+def _feed_tan_model(tool_name: str, args: dict, success: bool) -> None:
+    """把工具真实执行结果回写给 7Tan 模型记忆库（方案B：主系统数据自动成为训练数据）。
+
+    场景 = "tool:<工具名>"，动作 = 参数摘要（只存键名 + 短值，避免大内容进记忆）。
+    全部异常静默，绝不影响主流程（学习是副产物，不是依赖）。
+    """
+    try:
+        from src.agent.world_model import get_tan_model
+        model = get_tan_model()
+        parts = []
+        for k, v in (args or {}).items():
+            s = "" if v is None else str(v)
+            parts.append(f"{k}={s[:40]}" + ("…" if len(s) > 40 else ""))
+        action = (",".join(parts))[:120] or "run"
+        scene = f"tool:{tool_name}"
+        model.memory.add_trace(
+            scene=scene,
+            action=action,
+            finished=bool(success),
+            changed=False,
+            reduced=False,
+            gained=True,  # 每次真实执行都是经验
+        )
+        # 只有模型此前对该场景（scene=动作摘要的任一预测）有过预测 → 才触发完整闭环
+        # 否则只入库不闭环，避免 PE 历史被无对照的满误差污染
+        try:
+            preds = getattr(model, "_last_predictions", {}) or {}
+            has_pred = any(str(k[0]) == scene for k in preds)
+            if has_pred and hasattr(model, "_selflearn_after_record"):
+                model._last_record = model.memory.traces[-1]
+                extra = model._selflearn_after_record()
+                if extra:
+                    logger.debug(f"🧠 7Tan模型闭环（工具 {tool_name}）: {extra.splitlines()[0][:60]}")
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _result_is_error(result) -> bool:
+    """业务失败检测：工具返回以 ❌ 开头的错误字符串（项目内失败约定），
+    或返回 None（视为完成但无内容）。"""
+    return isinstance(result, str) and result.startswith("❌")
+
+
 def execute_tool(name: str, args: dict) -> str:
     """执行工具并返回结果字符串。
     """
@@ -196,7 +241,9 @@ def execute_tool(name: str, args: dict) -> str:
 
     try:
         result = func(**args)
+        _feed_tan_model(name, args, not _result_is_error(result))
         return str(result) if result is not None else "✅ 完成"
     except Exception as e:
+        _feed_tan_model(name, args, False)
         logger.error(f"❌ 工具执行失败 {name}: {e}")
         return f"❌ 工具执行失败: {e}"

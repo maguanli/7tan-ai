@@ -1,0 +1,89 @@
+{
+  "module": "G",
+  "name": "ToolRegistry 工具注册表",
+  "generated": "2026-09-02",
+  "total": 57,
+  "categories": {
+    "7坛社区采集发布": [
+      {"name": "browse_page", "desc": "打开网页并获取页面内容摘要(含文字/链接/图片URL)", "scene": "浏览源站详情页、列表页", "risk": 1, "dep": "源站浏览器"},
+      {"name": "click_element", "desc": "在浏览器中点击指定元素", "scene": "导航、翻页、触发下载", "risk": 1, "dep": "源站浏览器"},
+      {"name": "find_download_links", "desc": "在当前页面查找下载链接(APK/IPA/ZIP等)", "scene": "从下载站定位真实下载URL", "risk": 1, "dep": "源站浏览器"},
+      {"name": "download_file", "desc": "下载文件到本地,支持断点续传", "scene": "下载游戏包/软件包", "risk": 1, "dep": "网络"},
+      {"name": "db_check_duplicate", "desc": "按源站ID检查资源是否已存在", "scene": "采集前去重", "risk": 1, "dep": "数据库"},
+      {"name": "db_save_resource", "desc": "保存资源信息到数据库", "scene": "采集后入库", "risk": 1, "dep": "数据库"},
+      {"name": "db_add_task_log", "desc": "记录任务日志(browse/download/rewrite/upload/publish)", "scene": "任务状态追踪", "risk": 1, "dep": "数据库"},
+      {"name": "oss_upload", "desc": "上传文件到云存储,返回外链URL", "scene": "包体上云、图片上云", "risk": 1, "dep": "OSS"},
+      {"name": "publish_to_7tan", "desc": "发布资源到7坛(自动填表、上传LOGO/截图、提交)", "scene": "最终发布", "risk": 1, "dep": "管理后台"},
+      {"name": "api_publish_to_7tan", "desc": "通过API发布资源到7坛(比浏览器自动化更快)", "scene": "最终发布(API方式)", "risk": 1, "dep": "API"}
+    ],
+    "浏览器/网页工具": [
+      {"name": "use_source_browser", "desc": "切换到源站浏览器", "scene": "在游戏源站操作前", "risk": 1, "dep": "浏览器"},
+      {"name": "use_admin_browser", "desc": "切换到管理后台浏览器", "scene": "在7坛后台操作前", "risk": 1, "dep": "浏览器"},
+      {"name": "screenshot", "desc": "对当前页面截图保存到本地", "scene": "留证、检查页面", "risk": 1, "dep": "浏览器"},
+      {"name": "get_page_images", "desc": "获取当前页面所有图片URL", "scene": "提取游戏LOGO/截图", "risk": 1, "dep": "浏览器"},
+      {"name": "extract_logo", "desc": "自动识别并下载LOGO/图标", "scene": "获取游戏图标", "risk": 1, "dep": "浏览器"},
+      {"name": "auto_screenshot", "desc": "自动截取高质量预览图", "scene": "获取游戏详情页截图", "risk": 1, "dep": "浏览器"},
+      {"name": "browser_exec_js", "desc": "在页面执行JavaScript", "scene": "填表、读DOM、触发事件", "risk": 2, "dep": "浏览器"},
+      {"name": "browser_set_value", "desc": "设置输入框的值(兼容React)", "scene": "填表", "risk": 1, "dep": "浏览器"},
+      {"name": "login_7tan", "desc": "登录7坛管理后台", "scene": "后台操作前", "risk": 2, "dep": "浏览器"}
+    ],
+    "本地文件/文档": [
+      {"name": "list_files", "desc": "列出目录下所有文件", "scene": "查看下载目录", "risk": 1, "dep": "无"},
+      {"name": "read_file_content", "desc": "读取文件内容(文本/JSON)", "scene": "读取文档、日志、配置", "risk": 1, "dep": "无"},
+      {"name": "write_file", "desc": "写入文件(文本/二进制)", "scene": "生成脚本、导出TXT", "risk": 1, "dep": "无"},
+      {"name": "delete_file", "desc": "删除本地文件或目录", "scene": "清理临时文件", "risk": 3, "dep": "无"},
+      {"name": "file_replace", "desc": "对文本文件批量字符串替换", "scene": "批量修改配置/代码", "risk": 2, "dep": "无"},
+      {"name": "compress_image", "desc": "压缩图片(LOGO/截图)", "scene": "减小图片体积", "risk": 1, "dep": "无"}
+    ],
+    "脚本生成/执行": [
+      {"name": "sandbox_execute", "desc": "在安全沙盒执行Python脚本(30秒超时)", "scene": "验证自生代码、跑算法", "risk": 2, "dep": "沙盒"},
+      {"name": "run_shell_script", "desc": "执行Shell脚本", "scene": "批量命令、自动化", "risk": 3, "dep": "Shell"},
+      {"name": "run_command", "desc": "执行任意shell命令", "scene": "构建、运行脚本文件", "risk": 3, "dep": "Shell"},
+      {"name": "write_file+run_command", "desc": "先写脚本文件再运行(标准ScriptGenerator流程)", "scene": "多步骤/循环/批量任务", "risk": 2, "dep": "Shell"}
+    ],
+    "桌面自动化": [
+      {"name": "desktop_see", "desc": "看懂屏幕(截图+OCR+视觉理解)", "scene": "查看桌面状态", "risk": 1, "dep": "桌面"},
+      {"name": "desktop_ocr", "desc": "屏幕OCR识别文字", "scene": "读取界面文字", "risk": 1, "dep": "桌面"},
+      {"name": "desktop_click_text", "desc": "按文字定位点击", "scene": "操作按钮/菜单", "risk": 2, "dep": "桌面"},
+      {"name": "desktop_type_text", "desc": "向焦点输入文本", "scene": "输入内容", "risk": 1, "dep": "桌面"},
+      {"name": "desktop_send_chat", "desc": "聊天软件自动发消息(带防发错闸门)", "scene": "微信/QQ发消息", "risk": 2, "dep": "桌面"},
+      {"name": "desktop_watch", "desc": "桌面连续监控(帧差检测)", "scene": "等弹窗、盯进度", "risk": 1, "dep": "桌面"}
+    ],
+    "自我进化/安全": [
+      {"name": "memory_store", "desc": "存储知识/记忆到持久化存储", "scene": "沉淀经验", "risk": 1, "dep": "记忆库"},
+      {"name": "memory_recall", "desc": "检索已存储的记忆", "scene": "回忆经验", "risk": 1, "dep": "记忆库"},
+      {"name": "self_update_prompt", "desc": "更新系统提示词/子任务模板", "scene": "自我优化", "risk": 4, "dep": "核心"},
+      {"name": "self_modify_config", "desc": "修改配置文件(config.yaml)", "scene": "调整参数", "risk": 4, "dep": "核心"},
+      {"name": "create_plugin", "desc": "动态创建新插件扩展能力", "scene": "自我扩展", "risk": 4, "dep": "核心"},
+      {"name": "self_rebuild", "desc": "重新构建打包整个项目", "scene": "源码改动后", "risk": 5, "dep": "构建"},
+      {"name": "self_restart", "desc": "自动重启应用程序", "scene": "构建后重启", "risk": 4, "dep": "核心"},
+      {"name": "verify_integrity", "desc": "验证自身文件SHA-256完整性", "scene": "安全自检", "risk": 1, "dep": "核心"},
+      {"name": "check_sensitive_words", "desc": "检查文本敏感词", "scene": "发布前审核", "risk": 1, "dep": "审核"},
+      {"name": "check_content_quality", "desc": "检查内容质量(简介长度/截图数)", "scene": "发布前质检", "risk": 1, "dep": "审核"}
+    ],
+    "内容创作/AI": [
+      {"name": "web_search", "desc": "搜索互联网获取资讯", "scene": "查攻略/评测/新闻", "risk": 1, "dep": "网络"},
+      {"name": "fetch_news", "desc": "获取游戏行业新闻", "scene": "了解行业动态", "risk": 1, "dep": "网络"},
+      {"name": "translate_text", "desc": "英文翻译为中文", "scene": "翻译Steam商店描述", "risk": 1, "dep": "翻译"},
+      {"name": "cloud_write_intro", "desc": "深度模式撰写游戏发布简介(HTML)", "scene": "写发布文案", "risk": 1, "dep": "云端AI"},
+      {"name": "analyze_game", "desc": "深度分析游戏生成结构化报告", "scene": "写推荐文章", "risk": 1, "dep": "云端AI"},
+      {"name": "compare_games", "desc": "对比两款游戏差异", "scene": "竞品对比文章", "risk": 1, "dep": "云端AI"},
+      {"name": "summarize_reviews", "desc": "汇总用户评价提取正负面主题", "scene": "评价分析", "risk": 1, "dep": "云端AI"}
+    ],
+    "开发/运维": [
+      {"name": "git_*", "desc": "Git全套: status/diff/commit/push/pull/branch", "scene": "版本管理", "risk": 2, "dep": "Git"},
+      {"name": "docker_*", "desc": "Docker: ps/images/compose/logs/build", "scene": "容器运维", "risk": 3, "dep": "Docker"},
+      {"name": "kubectl_*", "desc": "K8s: get/apply/logs/exec/scale等", "scene": "集群运维", "risk": 4, "dep": "K8s"},
+      {"name": "run_tests", "desc": "自动检测并运行项目测试", "scene": "测试验证", "risk": 1, "dep": "pytest等"},
+      {"name": "code_review_file", "desc": "单文件静态分析与质量审查", "scene": "代码审查", "risk": 1, "dep": "分析器"}
+    ],
+    "特色扩展": [
+      {"name": "gzh_full_flow", "desc": "公众号发布全流程(填标题/正文/摘要/封面/存草稿)", "scene": "公众号发文", "risk": 2, "dep": "桌面"},
+      {"name": "viral_topic/title/outline/write", "desc": "爆款内容生成套件", "scene": "自媒体选题/标题/大纲/正文", "risk": 1, "dep": "云端AI"},
+      {"name": "novel_quality_check", "desc": "番茄小说质检引擎", "scene": "小说发布前自查", "risk": 1, "dep": "分析器"},
+      {"name": "ltz_*", "desc": "龙头识别/情绪温度计/复盘/模拟交易", "scene": "股票分析", "risk": 3, "dep": "行情API"},
+      {"name": "iching_*", "desc": "易经占卦/查卦/每日一卦", "scene": "传统文化问答", "risk": 1, "dep": "无"},
+      {"name": "sunzi_*", "desc": "孙子兵法问答/推演/每日兵法", "scene": "谋略咨询", "risk": 1, "dep": "无"}
+    ]
+  }
+}

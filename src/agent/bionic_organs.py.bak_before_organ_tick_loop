@@ -1,0 +1,336 @@
+from dataclasses import dataclass
+from typing import Callable, Dict, Any, Optional, List
+
+# ====================== 基础数据结构 仿生器官框架 ======================
+@dataclass
+class BionicOrgan:
+    organ_code: str
+    organ_name: str
+    module_name: str
+    bio_analogy: str
+    enabled: bool
+    tick_func: Optional[Callable]
+    config: Dict[str, Any]
+
+# 全局器官注册表
+organ_registry: Dict[str, BionicOrgan] = {}
+
+def register_organ(org: BionicOrgan):
+    organ_registry[org.organ_code] = org
+
+def get_organ(code: str) -> Optional[BionicOrgan]:
+    return organ_registry.get(code)
+
+def organ_tick_all():
+    """系统主循环，驱动所有已开启器官执行tick"""
+    for code, org in organ_registry.items():
+        if org.enabled and org.tick_func is not None:
+            org.tick_func()
+
+# ====================== ORG?A 海马体?长期记忆器官 ModuleA ======================
+memory_library: List[Dict[str, Any]] = []
+
+def module_a_tick():
+    """记忆生命周期：权重衰减、冷热记忆自动维护"""
+    for mem in memory_library:
+        # 权重衰减逻辑
+        mem["weight_eff"] = max(0.0, mem["weight_eff"] - 0.001)
+
+def register_organ_a():
+    register_organ(BionicOrgan(
+        organ_code="ORG?A",
+        organ_name="海马体?长期记忆器官",
+        module_name="ModuleA",
+        bio_analogy="海马+大脑皮层，冷热记忆管理",
+        enabled=True,
+        tick_func=module_a_tick,
+        config={}
+    ))
+
+# ====================== ORG?B 杏仁核?动机驱动器官 ModuleB ======================
+pe_lp_buffer: Dict[str, float] = {"pe":0.0, "lp":0.0}
+
+def module_b_tick():
+    """计算预测误差PE、学习进度LP，生成内生动机"""
+    # 此处为占位，真实需要对比预测与现实观测
+    pass
+
+def register_organ_b():
+    register_organ(BionicOrgan(
+        organ_code="ORG?B",
+        organ_name="杏仁核?动机驱动器官",
+        module_name="ModuleB",
+        bio_analogy="杏仁核、边缘系统，内生动机引擎",
+        enabled=False,
+        tick_func=module_b_tick,
+        config={"ENABLE_PREDICTION_DRIVEN_MOTIVE":False}
+    ))
+
+# ====================== ORG?D 丘脑?安全守护器官 ModuleD ======================
+snapshot_list: List[str] = []
+
+def module_d_tick():
+    """安全底座：监测全局指标，可触发快照回退"""
+    pass
+
+def register_organ_d():
+    register_organ(BionicOrgan(
+        organ_code="ORG?D",
+        organ_name="丘脑?安全守护器官",
+        module_name="ModuleD",
+        bio_analogy="丘脑保护回路，沙盒、git快照回退",
+        enabled=True,
+        tick_func=module_d_tick,
+        config={"ENABLE_7TAN_SELF_CODE_EVOLVE":False}
+    ))
+
+# ====================== ORG?E 前额叶?工作思考器官 ModuleE ======================
+working_memory = {
+    "context_stack": [],
+    "active_goals": [],
+    "intermediate_pe_lp": {},
+    "focus_weight":0.5,
+    "scratch_pad": {}
+}
+
+def wm_push_thought(thought_fragment, focus):
+    max_step = 12
+    if len(working_memory["context_stack"]) >= max_step:
+        working_memory["context_stack"].pop(0)
+    working_memory["context_stack"].append({"thought":thought_fragment,"focus":focus})
+
+def module_e_tick():
+    """E模块主tick：链式推演、目标拆解占位"""
+    pass
+
+def register_organ_e():
+    register_organ(BionicOrgan(
+        organ_code="ORG?E",
+        organ_name="前额叶?工作思考器官",
+        module_name="ModuleE",
+        bio_analogy="前额叶皮层，工作记忆工作台",
+        enabled=False,
+        tick_func=module_e_tick,
+        config={"ENABLE_WORKING_MEMORY":False,"max_context_stack":12}
+    ))
+
+# ====================== ORG?F 脑回?记忆学习器官 ModuleF ======================
+hypothesis_registry: List[Dict[str,Any]] = []
+
+def module_f_tick():
+    """f_selflearn_tick，F模块主循环钩子"""
+    pass
+
+def register_organ_f():
+    register_organ(BionicOrgan(
+        organ_code="ORG?F",
+        organ_name="脑回?记忆学习器官",
+        module_name="ModuleF",
+        bio_analogy="大脑联合皮层，假设验证L1自我学习闭环",
+        enabled=False,
+        tick_func=module_f_tick,
+        config={
+            "ENABLE_L1_MEMORY_SELF_LEARN":False,
+            "HYPO_MIN_TESTS":2,
+            "HYPO_PASS_THRESHOLD":0.6,
+            "HYPO_REJECT_THRESHOLD":0.3,
+            "MEMORY_BUMP_STRENGTH":0.08,
+            "MEMORY_WEAKEN_STRENGTH":0.15
+        }
+    ))
+
+# ====================== ORG?LLM 基底神经?基座内核 ======================
+llm_model_path:str = "./qwen2.5?1.5b?instruct?q4_K_M.gguf"
+
+def module_llm_tick():
+    """调用GGUF大模型生成思考片段占位"""
+    pass
+
+def register_organ_llm():
+    register_organ(BionicOrgan(
+        organ_code="ORG?LLM",
+        organ_name="基底神经?基座内核",
+        module_name="LLM_GGUF",
+        bio_analogy="大脑基底核，语言推理生成内核",
+        enabled=True,
+        tick_func=module_llm_tick,
+        config={"model_path":llm_model_path}
+    ))
+
+# ====================== ORG?VIS 感官?视觉器官 ======================
+vision_buffer = {"frame":None,"features":None}
+
+def module_vis_tick():
+    """屏幕视觉解析占位"""
+    pass
+
+def register_organ_vis():
+    register_organ(BionicOrgan(
+        organ_code="ORG?VIS",
+        organ_name="感官?视觉器官",
+        module_name="VisionEncoder",
+        bio_analogy="视觉皮层，屏幕画面感知",
+        enabled=False,
+        tick_func=module_vis_tick,
+        config={}
+    ))
+
+# ====================== ORG?SPEECH 言语输出器官 ======================
+output_log:List[str] = []
+
+def module_speech_tick():
+    """读取E/F模块，对外输出文字"""
+    pass
+
+def register_organ_speech():
+    register_organ(BionicOrgan(
+        organ_code="ORG?SPEECH",
+        organ_name="言语输出器官",
+        module_name="SpeechGenerator",
+        bio_analogy="布洛卡区，语言输出播报",
+        enabled=True,
+        tick_func=module_speech_tick,
+        config={}
+    ))
+
+# ============ 新增意识内核器官数据结构与tick占位 ============
+
+# ORG?BODYSTATES 躯体稳态器官
+bodystate_buffer = {
+    "fatigue":0.0,        # 疲劳度 0?1
+    "resource_pressure":0.0, # 资源/算力压力
+    "damage_level":0.0,   # 损伤告警等级
+    "internal_signal_queue":[] # 输出信号送往ORG?B动机器官
+}
+def organ_bodystates_tick():
+    """躯体稳态每周期更新，生成内部压力信号推送给ORG?B"""
+    pass
+
+# ORG?VALENCE 情绪效价标签器官
+valence_cache:Dict[str,float] = {} # item_id → valence [-1.0厌恶 … 0中性 … +1.0愉悦]
+def organ_valence_tick():
+    """给记忆、思考片段、假设打上情绪效价标签，影响注意力权重"""
+    pass
+
+# ORG?INHIBIT 冲动抑制调控器官
+inhibit_rule_list:List[Dict[str,Any]] = []
+def organ_inhibit_tick():
+    """扫描ORG?E的active_goals，过滤压制不合理目标"""
+    pass
+
+# ORG?CONSOLIDATE 记忆重放巩固器官
+replay_buffer:List[Any] = []
+def organ_consolidate_tick():
+    """后台记忆重放；把E模块草稿碎片整理，降噪后写入ORG?A；清理过期草稿"""
+    pass
+
+# ORG?TIMESENSE 主观时间感知器官
+subjective_time = {"subjective_clock":0.0,"time_dilation":1.0}
+def organ_timesense_tick():
+    """维护内部主观时间流逝，给记忆附加主观时序信息"""
+    pass
+
+# ORG?SELFMODEL 自我表征器官（路线图待实现）
+self_model_data:Dict[str,Any] = {}
+def organ_selfmodel_tick():
+    """维护“我是谁、我的模块、我的局限”的内部自我模型"""
+    pass
+
+# ORG?SIMULATE 假想预演器官（路线图待实现）
+sim_scenario_pool:List[Dict[str,Any]] = []
+def organ_simulate_tick():
+    """内部虚拟推演试错，不需要现实世界观测反馈"""
+    pass
+
+# ============ 注册新增内核器官 ============
+def register_extra_core_organs():
+    register_organ(BionicOrgan(
+        organ_code="ORG?BODYSTATES",
+        organ_name="躯体稳态器官",
+        module_name="ModuleBodyStates",
+        bio_analogy="下丘脑、内脏传入通路，内部躯体信号源",
+        enabled=False,
+        tick_func=organ_bodystates_tick,
+        config={}
+    ))
+    register_organ(BionicOrgan(
+        organ_code="ORG?VALENCE",
+        organ_name="效价?情绪标签器官",
+        module_name="ModuleValence",
+        bio_analogy="杏仁核、扣带回，情绪效价打分",
+        enabled=False,
+        tick_func=organ_valence_tick,
+        config={}
+    ))
+    register_organ(BionicOrgan(
+        organ_code="ORG?INHIBIT",
+        organ_name="冲动抑制调控器官",
+        module_name="ModuleInhibit",
+        bio_analogy="腹内侧前额叶，目标冲动过滤抑制",
+        enabled=False,
+        tick_func=organ_inhibit_tick,
+        config={}
+    ))
+    register_organ(BionicOrgan(
+        organ_code="ORG?CONSOLIDATE",
+        organ_name="记忆重放巩固器官",
+        module_name="ModuleConsolidate",
+        bio_analogy="海马?皮层睡眠记忆巩固回路",
+        enabled=False,
+        tick_func=organ_consolidate_tick,
+        config={}
+    ))
+    register_organ(BionicOrgan(
+        organ_code="ORG?TIMESENSE",
+        organ_name="主观时间感知器官",
+        module_name="ModuleTimeSense",
+        bio_analogy="顶叶?海马时间编码回路",
+        enabled=False,
+        tick_func=organ_timesense_tick,
+        config={}
+    ))
+    register_organ(BionicOrgan(
+        organ_code="ORG?SELFMODEL",
+        organ_name="自我表征器官",
+        module_name="ModuleSelfModel",
+        bio_analogy="大脑元认知自我表征回路",
+        enabled=False,
+        tick_func=organ_selfmodel_tick,
+        config={}
+    ))
+    register_organ(BionicOrgan(
+        organ_code="ORG?SIMULATE",
+        organ_name="假想预演器官",
+        module_name="ModuleSimulate",
+        bio_analogy="脑内心理模拟、想象推演回路",
+        enabled=False,
+        tick_func=organ_simulate_tick,
+        config={}
+    ))
+    print("?新增7个意识内核器官注册完成")
+
+# ====================== 一次性初始化全部器官 ======================
+def init_all_organs():
+    register_organ_a()
+    register_organ_b()
+    register_organ_d()
+    register_organ_e()
+    register_organ_f()
+    register_organ_llm()
+    register_organ_vis()
+    register_organ_speech()
+    register_extra_core_organs()
+    print("?全部仿生器官注册完成")
+
+# ====================== 示例运行 ======================
+if __name__ == "__main__":
+    init_all_organs()
+    # 开启器官示例
+    org_e = get_organ("ORG?E")
+    if org_e:
+        org_e.enabled = True
+    # 执行一轮全器官tick
+    organ_tick_all()
+    print(f"当前注册器官数量：{len(organ_registry)}")
+    for code,o in organ_registry.items():
+        print(f" - {code:8} | {o.organ_name} | enabled={o.enabled}")

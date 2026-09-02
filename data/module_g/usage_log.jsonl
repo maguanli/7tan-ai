@@ -1,0 +1,17 @@
+{"ts": "2026-09-02 12:35:56", "tool": "list_files", "args": {"path": "."}, "ok": true, "result_head": "✅ 文件列表: a.txt, b.txt"}
+{"ts": "2026-09-02 12:36:02", "tool": "list_files", "args": {"path": "."}, "ok": true, "result_head": "✅ 文件列表: a.txt, b.txt"}
+{"ts": "2026-09-02 12:36:02", "tool": "read_file_content", "args": {"path": "m.txt"}, "ok": true, "result_head": "✅ 内容: 你好，世界"}
+{"ts": "2026-09-02 12:36:02", "tool": "list_files", "args": {}, "ok": true, "result_head": "✅ ok"}
+{"ts": "2026-09-02 12:36:02", "tool": "list_files", "args": {}, "ok": true, "result_head": "✅ ok"}
+{"ts": "2026-09-02 12:36:02", "tool": "list_files", "args": {}, "ok": true, "result_head": "✅ ok"}
+{"ts": "2026-09-02 12:36:02", "tool": "read_file_content", "args": {}, "ok": true, "result_head": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+{"ts": "2026-09-02 12:36:02", "tool": "read_file_content", "args": {}, "ok": false, "result_head": "❌ 工具 read_file_content 执行异常: boom"}
+{"ts": "2026-09-02 12:36:03", "tool": "list_files", "args": {"path": "."}, "ok": true, "result_head": "✅ 文件列表: a.txt, b.txt"}
+{"ts": "2026-09-02 12:36:03", "tool": "read_file_content", "args": {"path": "m.txt"}, "ok": true, "result_head": "✅ 内容: 你好，世界"}
+{"ts": "2026-09-02 12:36:03", "tool": "list_files", "args": {}, "ok": true, "result_head": "✅ ok"}
+{"ts": "2026-09-02 12:36:03", "tool": "list_files", "args": {}, "ok": true, "result_head": "✅ ok"}
+{"ts": "2026-09-02 12:36:03", "tool": "list_files", "args": {}, "ok": true, "result_head": "✅ ok"}
+{"ts": "2026-09-02 12:36:03", "tool": "read_file_content", "args": {}, "ok": true, "result_head": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+{"ts": "2026-09-02 12:36:03", "tool": "read_file_content", "args": {}, "ok": false, "result_head": "❌ 工具 read_file_content 执行异常: boom"}
+{"ts": "2026-09-02 12:54:40", "tool": "list_files", "args": {"directory": "D:\\7tan\\7tanAI\\data"}, "ok": false, "result_head": "❌ 未注入工具执行器，无法执行 list_files"}
+{"ts": "2026-09-02 12:54:55", "tool": "list_files", "args": {"directory": "D:\\7tan\\7tanAI\\data"}, "ok": true, "result_head": "📂 D:\\7tan\\7tanAI\\data (97 个文件/目录):\n\n  📄 .api_token (43.0 B)\n  📄 .encryption_key (44.0 B)\n  📄 .encryption_salt (16.0 B)\n "}

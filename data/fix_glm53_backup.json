@@ -1,0 +1,7 @@
+{
+  "id": 12,
+  "config_key": "GLM-5.3",
+  "old_base_url": "https://api.deepseek.com/v1",
+  "new_base_url": "https://open.bigmodel.cn/api/paas/v4",
+  "fixed_at": "2026-09-02T20:10:34.480032"
+}

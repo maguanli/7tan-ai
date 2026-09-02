@@ -349,6 +349,12 @@ def module_e_tick(ctx=None):
                 action = p.get("action")
                 if scene and action:
                     wm_push_thought(f"replay:{scene}:{action}", 0.5)
+            elif et == "user_input":
+                # 阶段一：外部输入进入工作记忆草稿区（我-非我边界：external 信号）
+                wm_push_thought(f"user:{str(p.get('text', ''))[:40]}", 0.6)
+            elif et == "tool_result":
+                # 阶段一：工具返回结果作为 external 信号进入工作记忆
+                wm_push_thought(f"tool:{str(p.get('tool', ''))}:{str(p.get('summary', ''))[:40]}", 0.5)
         # 2. focus 自然衰减
         working_memory["focus_weight"] = max(0.1, round(float(working_memory.get("focus_weight", 0.5)) * 0.98, 4))
         # 3. scratch_pad 清理
@@ -415,6 +421,10 @@ def module_f_tick(ctx=None):
                             existed[0]["score"] = min(1.0, float(existed[0].get("score", 0.0)) + 0.1)
                         else:
                             hypothesis_registry.append(hypo)
+            elif ev["event_type"] in ("user_input", "tool_result"):
+                # 阶段一：外部信号（用户输入/工具返回）来源统计
+                _origin = str(ev.get("origin", "external"))
+                origin_stats[_origin] = int(origin_stats.get(_origin, 0)) + 1
         # 2. 假设评估（接纳/证伪）
         org = get_organ("ORG-F")
         cfg = org.config if org else {}
@@ -779,37 +789,54 @@ def organ_timesense_tick(ctx=None):
 
 self_model_data: Dict[str, Any] = {}
 
+# 阶段三：周期性增量归纳状态（避免每 tick 全量重算，符合避坑清单第4条）
+_selfmodel_tick_count: int = 0
+_selfmodel_last_trace_count: int = 0
+_selfmodel_accum: Dict[str, Any] = {"succ": 0, "fail": 0, "succ_c": {}, "fail_c": {}}
+SELFMODEL_INDUCT_INTERVAL: int = 30   # 每 30 tick 归纳一次（文档建议 30~100）
+
 
 def organ_selfmodel_tick(ctx=None):
     """自我表征：从记忆库/假设库/动机历史归纳自我模型（无任何硬编码文本）。
 
     阶段三/四落地：产出 confidence（随样本量抬升）与 limitations（持续失败边界），
     随 selfmodel_update 事件广播，供 B / INHIBIT / SIMULATE 参与决策闭环。"""
+    global _selfmodel_tick_count, _selfmodel_last_trace_count, _selfmodel_accum
     try:
+        _selfmodel_tick_count += 1
+        if _selfmodel_tick_count % SELFMODEL_INDUCT_INTERVAL != 0:
+            return   # 非归纳 tick：跳过（避坑：不做每 tick 全量重算）
         traces = getattr(ctx, "traces", None) if ctx is not None else None
         knowledge = getattr(ctx, "knowledge", None) if ctx is not None else None
-        n_traces = len(traces) if traces else 0
-        n_know = len(knowledge) if knowledge else 0
-        # 成功/失败记录（从记忆库归纳）
-        succ = sum(1 for t in (traces or []) if isinstance(t, dict) and t.get("action_finished"))
-        fail = n_traces - succ
-        # 能力边界：从假设库归纳（已验证可成功的 key）
-        abilities = [h.get("key") for h in hypothesis_registry if float(h.get("score", 0.0)) >= 0.6]
-        # 局限边界：从记忆库归纳「持续失败」的 (scene, action)（结构化，无硬编码文本）
-        from collections import Counter
-        succ_c = Counter()
-        fail_c = Counter()
-        for t in (traces or []):
+        if traces is None:
+            return
+        # 记忆被清空（轨迹数回退）→ 重置累积统计
+        if len(traces) < _selfmodel_last_trace_count:
+            _selfmodel_last_trace_count = 0
+            _selfmodel_accum = {"succ": 0, "fail": 0, "succ_c": {}, "fail_c": {}}
+        # 增量：只处理上次归纳之后新增的轨迹
+        new_traces = traces[_selfmodel_last_trace_count:]
+        _selfmodel_last_trace_count = len(traces)
+        for t in new_traces:
             if not isinstance(t, dict):
                 continue
-            key = f"{t.get('scene')}:{t.get('action')}"
             if t.get("action_finished"):
-                succ_c[key] += 1
+                _selfmodel_accum["succ"] += 1
             else:
-                fail_c[key] += 1
+                _selfmodel_accum["fail"] += 1
+            key = f"{t.get('scene')}:{t.get('action')}"
+            bucket = "succ_c" if t.get("action_finished") else "fail_c"
+            _selfmodel_accum[bucket][key] = int(_selfmodel_accum[bucket].get(key, 0)) + 1
+        n_traces = len(traces)
+        n_know = len(knowledge) if knowledge else 0
+        succ = int(_selfmodel_accum["succ"])
+        fail = int(_selfmodel_accum["fail"])
+        # 能力边界：从假设库归纳（已验证可成功的 key）
+        abilities = [h.get("key") for h in hypothesis_registry if float(h.get("score", 0.0)) >= 0.6]
+        # 局限边界：从累积统计归纳「持续失败」的 (scene, action)（结构化，无硬编码文本）
         limitations = []
-        for key, f in fail_c.items():
-            s = succ_c.get(key, 0)
+        for key, f in _selfmodel_accum["fail_c"].items():
+            s = int(_selfmodel_accum["succ_c"].get(key, 0))
             total = f + s
             if total >= 2 and (f / total) >= 0.5:   # 至少2次尝试且失败率≥50%
                 limitations.append({"key": key, "fail_rate": round(f / total, 4), "trials": total})
@@ -1000,6 +1027,11 @@ def _setup_subscriptions():
     subscribe_event("memory_replay", "ORG-E")
     # 模拟结果 → 动机(算PE)
     subscribe_event("simulation_result", "ORG-B")
+    # 外部信号流入（阶段一：我-非我边界——用户输入/工具返回作为 external 事件进入总线）
+    subscribe_event("user_input", "ORG-E")
+    subscribe_event("user_input", "ORG-F")
+    subscribe_event("tool_result", "ORG-E")
+    subscribe_event("tool_result", "ORG-F")
 
 
 # ====================== 一次性初始化全部器官 ======================

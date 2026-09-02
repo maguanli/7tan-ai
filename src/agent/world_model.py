@@ -442,6 +442,12 @@ class TanModel:
         """
         if history:
             self.conversation_history = list(history[-self._history_max:])
+        # ⑥.0 外部信号流入总线（阶段一「我-非我」边界：用户输入 = external 事件）
+        try:
+            from .bionic_organs import emit_event
+            emit_event("user_input", {"text": (user_text or "").strip()}, source="WORLD_MODEL", origin="external")
+        except Exception:
+            pass
         # ① 上下文进入工作记忆
         self._absorb_context(user_text)
         # ② 思考循环
@@ -610,6 +616,17 @@ class TanModel:
             s = str(result)
             if s.startswith("❌"):
                 return None
+            # 外部信号流入总线：工具返回结果 = external 事件（阶段一「我-非我」边界）
+            try:
+                from .bionic_organs import emit_event
+                _q = (args or {}).get("query") or (args or {}).get("keyword") or ""
+                emit_event("tool_result", {
+                    "tool": name,
+                    "query": _q,
+                    "summary": s[:80],
+                }, source="WORLD_MODEL", origin="external")
+            except Exception:
+                pass
             return s
         except Exception as e:
             logger.warning(f"🔧 7Tan模型工具调用异常 {name}: {e}")

@@ -206,12 +206,13 @@ class TanModelMemory:
             })
 
     def add_trace(self, scene, action, finished=True, changed=False,
-                  reduced=False, gained=False, **extra) -> dict:
+                  reduced=False, gained=False, origin="internal", **extra) -> dict:
         rec = {
             "scene": scene, "action": action,
             "action_finished": bool(finished), "scene_changed": bool(changed),
             "defect_reduced": bool(reduced), "knowledge_gained": bool(gained),
             "weight_eff": 1.0, "ts": time.time(),
+            "origin": origin,   # 来源标记：internal=内部推演 / external=用户输入/工具返回
         }
         if extra:
             rec.update(extra)   # 允许携带对话原文等附加字段（供记忆检索展示）

@@ -475,7 +475,13 @@ def module_f_tick(ctx=None):
         # 1. 监听新记忆 → 归纳假设（同时统计来源 origin）
         for ev in poll_events("ORG-F"):
             if ev["event_type"] == "mem_consolidated":
-                for item in ev.get("payload", {}).get("items", []):
+                payload = ev.get("payload", {})
+                if isinstance(payload, dict) and payload.get("thought_fragment"):
+                    # 新结构（伪代码）：思想碎片巩固（单条 thought_fragment）
+                    _origin = str(payload.get("origin", "internal"))
+                    origin_stats[_origin] = int(origin_stats.get(_origin, 0)) + 1
+                    continue
+                for item in payload.get("items", []):
                     scene = item.get("scene")
                     action = item.get("action")
                     if not (scene and action):

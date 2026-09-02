@@ -912,6 +912,8 @@ def organ_selfmodel_tick(ctx=None):
         mem_events = poll_replay_events("mem_consolidated", SAMPLE_MEMORY_COUNT)
         hypo_events = poll_replay_events("hypothesis_update", SAMPLE_HYPOTHESIS_COUNT)
         motive_events = poll_replay_events("candidate_motives", 80)
+        final_goal_events = poll_replay_events("final_goals", 80)
+        pe_events = poll_replay_events("pe_update", 60)
         body_events = poll_replay_events("bodystate_update", 60)
         subj_time_event = poll_latest_event("subjective_tick")
         if subj_time_event is None:
@@ -922,24 +924,35 @@ def organ_selfmodel_tick(ctx=None):
         evidence_count = len(mem_events) + len(hypo_events)
         succ_map: Dict[str, List[bool]] = {}   # key -> 成败序列
         hist_sum = {"total_goal": 0, "total_success": 0, "total_fail": 0}
+        origin_dist: Dict[str, int] = {"internal": 0, "external": 0}
 
-        # 2-1 记忆样本统计：基于记忆条目成败统计能力/局限
+        # 2-1 记忆样本统计：CONSOLIDATE 新结构（单条 thought_fragment），从 goal_tag+success 提取，
+        #     兼容旧 items/scene/action 结构，并按 focus 取高权重自传记忆，区分 origin。
+        mem_samples: List[Dict[str, Any]] = []
         for evt in mem_events:
-            for mem in evt.get("payload", {}).get("items", []):
-                if not isinstance(mem, dict):
-                    continue
-                scene = mem.get("scene")
-                action = mem.get("action")
-                if not (scene and action):
-                    continue
-                key = f"{scene}:{action}"
-                ok = bool(mem.get("action_finished", False))
-                hist_sum["total_goal"] += 1
-                if ok:
-                    hist_sum["total_success"] += 1
-                else:
-                    hist_sum["total_fail"] += 1
-                succ_map.setdefault(key, []).append(ok)
+            payload = evt.get("payload", {})
+            if not isinstance(payload, dict):
+                continue
+            if payload.get("thought_fragment") is not None or "goal_tag" in payload:
+                mem_samples.append(payload)        # 新结构：单条记忆
+            else:
+                for mem in payload.get("items", []):   # 旧结构：items 包裹（向后兼容）
+                    if isinstance(mem, dict):
+                        mem_samples.append(mem)
+        mem_samples.sort(key=lambda m: float(m.get("focus", 0.0)), reverse=True)
+        for mem in mem_samples[:SAMPLE_MEMORY_COUNT]:
+            key = str(mem.get("goal_tag") or "").strip()
+            if not key:
+                continue
+            ok = bool(mem.get("success", mem.get("action_finished", False)))
+            hist_sum["total_goal"] += 1
+            if ok:
+                hist_sum["total_success"] += 1
+            else:
+                hist_sum["total_fail"] += 1
+            succ_map.setdefault(key, []).append(ok)
+            o = str(mem.get("origin", "internal"))
+            origin_dist[o] = int(origin_dist.get(o, 0)) + 1
 
         # 2-2 假设样本：accepted 假设视为已验证能力（补充 capability）
         for evt in hypo_events:
@@ -972,6 +985,11 @@ def organ_selfmodel_tick(ctx=None):
                     tag = mot.get("goal") or mot.get("motive_tag")
                     if tag:
                         motive_counter[str(tag)] = int(motive_counter.get(str(tag), 0)) + 1
+        # 最终执行目标（ORG-INHIBIT 产出）频次并入 preferred_motives
+        for evt in final_goal_events:
+            for g in evt.get("payload", {}).get("goals", []):
+                if g:
+                    motive_counter[str(g)] = int(motive_counter.get(str(g), 0)) + 1
         new_preferred = [
             {"motive_tag": tag, "occur_count": cnt}
             for tag, cnt in sorted(motive_counter.items(), key=lambda x: -x[1])
@@ -985,6 +1003,13 @@ def organ_selfmodel_tick(ctx=None):
             body_stats["fatigue_avg"] = round(sum(fatigue_list) / len(fatigue_list), 4)
         if rp_list:
             body_stats["resource_pressure_avg"] = round(sum(rp_list) / len(rp_list), 4)
+        # PE / LP 预测误差统计（ORG-B 产出 pe_update 事件，阶段三数据源）
+        pe_list = [float(evt.get("payload", {}).get("pe", 0.0)) for evt in pe_events]
+        lp_list = [float(evt.get("payload", {}).get("lp", 0.0)) for evt in pe_events]
+        if pe_list:
+            body_stats["pe_avg"] = round(sum(pe_list) / len(pe_list), 4)
+        if lp_list:
+            body_stats["lp_avg"] = round(sum(lp_list) / len(lp_list), 4)
 
         # ========== 步骤3：计算自我模型置信度（证据越少越低，模拟幼儿自我概念模糊） ==========
         if evidence_count <= MIN_EVIDENCE_COUNT:
@@ -999,6 +1024,7 @@ def organ_selfmodel_tick(ctx=None):
         self_model_data["preferred_motives"] = new_preferred
         self_model_data["internal_signature"] = body_stats
         self_model_data["history_summary"] = hist_sum
+        self_model_data["origin_distribution"] = origin_dist
         self_model_data["confidence"] = round(conf, 4)
 
         # ========== 步骤5：广播 selfmodel_update（origin=internal） ==========

@@ -53,6 +53,8 @@ def get_organ(code: str) -> Optional[BionicOrgan]:
 
 _event_queue: List[Dict[str, Any]] = []          # 待分发事件队列（本 tick 内入队）
 _event_log: List[Dict[str, Any]] = []            # 已分发事件历史（调试/审查用）
+_replay_buffer: Dict[str, List[Dict[str, Any]]] = {}   # event_type -> 历史事件（回放数据源，不消费）
+_REPLAY_MAX_PER_TYPE: int = 200   # 每类事件最多保留条数（供 poll_replay_events 回放）
 _subscriptions: Dict[str, List[str]] = {}         # event_type -> [organ_code, ...]
 _inboxes: Dict[str, List[Dict[str, Any]]] = {}    # organ_code -> 待处理事件收件箱
 
@@ -89,12 +91,16 @@ def _dispatch_events() -> None:
     """tick 结束后统一分发：按订阅表投递到各器官收件箱（防递归）。
 
     分发时按开关打印观测日志，让「事件流入总线」肉眼可见。"""
-    global _event_log
+    global _event_log, _replay_buffer
     for ev in _event_queue:
         etype = ev["event_type"]
         subs = _subscriptions.get(etype, [])
         for code in subs:
             _inboxes.setdefault(code, []).append(ev)
+        # 写入回放缓冲（按类型分类，供 poll_replay_events 回放历史事件，不消费）
+        _replay_buffer.setdefault(etype, []).append(ev)
+        if len(_replay_buffer[etype]) > _REPLAY_MAX_PER_TYPE:
+            _replay_buffer[etype] = _replay_buffer[etype][-_REPLAY_MAX_PER_TYPE:]
         if _BUS_LOG_ENABLED:
             mark = "🌐EXT" if ev.get("origin") == "external" else "🧠INT"
             dest = ",".join(subs) if subs else "(无订阅)"
@@ -117,6 +123,20 @@ def poll_events(organ_code: str) -> List[Dict[str, Any]]:
     return evs
 
 
+def poll_replay_events(event_type: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """回放读取历史事件（不消费收件箱/队列）。SELFMODEL 等归纳型器官靠它读历史数据。
+
+    与 poll_events（消费型）不同：这里从 _replay_buffer 读取，读后不清空。"""
+    evs = _replay_buffer.get(event_type, [])
+    return list(evs[-limit:])
+
+
+def poll_latest_event(event_type: str) -> Optional[Dict[str, Any]]:
+    """获取某类型最近一条事件（回放，不消费）。"""
+    evs = _replay_buffer.get(event_type, [])
+    return evs[-1] if evs else None
+
+
 def bus_stats() -> Dict[str, Any]:
     """事件总线统计（供调试/审查）。"""
     return {
@@ -124,6 +144,7 @@ def bus_stats() -> Dict[str, Any]:
         "log_len": len(_event_log),
         "subscriptions": {k: len(v) for k, v in _subscriptions.items()},
         "inboxes": {k: len(v) for k, v in _inboxes.items()},
+        "replay_buffer": {k: len(v) for k, v in _replay_buffer.items()},
     }
 
 
@@ -806,86 +827,147 @@ def organ_timesense_tick(ctx=None):
 
 
 # ====================== 阶段6：ORG-SELFMODEL 自我表征器官 ======================
-# 约束：禁止硬编码自我描述，数据只来源于记忆库/假设库/动机历史。
+# 约束（严格按 ORG-SELFMODEL tick 伪代码）：
+#   1. 不直接读取其他模块全局变量，靠事件总线回放读取历史事件数据
+#   2. 低频周期性执行（每 SELFMODEL_UPDATE_INTERVAL tick 一次），防自我模型震荡
+#   3. 无硬编码自我文本描述，全部为结构化数值/列表
+#   4. 输出 selfmodel_update 事件给全系统器官订阅
 
-self_model_data: Dict[str, Any] = {}
+self_model_data: Dict[str, Any] = {
+    "meta": {"last_update_subj_time": 0.0, "tick_counter": 0},
+    "capability": [],        # [{"key":"scene:action","goal_tag":"scene:action","success_rate":float}, ...]
+    "limitations": [],       # [{"key":"scene:action","goal_tag":"scene:action","fail_rate":float,"trials":int}, ...]
+    "preferred_motives": [], # [{"motive_tag":str,"occur_count":int}, ...]
+    "internal_signature": {},# {"fatigue_avg":float,"resource_pressure_avg":float}
+    "history_summary": {"total_goal": 0, "total_success": 0, "total_fail": 0},
+    "confidence": 0.0,       # 0.0~1.0 证据越少置信度越低
+}
 
-# 阶段三：周期性增量归纳状态（避免每 tick 全量重算，符合避坑清单第4条）
-_selfmodel_tick_count: int = 0
-_selfmodel_last_trace_count: int = 0
-_selfmodel_accum: Dict[str, Any] = {"succ": 0, "fail": 0, "succ_c": {}, "fail_c": {}}
-SELFMODEL_INDUCT_INTERVAL: int = 30   # 每 30 tick 归纳一次（文档建议 30~100）
+# SELFMODEL 归纳配置（伪代码配置项：低频周期增量归纳，禁止每 tick 全量重算）
+SELFMODEL_UPDATE_INTERVAL: int = 60    # 每 60 tick 执行一次归纳
+SAMPLE_MEMORY_COUNT: int = 40          # 采样记忆事件条数
+SAMPLE_HYPOTHESIS_COUNT: int = 25      # 采样假设事件条数
+MIN_EVIDENCE_COUNT: int = 10           # 最小证据量，低于则压低 confidence
 
 
 def organ_selfmodel_tick(ctx=None):
-    """自我表征：从记忆库/假设库/动机历史归纳自我模型（无任何硬编码文本）。
+    """自我表征：低频周期性从事件总线回放历史事件，归纳自我模型（无任何硬编码文本）。
 
-    阶段三/四落地：产出 confidence（随样本量抬升）与 limitations（持续失败边界），
-    随 selfmodel_update 事件广播，供 B / INHIBIT / SIMULATE 参与决策闭环。"""
-    global _selfmodel_tick_count, _selfmodel_last_trace_count, _selfmodel_accum
+    严格按 ORG-SELFMODEL tick 伪代码落地：
+      - 数据源全部通过 poll_replay_events / poll_latest_event 回放读取（禁止直读全局变量）
+      - 每 SELFMODEL_UPDATE_INTERVAL tick 归纳一次，其余 tick 直接返回
+      - 输出结构化 self_model_data，emit selfmodel_update 广播（origin=internal）"""
+    global self_model_data
     try:
-        _selfmodel_tick_count += 1
-        if _selfmodel_tick_count % SELFMODEL_INDUCT_INTERVAL != 0:
-            return   # 非归纳 tick：跳过（避坑：不做每 tick 全量重算）
-        traces = getattr(ctx, "traces", None) if ctx is not None else None
-        knowledge = getattr(ctx, "knowledge", None) if ctx is not None else None
-        if traces is None:
+        # ========== tick 计数，只有到达周期才归纳，其余 tick 直接返回 ==========
+        self_model_data["meta"]["tick_counter"] += 1
+        tick_cnt = int(self_model_data["meta"]["tick_counter"])
+        if tick_cnt % SELFMODEL_UPDATE_INTERVAL != 0:
             return
-        # 记忆被清空（轨迹数回退）→ 重置累积统计
-        if len(traces) < _selfmodel_last_trace_count:
-            _selfmodel_last_trace_count = 0
-            _selfmodel_accum = {"succ": 0, "fail": 0, "succ_c": {}, "fail_c": {}}
-        # 增量：只处理上次归纳之后新增的轨迹
-        new_traces = traces[_selfmodel_last_trace_count:]
-        _selfmodel_last_trace_count = len(traces)
-        for t in new_traces:
-            if not isinstance(t, dict):
-                continue
-            if t.get("action_finished"):
-                _selfmodel_accum["succ"] += 1
-            else:
-                _selfmodel_accum["fail"] += 1
-            key = f"{t.get('scene')}:{t.get('action')}"
-            bucket = "succ_c" if t.get("action_finished") else "fail_c"
-            _selfmodel_accum[bucket][key] = int(_selfmodel_accum[bucket].get(key, 0)) + 1
-        n_traces = len(traces)
-        n_know = len(knowledge) if knowledge else 0
-        succ = int(_selfmodel_accum["succ"])
-        fail = int(_selfmodel_accum["fail"])
-        # 能力边界：从假设库归纳（已验证可成功的 key）
-        abilities = [h.get("key") for h in hypothesis_registry if float(h.get("score", 0.0)) >= 0.6]
-        # 局限边界：从累积统计归纳「持续失败」的 (scene, action)（结构化，无硬编码文本）
-        limitations = []
-        for key, f in _selfmodel_accum["fail_c"].items():
-            s = int(_selfmodel_accum["succ_c"].get(key, 0))
-            total = f + s
-            if total >= 2 and (f / total) >= 0.5:   # 至少2次尝试且失败率≥50%
-                limitations.append({"key": key, "fail_rate": round(f / total, 4), "trials": total})
-        # 置信度：随记忆样本量抬升（早期低=自我概念模糊，后期高=清晰）
-        confidence = round(min(1.0, n_traces / 500.0), 4)
-        # 动机历史：从效价缓存归纳（近期正/负效价分布）
-        n_pos = sum(1 for v in valence_cache.values() if v > 0)
-        n_neg = sum(1 for v in valence_cache.values() if v < 0)
-        # 全部来自数据，无硬编码
-        self_model_data.update({
-            "organ_count": len(organ_registry),   # 架构事实
-            "trace_count": n_traces,              # 记忆数据
-            "knowledge_count": n_know,            # 知识数据
-            "hypothesis_count": len(hypothesis_registry),  # 学习数据
-            "success_count": succ,                # 成功记录
-            "failure_count": fail,                # 失败记录
-            "valence_pos": n_pos,                 # 动机历史（正）
-            "valence_neg": n_neg,                 # 动机历史（负）
-            "abilities": abilities[:20],          # 能力边界（从假设归纳）
-            "limitations": limitations[:20],      # 局限边界（从记忆归纳）
-            "confidence": confidence,             # 自我模型置信度（随样本量抬升）
-            "ts": time.time(),
-        })
+
+        # ========== 步骤1：回放读取历史事件（禁止直读全局变量） ==========
+        mem_events = poll_replay_events("mem_consolidated", SAMPLE_MEMORY_COUNT)
+        hypo_events = poll_replay_events("hypothesis_update", SAMPLE_HYPOTHESIS_COUNT)
+        motive_events = poll_replay_events("candidate_motives", 80)
+        body_events = poll_replay_events("bodystate_update", 60)
+        subj_time_event = poll_latest_event("subjective_tick")
+        if subj_time_event is None:
+            return
+        current_subj_time = float(subj_time_event.get("payload", {}).get("subjective_clock", 0.0))
+
+        # ========== 步骤2：统计加工样本数据 ==========
+        evidence_count = len(mem_events) + len(hypo_events)
+        succ_map: Dict[str, List[bool]] = {}   # key -> 成败序列
+        hist_sum = {"total_goal": 0, "total_success": 0, "total_fail": 0}
+
+        # 2-1 记忆样本统计：基于记忆条目成败统计能力/局限
+        for evt in mem_events:
+            for mem in evt.get("payload", {}).get("items", []):
+                if not isinstance(mem, dict):
+                    continue
+                scene = mem.get("scene")
+                action = mem.get("action")
+                if not (scene and action):
+                    continue
+                key = f"{scene}:{action}"
+                ok = bool(mem.get("action_finished", False))
+                hist_sum["total_goal"] += 1
+                if ok:
+                    hist_sum["total_success"] += 1
+                else:
+                    hist_sum["total_fail"] += 1
+                succ_map.setdefault(key, []).append(ok)
+
+        # 2-2 假设样本：accepted 假设视为已验证能力（补充 capability）
+        for evt in hypo_events:
+            hp = evt.get("payload", {})
+            if hp.get("status") == "accepted" and hp.get("key"):
+                succ_map.setdefault(str(hp.get("key")), []).append(True)
+
+        # 归纳 capability / limitations（结构化，无硬编码文本）
+        new_capability = []
+        new_limitations = []
+        for key, flags in succ_map.items():
+            total = len(flags)
+            succ = sum(1 for f in flags if f)
+            rate = round(succ / total, 4) if total else 0.0
+            if succ > 0:
+                new_capability.append({"key": key, "goal_tag": key, "success_rate": rate})
+            if total >= 2 and rate <= 0.5:   # 至少2次尝试且失败率≥50% → 局限
+                new_limitations.append({
+                    "key": key, "goal_tag": key,
+                    "fail_rate": round(1 - rate, 4), "trials": total,
+                })
+        new_capability = new_capability[:20]
+        new_limitations = new_limitations[:20]
+
+        # 2-3 动机出现频次 → preferred_motives
+        motive_counter: Dict[str, int] = {}
+        for evt in motive_events:
+            for mot in evt.get("payload", {}).get("motives", []):
+                if isinstance(mot, dict):
+                    tag = mot.get("goal") or mot.get("motive_tag")
+                    if tag:
+                        motive_counter[str(tag)] = int(motive_counter.get(str(tag), 0)) + 1
+        new_preferred = [
+            {"motive_tag": tag, "occur_count": cnt}
+            for tag, cnt in sorted(motive_counter.items(), key=lambda x: -x[1])
+        ][:20]
+
+        # 2-4 本体信号统计（internal_signature）
+        body_stats: Dict[str, float] = {}
+        fatigue_list = [float(evt.get("payload", {}).get("fatigue", 0.0)) for evt in body_events]
+        rp_list = [float(evt.get("payload", {}).get("resource_pressure", 0.0)) for evt in body_events]
+        if fatigue_list:
+            body_stats["fatigue_avg"] = round(sum(fatigue_list) / len(fatigue_list), 4)
+        if rp_list:
+            body_stats["resource_pressure_avg"] = round(sum(rp_list) / len(rp_list), 4)
+
+        # ========== 步骤3：计算自我模型置信度（证据越少越低，模拟幼儿自我概念模糊） ==========
+        if evidence_count <= MIN_EVIDENCE_COUNT:
+            conf = 0.1
+        else:
+            conf = min(0.1 + (evidence_count / (MIN_EVIDENCE_COUNT * 8)), 1.0)
+
+        # ========== 步骤4：更新 self_model_data（结构化，无自然语言自我描述） ==========
+        self_model_data["meta"]["last_update_subj_time"] = current_subj_time
+        self_model_data["capability"] = new_capability
+        self_model_data["limitations"] = new_limitations
+        self_model_data["preferred_motives"] = new_preferred
+        self_model_data["internal_signature"] = body_stats
+        self_model_data["history_summary"] = hist_sum
+        self_model_data["confidence"] = round(conf, 4)
+
+        # ========== 步骤5：广播 selfmodel_update（origin=internal） ==========
         emit_event("selfmodel_update", {
-            "abilities": abilities[:20],
-            "limitations": limitations[:20],
-            "confidence": confidence,
-            "success_ratio": round(succ / n_traces, 4) if n_traces else 0.0,
+            "capability": new_capability,
+            "abilities": [c["key"] for c in new_capability],  # 兼容旧闭环 ORG-E 读取
+            "limitations": new_limitations,
+            "preferred_motives": new_preferred,
+            "internal_signature": body_stats,
+            "history_summary": hist_sum,
+            "confidence": round(conf, 4),
+            "meta": self_model_data["meta"],
         }, source="ORG-SELFMODEL", origin="internal")
     except Exception:
         pass

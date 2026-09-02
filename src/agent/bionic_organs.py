@@ -375,7 +375,7 @@ working_memory = {
 }
 
 
-def wm_push_thought(thought_fragment, focus, valence=0.0, origin="internal"):
+def wm_push_thought(thought_fragment, focus, valence=0.0, origin="internal", consolidated=False):
     """把思想碎片压入工作记忆 context_stack（碎片自带 focus/valence/origin，供 CONSOLIDATE 筛选）。"""
     max_step = 12
     if len(working_memory["context_stack"]) >= max_step:
@@ -385,6 +385,7 @@ def wm_push_thought(thought_fragment, focus, valence=0.0, origin="internal"):
         "focus": focus,
         "valence": valence,
         "origin": origin,
+        "consolidated": consolidated,
     })
 
 
@@ -415,7 +416,7 @@ def module_e_tick(ctx=None):
                 scene = p.get("scene")
                 action = p.get("action")
                 if scene and action:
-                    wm_push_thought(f"replay:{scene}:{action}", 0.5, origin=str(p.get("origin", "internal")))
+                    wm_push_thought(f"replay:{scene}:{action}", 0.5, origin=str(p.get("origin", "internal")), consolidated=True)
             elif et == "replay_thought_fragment":
                 # 伪代码配套：ORG-CONSOLIDATE 重放的历史思想碎片压入工作记忆（focus 已衰减、origin 透传）
                 wm_push_thought(
@@ -423,6 +424,7 @@ def module_e_tick(ctx=None):
                     float(p.get("focus", 0.3)),
                     valence=float(p.get("valence", 0.0)),
                     origin=str(p.get("origin", "internal")),
+                    consolidated=True,
                 )
             elif et == "user_input":
                 # 阶段一：外部输入进入工作记忆草稿区（我-非我边界：external 信号）
@@ -792,6 +794,8 @@ def organ_consolidate_tick(ctx=None):
             for thought_item in context_stack:
                 if not isinstance(thought_item, dict):
                     continue
+                if thought_item.get("consolidated"):
+                    continue
                 focus = float(thought_item.get("focus", 0.0))
                 valence = float(thought_item.get("valence", 0.0))
                 origin = thought_item.get("origin", "internal")
@@ -817,6 +821,7 @@ def organ_consolidate_tick(ctx=None):
                     source="ORG-CONSOLIDATE",
                     origin="internal",
                 )
+                thought_item["consolidated"] = True
 
         # 2. 记忆后台重放：周期触发
         _consolidate_counter += 1

@@ -28,6 +28,9 @@ from typing import Optional
 
 from loguru import logger
 
+# 本地 LLM 内核器官（1.1GB 方案）：理解+生成；不可用时自动降级
+from .local_llm_bridge import ENABLE_LOCAL_LLM, LocalLLMBridge  # noqa: E402
+
 # 7Tan 模型的唯一标识（对应数据库 ai_configs 表 config_key 与 model 字段）
 T7_MODEL_NAME = "7tan-model"
 T7_MODEL_DISPLAY = "7Tan模型"
@@ -351,6 +354,16 @@ class TanModel:
         except Exception as e:
             logger.warning(f"模块D 初始化失败（退回原行为）: {e}")
             self.evolve = None
+        # ── 本地 LLM 内核器官（1.1GB 方案）：理解+生成；不可用自动降级 ──
+        self.local_llm = None
+        self._llm_launch_tried = False
+        if ENABLE_LOCAL_LLM:
+            try:
+                self.local_llm = LocalLLMBridge()
+                logger.info("🧠 本地LLM器官已挂载（llama.cpp 内核 · 失败自动降级）")
+            except Exception as e:
+                logger.warning(f"本地LLM器官初始化失败: {e}")
+                self.local_llm = None
 
     # ---------------- 预测核心（忠实移植） ----------------
     def virtual_predict(self, scene, action) -> dict:
@@ -535,6 +548,10 @@ class TanModel:
                 return self._report_predict_with_thinking(scene, action)
             logger.info(f"🌍 7Tan模型 → 预测推演（场景={scene} 动作={action}）")
             return self._report_predict(scene, action)
+        # 4.5) 本地 LLM 兜底（非疑问句的闲聊/开放陈述）：基于自身记忆生成
+        llm_reply = self._llm_answer(text)
+        if llm_reply:
+            return llm_reply
         # 5) 都不是 → 诚实承认（不编、不强行推演）
         logger.info("🌍 7Tan模型 → 未识别请求，诚实承认不会")
         return self._honest_unknown(text)
@@ -555,6 +572,64 @@ class TanModel:
                                    "探索", "学习")):
             return True
         return False
+
+    # ---------------- 本地 LLM 内核（理解+生成器官，防套壳：基于自身记忆作答） ----------------
+    def _collect_memory_materials(self, text: str) -> dict:
+        """收集 7Tan 自己的记忆材料，供本地模型作答时引用。"""
+        materials: dict = {"knowledge": [], "traces": [], "wm": ""}
+        try:
+            knows = getattr(self.memory, "knowledge", None) or []
+            for item in list(knows)[:6]:
+                if isinstance(item, dict):
+                    content = item.get("content", "") or ""
+                    if content:
+                        materials["knowledge"].append(content)
+        except Exception:
+            pass
+        try:
+            for t in self.memory.traces[-6:]:
+                if not isinstance(t, dict):
+                    continue
+                sc, ac = t.get("scene", "?"), t.get("action", "?")
+                ok = "成功" if t.get("action_finished") else "失败"
+                ts = float(t.get("ts", 0) or 0)
+                hint = time.strftime("%m-%d %H:%M", time.localtime(ts)) if ts > 0 else ""
+                ut = (t.get("user_text") or "").strip()[:50]
+                if ut:
+                    materials["traces"].append(f"对话「{ut}」（{hint}）")
+                else:
+                    materials["traces"].append(f"场景「{sc}」动作「{ac}」→ {ok}（{hint}）")
+        except Exception:
+            pass
+        try:
+            if self.wm is not None:
+                s = self.wm.wm_dialog_summary()
+                if s and s != "（无）":
+                    materials["wm"] = s[:200]
+        except Exception:
+            pass
+        return materials
+
+    def _llm_answer(self, text: str) -> Optional[str]:
+        """本地模型兜底：基于 7Tan 自己的记忆材料生成回答；失败返回 None（降级）。"""
+        if self.local_llm is None:
+            return None
+        if not self.local_llm.is_available():
+            if self._llm_launch_tried:
+                return None
+            self._llm_launch_tried = True
+            if not self.local_llm.ensure_server():
+                return None
+        materials = self._collect_memory_materials(text)
+        sys_prompt = LocalLLMBridge.build_system_prompt(materials)
+        try:
+            reply = self.local_llm.generate(text, sys_prompt)
+        except Exception as e:
+            logger.warning(f"本地LLM生成异常（降级）: {e}")
+            return None
+        if not reply:
+            return None
+        return "🧠（本地模型基于我的记忆生成）\n" + reply
 
     def _honest_unknown(self, text: str) -> str:
         """未识别请求时的诚实回应：不编、不强行推演。"""
@@ -672,6 +747,10 @@ class TanModel:
             if summary and summary != "（无）" and any(k in text for k in ("你认识", "你知道", "记得")):
                 lines.append(f"📚 我能调用的上下文：{summary}")
                 lines.append("")
+        # —— 本地 LLM 兜底：用自身记忆材料让内核器官理解并组织语言 ——
+        llm_reply = self._llm_answer(text)
+        if llm_reply:
+            return llm_reply
         # —— 未命中：诚实承认 + 引导 ——
         lines.append("🤖 我诚实说：这个问题不在我的记忆里，我答不上来——我不会编答案骗你。")
         lines.append("")

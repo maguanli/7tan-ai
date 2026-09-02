@@ -987,6 +987,37 @@ class TanModel:
                 return action
         return DEFAULT_ACTION
 
+    def _push_experience(self, scene, action, success, focus=0.8, valence=0.0,
+                         origin="external", pe=None, kind="经历") -> None:
+        """把一次「场景+动作→结果」的经历作为思想碎片投递进仿生器官工作记忆。
+
+        这是 self_model_data 丰满的关键：让真实对话产生可被 CONSOLIDATE 固化、
+        被 SELFMODEL 归纳的「有意义的经历碎片」（带 goal_tag/success/focus/valence/origin）。
+
+        success: True/False = 真实成败（记录学习）；None = 未验证预期（推演，不计成败）
+        origin: external = 用户发起的观测/推演；internal = 系统内部假设验证
+        """
+        try:
+            from .bionic_organs import wm_push_thought
+        except Exception:
+            return
+        if not scene or not action:
+            return
+        goal_tag = f"{scene}:{action}"
+        try:
+            wm_push_thought(
+                f"{kind}:{goal_tag}",
+                focus=float(focus),
+                valence=float(valence),
+                origin=origin,
+                consolidated=False,
+                goal_tag=goal_tag,
+                success=success,
+                pe=pe,
+            )
+        except Exception:
+            pass
+
     def _handle_record(self, text) -> str:
         scene = self._match_scene(text)
         action = self._match_action(text)
@@ -1004,6 +1035,10 @@ class TanModel:
         rec = self.memory.add_trace(scene, action, finished=finished,
                                     changed=changed, reduced=reduced, gained=gained)
         self._last_record = rec  # 供模块F闭环计算PE（开关关闭时无行为影响）
+        # 经历碎片投递：真实观测结果喂给仿生器官（CONSOLIDATE 固化 → SELFMODEL 归纳成败）
+        self._push_experience(scene, action, finished, focus=0.9,
+                              valence=(0.5 if finished else -0.5), origin="external",
+                              kind="经历")
         state = "成功" if finished else "失败"
         return (f"✅ 已记录轨迹：场景={scene} 动作={action} 结果={state}\n"
                 f"   7Tan 模型已把这次真实结果纳入记忆，下次预测会参考它。")
@@ -1086,6 +1121,10 @@ class TanModel:
             verdict = "✅ 预期可成功"
         else:
             verdict = "⚠️ 预期成功率偏低"
+
+        # 经历碎片投递：推演请求作为「预期」经历（success=None 表示未验证，不计成败）
+        self._push_experience(scene, action, None, focus=0.6, valence=0.0,
+                              origin="external", kind="推演")
 
         lines = [
             "🤖 7Tan 模型推演报告",

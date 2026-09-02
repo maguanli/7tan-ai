@@ -312,6 +312,8 @@ def module_b_tick(ctx=None):
         lp = round(pe_prev - pe_now, 4)
         pe_lp_buffer["pe"] = pe_now
         pe_lp_buffer["lp"] = lp
+        # 阶段三数据源：把预测误差 PE / 学习进度 LP 投递进事件总线（供 SELFMODEL 回放归纳）
+        emit_event("pe_update", {"pe": pe_now, "lp": lp}, source="ORG-B", origin="internal")
     except Exception:
         pass
 
@@ -375,8 +377,12 @@ working_memory = {
 }
 
 
-def wm_push_thought(thought_fragment, focus, valence=0.0, origin="internal", consolidated=False):
-    """把思想碎片压入工作记忆 context_stack（碎片自带 focus/valence/origin，供 CONSOLIDATE 筛选）。"""
+def wm_push_thought(thought_fragment, focus, valence=0.0, origin="internal", consolidated=False,
+                    goal_tag=None, success=None, pe=None):
+    """把思想碎片压入工作记忆 context_stack（碎片自带 focus/valence/origin，供 CONSOLIDATE 筛选）。
+
+    可附带 goal_tag / success / pe 字段，让「场景+动作→结果」的经历碎片
+    能被 CONSOLIDATE 固化、被 SELFMODEL 归纳成败（阶段三数据源）。"""
     max_step = 12
     if len(working_memory["context_stack"]) >= max_step:
         working_memory["context_stack"].pop(0)
@@ -386,6 +392,9 @@ def wm_push_thought(thought_fragment, focus, valence=0.0, origin="internal", con
         "valence": valence,
         "origin": origin,
         "consolidated": consolidated,
+        "goal_tag": goal_tag,
+        "success": success,
+        "pe": pe,
     })
 
 
@@ -943,6 +952,9 @@ def organ_selfmodel_tick(ctx=None):
         for mem in mem_samples[:SAMPLE_MEMORY_COUNT]:
             key = str(mem.get("goal_tag") or "").strip()
             if not key:
+                continue
+            # 跳过「未验证」的推演碎片（success=None 表示预期而非真实结果，不计成败）
+            if mem.get("success") is None:
                 continue
             ok = bool(mem.get("success", mem.get("action_finished", False)))
             hist_sum["total_goal"] += 1

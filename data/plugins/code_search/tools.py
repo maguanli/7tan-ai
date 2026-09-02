@@ -132,6 +132,12 @@ def find_files(pattern: str = "*", path: str = ".", recursive: bool = True,
     # 路径存在检查，避免 WinError 3
     if not os.path.exists(path):
         return f"❌ 路径不存在: {path}\n💡 提示: 当前工作目录是 {os.getcwd()}，请确认路径是否正确。"
+    # 单文件路径加固：os.walk 对单文件返回空、os.listdir 对单文件抛错，需特殊处理
+    if os.path.isfile(path):
+        if fnmatch.fnmatch(os.path.basename(path), pattern):
+            size = os.path.getsize(path)
+            return f"{path} ({size:,} bytes)"
+        return f"未找到匹配 '{pattern}' 的文件"
     results = []
     walker = os.walk(path) if recursive else [(path, [], os.listdir(path))]
     for root, dirs, files in walker:

@@ -270,6 +270,50 @@ pe_lp_buffer: Dict[str, float] = {"pe": 0.0, "lp": 0.0}
 
 _self_limitations_b: List[Dict[str, Any]] = []   # 自我模型能力边界缓存（阶段四）
 _self_confidence_b: float = 0.0                     # 自我模型置信度缓存（阶段四）
+_task_motive_counter: int = 0                       # 任务型目标采样周期计数器（阶段四）
+TASK_MOTIVE_INTERVAL: int = 10                      # 每 N tick 采样一次任务型目标
+
+
+def _generate_task_motives(ctx, limitations):
+    """阶段四：从记忆库/轨迹采样高价值「场景:动作」作为探索型目标（对齐 limitations 粒度）。
+
+    这是阶段四闭环的关键——limitations 记录的是「场景:动作」级能力边界，
+    而稳态动机（reduce_load/consolidate_memory）是抽象内生需求，两者粒度不同无法匹配。
+    本函数把记忆里的具体经历提炼成任务型目标，使 limitations 的 key 能真正命中候选目标，
+    从而触发降权/抑制/压低。稳态动机不受 limitations 约束（生物稳态需求非能力边界）。
+    """
+    candidates = {}   # goal -> 累计评分
+    # 1. 从记忆库采样（含 goal_tag + focus + weight_eff）
+    for mem in memory_library:
+        if not isinstance(mem, dict):
+            continue
+        gt = mem.get("goal_tag")
+        if not gt or ":" not in str(gt):
+            continue
+        focus = float(mem.get("focus", 0.0) or 0.0)
+        w = float(mem.get("weight_eff", 1.0) or 1.0)
+        candidates[str(gt)] = candidates.get(str(gt), 0.0) + focus * w
+    # 2. 从轨迹采样（scene + action）
+    traces = getattr(ctx, "traces", None) or []
+    for t in traces:
+        if not isinstance(t, dict):
+            continue
+        scene = str(t.get("scene", "")).strip()
+        action = str(t.get("action", "")).strip()
+        if scene and action:
+            key = f"{scene}:{action}"
+            candidates[key] = candidates.get(key, 0.0) + float(t.get("weight_eff", 1.0) or 1.0)
+    # 3. 生成任务型候选动机（含 limitations 降权）
+    lim_keys = {str(l.get("key", "")) for l in limitations}
+    motives = []
+    for goal, score in sorted(candidates.items(), key=lambda x: -x[1])[:5]:
+        drive = round(min(1.0, score / 5.0), 4)
+        if drive < 0.1:
+            continue
+        if goal in lim_keys:
+            drive = round(drive * 0.5, 4)   # 阶段四：落在能力局限内 → 降权
+        motives.append({"goal": goal, "drive": drive, "source": "task_memory"})
+    return motives
 
 
 def module_b_tick(ctx=None):
@@ -277,7 +321,7 @@ def module_b_tick(ctx=None):
 
     阶段四闭环：收到 selfmodel_update 后，把 limitations 存下，
     生成候选动机时若目标落在已知能力局限内，降低其驱动权重。"""
-    global _self_limitations_b, _self_confidence_b
+    global _self_limitations_b, _self_confidence_b, _task_motive_counter
     try:
         # 1. 处理订阅事件（自我模型 / 本体信号 / 模拟结果）
         for ev in poll_events("ORG-B"):
@@ -314,6 +358,12 @@ def module_b_tick(ctx=None):
         pe_lp_buffer["lp"] = lp
         # 阶段三数据源：把预测误差 PE / 学习进度 LP 投递进事件总线（供 SELFMODEL 回放归纳）
         emit_event("pe_update", {"pe": pe_now, "lp": lp}, source="ORG-B", origin="internal")
+        # 阶段四：任务型目标生成（对齐 limitations 的「场景:动作」粒度，周期采样避免每 tick 刷屏）
+        _task_motive_counter += 1
+        if _task_motive_counter % TASK_MOTIVE_INTERVAL == 0:
+            task_motives = _generate_task_motives(ctx, _self_limitations_b)
+            if task_motives:
+                emit_event("candidate_motives", {"motives": task_motives}, source="ORG-B", origin="internal")
     except Exception:
         pass
 
@@ -1075,8 +1125,17 @@ def organ_simulate_tick(ctx=None):
             elif et == "wm_snapshot":
                 goals = p.get("active_goals", [])
                 for g in goals:
-                    if g and not any(s.get("scene") == g for s in sim_scenario_pool):
-                        sim_scenario_pool.append({"scene": g, "action": "explore", "simulated": False})
+                    if not g:
+                        continue
+                    # 阶段四：goal 可能是「场景:动作」任务型目标，拆分成 scene/action 以对齐 limitations 粒度
+                    if ":" in str(g):
+                        scene, _, action = str(g).partition(":")
+                    else:
+                        scene, action = str(g), "explore"
+                    scene = scene.strip()
+                    action = action.strip()
+                    if scene and action and not any(s.get("scene") == scene and s.get("action") == action for s in sim_scenario_pool):
+                        sim_scenario_pool.append({"scene": scene, "action": action, "simulated": False})
         lim_keys = {str(l.get("key", "")) for l in _self_limitations_sim}
         # 2. 内部沙盒推演
         for sc in list(sim_scenario_pool):

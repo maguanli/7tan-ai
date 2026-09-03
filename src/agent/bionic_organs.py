@@ -934,7 +934,16 @@ def organ_consolidate_tick(ctx=None):
         # 2. 记忆后台重放：周期触发
         _consolidate_counter += 1
         if _consolidate_counter % replay_interval == 0:
-            old_mem_events = poll_replay_events("mem_consolidated", replay_sample)
+            # 【阶段六·测试2修复】自传记忆连续性：重放采样从「最近N条」改为「全部历史+高权重优先」
+            # 旧逻辑 poll_replay_events(..., replay_sample) 内部取队列尾部（最近N条），
+            # 久远高权重记忆永远被近期低权重记忆挤出重放队列 → 久远记忆彻底沉默，
+            # 系统只剩近期记忆，无法形成连续的"我"（违背阶段二设计目标）。
+            all_mem_events = poll_replay_events("mem_consolidated", 200)  # 全部历史（回放缓冲上限200条）
+            all_mem_events.sort(
+                key=lambda e: float(e.get("payload", {}).get("focus", 0.0)) if isinstance(e.get("payload"), dict) else 0.0,
+                reverse=True,
+            )
+            old_mem_events = all_mem_events[:replay_sample]  # 高权重优先重放（久远高权重不再被挤出）
             for mem_evt in old_mem_events:
                 mem_data = mem_evt.get("payload", {})
                 if not isinstance(mem_data, dict):
@@ -946,6 +955,7 @@ def organ_consolidate_tick(ctx=None):
                     "origin": mem_data.get("origin", "internal"),  # 必须继承原始 origin，禁止硬编码
                     "goal_tag": mem_data.get("goal_tag"),
                     "pe": mem_data.get("pe"),
+                    "subjective_time": mem_data.get("subjective_time"),  # 透传主观时间线（基于主观时间，非系统时间）
                 }
                 emit_event(
                     event_type="replay_thought_fragment",

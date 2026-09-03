@@ -527,11 +527,23 @@ def register_organ_e():
 hypothesis_registry: List[Dict[str, Any]] = []
 origin_stats: Dict[str, int] = {}   # 阶段一：internal/external 来源统计（我-非我边界）
 
+# 阶段五元认知：ORG-F 对自身思维过程做统计（对自身过去的假设/预测误差建立统计，而非仅统计外部成败）
+meta_cognition_stats: Dict[str, Any] = {
+    "hypo_accepted": 0,
+    "hypo_rejected": 0,
+    "pe_samples": [],        # 预测误差历史（保留最近若干条）
+    "meta_hypotheses": [],   # 关于自身思维的归纳结果（结构化，无自然语言）
+}
+_meta_cognition_counter: int = 0
+META_COGNITION_INTERVAL: int = 20   # 每 20 tick 归纳一次元认知统计并广播
+
 
 def module_f_tick(ctx=None):
     """脑回：监听 mem_consolidated 归纳假设，按阈值接纳/证伪。
 
-    阶段一：统计 internal/external 两类事件规律（内部信号 vs 外界输入）。"""
+    阶段一：统计 internal/external 两类事件规律（内部信号 vs 外界输入）。
+    阶段五：对自身过去的假设(accept/reject)、自身预测误差(PE)做统计 → 元认知。"""
+    global _meta_cognition_counter
     try:
         # 1. 监听新记忆 → 归纳假设（同时统计来源 origin）
         for ev in poll_events("ORG-F"):
@@ -568,6 +580,19 @@ def module_f_tick(ctx=None):
                 # 阶段一：外部信号（用户输入/工具返回）来源统计
                 _origin = str(ev.get("origin", "external"))
                 origin_stats[_origin] = int(origin_stats.get(_origin, 0)) + 1
+            elif ev["event_type"] == "hypothesis_update":
+                # 阶段五元认知：对自身假设的接受/拒绝做统计（对自己的思维过程做统计）
+                _status = ev.get("payload", {}).get("status")
+                if _status == "accepted":
+                    meta_cognition_stats["hypo_accepted"] += 1
+                elif _status == "rejected":
+                    meta_cognition_stats["hypo_rejected"] += 1
+            elif ev["event_type"] == "pe_update":
+                # 阶段五元认知：对自身预测误差做统计（记录"我之前预测错了"这类历史）
+                _pe = float(ev.get("payload", {}).get("pe", 0.0))
+                meta_cognition_stats["pe_samples"].append(_pe)
+                if len(meta_cognition_stats["pe_samples"]) > 50:
+                    meta_cognition_stats["pe_samples"].pop(0)
         # 2. 假设评估（接纳/证伪）
         org = get_organ("ORG-F")
         cfg = org.config if org else {}
@@ -585,6 +610,30 @@ def module_f_tick(ctx=None):
             elif tests >= min_tests and score <= reject_thr:
                 hypothesis_registry.remove(h)
                 emit_event("hypothesis_update", {"key": h.get("key"), "status": "rejected"}, source="ORG-F")
+        # 3. 元认知归纳（阶段五）：对自己的思维过程做统计，形成"关于自身思维的假设"，周期广播
+        _meta_cognition_counter += 1
+        if _meta_cognition_counter % META_COGNITION_INTERVAL == 0:
+            _total_hypo = meta_cognition_stats["hypo_accepted"] + meta_cognition_stats["hypo_rejected"]
+            _accept_rate = round(meta_cognition_stats["hypo_accepted"] / _total_hypo, 4) if _total_hypo > 0 else None
+            _pe_list = meta_cognition_stats["pe_samples"]
+            _pe_mean = round(sum(_pe_list) / len(_pe_list), 4) if _pe_list else None
+            _meta = {
+                "hypo_accepted": meta_cognition_stats["hypo_accepted"],
+                "hypo_rejected": meta_cognition_stats["hypo_rejected"],
+                "hypo_accept_rate": _accept_rate,
+                "pe_mean": _pe_mean,
+                "pe_sample_count": len(_pe_list),
+            }
+            # 归纳"关于自身思维的假设"（元假设，结构化，无自然语言描述）
+            if _total_hypo >= 2 and _accept_rate is not None:
+                if _accept_rate >= 0.6:
+                    meta_cognition_stats["meta_hypotheses"].append({"type": "self_hypo_reliable", "accept_rate": _accept_rate})
+                else:
+                    meta_cognition_stats["meta_hypotheses"].append({"type": "self_hypo_unreliable", "accept_rate": _accept_rate})
+                if len(meta_cognition_stats["meta_hypotheses"]) > 20:
+                    meta_cognition_stats["meta_hypotheses"].pop(0)
+            _meta["meta_hypotheses"] = list(meta_cognition_stats["meta_hypotheses"])
+            emit_event("meta_cognition_update", _meta, source="ORG-F", origin="internal")
     except Exception:
         pass
 
@@ -942,6 +991,9 @@ self_model_data: Dict[str, Any] = {
     "preferred_motives": [], # [{"motive_tag":str,"occur_count":int}, ...]
     "internal_signature": {},# {"fatigue_avg":float,"resource_pressure_avg":float}
     "history_summary": {"total_goal": 0, "total_success": 0, "total_fail": 0},
+    "prediction_error_history": [],      # 阶段五：预测误差留痕（"我之前预测错了"的历史）
+    "meta_cognition": {},                # 阶段五：关于自身思维过程的统计归纳
+    "counterfactual_stats": {},          # 阶段五：反事实推演统计（"如果我改变目标会怎样"）
     "confidence": 0.0,       # 0.0~1.0 证据越少置信度越低
 }
 
@@ -974,6 +1026,8 @@ def organ_selfmodel_tick(ctx=None):
         final_goal_events = poll_replay_events("final_goals", 80)
         pe_events = poll_replay_events("pe_update", 60)
         body_events = poll_replay_events("bodystate_update", 60)
+        meta_events = poll_replay_events("meta_cognition_update", 40)
+        counter_events = poll_replay_events("counterfactual_result", 40)
         subj_time_event = poll_latest_event("subjective_tick")
         if subj_time_event is None:
             return
@@ -1072,6 +1126,24 @@ def organ_selfmodel_tick(ctx=None):
             body_stats["pe_avg"] = round(sum(pe_list) / len(pe_list), 4)
         if lp_list:
             body_stats["lp_avg"] = round(sum(lp_list) / len(lp_list), 4)
+        # 阶段五元认知：预测误差留痕（"我之前预测错了"这类关于自身思考的历史，非仅均值）
+        pe_history = [{"pe": p, "lp": l} for p, l in zip(pe_list, lp_list)][-30:]
+        # 阶段五元认知：关于自身思维过程的统计（ORG-F 产出 meta_cognition_update）
+        meta_cog: Dict[str, Any] = {}
+        if meta_events:
+            latest_meta = meta_events[-1].get("payload", {})
+            meta_cog = {
+                "hypo_accept_rate": latest_meta.get("hypo_accept_rate"),
+                "pe_mean": latest_meta.get("pe_mean"),
+                "meta_hypotheses": list(latest_meta.get("meta_hypotheses", [])),
+            }
+        # 阶段五元认知：反事实推演统计（ORG-SIMULATE 产出 counterfactual_result）
+        counter_stats: Dict[str, Any] = {"total": 0, "better_alternative": 0}
+        for evt in counter_events:
+            p = evt.get("payload", {})
+            counter_stats["total"] += 1
+            if float(p.get("delta", 0.0)) > 0:
+                counter_stats["better_alternative"] += 1
 
         # ========== 步骤3：计算自我模型置信度（证据越少越低，模拟幼儿自我概念模糊） ==========
         if evidence_count <= MIN_EVIDENCE_COUNT:
@@ -1087,6 +1159,9 @@ def organ_selfmodel_tick(ctx=None):
         self_model_data["internal_signature"] = body_stats
         self_model_data["history_summary"] = hist_sum
         self_model_data["origin_distribution"] = origin_dist
+        self_model_data["prediction_error_history"] = pe_history
+        self_model_data["meta_cognition"] = meta_cog
+        self_model_data["counterfactual_stats"] = counter_stats
         self_model_data["confidence"] = round(conf, 4)
 
         # ========== 步骤5：广播 selfmodel_update（origin=internal） ==========
@@ -1097,6 +1172,9 @@ def organ_selfmodel_tick(ctx=None):
             "preferred_motives": new_preferred,
             "internal_signature": body_stats,
             "history_summary": hist_sum,
+            "prediction_error_history": pe_history,
+            "meta_cognition": meta_cog,
+            "counterfactual_stats": counter_stats,
             "confidence": round(conf, 4),
             "meta": self_model_data["meta"],
         }, source="ORG-SELFMODEL", origin="internal")
@@ -1108,6 +1186,26 @@ def organ_selfmodel_tick(ctx=None):
 
 sim_scenario_pool: List[Dict[str, Any]] = []
 _self_limitations_sim: List[Dict[str, Any]] = []   # 自我模型能力边界缓存（阶段四）
+
+
+def _simulate_confidence(ctx, scene, action, lim_keys):
+    """内部沙盒推演：返回某「场景:动作」的预期成功率。
+
+    阶段四闭环：把「自身能力边界」作为推演条件，落在已知局限内则压低置信度。
+    阶段五元认知：反事实推演复用本函数，对「替代目标」做沙盒预演。"""
+    if ctx is None:
+        return 0.0
+    similar = [t for t in (getattr(ctx, "traces", []) or [])
+               if isinstance(t, dict) and t.get("scene") == scene]
+    if similar:
+        total_w = sum(float(t.get("weight_eff", 1.0)) for t in similar)
+        succ_w = sum(float(t.get("weight_eff", 1.0)) for t in similar if t.get("action_finished"))
+        conf = round(succ_w / total_w, 4) if total_w > 0 else 0.0
+    else:
+        conf = 0.0  # 无历史经验 → 知识缺口
+    if f"{scene}:{action}" in lim_keys:
+        conf = min(conf, 0.3)
+    return conf
 
 
 def organ_simulate_tick(ctx=None):
@@ -1137,31 +1235,56 @@ def organ_simulate_tick(ctx=None):
                     if scene and action and not any(s.get("scene") == scene and s.get("action") == action for s in sim_scenario_pool):
                         sim_scenario_pool.append({"scene": scene, "action": action, "simulated": False})
         lim_keys = {str(l.get("key", "")) for l in _self_limitations_sim}
-        # 2. 内部沙盒推演
+        # 2. 内部沙盒推演（复用 _simulate_confidence）
+        simulated_this_round = []
         for sc in list(sim_scenario_pool):
             scene = sc.get("scene")
             action = sc.get("action")
             if not scene or not action:
                 sim_scenario_pool.remove(sc)
                 continue
-            if ctx is not None:
-                similar = [t for t in (getattr(ctx, "traces", []) or [])
-                           if isinstance(t, dict) and t.get("scene") == scene]
-                if similar:
-                    total_w = sum(float(t.get("weight_eff", 1.0)) for t in similar)
-                    succ_w = sum(float(t.get("weight_eff", 1.0)) for t in similar if t.get("action_finished"))
-                    conf = round(succ_w / total_w, 4) if total_w > 0 else 0.0
-                else:
-                    conf = 0.0  # 无历史经验 → 知识缺口
-                # 阶段四：能力边界作为推演条件，落在已知局限内则压低置信度
-                if f"{scene}:{action}" in lim_keys:
-                    conf = min(conf, 0.3)
-                sc["sim_confidence"] = conf
-                emit_event("simulation_result", {
-                    "scene": scene, "action": action, "sim_confidence": conf,
-                }, source="ORG-SIMULATE", origin="internal")
+            conf = _simulate_confidence(ctx, scene, action, lim_keys)
+            sc["sim_confidence"] = conf
+            emit_event("simulation_result", {
+                "scene": scene, "action": action, "sim_confidence": conf,
+            }, source="ORG-SIMULATE", origin="internal")
+            simulated_this_round.append({"scene": scene, "action": action, "conf": conf})
             sc["simulated"] = True
             sim_scenario_pool.remove(sc)
+        # 3. 阶段五元认知：反事实推演——"如果我改变我的某个目标，我会发生什么"
+        #    对每个已推演目标，找一个不同的替代动作，推演对比并产出 counterfactual_result。
+        if ctx is not None:
+            alt_actions = set()
+            for t in (getattr(ctx, "traces", []) or []):
+                if isinstance(t, dict) and t.get("action"):
+                    alt_actions.add(str(t.get("action")))
+            for r in simulated_this_round:
+                scene = r["scene"]
+                action = r["action"]
+                orig_conf = r["conf"]
+                alt_found = False
+                for alt in sorted(alt_actions):
+                    if alt == action or not alt:
+                        continue
+                    alt_conf = _simulate_confidence(ctx, scene, alt, lim_keys)
+                    emit_event("counterfactual_result", {
+                        "original_goal": f"{scene}:{action}",
+                        "alternative_goal": f"{scene}:{alt}",
+                        "original_conf": orig_conf,
+                        "alternative_conf": alt_conf,
+                        "delta": round(alt_conf - orig_conf, 4),
+                    }, source="ORG-SIMULATE", origin="internal")
+                    alt_found = True
+                    break   # 每个目标只取第一个替代动作，避免组合爆炸
+                if not alt_found:
+                    # 无替代动作时，以「不执行该目标」为反事实基线
+                    emit_event("counterfactual_result", {
+                        "original_goal": f"{scene}:{action}",
+                        "alternative_goal": f"{scene}:abstain",
+                        "original_conf": orig_conf,
+                        "alternative_conf": 0.0,
+                        "delta": round(0.0 - orig_conf, 4),
+                    }, source="ORG-SIMULATE", origin="internal")
     except Exception:
         pass
 
@@ -1264,13 +1387,20 @@ def _setup_subscriptions():
     subscribe_event("candidate_motives", "ORG-INHIBIT")
     # 最终目标 → 前额叶(更新active_goals)
     subscribe_event("final_goals", "ORG-E")
-    # 假设更新 → 自我模型
+    # 假设更新 → 自我模型（归纳能力/局限）
     subscribe_event("hypothesis_update", "ORG-SELFMODEL")
+    # 阶段五元认知：ORG-F 订阅自身假设更新 + 预测误差，对自身思维做统计
+    subscribe_event("hypothesis_update", "ORG-F")
+    subscribe_event("pe_update", "ORG-F")
     # 自我模型更新 → 前额叶 + 动机 + 抑制 + 假想预演（阶段四闭环）
     subscribe_event("selfmodel_update", "ORG-E")
     subscribe_event("selfmodel_update", "ORG-B")
     subscribe_event("selfmodel_update", "ORG-INHIBIT")
     subscribe_event("selfmodel_update", "ORG-SIMULATE")
+    # 阶段五元认知：元认知统计 + 反事实推演结果 → 自我模型（归纳"关于思考的思考"）
+    subscribe_event("meta_cognition_update", "ORG-SELFMODEL")
+    subscribe_event("counterfactual_result", "ORG-SELFMODEL")
+    subscribe_event("counterfactual_result", "ORG-E")
     # 记忆重放 → 前额叶工作记忆（阶段二）
     subscribe_event("memory_replay", "ORG-E")
     subscribe_event("replay_thought_fragment", "ORG-E")

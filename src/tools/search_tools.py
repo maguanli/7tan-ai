@@ -22,6 +22,28 @@ HEADERS = {
 }
 
 
+def _normalize_query(query: str) -> str:
+    """把口语 query 归一化成核心关键词（去除人称+能愿动词/疑问/语气词），
+    避免 Bing 把「你会写脚本吗」降级成单字「你」的结果。"""
+    q = (query or "").strip()
+    if not q:
+        return ""
+    for _ in range(3):
+        old = q
+        q = re.sub(r"(?:你|您|我|我们|你们|咱们|人家)(?:会不会|能不能|可不可以|会|能|可以|知道|认识|了解|想|想要|需要)(?:不)?", "", q)
+        q = re.sub(r"^(?:你|您|我|我们|你们|咱们|人家)", "", q)
+        q = re.sub(r"^(?:会|能|可以|想|想要|需要|会不会|能不能|可不可以)", "", q)
+        q = re.sub(r"(?:会不会|能不能|可不可以)", "", q)
+        q = re.sub(r"^(?:你能帮我|你可以帮我|帮我找一下|帮我查一下|帮我搜一下|帮我查查|帮我|麻烦你|麻烦|请你|请|给我|替我|查一下|搜一下|找一下|搜索一下|查询一下|搜索|查找|看看|请问|问一下|我想知道|我想问|告诉我|介绍一下|推荐一下|给我推荐|想知道|问下)", "", q)
+        q = re.sub(r"[？?。！!，,、；;：:]+$", "", q)
+        q = re.sub(r"(?<!什)(吗|呢|么|啊|呀|吧|哦|哈|呗|啦|咯|喔)+$", "", q)
+        q = re.sub(r"^(?:什么是|是什么|是谁|为什么|为啥|为何|怎么样|怎么|如何|是不是|有没有|有哪些|哪里|哪儿|多少|几点|几号|干嘛|干吗)", "", q)
+        q = q.strip(" ？?。，,、 ")
+        if q == old:
+            break
+    return q if len(q) >= 2 else ""
+
+
 def _search_bing(query: str, num_results: int = 5) -> list[dict]:
     """核心：Bing 搜索，返回 [{title, url, snippet}]"""
     params = {"q": query, "count": min(num_results, 20), "setlang": "zh-cn"}
@@ -84,11 +106,13 @@ def _search_bing(query: str, num_results: int = 5) -> list[dict]:
 )
 def web_search(query: str, num_results: int = 5) -> str:
     """搜索互联网"""
-    results = _search_bing(query, num_results)
+    norm_q = _normalize_query(query)
+    q = norm_q if norm_q else (query or "")
+    results = _search_bing(q, num_results)
     if not results:
         return "❌ 搜索无结果或请求失败，请稍后重试。"
 
-    lines = [f"🔍 搜索「{query}」结果：\n"]
+    lines = [f"🔍 搜索「{q}」结果：\n"]
     for i, r in enumerate(results, 1):
         lines.append(f"{i}. **{r['title']}**")
         lines.append(f"   🔗 {r['url']}")

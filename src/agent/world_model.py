@@ -55,6 +55,131 @@ DEFAULT_SCENE = "unknown_interface"
 DEFAULT_ACTION = "explore"
 
 
+# ---------------- 搜索 query 清洗与结果整理（模块级，供 _clean_search_query/_try_tool_answer 使用） ----------------
+# 背景：Bing 对「你会写脚本吗」这类口语长句会降级成单字「你」的结果（搜出来全是「你」字百科），
+# 因此必须先把口语清洗成核心关键词（去掉人称代词+能愿动词+疑问/语气词），再交给搜索引擎。
+
+_CMD_PREFIX_RE = re.compile(
+    r"^(?:你能帮我|你可以帮我|你能给我|可以帮我|帮我找一下|帮我查一下|帮我搜一下|帮我查查|帮我查|帮我搜|帮我找|帮我|麻烦你|麻烦|请你|请|给我|替我|查找一下|查一下|搜一下|找一下|搜索一下|查询一下|搜索|查找|看看|请问|问一下|我想知道|我想问|告诉我|说说|介绍一下|推荐一下|给我推荐|来一个|来个|想知道|问下|介绍下|说下|讲下)"
+)
+_PRONOUN_MODAL_RE = re.compile(
+    r"(?:你|您|我|我们|你们|咱们|人家)(?:会不会|能不能|可不可以|知不知道|认不认识|会|能|可以|知道|认识|了解|想|想要|需要|打算|觉得)(?:不)?"
+)
+_MODAL_ANY_RE = re.compile(r"(?:会不会|能不能|可不可以|知不知道|认不认识)")
+_PRONOUN_HEAD_RE = re.compile(r"^(?:你|您|我|我们|你们|咱们|人家)")
+_MODAL_HEAD_RE = re.compile(r"^(?:会|能|可以|想|想要|需要|会不会|能不能|可不可以)")
+_TAIL_PUNCT_RE = re.compile(r"[？?。！!，,、；;：:]+$")
+_TAIL_PARTICLE_RE = re.compile(r"(?<!什)(吗|呢|么|啊|呀|吧|哦|哈|呗|啦|咯|喔)+$")
+_TAIL_QWORD_RE = re.compile(r"(?:是谁|是什么|是啥|是干什么的|是干嘛的|是做什么的)$")
+_HEAD_QWORD_RE = re.compile(r"^(?:什么是|是什么|是谁|为什么|为啥|为何|怎么样|怎么|如何|是不是|有没有|有哪些|哪里|哪儿|多少|几点|几号|干嘛|干吗|做什么|谁|啥)")
+_SEARCH_ITEM_RE = re.compile(r"^\s*\d+\.\s+\*\*(.+?)\*\*")
+_SEARCH_STOP_TERMS = {
+    "什么", "怎么", "如何", "我们", "你们", "咱们", "人家", "这个", "那个",
+    "一个", "一下", "可以", "知道", "认识", "还有", "哪些", "是不是", "有没有",
+    "不会", "不能", "不想", "为什么", "怎么样", "是吗", "好吗", "吗", "呢",
+    "么", "啊", "呀", "吧", "哦", "哈", "咯", "啦", "喔", "啥",
+}
+
+
+def normalize_search_query(text: str) -> str:
+    """把用户口语/祈使句清洗成搜索引擎可用的核心查询词。
+
+    去掉：人称代词+能愿动词（你会/你知道/你能…）、祈使/客套前缀（帮我/请…）、
+    疑问引导词（是什么/怎么…）、句末语气词（吗/呢…）。清洗不出有效词则返回空串。
+    """
+    q = (text or "").strip()
+    if not q:
+        return ""
+    for _ in range(5):
+        old = q
+        q = _PRONOUN_MODAL_RE.sub("", q)
+        q = _MODAL_ANY_RE.sub("", q)
+        q = _CMD_PREFIX_RE.sub("", q)
+        q = _PRONOUN_HEAD_RE.sub("", q)
+        q = _MODAL_HEAD_RE.sub("", q)
+        q = _TAIL_PUNCT_RE.sub("", q)
+        q = _TAIL_QWORD_RE.sub("", q)
+        q = _TAIL_PARTICLE_RE.sub("", q)
+        q = _HEAD_QWORD_RE.sub("", q)
+        q = q.strip(" ？?。，,、:：;；!！…·\"'“”‘’（）()【】[]")
+        if q == old:
+            break
+    if len(q) < 2:
+        return ""
+    return q[:60]
+
+
+def extract_query_terms(query: str) -> list:
+    """提取 query 的中文/英文关键词（含 2 字滑窗），用于搜索结果相关性判断。"""
+    q = normalize_search_query(query) or (query or "")
+    terms = set()
+    for s in re.findall(r"[\u4e00-\u9fa5]{2,}", q):
+        terms.add(s)
+        for i in range(len(s) - 1):
+            terms.add(s[i:i + 2])
+    for t in re.findall(r"[A-Za-z0-9][A-Za-z0-9_.\-]{1,}", q):
+        terms.add(t)
+    terms = {t for t in terms if len(t) >= 2 and t not in _SEARCH_STOP_TERMS and not t.isdigit()}
+    return sorted(terms)
+
+
+def pick_core_query(query: str) -> str:
+    """从清洗后的 query 提取最核心的搜索词：最长中文段 + 英文/数字 token。"""
+    q = (query or "").strip()
+    if not q:
+        return ""
+    segs = re.findall(r"[\u4e00-\u9fa5]{2,}", q)
+    en = re.findall(r"[A-Za-z0-9][A-Za-z0-9_.\-]{1,}", q)
+    core = max(segs, key=len) if segs else ""
+    if en:
+        core = (" ".join(en) + " " + core).strip()
+    return core
+
+
+def search_text_off_topic(res_text: str, terms: list) -> bool:
+    """若所有结果标题都不含任一关键词 → 判定搜索跑偏（如 Bing 把句子降级成单字结果）。"""
+    if not res_text or not terms:
+        return False
+    titles = [m.group(1) for m in re.finditer(r"^\s*\d+\.\s+\*\*(.+?)\*\*", res_text, re.M)]
+    if not titles:
+        return False  # 非标准 markdown，不做跑偏判定
+    for ti in titles:
+        for tm in terms:
+            if tm and (tm in ti or ti in tm):
+                return False
+    return True
+
+
+def filter_search_text(res_text: str, terms: list, keep: int = 4) -> str:
+    """整理搜索结果：只保留标题含任一关键词的条目（最多 keep 条）；解析失败/全无关时返回原文。"""
+    if not res_text or not terms:
+        return res_text
+    lines = res_text.split("\n")
+    header, blocks, cur_title, cur_lines = [], [], None, []
+    for ln in lines:
+        m = _SEARCH_ITEM_RE.match(ln)
+        if m:
+            if cur_title is not None:
+                blocks.append((cur_title, cur_lines))
+            cur_title, cur_lines = m.group(1), [ln]
+        elif cur_title is None:
+            header.append(ln)
+        else:
+            cur_lines.append(ln)
+    if cur_title is not None:
+        blocks.append((cur_title, cur_lines))
+    if not blocks:
+        return res_text
+    keep_blocks = [(ti, ls) for ti, ls in blocks
+                   if any(tm and (tm in ti or ti in tm) for tm in terms)]
+    if not keep_blocks or len(keep_blocks) == len(blocks):
+        return res_text
+    out = "\n".join(header).rstrip()
+    for _, ls in keep_blocks[:keep]:
+        out += "\n\n" + "\n".join(ls)
+    return out
+
+
 def is_7tan_model(model_name: str) -> bool:
     """判断模型名是否指向本地 7Tan 模型"""
     m = (model_name or "").strip().lower()
@@ -732,7 +857,19 @@ class TanModel:
                     res = self._call_tool_safe("web_search", {"query": query, "num_results": 5})
                     if res:
                         src = "联网搜索（资源库无记录，已自动转搜索）" if resource_empty else "联网搜索"
-                        return self._wrap_tool_reply(src, res)
+                        # 跑偏检测：Bing 对口语长句会降级成单字结果（如「你会…」→ 全是「你」字百科）→ 用核心词重搜一次
+                        terms = extract_query_terms(query)
+                        if terms and search_text_off_topic(res, terms):
+                            core = pick_core_query(query)
+                            if core and core != query:
+                                res2 = self._call_tool_safe("web_search", {"query": core, "num_results": 5})
+                                if res2:
+                                    res = res2
+                                    query = core
+                                    src = "联网搜索（已按核心词重新搜索）"
+                        # 整理：只保留与核心关键词相关的条目再展示
+                        shown = filter_search_text(res, extract_query_terms(query))
+                        return self._wrap_tool_reply(src, shown)
             return None
         except Exception as e:
             logger.warning(f"🔧 7Tan模型工具增强异常（忽略，不影响回复）: {e}")
@@ -745,27 +882,12 @@ class TanModel:
         return any(k in res for k in ("没有符合条件的资源", "📭", "没有找到", "暂无", "无结果", "0 条"))
 
     def _clean_search_query(self, text: str) -> str:
-        """把用户口语/祈使句清洗成搜索引擎可用的核心查询词。
+        """把用户口语/祈使句清洗成搜索引擎可用的核心查询词（委托模块级 normalize_search_query）。
 
-        去掉：客套前缀（帮我/请/麻烦…）、疑问引导词（是什么/怎么/为什么…）、
-        句末语气词（吗/呢/啊/？…）。保留核心名词与主题。清洗不出有效词则返回空串。
+        关键：必须去掉「人称代词 + 能愿动词」（你会/你知道/你能…）与疑问/语气词，
+        否则 Bing 会把「你会写脚本吗」这类句子降级成单字「你」的结果（搜出来全是「你」字百科）。
         """
-        q = (text or "").strip()
-        if not q:
-            return ""
-        # 去祈使/客套前缀（长的在前，避免只匹配到「帮我」留下「找一下」）
-        q = re.sub(r"^(帮我找一下|帮我查一下|帮我搜一下|帮我查查|帮我查|帮我搜|帮我找|帮我|麻烦你|麻烦|请你|请|给我|替我|查找一下|查一下|搜一下|找一下|搜索一下|查询一下|搜索|查找|看看|请问|问一下|我想知道|我想问|告诉我|说说|介绍一下|推荐一下|给我推荐|来一个|来个|想知道|问下)", "", q)
-        # 去句末标点
-        q = re.sub(r"[？?。！!，,、；;：:]+$", "", q)
-        # 去句末语气词
-        q = re.sub(r"(?<!什)(吗|呢|么|啊|呀|吧|哦|哈|呗|啦|咯|喔)+$", "", q)
-        # 去开头的疑问引导词
-        q = re.sub(r"^(什么是|是什么|是谁|为什么|为啥|为何|怎么样|怎么|如何|能不能|可不可以|会不会|是不是|有没有|有哪些|哪里|哪儿|多少|几点|几号|干嘛|干吗)", "", q)
-        # 去首尾残留的助词/标点
-        q = q.strip(" ？?。，,、 ")
-        if len(q) < 2:
-            return ""
-        return q[:60]
+        return normalize_search_query(text)
 
     def _merge_tool_replies(self, results: list) -> str:
         """整合多个工具的返回结果为一个回答（多工具协同，择优输出）。"""

@@ -78,8 +78,8 @@ _REPLAY_TYPE_LIMITS: Dict[str, int] = {
 _subscriptions: Dict[str, List[str]] = {}         # event_type -> [organ_code, ...]
 _inboxes: Dict[str, List[Dict[str, Any]]] = {}    # organ_code -> 待处理事件收件箱
 
-# 事件总线观测日志开关：True=每次分发打印一行日志（肉眼可见信号流入），False=静默。
-_BUS_LOG_ENABLED = True
+# 事件总线观测日志开关：默认静默；设置环境变量 ORGAN_BUS_LOG=1 才打印（肉眼可见信号流入）。
+_BUS_LOG_ENABLED = os.environ.get("ORGAN_BUS_LOG", "0") == "1"
 
 
 def emit_event(event_type: str, payload: Optional[Dict[str, Any]] = None,
@@ -183,7 +183,10 @@ def bus_stats() -> Dict[str, Any]:
 #   归纳出新一轮结果时会覆盖快照；持久化的价值是事件不足时的保底 + 停机最终快照 +
 #   meta.tick_counter 连续（避免重启后归纳周期错乱）。
 
-_ORGAN_STATE_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "tan_model_organs.json"
+_ORGAN_STATE_PATH = Path(
+    os.environ.get("ORGAN_STATE_PATH", "")
+    or (Path(__file__).resolve().parent.parent.parent / "data" / "tan_model_organs.json")
+)
 ORGAN_AUTOSAVE_EVERY: int = 30    # 每 30 次器官主循环 tick 自动落盘一次
 _organ_tick_counter: int = 0      # organ_tick_all 调用计数（自动保存触发用，落盘恢复→跨会话累计）
 

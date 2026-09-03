@@ -319,6 +319,22 @@ def attempt_recovery():
         return []
 
 
+def _boot_organs():
+    """启动时立即挂载仿生器官框架 + 启动器官后台心跳（不等首次对话/工具执行）。
+
+    器官心跳是后台常驻机制：只要 TanModel 单例实例化，init_all_organs()
+    会注册全部器官并恢复跨重启状态，start_organ_heartbeat() 会拉起 daemon
+    心跳线程，之后无人对话器官也按 ORGAN_HEARTBEAT_INTERVAL 自主呼吸一次
+    （主观时钟推进、重放、自我模型演化）。此处显式触发，确保「开机即有呼吸」。
+    """
+    try:
+        from src.agent.world_model import get_tan_model
+        get_tan_model()
+        logger.info("🫀 仿生器官已随应用启动挂载，后台心跳已启动")
+    except Exception as e:
+        logger.warning(f"🫀 器官启动失败（不影响主程序）: {e}")
+
+
 def run_desktop(args):
     """启动原生桌面应用 — PyQt6 全原生控件，后端异步初始化"""
     # 沙盒模式：由 sandbox_execute 的子进程设置，防止意外启动 GUI
@@ -419,6 +435,8 @@ def run_desktop(args):
     config = load_config()
     start_scheduler(config)
 
+    _boot_organs()
+
     host = "127.0.0.1"
     port = getattr(args, 'port', 9800)
 
@@ -511,6 +529,8 @@ def run_web_only(args):
     from src.database.db import init_db
     init_db()
 
+    _boot_organs()
+
     # ===== 流量统计：后台线程发送 ping，绝不阻塞服务启动（与桌面版 launch_app 一致） =====
     import threading as _thr
 
@@ -602,6 +622,8 @@ def run_scheduler():
 
     config = load_config()
     start_scheduler(config)
+
+    _boot_organs()
 
     logger.info("📅 调度器已启动，Ctrl+C 停止")
     try:

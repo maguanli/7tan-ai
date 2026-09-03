@@ -8,6 +8,7 @@
 测试5 幼年效应：早期大量低权重事件不固化，仅高 focus/valence 少数固化
 """
 import sys, os
+from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
     sys.stdout.reconfigure(encoding='utf-8')
@@ -22,6 +23,13 @@ def reset():
     bo.organ_registry.clear()
     bo._event_queue.clear()
     bo._event_log.clear()
+    # ── 状态隔离（2026-09-03 修复）：init_all_organs() 末尾会 load_organ_state() 读取真实
+    # data/tan_model_organs.json——运行中的 WEB 服务每 30 tick 自动落盘真实对话记忆，
+    # 会把生产数据灌进测试（「刚启动条目数」「固化计数」被污染而误报失败）。
+    # 这里先把 _ORGAN_STATE_PATH 重定向到临时空文件，init 加载不到任何东西，测试自干净。
+    import tempfile as _tf
+    _tmp = Path(_tf.mkdtemp(prefix="stage6_observe_")) / "organs.json"
+    bo._ORGAN_STATE_PATH = _tmp
     bo._replay_buffer.clear()
     bo._subscriptions.clear()
     bo._inboxes.clear()

@@ -70,7 +70,8 @@ def main():
     # ========== ② 原子写：无 .tmp 残留，文件可解析 ==========
     check("②无 .tmp 残留", not (tmpdir / "tan_model_organs.json.tmp").exists())
     raw = json.loads(state_file.read_text(encoding="utf-8"))
-    check("②落盘文件 JSON 可解析", isinstance(raw, dict) and raw.get("version") == 1)
+    # b03baf7（阶段六修复6）将落盘格式升级为 version=2（新增重放/动机计数器+主观时钟），此处同步断言
+    check("②落盘文件 JSON 可解析", isinstance(raw, dict) and raw.get("version") == 2)
 
     # ========== ③ 坏文件容错 ==========
     bad = tmpdir / "bad.json"

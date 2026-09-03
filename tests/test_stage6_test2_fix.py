@@ -15,7 +15,8 @@ print("COMPILE_OK")
 
 # 2) 源码断言：修复代码真实落盘
 src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "agent", "bionic_organs.py"), encoding="utf-8").read()
-assert "all_mem_events = poll_replay_events(\"mem_consolidated\", 200)" in src, "修复代码不在源码里！"
+# b03baf7（阶段六修复6）把「变量赋值采样」重构为「for 循环直读 + 去重键」，语义不变（全历史采样），锚点同步更新
+assert "for mem_evt in poll_replay_events(\"mem_consolidated\", 200):" in src, "修复代码不在源码里！"
 assert "subjective_time\": mem_data.get(\"subjective_time\")" in src, "主观时间透传缺失！"
 assert src.count("old_mem_events = poll_replay_events(\"mem_consolidated\", replay_sample)") == 0, "旧逻辑还残留！"
 print("SOURCE_PATCH_OK  (全部历史采样 + focus降序 + 主观时间透传 均已落盘)")

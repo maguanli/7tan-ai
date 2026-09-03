@@ -167,7 +167,8 @@ check("7b 低权重被淘汰、高权重保留(非FIFO)", low_left < 100 and hig
 
 # ================= 测试8：CONSOLIDATE 调参确认 =================
 cfg = bo.get_organ("ORG-CONSOLIDATE").config
-check("8a 重放间隔50/采样6", cfg.get("REPLAY_INTERVAL_TICKS") == 50 and cfg.get("REPLAY_SAMPLE_COUNT") == 6,
+# b03baf7（阶段六修复6）将重放间隔从 50 调至 20（重放更快触达，采样数不变），此处同步断言
+check("8a 重放间隔20/采样6", cfg.get("REPLAY_INTERVAL_TICKS") == 20 and cfg.get("REPLAY_SAMPLE_COUNT") == 6,
       f"config={cfg}")
 
 # ================= 测试9：world_model 兼容（关键接口未被破坏） =================

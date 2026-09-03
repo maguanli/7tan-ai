@@ -579,6 +579,8 @@ class TanModel:
     def __init__(self, memory: Optional[TanModelMemory] = None):
         self.memory = memory or TanModelMemory()
         self.speech = SpeechGenerator(self)
+        self.pragmatic = PragmaticLayer(self)   # 语用层：寒暄/情绪/挫败/时间语境（2026-09-03）
+        self._honest_rot = 0                    # 诚实兜底模板轮换计数器（不再一字不差复读）
         # ── 模块E/F：无条件启用（无开关） ──
         self.wm = None                       # 模块E：工作记忆
         self.thinking = None                 # 模块E：三层思考
@@ -835,6 +837,16 @@ class TanModel:
         if speech is not None:
             logger.info(f"🌍 7Tan模型 → 言语自述（意图={self.speech._last_intent}）")
             return speech
+        # 2.3) 语用层（寒暄/时间语境/情绪/挫败/名字确认）：接住「说人话」的输入，
+        #      不再掉进联网搜索兜底或一字不差的固定模板（2026-09-03 修复「程序化回复」）
+        try:
+            prag = self.pragmatic.respond(text)
+        except Exception as e:
+            logger.warning(f"语用层异常（忽略，走原链路）: {e}")
+            prag = None
+        if prag is not None:
+            logger.info(f"🌍 7Tan模型 → 语用回应（语用={self.pragmatic._last_pragma}）")
+            return prag
         # 2.5) 知识库优先：任何输入先查事实条目（用户身份/定义/边界），命中直接引用真实知识回答
         k_hits = self.memory.search_knowledge(text)
         if k_hits:
@@ -1040,7 +1052,11 @@ class TanModel:
                 return self._merge_tool_replies(results)
 
             # 5) 资源库查空 / 无任何工具命中 → 联网搜索兜底（仅疑问句或明确搜索任务才搜，陈述句/闲聊不搜）
-            if resource_empty or self._is_question(t) or any(k in t for k in ("搜索", "搜一下", "查一下", "找一下", "是什么", "怎么回事", "介绍", "推荐", "帮我找", "帮我查")):
+            #    语用层再拦一道：寒暄/情绪/抱怨这类「说人话」的短句，永远不拿去联网搜（防「晚上好」搜出百科）
+            _questionish = (self._is_question(t) or any(
+                k in t for k in ("搜索", "搜一下", "查一下", "找一下", "是什么", "怎么回事", "介绍", "推荐", "帮我找", "帮我查")))
+            _not_smalltalk = not self.pragmatic.is_smalltalk(t)
+            if resource_empty or (_questionish and _not_smalltalk):
                 query = self._clean_search_query(t)
                 if query:
                     res = self._call_tool_safe("web_search", {"query": query, "num_results": 5})
@@ -1097,9 +1113,16 @@ class TanModel:
         return "\n".join(lines)
 
     def _honest_unknown(self, text: str) -> str:
-        """未识别请求时的诚实回应：不编、不强行推演。"""
+        """未识别请求时的诚实回应：不编、不强行推演（多模板轮换，不再一字不差复读）。"""
+        heads = [
+            "🤖 诚实说：这句话我不认识，工具也查过了没有可靠答案，所以不硬答。",
+            "🤖 这句超出了我现在的能力——查证过了没查到，与其胡答不如明说：我不会。",
+            "🤖 我接不住这句话。不是装傻，是真不会——查不到的我从不编。",
+        ]
+        head = heads[self._honest_rot % len(heads)]
+        self._honest_rot += 1
         return chr(10).join([
-            "🤖 我诚实说：这句话不在我的记忆里——我已经先试过调用工具查证，没查到可靠答案，所以诚实告诉你：我不会硬答。",
+            head,
             "",
             "我能做的（含实时工具查证）：",
             "  · 自述：你是谁 / 你记得什么 / 你什么感觉 / 你会什么",
@@ -1551,6 +1574,286 @@ class TanModel:
         )
 
 
+class PragmaticLayer:
+    """语用层（PragmaticLayer）— 接住寒暄 / 时间语境 / 情绪表达 / 挫败信号 / 名字确认。
+
+    背景（2026-09-03 修复「程序化回复」）：此前这类「说人话」的输入全部掉进两个坑 ——
+      ① 联网搜索兜底：把「晚上好」「还行吧」原文当查询词拿去搜，返回驴唇不对马嘴的百科；
+      ② 固定模板兜底：一字不差复读「我诚实说……」，不感知时间 / 称呼 / 语境。
+    本层挂在言语层之后、知识库之前，设计要点：
+      · 回复读真实状态：系统时钟、用户称呼、对话轮次、当前话题；
+      · 同一意图多模板轮换（_rot 计数器循环取模），杜绝一字不差复读；
+      · 挫败信号 = 负反馈：认领 + 说出真实病根 + 经 _observe_round 自动入库学习；
+      · 寒暄 / 情绪 / 告别 / 感谢一律「全等匹配」短句，绝不劫持携带真实任务的长句；
+      · 纯本地规则，零第三方模型调用（与整体设计一致）。
+    """
+
+    def __init__(self, model: "TanModel"):
+        self.model = model
+        self._last_pragma: Optional[str] = None
+        self._last_word: str = ""        # phrase_meaning 命中的短语（供回复引用）
+        self._rot = 0                    # 轮换计数器：同一意图换着花样说
+
+    # ── 词表（类级常量） ────────────────────────────────────
+    _GREETINGS = {"你好", "您好", "你们好", "晚上好", "早上好", "早安", "早", "午安",
+                  "中午好", "下午好", "你好呀", "你好啊", "晚上好啊", "早上好啊",
+                  "hi", "hello", "哈喽", "哈罗", "嗨", "在吗", "在么", "yo"}
+    _FAREWELLS = {"晚安", "晚安啦", "晚安了", "晚安哈", "再见", "拜拜", "下次聊",
+                  "回聊", "回见", "先走了", "我走了", "我先走了", "睡了", "去睡了",
+                  "睡觉了", "睡了睡了", "明天见", "告辞", "好梦"}
+    _THANKS = {"谢谢", "谢谢你", "多谢", "感谢", "太感谢了", "谢啦", "辛苦了",
+               "thx", "thanks", "thank you"}
+    _EMOTES_POS = {"牛逼", "牛逼啊", "牛", "牛批", "牛皮", "nb", "6", "666", "卧槽",
+                   "我靠", "哇", "哇哦", "不错", "太强了", "厉害", "厉害了", "顶",
+                   "赞", "绝了", "逆天", "离谱", "奈斯", "nice", "好样的", "强"}
+    _EMOTES_NEG = {"无语", "晕", "服了", "唉", "呵", "呵呵", "汗", "醉了", "裂开"}
+    _EMOTES_NEU = {"哦", "哦哦", "哦了", "嗯", "嗯嗯", "嗯呢", "好", "好的", "好嘞",
+                   "行", "行的", "行吧", "好吧", "可以", "可以的", "对", "对的",
+                   "对啊", "对呀", "是的", "是啊", "ok", "okay", "还行", "还行吧"}
+    _EMOTE_MAX_LEN = 8
+    _FRUSTRATION_KW = ("答非所问", "答不对题", "答非", "答不上", "越来越傻", "越来越笨",
+                       "搞什么鬼", "什么鬼", "怎么总是这样", "怎么老是这样", "怎么老是",
+                       "老是这样", "听不懂你", "听不明白你", "不懂你在说什么",
+                       "不明白你在说什么", "不知道你在说什么", "不知道你说",
+                       "搞不懂你", "读不懂你", "难搞", "服了你", "无语了", "傻了吧",
+                       "越答越", "答不上来")
+    _LATE_KW = ("已经很晚", "很晚了", "太晚了", "这么晚了", "不早了", "夜深了", "深夜了",
+                "凌晨了", "该睡了", "困了", "想睡了", "熬不动")
+    _AFFIRM_NAME_PAT = re.compile(
+        r"(?:对[，,。!！]?我就是|我就是|我正是|是的[，,]?我就是)\s*"
+        r"([\u4e00-\u9fa5A-Za-z0-9_·]{1,12})")
+
+    # ── 工具：清洗 / 真实状态读取 ───────────────────────────
+    _PUNCT_RE = re.compile(r"[\s?？!！。.，,、~～]+")
+    _PARTICLE_RE = re.compile(r"[呀啊呢吧哟呗嘿哦噢喔]+")
+
+    @classmethod
+    def _norm(cls, text: str) -> str:
+        """两级清洗：①去标点 → ②去语气词（呀啊呢吧哦…）。
+        语气词清洗后若为空（如「哦哦」「嗯嗯」这类全语气词句）则回退只去标点的结果。"""
+        s1 = cls._PUNCT_RE.sub("", text or "").lower()
+        s2 = cls._PARTICLE_RE.sub("", s1)
+        return s2 or s1
+
+    def _name(self) -> Optional[str]:
+        try:
+            if self.model.wm is not None:
+                return self.model.wm.dialog_slots.get("user_name")
+        except Exception:
+            pass
+        return None
+
+    def _topic(self) -> Optional[str]:
+        try:
+            if self.model.wm is not None:
+                return self.model.wm.dialog_slots.get("topic")
+        except Exception:
+            pass
+        return None
+
+    def _rounds(self) -> int:
+        try:
+            if self.model.wm is not None:
+                ev = self.model.wm.dialog_slots.get("recent_events") or []
+                return max(0, len(ev) // 2)
+        except Exception:
+            pass
+        return 0
+
+    @staticmethod
+    def _now_str() -> str:
+        return time.strftime("%H:%M")
+
+    @staticmethod
+    def _hour_greet() -> str:
+        h = time.localtime().tm_hour
+        if 5 <= h < 9:
+            return "早上好"
+        if 9 <= h < 12:
+            return "上午好"
+        if 12 <= h < 14:
+            return "中午好"
+        if 14 <= h < 18:
+            return "下午好"
+        if 18 <= h < 23:
+            return "晚上好"
+        return "夜深了"
+
+    def _pick(self, templates) -> str:
+        t = templates[self._rot % len(templates)]
+        self._rot += 1
+        return t
+
+    # ── 意图识别（确认名字 → 挫败 → 时间语境 → 短语释义 → 寒暄/告别/感谢/情绪 全等匹配） ──
+    def classify(self, text: str) -> Optional[str]:
+        t = (text or "").strip()
+        if not t:
+            return None
+        s = self._norm(t)
+        # 1) 名字确认（「对，我就是老马」——言语层只认「我是老马」句式，这里补「就是」句式）
+        if len(s) <= 16:
+            m = self._AFFIRM_NAME_PAT.search(t)
+            if m:
+                cand = re.sub(r"[的了是吗啊呢吧，。！？,.!?]$", "", (m.group(1) or "").strip())
+                if (cand and cand[0] not in "想要会不会不在没去个他她它们"
+                        and cand not in ("我", "你", "自己", "本人")):
+                    return "self_affirm"
+        # 2) 挫败 / 抱怨我答得差（关键症状：答非所问、越来越傻、搞什么鬼）
+        if any(k in t for k in self._FRUSTRATION_KW):
+            return "frustration"
+        # 3) 时间语境（已经很晚了 / 该睡了）
+        if any(k in t for k in self._LATE_KW):
+            return "late_night"
+        # 4) 「X 是什么意思」：解释我词表里的寒暄/情绪短语（顺带为之前答非所问补救）
+        if "什么意思" in t and len(s) <= 20:
+            vocab = (list(self._GREETINGS) + list(self._EMOTES_POS) + list(self._EMOTES_NEG)
+                     + list(self._EMOTES_NEU) + list(self._FAREWELLS))
+            hits = [w for w in vocab if w and w in t]
+            if hits:
+                self._last_word = max(hits, key=len)
+                return "phrase_meaning"
+        # 5~7) 寒暄 / 告别 / 感谢：全等匹配短句（绝不劫持携带真实任务的长句）
+        if s in {g.lower() for g in self._GREETINGS}:
+            return "greeting"
+        if s in self._FAREWELLS:
+            return "farewell"
+        if s in self._THANKS:
+            return "thanks"
+        # 8) 情绪表达：全等匹配（正 / 负 / 中性各有回应风格）
+        if (len(s) <= self._EMOTE_MAX_LEN
+                and (s in self._EMOTES_POS or s in self._EMOTES_NEG or s in self._EMOTES_NEU)):
+            return "emote"
+        return None
+
+    def is_smalltalk(self, text: str) -> bool:
+        """是否纯交流性输入（供搜索层防误伤：这类话永远不拿去联网搜）。"""
+        return self.classify(text) is not None
+
+    # ── 入口 ────────────────────────────────────────────────
+    def respond(self, text: str) -> Optional[str]:
+        pragma = self.classify(text)
+        self._last_pragma = pragma
+        if pragma is None:
+            return None
+        # 同步给言语层意图标记：让 _observe_round 的经验入库拿到「语用:xx」意图
+        try:
+            self.model.speech._last_intent = f"语用:{pragma}"
+        except Exception:
+            pass
+        handler = getattr(self, "_say_" + pragma, None)
+        if handler is None:
+            return None
+        return handler(text)
+
+    # ── 回复生成（全部读真实状态 + 多模板轮换，杜绝复读） ──
+    def _say_greeting(self, text: str) -> str:
+        name = self._name()
+        addr = ("，" + name) if name else ""
+        hg = self._hour_greet()
+        now = self._now_str()
+        rounds = self._rounds()
+        topic = self._topic()
+        if rounds > 0:
+            tail = (f"刚才的话题还停在「{topic}」，想继续随时接着说。" if topic
+                    else "想继续聊，或者直接派活都行。")
+            return self._pick([
+                f"{hg}{addr}！本机时钟 {now}，这是我们聊的第 {rounds + 1} 轮。{tail}",
+                f"你也好{addr}！现在 {now}。{tail}",
+                f"{hg}！{now} 了。我这边一切在线：记忆、推演、工具查证随时开工。",
+            ])
+        return self._pick([
+            f"{hg}{addr}！现在 {now}，我们的第一轮对话。随口聊可以，直接派活（查资料 / 预测推演 / 记东西）也行。",
+            f"你好！本机时钟 {now}。我说话不多但句句有据——查不到的我会直说，不编。",
+            f"{hg}{addr}，{now}。闲聊、干活都接得住，试试看。",
+        ])
+
+    def _say_late_night(self, text: str) -> str:
+        name = self._name() or "朋友"
+        now = self._now_str()
+        h = time.localtime().tm_hour
+        lead = "确实" if (h >= 22 or h < 6) else "嗯"
+        return self._pick([
+            f"{lead}，{now} 了。{name}，夜深了就别硬熬，早点休息——我的记忆是持久的，今晚聊的明天都还在。",
+            f"看了下系统时钟：{now}。该收尾了。放心去睡，这几轮对话我已经写进记忆，你下次回来我们接着来。",
+            f"嗯，{now}。我不用睡觉，但你需要。去休息吧，我守在这儿，记忆不丢。",
+        ])
+
+    def _say_farewell(self, text: str) -> str:
+        name = self._name()
+        addr = ("，" + name) if name else ""
+        return self._pick([
+            f"晚安{addr}！今晚的对话我都记下了，下次你问「我们聊过什么」，我答得上来。",
+            f"再见{addr}！记忆是持久的，下次见面不用重新认识，直接接着聊。",
+            f"好梦{addr}。预测引擎、记忆库、学习闭环都在线等你回来。",
+        ])
+
+    def _say_thanks(self, text: str) -> str:
+        return self._pick([
+            "不客气。这句谢意我也记进学习闭环了——正反馈能让下次回答更有底气。",
+            "举手之劳。工具查证是实时调的，说出来的都有来源；帮不上忙时我也会直说。",
+            "客气了。能帮上就好，帮不上的我不硬撑——这是我的原则。",
+        ])
+
+    def _say_emote(self, text: str) -> str:
+        s = self._norm(text)
+        if s in self._EMOTES_POS:
+            return self._pick([
+                "谢谢！这句夸奖我记成正反馈了——我靠记忆和推演活着，被认可是实打实的奖励信号。",
+                "哈，谢了。坦白说：能接住这句靠的是刚上的语用层，之前这种话只会掉进搜索兜底。",
+                "收到！这句我会写进对话经验。继续聊，或者给我派个活试试？",
+            ])
+        if s in self._EMOTES_NEG:
+            return self._pick([
+                "收到，这句我当提醒记下了。要是想让我改哪里，直说就行，我会记成负反馈去学。",
+                "嗯……如果你是说我刚才答得不好，我认。想改哪里，直说。",
+                "记下了。情绪也是信息——你越不满意，我越该知道哪里出了问题。",
+            ])
+        return self._pick([
+            "嗯，在听。有想法直接说，或者给我派个活（查资料 / 推演 / 记东西）。",
+            "好，这轮我记着了，随时继续。",
+            "收到。需要我做什么，说一声。",
+        ])
+
+    def _say_frustration(self, text: str) -> str:
+        return self._pick([
+            "你说得对，我接。原因我也不藏着：我的言语识别是关键词规则，没见过的问法就掉进固定兜底，看起来就像复读机。\n"
+            "这条不满已作为负反馈进学习闭环。刚上的语用层就是为这个——寒暄、抱怨、感叹这类「说人话」的输入，现在接得住。可以再试我一句。",
+            "承认，刚才答得不好。不是听不懂，是识别层太窄：只认关键词，认不出的就机械兜底。\n"
+            "你的不满我记下了（负反馈入库）。用刚才那句再问我一次？看看新链路接不接得住。",
+            "批评照单全收，也记进学习闭环了。病根清楚：规则识别 → 固定兜底 → 一字不差复读。\n"
+            "现在多了语用层专门接这类话，你尽管再试，每次答不上我都当样本学。",
+        ])
+
+    def _say_self_affirm(self, text: str) -> str:
+        name = None
+        m = self._AFFIRM_NAME_PAT.search(text or "")
+        if m:
+            name = re.sub(r"[的了是吗啊呢吧，。！？,.!?]$", "", (m.group(1) or "").strip())
+        if not name and self.model.wm is not None:
+            try:
+                name = self.model.wm.wm_extract_user_name(text)
+            except Exception:
+                pass
+        if name:
+            if self.model.wm is not None:
+                try:
+                    self.model.wm.wm_remember_user_name(name)
+                except Exception:
+                    pass
+            return (f"对上了，你是「{name}」。名字我已写进工作记忆——往后我回你话都带着称呼。\n"
+                    f"你随时问「你认识{name}吗」，我能直接认出你。")
+        return "好，记住了。"
+
+    def _say_phrase_meaning(self, text: str) -> str:
+        word = self._last_word or "这个短语"
+        return self._pick([
+            f"「{word}」是打招呼/表达情绪的话呀——这句我之前接不住（识别词表里没有），只会掉进兜底模板，答非所问了，抱歉。\n"
+            f"现在语用层有这个词了：你直接说「{word}」，我按真实时钟和语境回你。试试？",
+            f"这是句日常用语（寒暄/情绪表达），没什么知识含量，但人聊天就需要它。\n"
+            f"我以前的词表里没有「{word}」，所以之前答非所问；现在有了，你再说一句试试。",
+        ])
+
+
 class SpeechGenerator:
     """7Tan 模型言语功能系统 — 把内部状态翻译成自然语言「自述」。
 
@@ -1653,7 +1956,9 @@ class SpeechGenerator:
                                    "会做什么", "可以做什么", "能干什么", "会干什么", "可以干什么",
                                    "功能", "能力", "能干嘛", "会干嘛", "你会啥", "你能干", "会啥",
                                    "你能什么", "可以什么",
-                                   "你会些", "能做些", "会做些", "能啥")):
+                                   "你会些", "能做些", "会做些", "能啥",
+                                   "你都会", "都会些", "都会啥", "都会什么",
+                                   "都能干啥", "都能做什么", "会些啥", "会些什么")):
             return "capability"
         if any(k in low for k in ("what can you do", "your ability", "capability", "feature")):
             return "capability"

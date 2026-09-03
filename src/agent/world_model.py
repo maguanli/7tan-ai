@@ -1136,6 +1136,27 @@ class TanModel:
             "输入「帮助」查看完整用法。",
         ])
 
+    # 指代词集合：命中则触发「对话回溯」——把上一轮对话内容合并进本轮检索词。
+    _COREF_WORDS = (
+        "那", "这", "它", "这些", "那些", "它们", "这个", "那个",
+        "这么", "那么", "其中", "上面", "刚才说的", "前面说的", "之前说的",
+    )
+
+    def _resolve_context_reference(self, text: str) -> str:
+        """对话回溯：若当前输入含指代词，则把上一轮用户消息合并进检索词。
+
+        解决短板「缺少对话回溯能力」：例如用户上一句说「我积累了 2236 段经历」，
+        下一句问「那这些经历会遗忘吗」，系统能自动关联上一句的「经历」去检索，
+        而不是把「这些」当成孤立词、检索落空。无指代词或无上一轮时返回原文本。"""
+        if not text or not any(w in text for w in self._COREF_WORDS):
+            return text
+        for m in reversed(self.conversation_history or []):
+            if isinstance(m, dict) and m.get("role") == "user":
+                prev = (m.get("content") or "").strip()
+                if prev:
+                    return f"{prev} {text}"
+        return text
+
     def _think_answer_question(self, text: str) -> str:
         """疑问句思考循环：在工作记忆 + 长期记忆中检索相关经验，能答则答，不能答则诚实承认。
 
@@ -1145,8 +1166,10 @@ class TanModel:
           3. 命中 → 引用真实记忆回答；未命中 → 诚实承认不会，不编答案
         """
         lines: list = []
+        # —— 检索-1：指代回溯（对话上下文复用，修复「缺少对话回溯能力」）——
+        search_text = self._resolve_context_reference(text)
         # —— 检索0：知识库优先（事实条目直接命中，如「老马是谁」「7Tan 是什么」） ——
-        k_hits = self.memory.search_knowledge(text)
+        k_hits = self.memory.search_knowledge(search_text)
         if k_hits:
             lines.append("📌 这个问题我知识库里有答案（来自真实对话提取）：")
             for k in k_hits[:3]:
@@ -1169,7 +1192,7 @@ class TanModel:
                     if last_user:
                         lines.append(f"🤔 我检索了工作记忆：最近你跟我说的是「{last_user[:60]}」。")
         # —— 检索2：长期记忆轨迹（关键词重叠） ——
-        hits = self._search_memory_by_keywords(text)
+        hits = self._search_memory_by_keywords(search_text)
         weak_memory = []   # 弱相关痕迹（只重叠1个词，疑似撞词），存下待工具查证后整合
         if hits:
             strong = hits[0].get("_overlap", 0) >= 2
@@ -1187,12 +1210,12 @@ class TanModel:
             # 弱相关：不阻塞，先走工具查证，再把记忆痕迹一起整合给用户
             weak_memory = hits[:2]
         # —— 检索2.4：常识问答（问句语义解析优先）—— 理解疑问类型+主体，抽取直接答案 ——
-        common = self._answer_common_question(text)
+        common = self._answer_common_question(search_text)
         if common:
             logger.info("🌍 7Tan模型 → 常识问答（问句解析命中）")
             return common
         # —— 检索2.4.5：工具增强 —— 记忆未命中/弱相关时，调用工具实时查证（知识/新闻/文件/联网搜索）
-        tool_reply = self._try_tool_answer(text)
+        tool_reply = self._try_tool_answer(search_text)
         if tool_reply:
             if weak_memory:
                 logger.info("🌍 7Tan模型 → 记忆弱相关，工具查证 + 记忆痕迹整合")
@@ -1204,7 +1227,7 @@ class TanModel:
             logger.info("🌍 7Tan模型 → 记忆轨迹未命中，转工具实时查证")
             return tool_reply
         # —— 检索2.5：对话内容检索（在 user_text/reply 原文里找关键词，回答「我们聊过什么」） ——
-        c_hits = self.memory.search_content(text)
+        c_hits = self.memory.search_content(search_text)
         if c_hits:
             lines.append("📚 我在对话原文里找到了相关的内容（真实记忆，不是编的）：")
             for h in c_hits[:3]:
@@ -1431,6 +1454,20 @@ class TanModel:
         self._push_experience(scene, action, None, focus=0.6, valence=0.0,
                               origin="external", kind="推演")
 
+        # 假想预演（ORG-SIMULATE 接入对话生成链路）：主推演之外，再调用 ORG-SIMULATE
+        # 做沙盒假想预演，呈现「模拟执行该动作的预期成功率 + 是否命中能力边界」。
+        simulate_lines = []
+        try:
+            from .bionic_organs import organ_simulate_preview
+            sim = organ_simulate_preview(scene, action, self.memory)
+            if sim and sim.get("sim_confidence") is not None:
+                simulate_lines.append("🧪 假想预演（ORG-SIMULATE 沙盒推演）：")
+                simulate_lines.append(f"  · 模拟执行「{scene}:{action}」的预期成功率：{sim['sim_confidence']}")
+                if sim.get("limit_hit"):
+                    simulate_lines.append("  · ⚠️ 该动作落在已知能力边界内，模拟已压低预期（≤0.3）")
+        except Exception:
+            pass
+
         lines = [
             "🤖 7Tan 模型推演报告",
             "━━━━━━━━━━━━━━━━━━",
@@ -1442,6 +1479,9 @@ class TanModel:
             f"预期结果：{verdict}",
             "",
         ]
+        if simulate_lines:
+            lines.extend(simulate_lines)
+            lines.append("")
         if feat is not None:
             names = ["成功概率", "场景变化概率", "缺陷降低概率", "知识增益概率"]
             lines.append("预测特征向量（4 维）：")
@@ -1525,6 +1565,7 @@ class SpeechGenerator:
             "memory": self.speak_memory,
             "memory_list": self.speak_memory_list,
             "memory_count": self.speak_memory_count,
+            "memory_forget": self.speak_memory_forget,
             "knowledge": self.speak_knowledge,
             "prediction": self.speak_prediction,
             "motive": self.speak_motive,
@@ -1629,6 +1670,9 @@ class SpeechGenerator:
         # 9) 反思
         if any(k in text for k in ("复盘", "反思", "做得对", "做得怎么样", "回顾")):
             return "reflection"
+        # 9.5) 遗忘机制（「会遗忘吗/会忘记吗」）—— 问记忆的遗忘机制，须在记忆概述分支之前
+        if any(k in text for k in ("遗忘", "忘记", "忘掉", "会忘", "记不住", "忘了吗", "忘掉吗")):
+            return "memory_forget"
         # 10) 记忆（口语化）细分：列明细 / 统计条数 / 概述
         if any(k in text for k in ("记得", "回忆", "记忆", "以前", "印象", "经历")):
             if any(k in text for k in ("显示", "列出", "列表", "明细", "详细", "都是些",
@@ -1714,6 +1758,21 @@ class SpeechGenerator:
         if n_dialog:
             lines.append(f"另外，我还和你对话了 {n_dialog} 次，这些也都在我的记忆里。")
         return "\n".join(lines)
+
+    def speak_memory_forget(self) -> str:
+        """回答「我的记忆会不会遗忘」——基于真实记忆机制（权重衰减 + 容量淘汰 + 巩固筛选）。"""
+        n = len(self.model.memory.traces)
+        lines = [
+            "会的，我的记忆不是永久保鲜——我会「遗忘」，而且是真实地在忘：",
+            "",
+            "  · 每条记忆都带权重，长时间不被唤起，权重会逐渐衰减；",
+            "  · 权重低到阈值、又超出容量上限的琐碎记忆，会被淘汰；",
+            "  · 但核心的、反复被重放巩固的记忆会越来越牢固，不容易忘。",
+            "",
+            f"所以不是全部忘光，而是「琐事淡忘、要事沉淀」。我现在共有 {n} 段经历，",
+            "那些长期没被想起的，确实会慢慢变淡。",
+        ]
+        return chr(10).join(lines)
 
     def speak_memory_list(self) -> str:
         """记忆明细：把记忆库里的经历按场景逐条列出（真实检索数据库内容）。"""

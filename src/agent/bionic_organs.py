@@ -770,6 +770,7 @@ def module_speech_tick(ctx=None):
                 text = p.get("text", "")
                 if text:
                     output_log.append(str(text)[:200])
+                    logger.info(f"🗣️[SPEECH] 收到 broadcast 输出文本: {str(text)[:80]}")
             elif et == "bodystate_update":
                 speech_state["fatigue"] = float(p.get("fatigue", 0.0))
                 speech_state["resource_pressure"] = float(p.get("resource_pressure", 0.0))
@@ -855,6 +856,8 @@ def module_speech_push(text):
             output_log.append(str(text)[:200])
             if len(output_log) > 200:
                 output_log = output_log[-100:]
+            # 输出文本事件日志：控制台可见回复文本，方便调试模板渲染（短板2）
+            logger.info(f"🗣️[SPEECH] 输出文本: {str(text)[:80]}")
     except Exception:
         pass
 
@@ -1581,6 +1584,24 @@ def organ_simulate_tick(ctx=None):
                     }, source="ORG-SIMULATE", origin="internal")
     except Exception:
         pass
+
+
+def organ_simulate_preview(scene, action, ctx=None) -> Dict[str, Any]:
+    """ORG-SIMULATE 对「场景:动作」做一次假想预演（供 world_model 言语链路直接调用）。
+
+    这是 ORG-SIMULATE 真正参与对话生成链路的入口——此前它只在 organ_tick_all 被动 tick，
+    产出 simulation_result 回送 ORG-B，但不影响本轮回复文本。现在预测类问题会直接调用
+    本函数做沙盒推演，把「模拟执行该动作的预期成功率 + 是否命中能力边界」写进回复。"""
+    lim_keys = {str(l.get("key", "")) for l in _self_limitations_sim}
+    conf = _simulate_confidence(ctx, scene, action, lim_keys)
+    if conf is None:
+        conf = 0.5
+    return {
+        "scene": scene,
+        "action": action,
+        "sim_confidence": conf,
+        "limit_hit": f"{scene}:{action}" in lim_keys,
+    }
 
 
 # ====================== 注册新增内核器官 ======================

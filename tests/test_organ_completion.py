@@ -6,6 +6,12 @@ sys.path.insert(0, r"D:\7tan\7tanAI")
 
 from src.agent import bionic_organs as bo
 
+# 测试卫生：器官状态自动落盘重定向到临时文件，避免污染真实 data/tan_model_organs.json
+# （本测试跑大量 organ_tick_all，会周期触发 save_organ_state()）
+import tempfile as _tf
+from pathlib import Path as _P
+bo._ORGAN_STATE_PATH = _P(_tf.mkdtemp(prefix="organ_state_test_")) / "state.json"
+
 PASS = []
 FAIL = []
 

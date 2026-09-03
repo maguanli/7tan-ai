@@ -16,10 +16,12 @@
 # 避免同一 tick 内器官循环调用造成递归。
 # =============================================================================
 
+import json
 import os
 import random
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Dict, Any, Optional, List
 
 from loguru import logger
@@ -167,6 +169,89 @@ def bus_stats() -> Dict[str, Any]:
     }
 
 
+# ====================== 器官状态持久化（ORG-A / ORG-SELFMODEL 落盘 + 启动加载）======================
+# 目标：让 ORG-A 长期记忆库（memory_library）与 ORG-SELFMODEL 自我模型（self_model_data）
+#       跨进程存续——重启后 7Tan 不再整体失忆，自传记忆与元认知快照直接恢复。
+# 机制：
+#   - save_organ_state()：原子写盘（先写 .tmp 再 os.replace，写一半崩溃不毁旧文件）
+#   - load_organ_state()：逐条防御校验，坏文件/坏条目自动跳过，绝不抛异常
+#   - organ_tick_all()：每 ORGAN_AUTOSAVE_EVERY 次主循环自动落盘一次（约每 30 轮对话）
+#   - init_all_organs()：注册完成后立即加载（WEB 服务启动即恢复）
+# 语义边界（如实声明）：
+#   ORG-SELFMODEL 的 capability/history_summary 等字段是「回放窗口重建型」——
+#   归纳出新一轮结果时会覆盖快照；持久化的价值是事件不足时的保底 + 停机最终快照 +
+#   meta.tick_counter 连续（避免重启后归纳周期错乱）。
+
+_ORGAN_STATE_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "tan_model_organs.json"
+ORGAN_AUTOSAVE_EVERY: int = 30    # 每 30 次器官主循环 tick 自动落盘一次
+_organ_tick_counter: int = 0      # organ_tick_all 调用计数（自动保存触发用）
+
+# SELFMODEL meta 默认模板（须与 self_model_data 初始 meta 保持一致）：
+# 加载旧快照时以它为底做三层合并（默认模板 ∪ 当前内存 ∪ 快照），
+# 防止旧版本/被破坏的 meta 缺 tick_counter 导致 SELFMODEL tick KeyError。
+_DEFAULT_SELFMODEL_META: Dict[str, Any] = {"last_update_subj_time": 0.0, "tick_counter": 0}
+
+
+def save_organ_state(path=None) -> bool:
+    """器官状态落盘：ORG-A memory_library + ORG-SELFMODEL self_model_data。返回是否成功。"""
+    try:
+        target = Path(path) if path else _ORGAN_STATE_PATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+        state = {
+            "version": 1,
+            "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "organ_tick_counter": _organ_tick_counter,
+            "memory_library": [m for m in memory_library if isinstance(m, dict)],
+            "self_model_data": self_model_data,
+        }
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+        os.replace(tmp, target)
+        return True
+    except Exception as e:
+        logger.warning(f"器官状态落盘失败（忽略）: {e}")
+        return False
+
+
+def load_organ_state(path=None) -> bool:
+    """启动加载器官状态：恢复 memory_library 与 self_model_data。坏文件自动跳过，绝不抛异常。"""
+    global _organ_tick_counter
+    try:
+        target = Path(path) if path else _ORGAN_STATE_PATH
+        if not target.exists():
+            return False
+        raw = json.loads(target.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            return False
+        # ① ORG-A：长期记忆库逐条校验（无 thought 的坏条目跳过，防脏数据入库）
+        lib = raw.get("memory_library")
+        if isinstance(lib, list):
+            memory_library.clear()
+            for m in lib:
+                if isinstance(m, dict) and m.get("thought"):
+                    memory_library.append(m)
+        # ② ORG-SELFMODEL：自我模型快照逐 key 恢复（旧快照缺的 key 保留内存默认值）
+        sm = raw.get("self_model_data")
+        if isinstance(sm, dict):
+            for k, v in sm.items():
+                if k == "meta" and isinstance(v, dict):
+                    base = dict(_DEFAULT_SELFMODEL_META)
+                    base.update(self_model_data.get("meta") or {})
+                    base.update(v)
+                    self_model_data["meta"] = base
+                else:
+                    self_model_data[k] = v
+        _organ_tick_counter = int(raw.get("organ_tick_counter", 0) or 0)
+        logger.info(
+            f"🧠 器官状态已加载: ORG-A 记忆 {len(memory_library)} 条, "
+            f"SELFMODEL confidence={self_model_data.get('confidence')} (tick={_organ_tick_counter})"
+        )
+        return True
+    except Exception as e:
+        logger.warning(f"器官状态加载失败（忽略，从空状态启动）: {e}")
+        return False
+
+
 def organ_tick_all(ctx=None):
     """系统主循环：先分发已入队事件 → 顺序驱动所有已开启器官执行 tick → 末尾再分发本 tick 新事件。
 
@@ -190,6 +275,11 @@ def organ_tick_all(ctx=None):
             continue
     # 本 tick 全部器官跑完后，统一分发事件（防同一 tick 内递归）
     _dispatch_events()
+    # 器官状态周期性自动落盘（ORG-A 记忆库 + ORG-SELFMODEL 快照，防重启失忆）
+    global _organ_tick_counter
+    _organ_tick_counter += 1
+    if _organ_tick_counter % ORGAN_AUTOSAVE_EVERY == 0:
+        save_organ_state()
 
 
 # ====================== 阶段3：ORG-A 海马体·长期记忆器官 ======================
@@ -797,7 +887,7 @@ def module_speech_tick(ctx=None):
 
 
 def generate_self_report() -> str:
-    """自述文本生成：把内部器官状态变量忠实映射为人类可读文本（纯模板，无 LLM）。
+    """自述文本生成：把内部器官状态变量忠实映射为人类可读文本（纯模板，无任何第三方模型调用）。
 
     ⚠️ 以下文本只是内部变量的忠实读数转述（变量名+数值可回溯），
     不是真的感受到累/愉悦/遗憾——本内核不具备现象意识 qualia。"""
@@ -1753,6 +1843,7 @@ def init_all_organs():
     register_organ_speech()
     register_extra_core_organs()
     _setup_subscriptions()
+    load_organ_state()   # 启动恢复：ORG-A 长期记忆库 + ORG-SELFMODEL 自我模型快照
 
 
 # ====================== 自检入口 ======================

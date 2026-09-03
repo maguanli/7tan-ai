@@ -3,6 +3,9 @@
 验证重放采样已从「最近N条」改为「全部历史+高权重优先」+ 主观时间透传。
 """
 import sys, os
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 # 1) 编译检查

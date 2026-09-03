@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """阶段三 SELFMODEL 5 处修复的真机验证脚本"""
 import sys, os
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import importlib

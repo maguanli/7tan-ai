@@ -187,6 +187,133 @@ def filter_search_text(res_text: str, terms: list, keep: int = 4) -> str:
     return out
 
 
+# ---------------- 问句语义解析器（路径A：纯规则，理解疑问类型 + 主体，无第三方模型） ----------------
+# 背景：之前只靠正则「删词」生成搜索 query，无法理解「太阳系有多少颗行星」这类常识问答，
+# 导致 Bing 把整句降级成单字「太阳」/「大」等跑偏结果。现在加一层问句结构解析：
+#   识别疑问类型（数量/定义/身份/位置/时间/原因/怎么做/是否）→ 提取主体 → 生成检索友好 query → 答案抽取。
+
+_MEASURE_RE = r"个|只|颗|条|台|辆|座|位|岁|种|类|张|把|支|根|块|片|本|份|场|次|遍|层|年|天|小时|分钟|秒|米|公里|千克|公斤|克|斤|吨|元|块钱|毛|角|分"
+_QUESTION_PARTICLE_RE = re.compile(r"(?<!什)(?<!怎)(吗|呢|么|啊|呀|吧|哈|哦|喔|呗|啦|咯)+$")
+_CN_NUM_RE = r"(?:[0-9]+|[一二两三四五六七八九十百千]+)"
+
+
+class QuestionParse:
+    """问句解析结果：疑问类型 + 主体 + 范围 + 量词（纯规则，无模型）。"""
+
+    __slots__ = ("qtype", "scope", "subject", "measure")
+
+    def __init__(self, qtype, scope="", subject="", measure=""):
+        self.qtype = qtype
+        self.scope = scope or ""
+        self.subject = subject or ""
+        self.measure = measure or ""
+
+    def is_self_referential(self) -> bool:
+        """主体指向「我自己/系统」而非外部常识 → 走原言语层，不走常识问答。"""
+        blob = self.scope + self.subject
+        return any(k in blob for k in ("你", "我", "自己", "7tan", "模型", "系统"))
+
+    def build_search_query(self) -> str:
+        s, sub = self.scope.strip(), self.subject.strip()
+        if self.qtype == "quantity":
+            if self.measure:
+                return f"{s} 有几{self.measure} {sub}".strip()
+            return f"{s} {sub} 数量".strip()
+        if self.qtype == "definition":
+            return f"{sub} 是什么".strip()
+        if self.qtype == "identity":
+            return sub  # 「X 是谁」→ 直接搜「X」：Bing 对「是谁」后缀会降级成单字
+        if self.qtype == "location":
+            return f"{sub} 在哪里".strip()
+        if self.qtype == "time":
+            return f"{sub} 什么时候".strip()
+        if self.qtype == "reason":
+            return f"为什么 {sub}".strip()
+        if self.qtype == "how_to":
+            return f"如何 {sub}".strip()
+        if self.qtype == "yes_no":
+            return f"{sub} {self.scope}".strip()
+        return sub
+
+
+def _parse_quantity(t: str):
+    m = re.search(r"(多少|几)", t)
+    if not m:
+        return None
+    scope = t[:m.start()]
+    rest = t[m.end():]
+    scope = re.sub(r"(有|一共|总共|共计|共|加起来|总计|总)$", "", scope).strip()
+    scope = re.sub(r"^(请问|问下|我想知道|想知道|你知道|知道)", "", scope).strip()
+    measure, subject = "", rest.strip()
+    mm = re.match(r"^(" + _MEASURE_RE + r")(.*)$", rest)
+    if mm:
+        measure = mm.group(1)
+        subject = mm.group(2).strip()
+    subject = re.sub(r"(有|是|为|共|一共|总共|总)+$", "", subject).strip()
+    subject = re.sub(r"[的了着呢]+$", "", subject).strip()
+    subject = re.sub(r"^(有|是|为)+", "", subject).strip()
+    if not subject and not scope:
+        return None
+    return QuestionParse("quantity", scope=scope, subject=subject, measure=measure)
+
+
+def parse_question(text: str):
+    """问句语义解析：识别疑问类型并提取主体。无法识别则返回 None（回退原逻辑）。"""
+    if not text:
+        return None
+    t = text.strip()
+    t = re.sub(r"[？?。！!，,、；;：:]+$", "", t)
+    t = _QUESTION_PARTICLE_RE.sub("", t)
+    p = _parse_quantity(t)
+    if p:
+        return p
+    m = re.search(r"(?:什么|啥)是(.+)$", t)
+    if m:
+        return QuestionParse("definition", subject=m.group(1).strip())
+    m = re.search(r"^(.{1,20}?)(?:是什么|是啥|是什么意思|指什么|叫什么|含义是什么)$", t)
+    if m:
+        return QuestionParse("definition", subject=m.group(1).strip())
+    m = re.search(r"^(.{1,20}?)(?:是谁|是什么人|是哪位)$", t)
+    if m:
+        return QuestionParse("identity", subject=m.group(1).strip())
+    m = re.search(r"^(.{1,20}?)(?:在哪|在哪里|在哪儿|什么地方|哪个地方|在什么地方)$", t)
+    if m:
+        return QuestionParse("location", subject=m.group(1).strip())
+    m = re.search(r"^(.{1,20}?)(?:什么时候|何时|哪天|哪一年)$", t)
+    if m:
+        return QuestionParse("time", subject=m.group(1).strip())
+    m = re.search(r"^(?:为什么|为啥|为何|凭什么)(.+)$", t)
+    if m:
+        return QuestionParse("reason", subject=m.group(1).strip())
+    m = re.search(r"^(?:怎么|如何|怎样|咋)(?:做|办|弄|搞|写|处理)?(.+)$", t)
+    if m and m.group(1).strip():
+        return QuestionParse("how_to", subject=m.group(1).strip())
+    m = re.search(r"^(.{1,20}?)(?:是不是|有没有|能不能|会不会|可不可以|是否)(.+)?$", t)
+    if m:
+        return QuestionParse("yes_no", subject=m.group(1).strip(), scope=(m.group(2) or "").strip())
+    return None
+
+
+def extract_quantity_answer(qp: "QuestionParse", res_text: str):
+    """从搜索结果里抽取「数字 + 量词 + 主体」答案片段（如「8颗行星」「八大行星」）。
+
+    优先级：阿拉伯数字 > 中文数字。因为「8颗行星」比「九大行星（传统分类）」更精确，
+    避免把过时的「九大行星」这类传统说法当成当前答案。
+    """
+    sub = qp.subject
+    if not sub:
+        return None
+    meas = qp.measure or r"个|颗|只|条|台|辆|座|位|种|类|张|把|支|根|块|片|本|份|场|次|年|天|公里|米|克|斤|吨|元"
+    esc = re.escape(sub)
+    pat_arabic = re.compile(r"[0-9]+\s*(?:" + meas + r"|大)?\s*" + esc)
+    pat_cn = re.compile(r"[一二两三四五六七八九十百千]+\s*(?:" + meas + r"|大)?\s*" + esc)
+    for pat in (pat_arabic, pat_cn):
+        mm = pat.search(res_text)
+        if mm:
+            return mm.group(0)
+    return None
+
+
 def is_7tan_model(model_name: str) -> bool:
     """判断模型名是否指向本地 7Tan 模型"""
     m = (model_name or "").strip().lower()
@@ -776,6 +903,48 @@ class TanModel:
             "（以上是工具返回的真实信息，不是我编的。需要进一步处理可以继续告诉我。）",
         ])
 
+    def _answer_common_question(self, text: str):
+        """常识问答（路径A）：问句语义解析 → 检索改写 → 搜索 → 答案抽取。
+
+        纯规则、无第三方模型。识别疑问类型与主体，生成检索友好 query，
+        对「数量查询」从搜索结果抽取直接答案（如「8颗行星」），而非甩原始搜索列表。
+        解析不出 / 问自己 / 时间日期类 → 返回 None（回退原逻辑）。
+        """
+        t = (text or "").strip()
+        if not t:
+            return None
+        # 时间/日期类交给 _try_tool_answer 的时间分支（直接系统时间，更准）
+        if re.search(r"(几点|时间|日期|星期几|几号|现在.*点)", t):
+            return None
+        p = parse_question(t)
+        if p is None or p.is_self_referential():
+            return None
+        query = p.build_search_query()
+        if not query or len(query.replace(" ", "")) < 2:
+            return None
+        res = self._call_tool_safe("web_search", {"query": query, "num_results": 8})
+        if not res:
+            return None
+        # 数量查询 → 抽取直接答案
+        if p.qtype == "quantity":
+            ans = extract_quantity_answer(p, res)
+            if ans:
+                lead = f"{p.scope}有" if p.scope else "答案是"
+                body = res if len(res) <= 900 else res[:900] + "……"
+                return chr(10).join([
+                    f"🔍 我查证的结果：{lead} {ans}。",
+                    "",
+                    "（这是我从搜索结果里抽取的直接答案，原始结果如下供核对）",
+                    "",
+                    body,
+                ])
+        # 其他类型 → 整理展示相关条目
+        shown = filter_search_text(res, extract_query_terms(query))
+        if shown and shown.strip():
+            return self._wrap_tool_reply("联网搜索", shown)
+        return None
+
+
     def _try_tool_answer(self, text: str):
         """主模型工具增强层：多工具协同 + 智能降级 + 搜索引擎兜底（不再「命中即停」）。
 
@@ -1017,7 +1186,12 @@ class TanModel:
                 return "\n".join(lines)
             # 弱相关：不阻塞，先走工具查证，再把记忆痕迹一起整合给用户
             weak_memory = hits[:2]
-        # —— 检索2.4：工具增强 —— 记忆未命中/弱相关时，调用工具实时查证（知识/新闻/文件/联网搜索）
+        # —— 检索2.4：常识问答（问句语义解析优先）—— 理解疑问类型+主体，抽取直接答案 ——
+        common = self._answer_common_question(text)
+        if common:
+            logger.info("🌍 7Tan模型 → 常识问答（问句解析命中）")
+            return common
+        # —— 检索2.4.5：工具增强 —— 记忆未命中/弱相关时，调用工具实时查证（知识/新闻/文件/联网搜索）
         tool_reply = self._try_tool_answer(text)
         if tool_reply:
             if weak_memory:

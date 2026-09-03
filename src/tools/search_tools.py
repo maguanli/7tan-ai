@@ -22,6 +22,15 @@ HEADERS = {
 }
 
 
+# 疑问框架词（疑问句主体剥离用）：把「太阳系有多少颗行星」剥离成「太阳系 行星」，
+# 避免整句疑问被 Bing 分词降级成单字结果（如搜「大阳系有多少颗行星」→ 全返回「大」字百科）。
+_QUESTION_FRAME_RE = re.compile(
+    r"(有多少个|有多少颗|有多少种|有多少只|有多少条|有多少张|有多少本|有多少位|有多少名|"
+    r"有几种|有几颗|有几个|有哪几个|有哪几种|有哪些|是什么|是谁|是啥|是干什么的|是干嘛的|"
+    r"怎么样|怎么|如何|为什么|为啥|为何|哪些|哪个|哪种|多少|几个|几种|几颗|几时|几点|几号)"
+)
+
+
 def _normalize_query(query: str) -> str:
     """把口语 query 归一化成核心关键词（去除人称+能愿动词/疑问/语气词），
     避免 Bing 把「你会写脚本吗」降级成单字「你」的结果。"""
@@ -41,7 +50,10 @@ def _normalize_query(query: str) -> str:
         q = q.strip(" ？?。，,、 ")
         if q == old:
             break
-    return q if len(q) >= 2 else ""
+    # 剥离疑问框架词，提取主体名词（"太阳系有多少颗行星" -> "太阳系 行星"）
+    q = _QUESTION_FRAME_RE.sub(" ", q)
+    q = re.sub(r"\s+", " ", q).strip(" ？?。，,、 ")
+    return q if len(q.replace(" ", "")) >= 2 else ""
 
 
 def _search_bing(query: str, num_results: int = 5) -> list[dict]:

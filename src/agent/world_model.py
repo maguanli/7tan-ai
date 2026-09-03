@@ -81,6 +81,15 @@ _SEARCH_STOP_TERMS = {
 }
 
 
+# 疑问框架词（疑问句主体剥离用）：把「太阳系有多少颗行星」剥离成「太阳系 行星」，
+# 避免整句疑问被 Bing 分词降级成单字结果（如搜「大阳系有多少颗行星」→ 全返回「大」字百科）。
+_QUESTION_FRAME_RE = re.compile(
+    r"(有多少个|有多少颗|有多少种|有多少只|有多少条|有多少张|有多少本|有多少位|有多少名|"
+    r"有几种|有几颗|有几个|有哪几个|有哪几种|有哪些|是什么|是谁|是啥|是干什么的|是干嘛的|"
+    r"怎么样|怎么|如何|为什么|为啥|为何|哪些|哪个|哪种|多少|几个|几种|几颗|几时|几点|几号)"
+)
+
+
 def normalize_search_query(text: str) -> str:
     """把用户口语/祈使句清洗成搜索引擎可用的核心查询词。
 
@@ -104,7 +113,10 @@ def normalize_search_query(text: str) -> str:
         q = q.strip(" ？?。，,、:：;；!！…·\"'“”‘’（）()【】[]")
         if q == old:
             break
-    if len(q) < 2:
+    # 剥离疑问框架词，提取主体名词（"太阳系有多少颗行星" -> "太阳系 行星"）
+    q = _QUESTION_FRAME_RE.sub(" ", q)
+    q = re.sub(r"\s+", " ", q).strip(" ？?。，,、:：;；!！")
+    if len(q.replace(" ", "")) < 2:
         return ""
     return q[:60]
 
@@ -172,7 +184,9 @@ def filter_search_text(res_text: str, terms: list, keep: int = 4) -> str:
         return res_text
     keep_blocks = [(ti, ls) for ti, ls in blocks
                    if any(tm and (tm in ti or ti in tm) for tm in terms)]
-    if not keep_blocks or len(keep_blocks) == len(blocks):
+    if not keep_blocks:
+        return ""   # 全部条目与关键词无关 → 返回空，由上层决定诚实回复/重搜
+    if len(keep_blocks) == len(blocks):
         return res_text
     out = "\n".join(header).rstrip()
     for _, ls in keep_blocks[:keep]:
@@ -869,6 +883,8 @@ class TanModel:
                                     src = "联网搜索（已按核心词重新搜索）"
                         # 整理：只保留与核心关键词相关的条目再展示
                         shown = filter_search_text(res, extract_query_terms(query))
+                        if not shown or not shown.strip():
+                            return None   # 过滤后无相关结果 → 走诚实回复
                         return self._wrap_tool_reply(src, shown)
             return None
         except Exception as e:

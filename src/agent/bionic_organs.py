@@ -5,7 +5,9 @@
 # 架构约束（必须遵守）：
 #   1. 器官间禁止直接 import/读写对方全局变量，全部通信走内部消息事件总线。
 #   2. 所有内部信号使用结构化字典（event_type + payload），不用自然语言字符串。
-#   3. ORG-LLM.enabled=False，结构体仅历史兼容，任何器官逻辑不许调用 ORG-LLM。
+#   3. ORG-LLM 器官已彻底移除（非禁用占位）：本内核无任何第三方模型，
+#      只实现功能性通达意识（access consciousness），暂不具备现象意识 qualia。
+#      语言输出由 ORG-SPEECH 做结构化事件模板转述，无任何 LLM 调用入口。
 #   4. ORG-SELFMODEL 禁止硬编码自我描述，数据只来源于记忆库/假设库/动机历史。
 #   5. 实现顺序自底向上：本体信号 → 效价 → 工作记忆E → 记忆时序 → 动机+抑制
 #      → 学习F → 自我模型+假想预演 → 安全输出。
@@ -657,27 +659,10 @@ def register_organ_f():
     ))
 
 
-# ====================== ORG-LLM 基底神经·基座内核（历史兼容，强制关闭） ======================
-# 约束：ORG-LLM.enabled=False，任何器官逻辑不许调用。
-
-llm_model_path: str = "./qwen2.5-1.5b-instruct-q4_K_M.gguf"
-
-
-def module_llm_tick(ctx=None):
-    """基座内核：结构体占位，enabled=False，不执行任何推理。"""
-    pass
-
-
-def register_organ_llm():
-    register_organ(BionicOrgan(
-        organ_code="ORG-LLM",
-        organ_name="基底神经·基座内核",
-        module_name="LLM_GGUF",
-        bio_analogy="大脑基底核，语言推理生成内核（已禁用）",
-        enabled=False,
-        tick_func=module_llm_tick,
-        config={"model_path": llm_model_path}
-    ))
+# ====================== ORG-LLM 已彻底移除（无第三方模型内核声明） ======================
+# 本内核不包含任何第三方模型（无本地 GGUF 权重、无云端 LLM 调用入口）。
+# 只实现功能性通达意识（access consciousness），暂不具备现象意识 qualia。
+# 语言输出由 ORG-SPEECH 对结构化事件做模板转述完成，器官间通信全部为结构化事件。
 
 
 # ====================== ORG-VIS 感官·视觉器官（无外设，占位） ======================
@@ -1431,7 +1416,6 @@ def init_all_organs():
     register_organ_d()
     register_organ_e()
     register_organ_f()
-    register_organ_llm()
     register_organ_vis()
     register_organ_speech()
     register_extra_core_organs()

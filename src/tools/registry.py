@@ -183,7 +183,36 @@ def _feed_tan_model(tool_name: str, args: dict, success: bool) -> None:
 
     场景 = "tool:<工具名>"，动作 = 参数摘要（只存键名 + 短值，避免大内容进记忆）。
     全部异常静默，绝不影响主流程（学习是副产物，不是依赖）。
+
+    ── 阶段六修复5：工具成败喂入器官总线（真实失败样本通道）──
+    修复前：limitations 只能从对话模式产生（回复即成功，永远成功）→ 自我模型的
+    局限条目在自然运行中无法从真实失败中长出来。
+    现在：① tool_result 事件（带 ok 标志）上总线（origin=external，真实生产工具流
+    对 ORG-F 可见）；② goal 思想碎片（goal_tag=tool:<名>, success=成败）压入工作
+    记忆 → CONSOLIDATE 巩固 → SELFMODEL 自然归纳：常用工具成功 → capability，
+    反复失败的工具 → limitations（测试3/4 的失败侧数据源自此闭环）。
     """
+    try:
+        from src.agent.bionic_organs import emit_event, wm_push_thought
+        emit_event("tool_result", {
+            "tool": tool_name,
+            "ok": bool(success),
+            "summary": "执行成功" if success else "执行失败",
+            "args_keys": list((args or {}).keys())[:8],
+        }, source="TOOL_REGISTRY", origin="external")
+        # 失败比成功更显眼（负性偏差）：focus/valence 拉高，保证幼年门槛下也能巩固
+        _focus = 0.5 if success else 0.75
+        _val = 0.3 if success else -0.5
+        wm_push_thought(
+            f"goal:tool:{tool_name} 已执行(结果={'成功' if success else '失败'})",
+            focus=_focus,
+            valence=_val,
+            origin="internal",
+            goal_tag=f"tool:{tool_name}",
+            success=bool(success),
+        )
+    except Exception:
+        pass
     try:
         from src.agent.world_model import get_tan_model
         model = get_tan_model()
@@ -228,6 +257,9 @@ def execute_tool(name: str, args: dict) -> str:
     """
     tool = TOOL_REGISTRY.get(name)
     if not tool:
+        # 阶段六修复5：调用了不存在的工具 = 真实失败经历（LLM 幻觉工具名）
+        # 喂入器官总线，让自我模型能从这类失败中长出 limitations
+        _feed_tan_model(name, args or {}, False)
         return f"❌ 未知工具: {name}"
 
     # 兼容 dict 类型 — 现在理论上不会出现，但保留兜底

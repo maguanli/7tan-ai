@@ -19,6 +19,7 @@
 import json
 import os
 import random
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -184,12 +185,22 @@ def bus_stats() -> Dict[str, Any]:
 
 _ORGAN_STATE_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "tan_model_organs.json"
 ORGAN_AUTOSAVE_EVERY: int = 30    # 每 30 次器官主循环 tick 自动落盘一次
-_organ_tick_counter: int = 0      # organ_tick_all 调用计数（自动保存触发用）
+_organ_tick_counter: int = 0      # organ_tick_all 调用计数（自动保存触发用，落盘恢复→跨会话累计）
+
+# ── 阶段六修复4：器官 tick 全局锁（对话 tick 与后台心跳 tick 并发安全）──
+_TICK_LOCK = threading.Lock()
+# ── 阶段六修复4：后台心跳配置（器官不依赖对话驱动、常驻呼吸；环境变量可关/调频）──
+_HEARTBEAT_ENABLED = os.environ.get("ORGAN_HEARTBEAT", "1") == "1"
+_HEARTBEAT_INTERVAL = float(os.environ.get("ORGAN_HEARTBEAT_INTERVAL", "120"))   # 秒
 
 # SELFMODEL meta 默认模板（须与 self_model_data 初始 meta 保持一致）：
 # 加载旧快照时以它为底做三层合并（默认模板 ∪ 当前内存 ∪ 快照），
 # 防止旧版本/被破坏的 meta 缺 tick_counter 导致 SELFMODEL tick KeyError。
-_DEFAULT_SELFMODEL_META: Dict[str, Any] = {"last_update_subj_time": 0.0, "tick_counter": 0}
+_DEFAULT_SELFMODEL_META: Dict[str, Any] = {
+    "last_update_subj_time": 0.0,
+    "tick_counter": 0,
+    "pending_goal_samples": 0,   # 阶段六修复3：自上次归纳起新增的「目标成败」样本数（≥3 提前触发归纳）
+}
 
 
 def save_organ_state(path=None) -> bool:
@@ -198,9 +209,17 @@ def save_organ_state(path=None) -> bool:
         target = Path(path) if path else _ORGAN_STATE_PATH
         target.parent.mkdir(parents=True, exist_ok=True)
         state = {
-            "version": 1,
+            "version": 2,
             "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "organ_tick_counter": _organ_tick_counter,
+            # ── 阶段六修复1/2：重放周期计数器 + 主观时钟一并落盘 ──
+            # 修复前二者均为模块级变量重启清零：重放永远够不到触发阈值（鸡生蛋死结），
+            # 主观时钟永远攒不出「幼年→成年」跨度（测试5 无法成立）。落盘后跨会话连续累计。
+            "consolidate_counter": _consolidate_counter,
+            # ── 阶段六修复6：任务动机采样周期计数器一并落盘（跨会话累计，与重放计数器同哲学）──
+            # 修复前重启清零：采样周期被重置，跨会话的采样节奏永远凑不齐一个周期。
+            "task_motive_counter": _task_motive_counter,
+            "subjective_time": dict(subjective_time),
             "memory_library": [m for m in memory_library if isinstance(m, dict)],
             "self_model_data": self_model_data,
         }
@@ -215,7 +234,8 @@ def save_organ_state(path=None) -> bool:
 
 def load_organ_state(path=None) -> bool:
     """启动加载器官状态：恢复 memory_library 与 self_model_data。坏文件自动跳过，绝不抛异常。"""
-    global _organ_tick_counter
+    global _organ_tick_counter, _consolidate_counter, _task_motive_counter
+    global _self_limitations_b, _self_limitations_inhibit, _self_limitations_sim, _self_confidence_b
     try:
         target = Path(path) if path else _ORGAN_STATE_PATH
         if not target.exists():
@@ -242,9 +262,71 @@ def load_organ_state(path=None) -> bool:
                 else:
                     self_model_data[k] = v
         _organ_tick_counter = int(raw.get("organ_tick_counter", 0) or 0)
+        # ── 阶段六修复1/2：恢复重放周期计数器 + 主观时钟（跨会话连续，死结解除）──
+        _consolidate_counter = int(raw.get("consolidate_counter", 0) or 0)
+        # ── 阶段六修复6：任务动机采样计数器恢复（跨会话累计）──
+        _task_motive_counter = int(raw.get("task_motive_counter", 0) or 0)
+        _subj_raw = raw.get("subjective_time")
+        if isinstance(_subj_raw, dict):
+            subjective_time["subjective_clock"] = round(float(_subj_raw.get("subjective_clock", 0.0) or 0.0), 2)
+            subjective_time["time_dilation"] = round(float(_subj_raw.get("time_dilation", 1.0) or 1.0), 4)
+        # ── 阶段六修复6：晨间回忆——落盘记忆中的「目标成败」样本回灌回放缓冲 ──
+        # 修复前：SELFMODEL 样本驱动归纳只读进程内回放缓冲，重启即空 →
+        # 跨会话分散积累的失败样本永远凑不齐 SELFMODEL_EARLY_SAMPLE_N 条 →
+        # 局限永远无法从跨重启的真实经历中归纳（模拟真实一天即可复现该缺陷）。
+        # 现在：启动加载记忆库后，把带 goal_tag+success 的记忆重建成 mem_consolidated
+        # 回放事件——只写入回放缓冲，不走 emit_event（不进收件箱、不刷事件日志、
+        # 不污染 ORG-F 统计），SELFMODEL 醒来即可「回忆起」跨重启的成败经历。
+        try:
+            hydrated = []
+            for m in memory_library:
+                if isinstance(m, dict) and m.get("goal_tag") and m.get("success") is not None:
+                    hydrated.append({
+                        "event_type": "mem_consolidated",
+                        "payload": {
+                            "thought_fragment": m.get("thought", ""),
+                            "focus": m.get("focus", 0.0),
+                            "valence": m.get("valence", 0.0),
+                            "origin": m.get("origin", "internal"),
+                            "subjective_time": m.get("subjective_time"),
+                            "weight_eff": m.get("weight_eff", 1.0),
+                            "goal_tag": m.get("goal_tag"),
+                            "pe": m.get("pe"),
+                            "success": m.get("success"),
+                        },
+                        "source": "ORG-A(晨间回忆)",
+                        "origin": "internal",
+                    })
+            if hydrated:
+                _cap = _REPLAY_TYPE_LIMITS.get("mem_consolidated", 1000)
+                buf = _replay_buffer.setdefault("mem_consolidated", [])
+                buf.extend(hydrated[-_cap:])
+                logger.info(f"🧠[晨间回忆] 跨重启目标成败样本回灌回放缓冲: {len(hydrated)} 条")
+        except Exception:
+            pass
+        # ── 阶段六修复6：自我模型限制缓存回灌（晨间回忆的决策侧补全）──
+        # 修复前：_self_limitations_b/_inhibit/_sim 是进程内缓存，重启清零——
+        # self_model_data 里明明持久化着 limitations，但决策器官（ORG-B 候选降权 /
+        # ORG-INHIBIT 阈值抬高 / ORG-SIMULATE 推演规避）在下一次 selfmodel_update
+        # 事件之前感知不到 → 跨重启后自我模型对决策的干预整体失效（阶段六测试4：
+        # 重启后局限内目标不被降权、不被拦截，行为翻转断裂）。
+        # 语义：人醒来不会忘记「自己不会什么」——能力边界是自我模型的一部分，
+        # 应随快照一并恢复，无需等新归纳事件重新告知。
+        try:
+            _lims = [l for l in (self_model_data.get("limitations") or [])
+                     if isinstance(l, dict) and l.get("key")]
+            if _lims:
+                _self_limitations_b = list(_lims)
+                _self_limitations_inhibit = list(_lims)
+                _self_limitations_sim = list(_lims)
+                _self_confidence_b = float(self_model_data.get("confidence", 0.0) or 0.0)
+                logger.info(f"🧠[晨间回忆] 自我模型限制缓存回灌: {len(_lims)} 条（决策器官醒来即知自身局限）")
+        except Exception:
+            pass
         logger.info(
             f"🧠 器官状态已加载: ORG-A 记忆 {len(memory_library)} 条, "
-            f"SELFMODEL confidence={self_model_data.get('confidence')} (tick={_organ_tick_counter})"
+            f"SELFMODEL confidence={self_model_data.get('confidence')} (tick={_organ_tick_counter}), "
+            f"重放计数={_consolidate_counter}, 主观时钟={subjective_time.get('subjective_clock')}"
         )
         return True
     except Exception as e:
@@ -258,28 +340,32 @@ def organ_tick_all(ctx=None):
     ctx 可选：传 world_model 的 memory 实例，使器官作用于真实状态。
 
     关键：开头先 dispatch 一次，把 respond() 开头 emit 的 external 事件（user_input/tool_result）
-    在本轮器官 tick 前就送进收件箱，消除「本轮投递、下一轮才生效」的一轮延迟。"""
-    _dispatch_events()
-    for code, org in organ_registry.items():
-        if not (org.enabled and org.tick_func is not None):
-            continue
-        try:
-            if ctx is None:
-                org.tick_func()
-            else:
-                try:
-                    org.tick_func(ctx)
-                except TypeError:
+    在本轮器官 tick 前就送进收件箱，消除「本轮投递、下一轮才生效」的一轮延迟。
+
+    线程安全（阶段六修复4）：持全局锁串行执行——对话 tick（respond 调用）与后台心跳 tick
+    （start_organ_heartbeat 线程）并发时不会交叉分发事件/交叉递增计数器。"""
+    with _TICK_LOCK:
+        _dispatch_events()
+        for code, org in organ_registry.items():
+            if not (org.enabled and org.tick_func is not None):
+                continue
+            try:
+                if ctx is None:
                     org.tick_func()
-        except Exception:
-            continue
-    # 本 tick 全部器官跑完后，统一分发事件（防同一 tick 内递归）
-    _dispatch_events()
-    # 器官状态周期性自动落盘（ORG-A 记忆库 + ORG-SELFMODEL 快照，防重启失忆）
-    global _organ_tick_counter
-    _organ_tick_counter += 1
-    if _organ_tick_counter % ORGAN_AUTOSAVE_EVERY == 0:
-        save_organ_state()
+                else:
+                    try:
+                        org.tick_func(ctx)
+                    except TypeError:
+                        org.tick_func()
+            except Exception:
+                continue
+        # 本 tick 全部器官跑完后，统一分发事件（防同一 tick 内递归）
+        _dispatch_events()
+        # 器官状态周期性自动落盘（ORG-A 记忆库 + ORG-SELFMODEL 快照，防重启失忆）
+        global _organ_tick_counter
+        _organ_tick_counter += 1
+        if _organ_tick_counter % ORGAN_AUTOSAVE_EVERY == 0:
+            save_organ_state()
 
 
 # ====================== 阶段3：ORG-A 海马体·长期记忆器官 ======================
@@ -415,9 +501,18 @@ def _generate_task_motives(ctx, limitations):
     而稳态动机（reduce_load/consolidate_memory）是抽象内生需求，两者粒度不同无法匹配。
     本函数把记忆里的具体经历提炼成任务型目标，使 limitations 的 key 能真正命中候选目标，
     从而触发降权/抑制/压低。稳态动机不受 limitations 约束（生物稳态需求非能力边界）。
+
+    ── 阶段六修复6：双池采样（记忆池 top-3 + 轨迹池 top-2）──
+    修复前单池 top-5 的缺陷：长期高频习惯轨迹（score 随执行次数累计，远高于单条
+    新记忆）会永久挤占全部候选席位 → 新近高显著记忆（如失败经历——limitations
+    的 key 所在命名空间）永远进不了候选 → 自我模型干预决策（阶段六测试4）在
+    自然运行中无从命中：即使归纳出 limitations，也没有候选目标可拦。
+    双池结构对应「新近显著经历捕获注意 + 长期习惯仍在候选中」的注意分配：
+      记忆池 = 记得的目标（goal_tag，与 limitations/capability 同一命名空间，保 3 席）
+      轨迹池 = 习惯模式（scene:action 长期统计，保 2 席；action 截断防整段
+              代码/长参数成为 key 导致候选无限细分无法累计）
     """
-    candidates = {}   # goal -> 累计评分
-    # 1. 从记忆库采样（含 goal_tag + focus + weight_eff）
+    mem_candidates = {}   # goal_tag -> 累计评分（记忆池：新近自我相关目标）
     for mem in memory_library:
         if not isinstance(mem, dict):
             continue
@@ -426,8 +521,8 @@ def _generate_task_motives(ctx, limitations):
             continue
         focus = float(mem.get("focus", 0.0) or 0.0)
         w = float(mem.get("weight_eff", 1.0) or 1.0)
-        candidates[str(gt)] = candidates.get(str(gt), 0.0) + focus * w
-    # 2. 从轨迹采样（scene + action）
+        mem_candidates[str(gt)] = mem_candidates.get(str(gt), 0.0) + focus * w
+    trace_candidates = {}   # scene:action -> 累计评分（轨迹池：习惯模式）
     traces = getattr(ctx, "traces", None) or []
     for t in traces:
         if not isinstance(t, dict):
@@ -435,18 +530,23 @@ def _generate_task_motives(ctx, limitations):
         scene = str(t.get("scene", "")).strip()
         action = str(t.get("action", "")).strip()
         if scene and action:
-            key = f"{scene}:{action}"
-            candidates[key] = candidates.get(key, 0.0) + float(t.get("weight_eff", 1.0) or 1.0)
-    # 3. 生成任务型候选动机（含 limitations 降权）
+            key = f"{scene}:{action[:24]}"   # 阶段六修复6：截断，防超长参数成为 key
+            trace_candidates[key] = trace_candidates.get(key, 0.0) + float(t.get("weight_eff", 1.0) or 1.0)
+    # 双池合成（记忆池 3 席 + 轨迹池 2 席，同 key 去重时记忆池优先）+ limitations 降权
     lim_keys = {str(l.get("key", "")) for l in limitations}
     motives = []
-    for goal, score in sorted(candidates.items(), key=lambda x: -x[1])[:5]:
-        drive = round(min(1.0, score / 5.0), 4)
-        if drive < 0.1:
-            continue
-        if goal in lim_keys:
-            drive = round(drive * 0.5, 4)   # 阶段四：落在能力局限内 → 降权
-        motives.append({"goal": goal, "drive": drive, "source": "task_memory"})
+    seen = set()
+    for pool, n_seat, src in ((mem_candidates, 3, "task_memory"), (trace_candidates, 2, "task_trace")):
+        for goal, score in sorted(pool.items(), key=lambda x: -x[1])[:n_seat]:
+            if goal in seen:
+                continue
+            seen.add(goal)
+            drive = round(min(1.0, score / 5.0), 4)
+            if drive < 0.1:
+                continue
+            if goal in lim_keys:
+                drive = round(drive * 0.5, 4)   # 阶段四：落在能力局限内 → 降权
+            motives.append({"goal": goal, "drive": drive, "source": src})
     return motives
 
 
@@ -1116,26 +1216,32 @@ def organ_inhibit_tick(ctx=None):
     global _self_limitations_inhibit
     try:
         candidates = []
+        seen = set()
         for ev in poll_events("ORG-INHIBIT"):
             et = ev["event_type"]
             p = ev.get("payload", {})
             if et == "selfmodel_update":
                 _self_limitations_inhibit = list(p.get("limitations", []))
             elif et == "candidate_motives":
-                candidates.extend(p.get("motives", []))
-        lim_keys = {str(l.get("key", "")) for l in _self_limitations_inhibit}
-        seen = set()
-        final = []
-        for m in candidates:
-            if not isinstance(m, dict):
-                continue
-            g = str(m.get("goal", "")).strip()
-            drive = float(m.get("drive", 0.0))
-            # 阶段四：落在能力局限内的目标加强抑制（阈值 0.3 → 0.6）
-            threshold = 0.6 if g in lim_keys else 0.3
-            if g and g not in seen and len(g) <= 100 and drive >= threshold:
-                seen.add(g)
-                final.append(m)
+                # ── 阶段六修复6：按到达顺序过滤（事件因果序）──
+                # 修复前：先收集全部候选再统一过滤——同批尾随而来的 selfmodel_update
+                # 会提前更新缓存，「局限归纳之前到达的候选」也被新局限拦截
+                # （未来信息泄漏到过去的决策），阶段六测试4 的「局限生效前
+                # 通过（撞墙）」窗口不存在。
+                # 修复后：每批候选到达时用「此刻」的局限认知过滤——归纳前的
+                # 候选按旧认知决策，归纳后的候选才受新局限约束（行为翻转因果链完整）。
+                lim_keys_now = {str(l.get("key", "")) for l in _self_limitations_inhibit}
+                for m in p.get("motives", []):
+                    if not isinstance(m, dict):
+                        continue
+                    g = str(m.get("goal", "")).strip()
+                    drive = float(m.get("drive", 0.0))
+                    # 阶段四：落在能力局限内的目标加强抑制（阈值 0.3 → 0.6）
+                    threshold = 0.6 if g in lim_keys_now else 0.3
+                    if g and g not in seen and len(g) <= 100 and drive >= threshold:
+                        seen.add(g)
+                        candidates.append(m)
+        final = candidates
         if final:
             emit_event("final_goals", {"goals": [m["goal"] for m in final]}, source="ORG-INHIBIT", origin="internal")
         # 同步维护 working_memory.active_goals 的去重（保持 E 侧状态干净）
@@ -1174,7 +1280,7 @@ def organ_consolidate_tick(ctx=None):
         cfg = get_organ("ORG-CONSOLIDATE").config
         focus_thr = float(cfg.get("FOCUS_THRESHOLD", 0.3))
         valence_thr = float(cfg.get("VALENCE_ABS_THRESHOLD", 0.2))
-        replay_interval = int(cfg.get("REPLAY_INTERVAL_TICKS", 100))
+        replay_interval = int(cfg.get("REPLAY_INTERVAL_TICKS", 20))
         replay_sample = int(cfg.get("REPLAY_SAMPLE_COUNT", 8))
 
         # 1. 订阅 wm_snapshot（ORG-E 工作记忆快照）
@@ -1187,6 +1293,16 @@ def organ_consolidate_tick(ctx=None):
                 return
             now_subj_time = subj_tick_evt["payload"]["subjective_clock"]
 
+            # ── 阶段六修复·测试5：幼年失忆时间依赖（主观时钟低 → 巩固门槛加倍）──
+            # 修复前筛选阈值恒定、与主观时钟无关，「幼年→成年」分化在代码里不存在；
+            # 幼年期（主观时钟 < INFANCY_SUBJECTIVE_TIME）门槛×2，只有高 focus / 高|效价|
+            # 的少数强事件能巩固，复现「人类幼年失忆 + 强烈经历例外留存」现象。
+            infancy_end = float(cfg.get("INFANCY_SUBJECTIVE_TIME", 60.0))
+            infancy_active = float(now_subj_time) < infancy_end
+            f_thr_eff = round(focus_thr * (2.0 if infancy_active else 1.0), 4)
+            v_thr_eff = round(valence_thr * (2.0 if infancy_active else 1.0), 4)
+            forgotten = 0
+
             # 遍历工作记忆碎片，筛选满足条件的写入长期记忆
             for thought_item in context_stack:
                 if not isinstance(thought_item, dict):
@@ -1196,8 +1312,9 @@ def organ_consolidate_tick(ctx=None):
                 focus = float(thought_item.get("focus", 0.0))
                 valence = float(thought_item.get("valence", 0.0))
                 origin = thought_item.get("origin", "internal")
-                # 筛选：focus 与效价都低于阈值才跳过（模拟遗忘/幼年失忆）
-                if focus < focus_thr and abs(valence) < valence_thr:
+                # 筛选：focus 与效价都低于（幼年期加倍的）阈值才跳过（模拟遗忘/幼年失忆）
+                if focus < f_thr_eff and abs(valence) < v_thr_eff:
+                    forgotten += 1
                     continue
 
                 mem_payload = {
@@ -1220,25 +1337,80 @@ def organ_consolidate_tick(ctx=None):
                 )
                 thought_item["consolidated"] = True
 
-        # 2. 记忆后台重放：周期触发
+            # ── 阶段六修复·测试5：遗忘过程可观测（修复前跳过即静默 continue，黑盒验证无从取证）──
+            if forgotten > 0:
+                emit_event(
+                    event_type="mem_forgotten",
+                    payload={
+                        "count": forgotten,
+                        "infancy_active": infancy_active,
+                        "focus_threshold": f_thr_eff,
+                        "valence_threshold": v_thr_eff,
+                        "subjective_time": now_subj_time,
+                    },
+                    source="ORG-CONSOLIDATE",
+                    origin="internal",
+                )
+                logger.info(
+                    f"🧠[consolidate] 遗忘过滤: 本 tick 跳过 {forgotten} 条低权重碎片 "
+                    f"(幼年期={infancy_active}, 主观时间={now_subj_time}, "
+                    f"门槛 focus>={f_thr_eff}/|valence|>={v_thr_eff})"
+                )
+
+        # 2. 记忆后台重放：周期触发（计数器已随器官状态落盘恢复 → 跨会话累计，重启死结解除）
         _consolidate_counter += 1
         if _consolidate_counter % replay_interval == 0:
-            # 【阶段六·测试2修复】自传记忆连续性：重放采样从「最近N条」改为「全部历史+高权重优先」
-            # 旧逻辑 poll_replay_events(..., replay_sample) 内部取队列尾部（最近N条），
-            # 久远高权重记忆永远被近期低权重记忆挤出重放队列 → 久远记忆彻底沉默，
-            # 系统只剩近期记忆，无法形成连续的"我"（违背阶段二设计目标）。
-            all_mem_events = poll_replay_events("mem_consolidated", 200)  # 全部历史（回放缓冲上限200条）
-            all_mem_events.sort(
-                key=lambda e: float(e.get("payload", {}).get("focus", 0.0)) if isinstance(e.get("payload"), dict) else 0.0,
-                reverse=True,
+            # ── 阶段六修复1：重放触发可观测（修复前静默发生/静默不发生，黑盒验证无从取证）──
+            logger.info(
+                f"🧠[replay] 记忆重放触发: 重放计数={_consolidate_counter}(跨会话累计), "
+                f"间隔阈值={replay_interval}, 主观时钟={subjective_time.get('subjective_clock')}"
             )
-            old_mem_events = all_mem_events[:replay_sample]  # 高权重优先重放（久远高权重不再被挤出）
-            for mem_evt in old_mem_events:
+            # 【阶段六·测试2修复】自传记忆连续性：高权重优先 + 双源采样
+            #   源① ORG-A 长期记忆库（memory_library，随器官状态落盘 → 跨重启持久，
+            #      久远高权重记忆不会因重启/缓冲截断而沉默——"我"的连续性本体）；
+            #   源② 本进程事件回放缓冲（尚未入库/最近巩固的事件，补充）。
+            # 旧逻辑仅从回放缓冲取「最近N条」：久远高权重被近期挤出 + 重启后缓冲清空，
+            # 久远记忆彻底沉默，无法形成连续的"我"（违背阶段二设计目标）。
+            _seen_replay_keys = set()
+            _replay_samples: List[Dict[str, Any]] = []
+            for m in memory_library:
+                if not isinstance(m, dict) or not m.get("thought"):
+                    continue
+                _k = (str(m.get("thought")), str(m.get("subjective_time")))
+                if _k in _seen_replay_keys:
+                    continue
+                _seen_replay_keys.add(_k)
+                _replay_samples.append({
+                    "thought": m.get("thought"),
+                    "focus": float(m.get("focus", 0.5) or 0.5),
+                    "valence": float(m.get("valence", 0.0) or 0.0),
+                    "origin": m.get("origin", "internal"),
+                    "goal_tag": m.get("goal_tag"),
+                    "pe": m.get("pe"),
+                    "subjective_time": m.get("subjective_time"),
+                })
+            for mem_evt in poll_replay_events("mem_consolidated", 200):
                 mem_data = mem_evt.get("payload", {})
                 if not isinstance(mem_data, dict):
                     continue
+                _thought = mem_data.get("thought_fragment", "")
+                _k = (str(_thought), str(mem_data.get("subjective_time")))
+                if not _thought or _k in _seen_replay_keys:
+                    continue
+                _seen_replay_keys.add(_k)
+                _replay_samples.append({
+                    "thought": _thought,
+                    "focus": float(mem_data.get("focus", 0.5) or 0.5),
+                    "valence": float(mem_data.get("valence", 0.0) or 0.0),
+                    "origin": mem_data.get("origin", "internal"),
+                    "goal_tag": mem_data.get("goal_tag"),
+                    "pe": mem_data.get("pe"),
+                    "subjective_time": mem_data.get("subjective_time"),
+                })
+            _replay_samples.sort(key=lambda s: s.get("focus", 0.0), reverse=True)
+            for mem_data in _replay_samples[:replay_sample]:  # 高权重优先重放（久远高权重不再被挤出）
                 replay_thought = {
-                    "thought": mem_data.get("thought_fragment", ""),
+                    "thought": mem_data.get("thought", ""),
                     "focus": float(mem_data.get("focus", 0.5)) * 0.6,  # 重放 focus 衰减，防抢占工作记忆
                     "valence": float(mem_data.get("valence", 0.0)),
                     "origin": mem_data.get("origin", "internal"),  # 必须继承原始 origin，禁止硬编码
@@ -1300,6 +1472,8 @@ self_model_data: Dict[str, Any] = {
 
 # SELFMODEL 归纳配置（伪代码配置项：低频周期增量归纳，禁止每 tick 全量重算）
 SELFMODEL_UPDATE_INTERVAL: int = 60    # 每 60 tick 执行一次归纳
+SELFMODEL_EARLY_SAMPLE_N: int = 3      # 阶段六修复3：新增「目标成败」样本 ≥3 条即提前归纳（样本驱动，不必等满周期）
+_last_induction_key: Optional[tuple] = None   # 上次样本驱动归纳时的最新样本身份（去重：无新样本不重复归纳）
 SAMPLE_MEMORY_COUNT: int = 40          # 采样记忆事件条数
 SAMPLE_HYPOTHESIS_COUNT: int = 25      # 采样假设事件条数
 MIN_EVIDENCE_COUNT: int = 10           # 最小证据量，低于则压低 confidence
@@ -1314,11 +1488,35 @@ def organ_selfmodel_tick(ctx=None):
       - 输出结构化 self_model_data，emit selfmodel_update 广播（origin=internal）"""
     global self_model_data
     try:
-        # ========== tick 计数，只有到达周期才归纳，其余 tick 直接返回 ==========
+        # ========== tick 计数：周期触发 OR 样本驱动提前触发（阶段六修复3） ==========
         self_model_data["meta"]["tick_counter"] += 1
         tick_cnt = int(self_model_data["meta"]["tick_counter"])
+        # 样本驱动：回放缓冲中「目标成败」巩固样本 ≥SELFMODEL_EARLY_SAMPLE_N 条 → 提前归纳。
+        # 修复前仅周期触发（60 tick ≈ 60 轮对话，远超真实会话长度，自然运行永远凑不满周期
+        # → selfmodel_update 事件 0 次 → 自我模型永不演化）。
+        # 注意：这里必须直接检查回放缓冲里的实际样本（而非 CONSOLIDATE 直写的计数器）——
+        # CONSOLIDATE 与 SELFMODEL 同 tick 先后执行，CONSOLIDATE 刚 emit 的样本要等
+        # tick 末尾 dispatch 才进缓冲，同 tick 内计数器触发的归纳读到的缓冲是空的。
+        global _last_induction_key
+        _goal_evts = [
+            e for e in poll_replay_events("mem_consolidated", 100)
+            if isinstance(e.get("payload"), dict)
+            and e["payload"].get("goal_tag")
+            and e["payload"].get("success") is not None
+        ]
         if tick_cnt % SELFMODEL_UPDATE_INTERVAL != 0:
-            return
+            # 样本驱动分支：样本不足 → 跳过；无新样本（最新样本身份未变）→ 跳过（防每 tick 重复归纳刷屏）
+            if len(_goal_evts) < SELFMODEL_EARLY_SAMPLE_N:
+                return
+            _newest = _goal_evts[-1].get("payload", {})
+            _newest_key = (str(_newest.get("thought_fragment")), str(_newest.get("subjective_time")))
+            if _newest_key == _last_induction_key:
+                return
+            logger.info(f"🧠[selfmodel] 样本驱动提前归纳: 可用目标成败样本 {len(_goal_evts)} 条 (tick={tick_cnt})")
+        # 记录本次归纳时见过的最新样本身份（周期归纳也刷新，供样本驱动分支去重）
+        if _goal_evts:
+            _newest = _goal_evts[-1].get("payload", {})
+            _last_induction_key = (str(_newest.get("thought_fragment")), str(_newest.get("subjective_time")))
 
         # ========== 步骤1：回放读取历史事件（禁止直读全局变量） ==========
         mem_events = poll_replay_events("mem_consolidated", SAMPLE_MEMORY_COUNT)
@@ -1732,12 +1930,15 @@ def register_extra_core_organs():
         enabled=True,
         tick_func=organ_consolidate_tick,
         config={
-            # 调参（自传记忆连续性优化）：重放间隔 100→50（久远记忆保持活跃、避免长期沉默），
+            # 阶段六修复1：重放间隔 50→20（对齐真实会话长度——每轮对话 1 tick、单会话仅 7~11 tick；
+            # 旧阈值 + 计数器重启清零 = 自然运行永远不触发的死结；现计数器已落盘跨会话累计）。
             # 采样 8→6（工作记忆 context_stack 上限 12，重放占比不超一半，防挤占当下思考）。
-            "REPLAY_INTERVAL_TICKS": 50,    # 每 50 tick 执行一次记忆重放
+            "REPLAY_INTERVAL_TICKS": 20,    # 每 20 tick（跨会话累计）执行一次记忆重放
             "REPLAY_SAMPLE_COUNT": 6,       # 每次重放采样几条高权重记忆
             "FOCUS_THRESHOLD": 0.3,         # focus 低于该值且效价低才不写入长期记忆
             "VALENCE_ABS_THRESHOLD": 0.2,   # 效价绝对值过低且 focus 低才不写入长期记忆
+            # 阶段六修复·测试5：幼年失忆时间依赖——主观时钟低于该值时巩固门槛×2
+            "INFANCY_SUBJECTIVE_TIME": 60.0,   # 幼年期结束点（主观时间单位）
         }
     ))
     register_organ(BionicOrgan(
@@ -1829,6 +2030,45 @@ def _setup_subscriptions():
     subscribe_event("selfmodel_update", "ORG-SPEECH")
     subscribe_event("meta_cognition_update", "ORG-SPEECH")
     subscribe_event("mood_state", "ORG-SPEECH")
+
+
+# ====================== 阶段六修复4：后台心跳（器官常驻呼吸，不依赖对话驱动）======================
+# 修复前：organ_tick_all 仅由 respond() 驱动（每轮对话 1 tick），无人对话器官即「死亡」——
+# 主观时钟不走、重放不触发、自我模型不演化。叙事自我要真正「活着」，必须有自主心跳。
+# 机制：daemon 线程每 _HEARTBEAT_INTERVAL 秒 tick 一次（与对话 tick 共用 _TICK_LOCK 串行）。
+# 开关：环境变量 ORGAN_HEARTBEAT=0 关闭 / ORGAN_HEARTBEAT_INTERVAL=秒 调频。
+
+_heartbeat_thread: Optional[threading.Thread] = None
+
+
+def _organ_heartbeat_loop(ctx):
+    """心跳线程主体：永远循环，静默失败（绝不能让心跳线程把宿主进程带崩）。
+
+    注意：此处不得再持 _TICK_LOCK——organ_tick_all 内部已持锁（串行化），
+    threading.Lock 不可重入，外层再包一层会自锁死锁。"""
+    while True:
+        try:
+            time.sleep(_HEARTBEAT_INTERVAL)
+            organ_tick_all(ctx)   # 锁由 organ_tick_all 内部统一管理
+        except Exception:
+            time.sleep(5.0)   # 出错退避后重试
+
+
+def start_organ_heartbeat(ctx=None) -> bool:
+    """启动器官后台心跳。幂等（重复调用只启一次）。返回是否真的启动了。"""
+    global _heartbeat_thread
+    if not _HEARTBEAT_ENABLED:
+        logger.info("🫀 器官心跳未启动（ORGAN_HEARTBEAT=0）")
+        return False
+    if _heartbeat_thread is not None and _heartbeat_thread.is_alive():
+        return False
+    _heartbeat_thread = threading.Thread(
+        target=_organ_heartbeat_loop, args=(ctx,),
+        daemon=True, name="organ-heartbeat",
+    )
+    _heartbeat_thread.start()
+    logger.info(f"🫀 器官心跳已启动: 每 {_HEARTBEAT_INTERVAL} 秒自主 tick 一次（无对话也活着）")
+    return True
 
 
 # ====================== 一次性初始化全部器官 ======================

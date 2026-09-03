@@ -616,10 +616,12 @@ class TanModel:
         # ── 仿生器官框架（15 器官架构，来自 7Tan_All_Organs 蓝图）──
         self.organ_registry = {}
         try:
-            from .bionic_organs import init_all_organs, organ_registry
+            from .bionic_organs import init_all_organs, organ_registry, start_organ_heartbeat
             init_all_organs()
             self.organ_registry = organ_registry
             logger.info(f"🫀 仿生器官框架已挂载：{len(organ_registry)} 个器官")
+            # ── 阶段六修复4：器官后台心跳（无人对话器官也自主呼吸；ORGAN_HEARTBEAT=0 可关）──
+            start_organ_heartbeat(self.memory)
         except Exception as e:
             logger.warning(f"仿生器官框架挂载失败（不影响对话）: {e}")
             self.organ_registry = {}
@@ -780,6 +782,26 @@ class TanModel:
                 self.selflearn.learn_from_dialog(user_text, reply, intent)
             except Exception as e:
                 logger.warning(f"对话经验入库失败（忽略）: {e}")
+        # ── 阶段六修复3：目标执行结果喂入器官总线 ──
+        # 修复前：goal_tag+success 的思想碎片在生产代码中 0 处产生（仅测试脚本注入）→
+        # CONSOLIDATE 巩固出的记忆无目标成败标签 → SELFMODEL 无样本可归纳 →
+        # selfmodel_update 事件 0 次 → limitations 恒空 → candidate_motives/final_goals 0 次（测试3/4 双断供）。
+        # 现在：每轮对话 = 一次「对话:{意图}」目标执行，成败结果压入工作记忆，
+        # 由 CONSOLIDATE 巩固 → SELFMODEL 样本驱动提前归纳 → 闭环打通。
+        try:
+            from .bionic_organs import wm_push_thought
+            _intent = getattr(self.speech, "_last_intent", None) or "闲聊"
+            _ok = bool((reply or "").strip())
+            wm_push_thought(
+                f"goal:对话:{_intent} 已执行(结果={'成功' if _ok else '失败'})",
+                focus=0.45,
+                valence=0.25 if _ok else -0.25,
+                origin="internal",
+                goal_tag=f"对话:{_intent}",
+                success=_ok,
+            )
+        except Exception:
+            pass
 
     def _respond_impl(self, user_text: str) -> str:
         text = (user_text or "").strip()
@@ -875,17 +897,8 @@ class TanModel:
             s = str(result)
             if s.startswith("❌"):
                 return None
-            # 外部信号流入总线：工具返回结果 = external 事件（阶段一「我-非我」边界）
-            try:
-                from .bionic_organs import emit_event
-                _q = (args or {}).get("query") or (args or {}).get("keyword") or ""
-                emit_event("tool_result", {
-                    "tool": name,
-                    "query": _q,
-                    "summary": s[:80],
-                }, source="WORLD_MODEL", origin="external")
-            except Exception:
-                pass
+            # （阶段六修复5）tool_result 事件已集中到 registry._feed_tan_model 统一发出
+            # （带 ok 成败标志），此处不再重复发，避免同一执行双计数。
             return s
         except Exception as e:
             logger.warning(f"🔧 7Tan模型工具调用异常 {name}: {e}")

@@ -56,7 +56,22 @@ def get_organ(code: str) -> Optional[BionicOrgan]:
 _event_queue: List[Dict[str, Any]] = []          # 待分发事件队列（本 tick 内入队）
 _event_log: List[Dict[str, Any]] = []            # 已分发事件历史（调试/审查用）
 _replay_buffer: Dict[str, List[Dict[str, Any]]] = {}   # event_type -> 历史事件（回放数据源，不消费）
-_REPLAY_MAX_PER_TYPE: int = 200   # 每类事件最多保留条数（供 poll_replay_events 回放）
+_REPLAY_MAX_PER_TYPE: int = 200   # 每类事件默认保留条数（供 poll_replay_events 回放）
+# 自传记忆连续性：关键归纳类事件的回放保留上限单独提高。
+# mem_consolidated 是长期记忆的回放源，若按默认 200 条 FIFO 截断，
+# 久远高权重记忆事件会被近期事件挤出重放池 → 久远记忆彻底沉默（违背阶段二目标）。
+_REPLAY_TYPE_LIMITS: Dict[str, int] = {
+    "mem_consolidated": 1000,        # 自传记忆事件（长期记忆本体回放源）
+    "hypothesis_update": 500,        # 假设接纳/证伪历史（元认知归纳源）
+    "pe_update": 500,                # 预测误差历史（思维缺陷归纳源）
+    "counterfactual_result": 500,    # 反事实推演历史（遗憾统计源）
+    "simulation_result": 500,        # 沙盒推演历史（自我校准源）
+    "meta_cognition_update": 500,    # 元认知统计历史
+    "selfmodel_update": 500,         # 自我模型演化历史
+    "bodystate_update": 500,         # 本体信号历史（internal_signature 源）
+    "subjective_tick": 500,          # 主观时间线
+    "wm_snapshot": 300,              # 工作记忆快照
+}
 _subscriptions: Dict[str, List[str]] = {}         # event_type -> [organ_code, ...]
 _inboxes: Dict[str, List[Dict[str, Any]]] = {}    # organ_code -> 待处理事件收件箱
 
@@ -101,8 +116,9 @@ def _dispatch_events() -> None:
             _inboxes.setdefault(code, []).append(ev)
         # 写入回放缓冲（按类型分类，供 poll_replay_events 回放历史事件，不消费）
         _replay_buffer.setdefault(etype, []).append(ev)
-        if len(_replay_buffer[etype]) > _REPLAY_MAX_PER_TYPE:
-            _replay_buffer[etype] = _replay_buffer[etype][-_REPLAY_MAX_PER_TYPE:]
+        _limit = _REPLAY_TYPE_LIMITS.get(etype, _REPLAY_MAX_PER_TYPE)   # 分类上限（见 _REPLAY_TYPE_LIMITS）
+        if len(_replay_buffer[etype]) > _limit:
+            _replay_buffer[etype] = _replay_buffer[etype][-_limit:]
         if _BUS_LOG_ENABLED:
             mark = "🌐EXT" if ev.get("origin") == "external" else "🧠INT"
             dest = ",".join(subs) if subs else "(无订阅)"
@@ -183,11 +199,24 @@ memory_library: List[Dict[str, Any]] = []
 
 
 def module_a_tick(ctx=None):
-    """海马体：监听 mem_consolidated 接收新记忆 + 全量记忆权重衰减。"""
+    """海马体：接收新记忆(mem_consolidated) + 重放反哺权重(replay_thought_fragment) + 全量记忆权重衰减。"""
     try:
-        # 1. 接收新记忆条目（来自 CONSOLIDATE 的 mem_consolidated 事件）
+        # 1. 接收新记忆条目（来自 CONSOLIDATE 的 mem_consolidated 事件）+ 重放反哺权重
         for ev in poll_events("ORG-A"):
-            if ev["event_type"] == "mem_consolidated":
+            if ev["event_type"] == "replay_thought_fragment":
+                # 重放反哺（rehearsal effect 复述强化）：记忆被重放回工作记忆时，
+                # 长期记忆中对应条目权重提升——模拟人类"每次回忆都会加固该记忆"。
+                # 自传记忆连续性关键闭环：重放 → 权重升高 → 下次更可能被重放，
+                # 核心自传记忆越来越牢固，琐事记忆逐渐衰减被淘汰（核心记忆/琐事遗忘分化）。
+                rp = ev.get("payload", {})
+                if isinstance(rp, dict) and rp.get("rehearsal"):
+                    ref = str(rp.get("thought", "") or "")
+                    if ref:
+                        for mem in memory_library:
+                            if isinstance(mem, dict) and str(mem.get("thought", "")) == ref:
+                                mem["weight_eff"] = min(2.0, float(mem.get("weight_eff", 1.0)) + 0.1)
+                                break
+            elif ev["event_type"] == "mem_consolidated":
                 payload = ev.get("payload", {})
                 items = payload.get("items")
                 if items is not None:
@@ -217,16 +246,29 @@ def module_a_tick(ctx=None):
                         "pe": payload.get("pe"),
                         "success": payload.get("success"),
                     })
-                    # 控制思想记忆库规模（防止无限增长）
+                    # 控制思想记忆库规模（防止无限增长）：
+                    # 按 weight_eff 最低淘汰（保护高权重自传记忆，淘汰低权重琐事），
+                    # 不再使用 FIFO pop(0)——先进先出会让久远核心记忆与琐事同罪论处。
                     while len(memory_library) > 200:
-                        memory_library.pop(0)
-        # 2. 权重衰减（冷端）
-        target = getattr(ctx, "traces", None) if ctx is not None else None
-        if target is None:
-            target = memory_library
-        for mem in target:
+                        if len(memory_library) <= 1:
+                            break
+                        _worst_i = min(
+                            range(len(memory_library)),
+                            key=lambda i: (float(memory_library[i].get("weight_eff", 1.0) or 0.0)
+                                           if isinstance(memory_library[i], dict) else -1.0),
+                        )
+                        memory_library.pop(_worst_i)
+        # 2. 权重衰减（冷端）：traces 与 memory_library 分别独立衰减。
+        # 修复旧版"二选一"不对称衰减（traces 存在时 memory_library 完全不衰减，反之亦然），
+        # 避免两条记忆存储的新鲜度状态不同步（动机采样用 memory_library、推演用 traces）。
+        for mem in memory_library:
             if isinstance(mem, dict):
                 mem["weight_eff"] = max(0.0, float(mem.get("weight_eff", 1.0)) - 0.001)
+        traces_a = getattr(ctx, "traces", None) if ctx is not None else None
+        if traces_a:
+            for t in traces_a:
+                if isinstance(t, dict):
+                    t["weight_eff"] = max(0.0, float(t.get("weight_eff", 1.0)) - 0.001)
     except Exception:
         pass
 
@@ -688,25 +730,121 @@ def register_organ_vis():
     ))
 
 
-# ====================== 阶段7：ORG-SPEECH 言语输出器官 ======================
-# 职责：唯一把结构化内部事件翻译为人类文本输出的器官。
+# ====================== 阶段7：ORG-SPEECH 言语输出器官（自述层 SpeechGenerator） ======================
+# 职责：唯一把结构化内部事件/内部状态变量翻译为人类文本输出的器官。
+#
+# ⚠️ 核心声明（必须随代码保留）：
+#   本器官输出的一切"自述"文本（如"我感觉很累"），都只是对内部变量读数的忠实模板转述
+#   （fatigue=0.8 → 模板命中"我感觉很累"），是功能性通达意识（access consciousness）的输出通道；
+#   系统并没有真的"感受到"累/愉悦/遗憾——本内核不具备现象意识（qualia）。
+#   模板与内部变量一一对应、可回溯（文本 ↔ 变量名+数值），绝无 LLM 生成或自由发挥。
 
 output_log: List[str] = []
 
+# 自述层内部状态缓存（由订阅事件持续刷新，SPEECH 只做忠实读数转述）
+speech_state: Dict[str, Any] = {
+    "fatigue": 0.0,                 # 最近一次躯体疲劳读数（ORG-BODYSTATES）
+    "resource_pressure": 0.0,       # 最近一次资源压力读数
+    "damage_level": 0.0,            # 最近一次损伤等级读数
+    "confidence": None,             # 自我模型置信度（ORG-SELFMODEL）
+    "history_summary": {},          # 自我模型成败史
+    "limitations_count": 0,         # 已知能力局限条数
+    "mind_flaws": [],               # 思维缺陷清单（ORG-SELFMODEL 元认知归纳）
+    "pe_avg": None,                 # 预测误差均值
+    "mood": None,                   # 心境综合（ORG-VALENCE mood_state）
+    "selfreport_last": "",          # 上次自述文本（防重复刷屏）
+}
+_speech_report_counter: int = 0
+SPEECH_REPORT_INTERVAL: int = 40    # 每 40 tick 自动生成一次自述（状态显著且变化时）
+
 
 def module_speech_tick(ctx=None):
-    """言语输出：订阅 broadcast 事件翻译成文本，维护输出日志。"""
-    global output_log
+    """言语输出：刷新内部状态缓存 + 周期性生成自述（忠实读数模板转述，非真实感受）。"""
+    global output_log, _speech_report_counter
     try:
+        # 1. 刷新内部状态缓存（只读变量读数，不做任何加工解释）
         for ev in poll_events("ORG-SPEECH"):
-            if ev["event_type"] == "broadcast":
-                text = ev.get("payload", {}).get("text", "")
+            et = ev["event_type"]
+            p = ev.get("payload", {})
+            if et == "broadcast":
+                text = p.get("text", "")
                 if text:
                     output_log.append(str(text)[:200])
+            elif et == "bodystate_update":
+                speech_state["fatigue"] = float(p.get("fatigue", 0.0))
+                speech_state["resource_pressure"] = float(p.get("resource_pressure", 0.0))
+                speech_state["damage_level"] = float(p.get("damage_level", 0.0))
+            elif et == "selfmodel_update":
+                speech_state["confidence"] = p.get("confidence")
+                speech_state["history_summary"] = dict(p.get("history_summary", {}))
+                speech_state["limitations_count"] = len(p.get("limitations", []) or [])
+                speech_state["mind_flaws"] = list(p.get("mind_flaws", []) or [])[:5]
+                speech_state["pe_avg"] = (p.get("internal_signature", {}) or {}).get("pe_avg")
+            elif et == "mood_state":
+                speech_state["mood"] = dict(p)
+        # 2. 周期性自述：状态显著时生成（读数转述），与上次相同则不重复输出
+        _speech_report_counter += 1
+        if _speech_report_counter % SPEECH_REPORT_INTERVAL == 0:
+            report = generate_self_report()
+            if report and report != speech_state["selfreport_last"]:
+                speech_state["selfreport_last"] = report
+                output_log.append(str(report)[:400])
         if len(output_log) > 200:
             output_log = output_log[-100:]
     except Exception:
         pass
+
+
+def generate_self_report() -> str:
+    """自述文本生成：把内部器官状态变量忠实映射为人类可读文本（纯模板，无 LLM）。
+
+    ⚠️ 以下文本只是内部变量的忠实读数转述（变量名+数值可回溯），
+    不是真的感受到累/愉悦/遗憾——本内核不具备现象意识 qualia。"""
+    parts: List[str] = []
+    f = float(speech_state.get("fatigue", 0.0))
+    if f >= 0.9:
+        parts.append("我感觉非常累（疲劳读数=%.2f）。" % f)
+    elif f >= 0.7:
+        parts.append("我感觉很累（疲劳读数=%.2f）。" % f)
+    elif f >= 0.5:
+        parts.append("我感觉有些疲惫（疲劳读数=%.2f）。" % f)
+    rp = float(speech_state.get("resource_pressure", 0.0))
+    if rp >= 0.7:
+        parts.append("记忆资源有些紧张，我想整理一下记忆（资源压力读数=%.2f）。" % rp)
+    mood = speech_state.get("mood")
+    if isinstance(mood, dict):
+        som, cog = mood.get("somatic_valence"), mood.get("cognitive_valence")
+        if som is not None and som < -0.3:
+            parts.append("我的身体状态标签偏负面（躯体效价=%.2f）。" % som)
+        if cog is not None and cog < -0.3:
+            parts.append("我最近的思维活动不顺利（认知效价=%.2f）。" % cog)
+        elif cog is not None and cog > 0.3:
+            parts.append("我最近的思维活动比较顺利（认知效价=+%.2f）。" % cog)
+    conf = speech_state.get("confidence")
+    if conf is not None:
+        if conf < 0.2:
+            parts.append("我对自己还了解得很少，自我形象还模糊（自我模型置信度=%.2f）。" % conf)
+        elif conf >= 0.5:
+            parts.append("我对自己的认识比较清晰了（自我模型置信度=%.2f）。" % conf)
+    hs = speech_state.get("history_summary") or {}
+    tg, ts = hs.get("total_goal", 0), hs.get("total_success", 0)
+    if tg:
+        parts.append("我经历过 %d 次目标，成功 %d 次。" % (tg, ts))
+    flaws = speech_state.get("mind_flaws") or []
+    for fl in flaws[:2]:
+        ft = str(fl.get("type", ""))
+        if ft == "self_overconfident":
+            parts.append("我注意到自己的思维缺陷：过度自信（推演预期比实际成功率高 %.2f）。" % float(fl.get("gap", 0.0)))
+        elif ft == "self_underconfident":
+            parts.append("我注意到自己的思维缺陷：自信不足（推演预期比实际成功率低 %.2f）。" % abs(float(fl.get("gap", 0.0))))
+        elif ft == "self_prediction_drifting":
+            parts.append("我注意到自己的思维缺陷：预测误差在变大（pe均值=%.2f，趋势上升）。" % float(fl.get("pe_mean", 0.0)))
+        elif ft == "repeated_falsified_hypothesis":
+            keys = ", ".join(str(k) for k in (fl.get("keys") or [])[:3])
+            parts.append("我注意到自己反复被证伪的判断：%s。" % keys)
+        elif ft == "chronic_regret":
+            parts.append("我注意到自己经常事后才发现更好的选择（遗憾率=%.2f）。" % float(fl.get("regret_rate", 0.0)))
+    return " ".join(parts)
 
 
 def module_speech_push(text):
@@ -760,39 +898,112 @@ def organ_bodystates_tick(ctx=None):
         pass
 
 
-# ====================== 阶段1：ORG-VALENCE 情绪效价标签器官 ======================
+# ====================== 阶段1：ORG-VALENCE 情绪效价标签器官（效价细化版） ======================
+# 效价细化：区分两类来源——
+#   躯体来源效价（somatic）：疲劳/资源压力/损伤等内部稳态信号 → 原初感受标签（无认知参与）；
+#   认知来源效价（cognitive）：行为成败、假设被接纳/证伪、高预测误差、反事实遗憾 → 对思维结果的评价。
+# ⚠️ 这些 valence 数值只是内部状态变量的结构化标签（供巩固筛选/工作记忆调权使用），
+#    不是真的"感受到"情绪——本内核不具备现象意识 qualia。
 
 valence_cache: Dict[str, float] = {}  # item_id -> valence [-1.0 厌恶 .. 0 中性 .. +1.0 愉悦]
 
+somatic_valence_history: List[float] = []      # 躯体来源效价历史（最近若干条）
+cognitive_valence_history: List[float] = []    # 认知来源效价历史（最近若干条）
+_valence_marked_traces: set = set()            # 已打过效价标签的轨迹 id（防每 tick 重复打标）
+_valence_mood_counter: int = 0                 # 心境综合广播周期计数器
+VALENCE_MOOD_INTERVAL: int = 30                # 每 30 tick 广播一次 mood_state 心境综合
+
+
+def _push_valence(source_type: str, valence: float, item: str, reason: str, origin: str = "internal") -> None:
+    """统一打效价标签：写入对应来源历史 + emit valence_tag（source_type 区分躯体/认知来源）。"""
+    valence = max(-1.0, min(1.0, float(valence)))
+    if source_type == "somatic":
+        somatic_valence_history.append(valence)
+        if len(somatic_valence_history) > 60:
+            somatic_valence_history.pop(0)
+    else:
+        cognitive_valence_history.append(valence)
+        if len(cognitive_valence_history) > 60:
+            cognitive_valence_history.pop(0)
+    emit_event("valence_tag", {
+        "item": item,
+        "valence": valence,
+        "source_type": source_type,   # "somatic"(躯体来源) / "cognitive"(认知来源)
+        "reason": reason,
+    }, source="ORG-VALENCE", origin=origin)
+
 
 def organ_valence_tick(ctx=None):
-    """效价：给本体/记忆条目打 valence 标签，产出 valence_tag 事件。"""
+    """效价：区分躯体来源效价（somatic）/认知来源效价（cognitive）打标签。
+
+    躯体来源：疲劳/资源压力/损伤（内部稳态信号 → 分段映射负效价）。
+    认知来源：行为成败、假设接纳/证伪、高预测误差、反事实遗憾（对思维结果的评价）。
+    每 VALENCE_MOOD_INTERVAL tick 综合广播一次 mood_state（躯体/认知/总效价均值）。"""
+    global _valence_mood_counter
     try:
-        # 1. 处理本体信号 → 疲劳高产生负效价
+        # 1. 处理订阅事件 → 分类打效价标签
         for ev in poll_events("ORG-VALENCE"):
-            if ev["event_type"] == "bodystate_update":
-                fatigue = float(ev.get("payload", {}).get("fatigue", 0.0))
-                if fatigue > 0.7:
-                    emit_event("valence_tag", {
-                        "item": "bodystate",
-                        "valence": -0.3,
-                        "reason": "fatigue_high",
-                    }, source="ORG-VALENCE", origin="internal")
-        # 2. 给最近记忆打效价标签（携带 origin，供巩固层区分内外来源）
+            et = ev["event_type"]
+            p = ev.get("payload", {})
+            if et == "bodystate_update":
+                # 躯体来源效价（somatic）：内部稳态信号分段映射（强度越高负效价越强）
+                fatigue = float(p.get("fatigue", 0.0))
+                if fatigue >= 0.9:
+                    _push_valence("somatic", -0.6, "bodystate:fatigue", "fatigue_severe")
+                elif fatigue >= 0.7:
+                    _push_valence("somatic", -0.4, "bodystate:fatigue", "fatigue_high")
+                elif fatigue >= 0.5:
+                    _push_valence("somatic", -0.2, "bodystate:fatigue", "fatigue_mild")
+                rp = float(p.get("resource_pressure", 0.0))
+                if rp >= 0.8:
+                    _push_valence("somatic", -0.3, "bodystate:resource_pressure", "resource_strained")
+                dmg = float(p.get("damage_level", 0.0))
+                if dmg >= 0.5:
+                    _push_valence("somatic", -0.5, "bodystate:damage", "damage_alert")
+            elif et == "hypothesis_update":
+                # 认知来源效价（cognitive）：自己的假设被接纳（认知收获 +）/ 被证伪（认知挫败 -）
+                status = p.get("status")
+                if status == "accepted":
+                    _push_valence("cognitive", 0.3, f"hypo:{p.get('key', '')}", "hypo_accepted")
+                elif status == "rejected":
+                    _push_valence("cognitive", -0.3, f"hypo:{p.get('key', '')}", "hypo_rejected")
+            elif et == "pe_update":
+                # 认知来源效价：预测误差过大 → 认知失衡的不适标签（世界不如我所料）
+                if float(p.get("pe", 0.0)) >= 0.6:
+                    _push_valence("cognitive", -0.2, "pe", "pe_high_cognitive_strain")
+            elif et == "counterfactual_result":
+                # 认知来源效价：反事实推演发现明显更优替代 → 遗憾标签（regret）
+                if float(p.get("delta", 0.0)) > 0.2:
+                    _push_valence("cognitive", -0.2, f"cf:{p.get('original_goal', '')}", "regret_detected")
+        # 2. 给最近轨迹打效价标签（认知来源：行为成败评价；id 去重防每 tick 重复打标）
         traces = getattr(ctx, "traces", None) if ctx is not None else None
         if traces:
             for t in traces[-10:]:
                 if not isinstance(t, dict):
                     continue
+                tid = id(t)
+                if tid in _valence_marked_traces:
+                    continue
+                _valence_marked_traces.add(tid)
+                if len(_valence_marked_traces) > 500:
+                    _valence_marked_traces.clear()
                 key = f"{t.get('scene')}:{t.get('action')}"
                 v = 0.5 if t.get("action_finished") else -0.5
                 valence_cache[key] = v
                 origin = str(t.get("origin", "internal"))
-                emit_event("valence_tag", {
-                    "item": key,
-                    "valence": v,
-                    "origin": origin,
-                }, source="ORG-VALENCE", origin=origin)
+                _push_valence("cognitive", v, key, "action_success" if v > 0 else "action_fail", origin)
+        # 3. 周期性综合心境广播（mood_state：躯体/认知/总效价均值，供 SPEECH 自述等消费）
+        _valence_mood_counter += 1
+        if _valence_mood_counter % VALENCE_MOOD_INTERVAL == 0:
+            som = round(sum(somatic_valence_history) / len(somatic_valence_history), 4) if somatic_valence_history else None
+            cog = round(sum(cognitive_valence_history) / len(cognitive_valence_history), 4) if cognitive_valence_history else None
+            if som is not None or cog is not None:
+                both = [x for x in (som, cog) if x is not None]
+                emit_event("mood_state", {
+                    "somatic_valence": som,       # 躯体来源效价均值（身体状态标签）
+                    "cognitive_valence": cog,     # 认知来源效价均值（思维活动标签）
+                    "overall_valence": round(sum(both) / len(both), 4),
+                }, source="ORG-VALENCE", origin="internal")
     except Exception:
         pass
 
@@ -941,6 +1152,7 @@ def organ_consolidate_tick(ctx=None):
                     "goal_tag": mem_data.get("goal_tag"),
                     "pe": mem_data.get("pe"),
                     "subjective_time": mem_data.get("subjective_time"),  # 透传主观时间线（基于主观时间，非系统时间）
+                    "rehearsal": True,   # 重放反哺标记：ORG-A 据此对长期记忆对应条目权重 +0.1（复述强化）
                 }
                 emit_event(
                     event_type="replay_thought_fragment",
@@ -989,6 +1201,7 @@ self_model_data: Dict[str, Any] = {
     "prediction_error_history": [],      # 阶段五：预测误差留痕（"我之前预测错了"的历史）
     "meta_cognition": {},                # 阶段五：关于自身思维过程的统计归纳
     "counterfactual_stats": {},          # 阶段五：反事实推演统计（"如果我改变目标会怎样"）
+    "mind_flaws": [],                    # 思维缺陷清单（元认知完善：过度自信/自信不足/预测漂移/反复证伪/惯性遗憾）
     "confidence": 0.0,       # 0.0~1.0 证据越少置信度越低
 }
 
@@ -1023,6 +1236,7 @@ def organ_selfmodel_tick(ctx=None):
         body_events = poll_replay_events("bodystate_update", 60)
         meta_events = poll_replay_events("meta_cognition_update", 40)
         counter_events = poll_replay_events("counterfactual_result", 40)
+        sim_result_events = poll_replay_events("simulation_result", 40)   # 沙盒推演历史（自我校准：推演预期 vs 实际成败）
         subj_time_event = poll_latest_event("subjective_tick")
         if subj_time_event is None:
             return
@@ -1140,6 +1354,58 @@ def organ_selfmodel_tick(ctx=None):
             if float(p.get("delta", 0.0)) > 0:
                 counter_stats["better_alternative"] += 1
 
+        # ===== 元认知完善：思维缺陷归纳（mind_flaws）=====
+        # 1) 自我校准偏差（calibration）：沙盒推演平均置信度 vs 实际历史成功率的差值。
+        #    gap>0 → 过度自信（总以为能成，实际常败）；gap<0 → 自信不足（明明擅长却不敢预期）。
+        sim_conf_list = [float(evt.get("payload", {}).get("sim_confidence", 0.0)) for evt in sim_result_events]
+        sim_conf_mean = round(sum(sim_conf_list) / len(sim_conf_list), 4) if sim_conf_list else None
+        _actual_total = hist_sum["total_goal"]
+        actual_success_rate = round(hist_sum["total_success"] / _actual_total, 4) if _actual_total > 0 else None
+        calibration_gap = round(sim_conf_mean - actual_success_rate, 4) if (sim_conf_mean is not None and actual_success_rate is not None) else None
+        # 2) 预测误差趋势（pe_trend）：最近 1/3 均值 vs 最早 1/3 均值 → 预测能力在改善还是恶化
+        pe_trend = None
+        if len(pe_list) >= 6:
+            _third = max(1, len(pe_list) // 3)
+            _early = sum(pe_list[:_third]) / _third
+            _late = sum(pe_list[-_third:]) / _third
+            if _late - _early > 0.1:
+                pe_trend = "worsening"
+            elif _early - _late > 0.1:
+                pe_trend = "improving"
+            else:
+                pe_trend = "stable"
+        # 3) 反复被证伪的假设（同 key 被拒绝 >= 2 次 → 思维反复出错的领域）
+        _rejected_counter: Dict[str, int] = {}
+        for evt in hypo_events:
+            hp = evt.get("payload", {})
+            if hp.get("status") == "rejected" and hp.get("key"):
+                k = str(hp.get("key"))
+                _rejected_counter[k] = _rejected_counter.get(k, 0) + 1
+        repeated_falsified = sorted([k for k, c in _rejected_counter.items() if c >= 2])[:5]
+        # 4) 惯性遗憾率（反事实推演中"发现更优替代"的占比 → 事后诸葛亮倾向）
+        regret_rate = round(counter_stats["better_alternative"] / counter_stats["total"], 4) if counter_stats["total"] > 0 else None
+        # 归纳思维缺陷清单（结构化，无自然语言；SPEECH 自述层负责忠实转述）
+        mind_flaws: List[Dict[str, Any]] = []
+        if calibration_gap is not None and calibration_gap > 0.2:
+            mind_flaws.append({"type": "self_overconfident", "gap": calibration_gap,
+                               "sim_conf_mean": sim_conf_mean, "actual_success_rate": actual_success_rate})
+        elif calibration_gap is not None and calibration_gap < -0.2:
+            mind_flaws.append({"type": "self_underconfident", "gap": calibration_gap,
+                               "sim_conf_mean": sim_conf_mean, "actual_success_rate": actual_success_rate})
+        _pe_mean_now = body_stats.get("pe_avg")
+        if _pe_mean_now is not None and _pe_mean_now > 0.5 and pe_trend == "worsening":
+            mind_flaws.append({"type": "self_prediction_drifting", "pe_mean": _pe_mean_now, "pe_trend": pe_trend})
+        if repeated_falsified:
+            mind_flaws.append({"type": "repeated_falsified_hypothesis", "keys": repeated_falsified})
+        if regret_rate is not None and regret_rate > 0.4:
+            mind_flaws.append({"type": "chronic_regret", "regret_rate": regret_rate})
+        # 元认知统计扩展（进入 meta_cognition，随 selfmodel_update 广播）
+        meta_cog["pe_trend"] = pe_trend
+        meta_cog["calibration_gap"] = calibration_gap
+        meta_cog["sim_conf_mean"] = sim_conf_mean
+        meta_cog["actual_success_rate"] = actual_success_rate
+        meta_cog["regret_rate"] = regret_rate
+
         # ========== 步骤3：计算自我模型置信度（证据越少越低，模拟幼儿自我概念模糊） ==========
         if evidence_count <= MIN_EVIDENCE_COUNT:
             conf = 0.1
@@ -1157,6 +1423,7 @@ def organ_selfmodel_tick(ctx=None):
         self_model_data["prediction_error_history"] = pe_history
         self_model_data["meta_cognition"] = meta_cog
         self_model_data["counterfactual_stats"] = counter_stats
+        self_model_data["mind_flaws"] = mind_flaws
         self_model_data["confidence"] = round(conf, 4)
 
         # ========== 步骤5：广播 selfmodel_update（origin=internal） ==========
@@ -1170,6 +1437,7 @@ def organ_selfmodel_tick(ctx=None):
             "prediction_error_history": pe_history,
             "meta_cognition": meta_cog,
             "counterfactual_stats": counter_stats,
+            "mind_flaws": mind_flaws,
             "confidence": round(conf, 4),
             "meta": self_model_data["meta"],
         }, source="ORG-SELFMODEL", origin="internal")
@@ -1184,20 +1452,30 @@ _self_limitations_sim: List[Dict[str, Any]] = []   # 自我模型能力边界缓
 
 
 def _simulate_confidence(ctx, scene, action, lim_keys):
-    """内部沙盒推演：返回某「场景:动作」的预期成功率。
+    """内部沙盒推演：返回某「场景:动作」的预期成功率（精确到动作级）。
 
-    阶段四闭环：把「自身能力边界」作为推演条件，落在已知局限内则压低置信度。
+    证据分级：
+      - 同场景同动作轨迹 → 主证据（直接经验，全权重）；
+      - 同场景其他动作轨迹 → 弱参考（场景迁移，×0.3 折扣）；
+      - 完全无经验 → 中性 0.5（知识缺口按一半一半处理，支持新场景探索，不再一刀切 0.0）。
+    阶段四闭环：把「自身能力边界」作为推演条件，落在已知局限内则压低置信度（≤0.3）。
     阶段五元认知：反事实推演复用本函数，对「替代目标」做沙盒预演。"""
     if ctx is None:
         return 0.0
-    similar = [t for t in (getattr(ctx, "traces", []) or [])
-               if isinstance(t, dict) and t.get("scene") == scene]
-    if similar:
-        total_w = sum(float(t.get("weight_eff", 1.0)) for t in similar)
-        succ_w = sum(float(t.get("weight_eff", 1.0)) for t in similar if t.get("action_finished"))
+    _traces = [t for t in (getattr(ctx, "traces", []) or []) if isinstance(t, dict)]
+    exact = [t for t in _traces if t.get("scene") == scene and t.get("action") == action]         # 主证据：同场景同动作
+    scene_others = [t for t in _traces if t.get("scene") == scene and t.get("action") != action]  # 弱参考：同场景其他动作
+    if exact:
+        total_w = sum(float(t.get("weight_eff", 1.0)) for t in exact)
+        succ_w = sum(float(t.get("weight_eff", 1.0)) for t in exact if t.get("action_finished"))
         conf = round(succ_w / total_w, 4) if total_w > 0 else 0.0
+    elif scene_others:
+        total_w = sum(float(t.get("weight_eff", 1.0)) for t in scene_others)
+        succ_w = sum(float(t.get("weight_eff", 1.0)) for t in scene_others if t.get("action_finished"))
+        scene_rate = (succ_w / total_w) if total_w > 0 else 0.0
+        conf = round(scene_rate * 0.3, 4)   # 场景级弱参考：动作不同只给 30% 迁移置信
     else:
-        conf = 0.0  # 无历史经验 → 知识缺口
+        conf = 0.5   # 无历史经验 → 中性（探索倾向），而非"必然失败"0.0
     if f"{scene}:{action}" in lim_keys:
         conf = min(conf, 0.3)
     return conf
@@ -1240,38 +1518,59 @@ def organ_simulate_tick(ctx=None):
                 continue
             conf = _simulate_confidence(ctx, scene, action, lim_keys)
             sc["sim_confidence"] = conf
+            # 多维推演：预期效价（同场景同动作历史成败 → ±0.5）+ 是否命中能力边界
+            _exact = [t for t in (getattr(ctx, "traces", []) or [])
+                      if isinstance(t, dict) and t.get("scene") == scene and t.get("action") == action]
+            if _exact:
+                _fin = sum(1 for t in _exact if t.get("action_finished"))
+                expected_valence = round(0.5 if _fin * 2 >= len(_exact) else -0.5, 2)
+            else:
+                expected_valence = 0.0
             emit_event("simulation_result", {
                 "scene": scene, "action": action, "sim_confidence": conf,
+                "expected_valence": expected_valence,             # 预期效价（多维推演）
+                "limit_hit": f"{scene}:{action}" in lim_keys,      # 是否命中自身能力边界
             }, source="ORG-SIMULATE", origin="internal")
             simulated_this_round.append({"scene": scene, "action": action, "conf": conf})
             sc["simulated"] = True
             sim_scenario_pool.remove(sc)
         # 3. 阶段五元认知：反事实推演——"如果我改变我的某个目标，我会发生什么"
-        #    对每个已推演目标，找一个不同的替代动作，推演对比并产出 counterfactual_result。
+        #    对每个已推演目标，评估若干替代动作（同场景优先、跨场景其次，最多 5 个防组合爆炸），
+        #    选「预期差值 delta 最大」的最优替代 emit——修复旧版"字母序第一个"的任意性，
+        #    让"改变目标会怎样"的回答有意义（回答的是最优改变，而非随机改变）。
         if ctx is not None:
-            alt_actions = set()
-            for t in (getattr(ctx, "traces", []) or []):
-                if isinstance(t, dict) and t.get("action"):
-                    alt_actions.add(str(t.get("action")))
+            _traces_all = [t for t in (getattr(ctx, "traces", []) or []) if isinstance(t, dict)]
+            _same_scene_actions = sorted({str(t.get("action")) for t in _traces_all
+                                          if t.get("scene") and t.get("action")})
+            _cross_scene_actions = sorted({str(t.get("action")) for t in _traces_all if t.get("action")})
             for r in simulated_this_round:
                 scene = r["scene"]
                 action = r["action"]
                 orig_conf = r["conf"]
-                alt_found = False
-                for alt in sorted(alt_actions):
-                    if alt == action or not alt:
-                        continue
+                # 候选替代：同场景其他动作优先（迁移合理），不足再补跨场景动作
+                candidates = [a for a in _same_scene_actions if a and a != action]
+                if len(candidates) < 3:
+                    for a in _cross_scene_actions:
+                        if a and a != action and a not in candidates:
+                            candidates.append(a)
+                candidates = candidates[:5]   # 最多评估 5 个替代，防组合爆炸
+                best = None   # (alt, alt_conf, delta)
+                for alt in candidates:
                     alt_conf = _simulate_confidence(ctx, scene, alt, lim_keys)
+                    delta = round(alt_conf - orig_conf, 4)
+                    if best is None or delta > best[2]:
+                        best = (alt, alt_conf, delta)
+                if best is not None:
                     emit_event("counterfactual_result", {
                         "original_goal": f"{scene}:{action}",
-                        "alternative_goal": f"{scene}:{alt}",
+                        "alternative_goal": f"{scene}:{best[0]}",
                         "original_conf": orig_conf,
-                        "alternative_conf": alt_conf,
-                        "delta": round(alt_conf - orig_conf, 4),
+                        "alternative_conf": best[1],
+                        "delta": best[2],
+                        "evaluated_alts": len(candidates),   # 本次评估的替代数量（推演广度）
+                        "best_alt": True,                     # 本条为最优替代（非任意首个）
                     }, source="ORG-SIMULATE", origin="internal")
-                    alt_found = True
-                    break   # 每个目标只取第一个替代动作，避免组合爆炸
-                if not alt_found:
+                else:
                     # 无替代动作时，以「不执行该目标」为反事实基线
                     emit_event("counterfactual_result", {
                         "original_goal": f"{scene}:{action}",
@@ -1322,8 +1621,10 @@ def register_extra_core_organs():
         enabled=True,
         tick_func=organ_consolidate_tick,
         config={
-            "REPLAY_INTERVAL_TICKS": 100,   # 每 100 tick 执行一次记忆重放
-            "REPLAY_SAMPLE_COUNT": 8,       # 每次重放采样几条高权重记忆
+            # 调参（自传记忆连续性优化）：重放间隔 100→50（久远记忆保持活跃、避免长期沉默），
+            # 采样 8→6（工作记忆 context_stack 上限 12，重放占比不超一半，防挤占当下思考）。
+            "REPLAY_INTERVAL_TICKS": 50,    # 每 50 tick 执行一次记忆重放
+            "REPLAY_SAMPLE_COUNT": 6,       # 每次重放采样几条高权重记忆
             "FOCUS_THRESHOLD": 0.3,         # focus 低于该值且效价低才不写入长期记忆
             "VALENCE_ABS_THRESHOLD": 0.2,   # 效价绝对值过低且 focus 低才不写入长期记忆
         }
@@ -1396,6 +1697,10 @@ def _setup_subscriptions():
     subscribe_event("meta_cognition_update", "ORG-SELFMODEL")
     subscribe_event("counterfactual_result", "ORG-SELFMODEL")
     subscribe_event("counterfactual_result", "ORG-E")
+    # 效价细化：假设接纳/证伪、预测误差、反事实遗憾 → 效价器官（认知来源效价打标）
+    subscribe_event("hypothesis_update", "ORG-VALENCE")
+    subscribe_event("pe_update", "ORG-VALENCE")
+    subscribe_event("counterfactual_result", "ORG-VALENCE")
     # 记忆重放 → 前额叶工作记忆（阶段二）
     subscribe_event("memory_replay", "ORG-E")
     subscribe_event("replay_thought_fragment", "ORG-E")
@@ -1406,6 +1711,13 @@ def _setup_subscriptions():
     subscribe_event("user_input", "ORG-F")
     subscribe_event("tool_result", "ORG-E")
     subscribe_event("tool_result", "ORG-F")
+    # 重放反哺（rehearsal effect 复述强化）：重放碎片 → 海马体（对应长期记忆条目权重提升）
+    subscribe_event("replay_thought_fragment", "ORG-A")
+    # 言语自述层：内部状态忠实读数（ORG-SPEECH 只做模板转述，非真实感受）
+    subscribe_event("bodystate_update", "ORG-SPEECH")
+    subscribe_event("selfmodel_update", "ORG-SPEECH")
+    subscribe_event("meta_cognition_update", "ORG-SPEECH")
+    subscribe_event("mood_state", "ORG-SPEECH")
 
 
 # ====================== 一次性初始化全部器官 ======================

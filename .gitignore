@@ -179,6 +179,7 @@ data/evolution_report.txt
 data/evolution_snapshots/
 data/stage6_real_world_report.txt
 data/docx_content.txt
+data/m1_knowledge_cursor.json
 
 # 公众号渲染产物与文章临时目录（运行时下载/生成，不入库）
 data/gzh_render/

@@ -103,23 +103,28 @@ class KnowledgePackageQueue:
         except Exception as e:
             logger.warning(f"[M1] 知识包游标保存失败: {e}")
 
-    def enqueue(self, entries: List[dict]) -> int:
-        """批量入队，返回真正新增的待投递条数（已处理/已在队中的跳过，即去重）。"""
+    def enqueue(self, entries: List[dict]) -> tuple:
+        """批量入队，返回 (新增条数, 重复跳过条数)。已处理/已在队中的跳过（去重）。"""
         added = 0
+        skipped = 0
         for e in entries:
             if not isinstance(e, dict):
+                skipped += 1
                 continue
             iid = str(e.get("item_id", "") or "")
             if not iid:
+                skipped += 1
                 continue
             if iid in self.processed_ids:
+                skipped += 1
                 continue
             if any(p.get("item_id") == iid for p in self.pending):
+                skipped += 1
                 continue
             self.pending.append({"item_id": iid, "content": str(e.get("content", "") or "")})
             added += 1
         self._save()
-        return added
+        return added, skipped
 
     def pop_batch(self, n: int) -> List[dict]:
         """取最多 n 条待投递，并标记为已处理（游标前移）。"""
@@ -188,9 +193,22 @@ class UpperModuleM1:
             self._deep_queue.append({"url": url, "chunk": c, "trigger": trigger})
         return len(chunks)
 
-    def import_knowledge_package(self, entries: List[dict]) -> int:
-        """导入预制知识包（source=knowledge_package）。返回新增入队条数。"""
-        return self.pkg_queue.enqueue(entries)
+    def import_knowledge_package(self, entries: List[dict]) -> dict:
+        """导入预制知识包（source=knowledge_package）。返回 {added, skipped, pending}。"""
+        added, skipped = self.pkg_queue.enqueue(entries)
+        return {"added": added, "skipped": skipped, "pending": len(self.pkg_queue.pending)}
+
+    def drain_now(self, max_batch: int = M1_RATE_LIMIT) -> int:
+        """手动导入后立即投递一批 pending（遵守单批额度，立即执行，不等心跳 tick）。
+
+        用户主动导入知识包时调用，让知识即时可见；仍按单批 3 条投递，
+        不破坏「防事件洪水」约束（批量导入走队列，逐 tick 消化剩余）。"""
+        batch = self.pkg_queue.pop_batch(max_batch)
+        n = 0
+        for item in batch:
+            self._emit_knowledge(item["item_id"], item["content"])
+            n += 1
+        return n
 
     # ── post_tick_hook：每 tick 限速投递 ──
     def _on_tick(self) -> None:

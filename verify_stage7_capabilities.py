@@ -25,15 +25,17 @@ def _test_m1_knowledge() -> tuple:
     if tmp.exists():
         tmp.unlink()
     q = KnowledgePackageQueue(cursor_path=tmp)
-    n = q.enqueue([
+    n, skipped = q.enqueue([
         {"item_id": "t-001", "content": "a"},
         {"item_id": "t-002", "content": "b"},
         {"item_id": "t-001", "content": "dup"},
     ])
     assert n == 2, f"知识包去重失败：应入队2条，实际 {n}"
+    assert skipped == 1, f"去重统计失败：应跳过1条重复，实际 {skipped}"
     # 再次 enqueue 相同 id 应全部去重
-    n2 = q.enqueue([{"item_id": "t-001", "content": "dup2"}])
+    n2, skipped2 = q.enqueue([{"item_id": "t-001", "content": "dup2"}])
     assert n2 == 0, f"去重失效：重复 id 应入队0条，实际 {n2}"
+    assert skipped2 == 1, f"去重统计失败：重复 id 应跳过1条，实际 {skipped2}"
     # 限速器：每 tick 最多 rate 条
     rl = _RateLimiter(rate=3)
     tick = 100

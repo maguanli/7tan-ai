@@ -1239,11 +1239,89 @@ $("#mindLearnImport") && $("#mindLearnImport").addEventListener("click", async (
   const btn = $("#mindLearnImport"); btn.disabled = true; btn.textContent = "⏳ 导入中…";
   try {
     const r = await API.post("/api/mind/knowledge-package", { entries });
-    toast(r.ok ? `✅ 已导入 ${r.imported} 条知识` : ("⚠️ " + (r.error || "失败")), !r.ok);
-    if (r.ok) { $("#mindLearnText").value = ""; loadMind(); }
+    if (r.ok) {
+      const dup = r.duplicates ? `，${r.duplicates} 条已存在跳过` : "";
+      toast(`✅ 已导入 ${r.imported} 条${dup}｜队列 ${r.pending} 条待学习`, false);
+      $("#mindLearnText").value = ""; loadMind();
+    } else { toast("⚠️ " + (r.error || "失败"), true); }
   } catch (e) { toast("导入失败: " + e.message, true); }
   finally { btn.disabled = false; btn.textContent = "📥 导入知识包"; }
 });
+
+/* 知识包文件导入：抽公共函数，供「选择文件」「打开文件夹」「拖拽」三个入口复用 */
+async function handleMindFiles(files, btn) {
+  const list = Array.from(files || []);
+  if (!list.length) return;
+  const orig = btn ? btn.textContent : "";
+  const MAX_FILE = 2 * 1024 * 1024;
+  const MAX_TOTAL = 5000;
+  const extRe = /\.(txt|md|json|csv|log|text|docx)$/i;
+  let entries = [], skipped = 0, docxFiles = [];
+  for (const f of list) {
+    if (!extRe.test(f.name)) { skipped++; continue; }
+    if (f.size > MAX_FILE) { skipped++; toast(`跳过 ${f.name}（>2MB）`, true); continue; }
+    const rel = f.webkitRelativePath || f.name;
+    if (/\.docx$/i.test(f.name)) { docxFiles.push({ f, rel }); continue; }
+    let text = "";
+    try { text = await f.text(); } catch (e) { skipped++; continue; }
+    text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
+      .forEach((content, i) => entries.push({ item_id: "file:" + rel + ":" + i, content }));
+  }
+  if (!entries.length && !docxFiles.length) { toast("没有可导入的文本内容", true); return; }
+  if (entries.length > MAX_TOTAL) entries = entries.slice(0, MAX_TOTAL);
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 导入中…"; }
+  let total = 0, dupTotal = 0, pendingLeft = 0;
+  try {
+    if (entries.length) {
+      const r = await API.post("/api/mind/knowledge-package", { entries });
+      if (r.ok) { total += r.imported || 0; dupTotal += r.duplicates || 0; pendingLeft = r.pending || 0; }
+      else toast("⚠️ " + (r.error || "文本导入失败"), true);
+    }
+    for (const { f, rel } of docxFiles) {
+      const b64 = await new Promise((res, rej) => {
+        const rd = new FileReader();
+        rd.onload = () => { const s = String(rd.result || ""); res(s.includes(",") ? s.slice(s.indexOf(",") + 1) : s); };
+        rd.onerror = rej; rd.readAsDataURL(f);
+      });
+      const r = await API.post("/api/mind/knowledge-docx", { base64: b64, filename: rel });
+      if (r.ok) { total += r.imported || 0; dupTotal += r.duplicates || 0; pendingLeft = r.pending || 0; }
+      else toast(`⚠️ ${f.name}: ${r.error || "导入失败"}`, true);
+    }
+    if (total > 0) {
+      toast(`✅ 已导入 ${total} 条，队列 ${pendingLeft} 条待学习（心跳逐步吸收）`, false);
+    } else if (dupTotal > 0) {
+      toast(`⚠️ 内容已导入过（${dupTotal} 条已存在），无需重复导入；队列 ${pendingLeft} 条待学习`, true);
+    } else {
+      toast(`没有新增内容${skipped ? `（跳过 ${skipped} 个文件）` : ""}`, true);
+    }
+    loadMind();
+  } catch (e) { toast("导入失败: " + e.message, true); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
+}
+
+$("#mindLearnPick") && $("#mindLearnPick").addEventListener("click", () => {
+  const fi = $("#mindLearnFilePick"); if (fi) fi.click();
+});
+$("#mindLearnFolder") && $("#mindLearnFolder").addEventListener("click", () => {
+  const fi = $("#mindLearnFile"); if (fi) fi.click();
+});
+
+$("#mindLearnFilePick") && $("#mindLearnFilePick").addEventListener("change", async function () {
+  await handleMindFiles(this.files, $("#mindLearnPick"));
+  this.value = "";
+});
+$("#mindLearnFile") && $("#mindLearnFile").addEventListener("change", async function () {
+  await handleMindFiles(this.files, $("#mindLearnFolder"));
+  this.value = "";
+});
+
+/* 拖拽导入：把文件拖到自我学习面板即导入 */
+const _mindOps = $("#mindLearnOps");
+if (_mindOps) {
+  ["dragenter", "dragover"].forEach((ev) => _mindOps.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); _mindOps.classList.add("mind-drop-active"); }));
+  ["dragleave", "drop"].forEach((ev) => _mindOps.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); _mindOps.classList.remove("mind-drop-active"); }));
+  _mindOps.addEventListener("drop", (e) => { const fs = e.dataTransfer && e.dataTransfer.files; if (fs && fs.length) handleMindFiles(fs, null); });
+}
 
 /* ---------- 源站管理 ---------- */
 async function loadSources() {

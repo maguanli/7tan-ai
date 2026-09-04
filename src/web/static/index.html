@@ -162,7 +162,7 @@
 
       <div class="panel">
         <h3>🧠 自我学习 <span class="muted">L1 记忆学习 · L2 进化 · M1 知识获取</span></h3>
-        <div class="mind-learn-ops">
+        <div class="mind-learn-ops" id="mindLearnOps">
           <div class="mind-learn-row">
             <input id="mindLearnUrl" placeholder="输入网页 URL，下载为知识包（网页自学）…">
             <button id="mindLearnWeb" class="btn btn-sm">⬇️ 抓取自学</button>
@@ -170,6 +170,13 @@
           <div class="mind-learn-row">
             <textarea id="mindLearnText" rows="2" placeholder="或粘贴知识内容（每行一条）导入知识包…"></textarea>
             <button id="mindLearnImport" class="btn btn-sm">📥 导入知识包</button>
+          </div>
+          <div class="mind-learn-row">
+            <button id="mindLearnPick" class="btn btn-sm">📄 选择文件导入</button>
+            <button id="mindLearnFolder" class="btn btn-sm">📂 打开文件夹导入</button>
+            <span class="muted" style="font-size:12px">支持 .txt/.md/.json/.csv/.log/.docx（每行一条，同文件去重）· 也可拖拽文件到此处</span>
+            <input type="file" id="mindLearnFilePick" multiple style="display:none">
+            <input type="file" id="mindLearnFile" multiple webkitdirectory style="display:none">
           </div>
         </div>
         <div id="mindLearnSummary" class="mind-kv" style="margin:6px 0 12px"></div>

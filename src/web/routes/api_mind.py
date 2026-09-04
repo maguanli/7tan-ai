@@ -8,7 +8,11 @@ GET /api/mind/status — 一次性快照：心跳 / 器官模块 / 长期记忆 
   3. 惰性——器官框架未初始化时返回空数据，不抛异常、不阻塞页面；
   4. 只溯源，不编造——所有字段直读内核结构化状态，不做任何文本杜撰。
 """
+import base64
+import io
+import re
 import time
+import zipfile
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -333,8 +337,67 @@ async def mind_import_knowledge(payload: dict):
                     items.append({"item_id": iid, "content": content})
             if not items:
                 return {"ok": False, "error": "没有可导入的有效知识条目"}
-            n = m1.import_knowledge_package(items)
-            return {"ok": True, "action": "knowledge_package", "imported": n}
+            res = m1.import_knowledge_package(items)
+            drained = m1.drain_now()
+            return {"ok": True, "action": "knowledge_package",
+                    "imported": res.get("added", 0), "duplicates": res.get("skipped", 0),
+                    "pending": len(getattr(m1, "pkg_queue", None).pending or []),
+                    "drained": drained}
         return {"ok": False, "error": "缺少 url 或 entries 参数"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def _extract_docx_text(b64: str) -> list:
+    """用标准库解析 .docx（本质是 zip + word/document.xml），提取段落文本。
+
+    不引入 python-docx 依赖，直接读 document.xml 里的 <w:p>/<w:t> 结构，
+    兼容表格、文本框内嵌文本；按段落顺序返回非空行。
+    """
+    import html
+    raw = base64.b64decode(b64)
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        if "word/document.xml" not in z.namelist():
+            return []
+        xml = z.read("word/document.xml").decode("utf-8", "ignore")
+    # 段落 <w:p ...>...</w:p>；<w:t> 是文本节点；<w:tab/> 制表符、<w:br/> 换行
+    paras = re.findall(r"<w:p[ >].*?</w:p>", xml, re.S)
+    if not paras:
+        paras = re.findall(r"<w:p>.*?</w:p>", xml, re.S)
+    lines = []
+    for p in paras:
+        p = p.replace("<w:tab/>", "\t").replace("<w:br/>", "\n")
+        texts = re.findall(r"<w:t[^>]*>(.*?)</w:t>", p, re.S)
+        line = html.unescape("".join(texts))
+        line = line.replace("\n", " ").strip()
+        if line:
+            lines.append(line)
+    return lines
+
+
+@router.post("/knowledge-docx")
+async def mind_import_docx(payload: dict):
+    """导入 .docx 文档：前端传 base64，后端标准库解包提取段落，走 M1 知识包链路。
+
+    只投递外部素材，不改任何器官算法（遵 C5）；去重键 docx:文件名:行号，同文件重复导入自动跳过。
+    """
+    payload = payload or {}
+    b64 = payload.get("base64")
+    filename = str(payload.get("filename", "document.docx") or "document.docx")
+    if not b64:
+        return {"ok": False, "error": "缺少 base64 内容"}
+    try:
+        lines = _extract_docx_text(str(b64))
+        if not lines:
+            return {"ok": False, "error": "未能从 docx 提取到文本（可能为空文档或格式异常）"}
+        entries = [{"item_id": f"docx:{filename}:{i}", "content": s} for i, s in enumerate(lines)]
+        from src.agent.upper_m1_knowledge import get_m1
+        m1 = get_m1()
+        res = m1.import_knowledge_package(entries)
+        drained = m1.drain_now()
+        return {"ok": True, "action": "knowledge_package",
+                "imported": res.get("added", 0), "duplicates": res.get("skipped", 0),
+                "pending": len(getattr(m1, "pkg_queue", None).pending or []),
+                "drained": drained, "paras": len(lines)}
     except Exception as e:
         return {"ok": False, "error": str(e)}

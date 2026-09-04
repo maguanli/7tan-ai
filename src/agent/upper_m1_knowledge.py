@@ -210,6 +210,18 @@ class UpperModuleM1:
             n += 1
         return n
 
+    def drain_all(self) -> int:
+        """⚡ 立即学习全部：一次性投递队列所有 pending（用户手动触发，跳过 rate≤3 限速）。
+
+        用户明确授权突破「防事件洪水」红线时使用；一次性灌入可能冲击工作记忆栈，
+        故仅作为手动「立即学习全部」按钮的后端实现，日常 tick 仍守 rate≤3。"""
+        batch = self.pkg_queue.pop_batch(len(self.pkg_queue.pending))
+        n = 0
+        for item in batch:
+            self._emit_knowledge(item["item_id"], item["content"])
+            n += 1
+        return n
+
     # ── post_tick_hook：每 tick 限速投递 ──
     def _on_tick(self) -> None:
         try:

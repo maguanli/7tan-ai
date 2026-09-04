@@ -1323,6 +1323,20 @@ if (_mindOps) {
   _mindOps.addEventListener("drop", (e) => { const fs = e.dataTransfer && e.dataTransfer.files; if (fs && fs.length) handleMindFiles(fs, null); });
 }
 
+/* ⚡ 立即学习全部：一次性消化知识包队列所有 pending（跳过 rate≤3 限速，用户手动触发） */
+$("#mindLearnDrainAll") && $("#mindLearnDrainAll").addEventListener("click", async () => {
+  const btn = $("#mindLearnDrainAll");
+  btn.disabled = true; btn.textContent = "⏳ 学习中…";
+  try {
+    const r = await API.post("/api/mind/knowledge-drain-all", {});
+    if (r.ok) {
+      toast(`✅ 已立即学习 ${r.drained} 条，队列剩余 ${r.pending} 条`, false);
+      loadMind();
+    } else { toast("⚠️ " + (r.error || "失败"), true); }
+  } catch (e) { toast("学习失败: " + e.message, true); }
+  finally { btn.disabled = false; btn.textContent = "⚡ 立即学习全部"; }
+});
+
 /* ---------- 源站管理 ---------- */
 async function loadSources() {
   try {

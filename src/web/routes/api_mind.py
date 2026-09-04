@@ -401,3 +401,19 @@ async def mind_import_docx(payload: dict):
                 "drained": drained, "paras": len(lines)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+@router.post("/knowledge-drain-all")
+async def mind_drain_all():
+    """⚡ 立即学习全部：一次性消化知识包队列所有 pending（用户手动触发，跳过 rate≤3 限速）。
+
+    突破「防事件洪水」红线，仅由用户显式点击触发；一次性灌入可能冲击工作记忆栈。
+    """
+    try:
+        from src.agent.upper_m1_knowledge import get_m1
+        m1 = get_m1()
+        n = m1.drain_all()
+        return {"ok": True, "drained": n,
+                "pending": len(getattr(m1, "pkg_queue", None).pending or [])}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

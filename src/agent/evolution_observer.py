@@ -127,8 +127,11 @@ class EvolutionObserver:
         cap_curve = [len(s.get("capability") or []) for s in self.snapshots]
         mem_curve = [s.get("memory_count", 0) for s in self.snapshots]
 
+        reached_target = int(last.get("tick") or 0) >= EVO_TARGET_TICKS
         report = {
             "ok": True,
+            "reached_target": reached_target,
+            "target_ticks": EVO_TARGET_TICKS,
             "snapshot_count": len(self.snapshots),
             "tick_span": (first.get("tick"), last.get("tick")),
             "subj_span": (first.get("subjective_clock"), last.get("subjective_clock")),
@@ -149,9 +152,11 @@ class EvolutionObserver:
             EVO_REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
             lines = ["# 长周期演化观测报告（阶段6）", ""]
             if report.get("ok"):
+                target_note = "已达" if report.get("reached_target") else "未达"
                 lines.append(f"快照数: {report['snapshot_count']} | "
                              f"tick 区间: {report['tick_span']} | "
-                             f"主观时钟区间: {report['subj_span']}")
+                             f"主观时钟区间: {report['subj_span']} | "
+                             f"达标(≥{report.get('target_ticks', EVO_TARGET_TICKS)}tick): {target_note}")
                 lines.append(f"置信度曲线: {report['confidence_curve']}")
                 lines.append(f"局限演化: {report['limitations_curve']}")
                 lines.append(f"能力演化: {report['capability_curve']}")
@@ -169,9 +174,10 @@ class EvolutionObserver:
     def render_report(self, report: dict) -> str:
         if not report.get("ok"):
             return report.get("reason", "")
+        target_note = "达标" if report.get("reached_target") else "未达标"
         return (
             f"长周期观测: {report['snapshot_count']} 个快照, tick {report['tick_span']}, "
-            f"主观时钟 {report['subj_span']}\n"
+            f"主观时钟 {report['subj_span']}, 目标≥{report.get('target_ticks', EVO_TARGET_TICKS)}tick {target_note}\n"
             f"  置信度曲线: {report['confidence_curve']}\n"
             f"  局限演化: {report['limitations_curve']}\n"
             f"  能力演化: {report['capability_curve']}\n"

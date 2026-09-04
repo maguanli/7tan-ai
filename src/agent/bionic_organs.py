@@ -1102,6 +1102,21 @@ def module_speech_tick(ctx=None):
                 speech_state["pe_avg"] = (p.get("internal_signature", {}) or {}).get("pe_avg")
             elif et == "mood_state":
                 speech_state["mood"] = dict(p)
+            elif et == "autobiography_fragment":
+                # M2 自传叙事接入言语：忠实转述叙事文本（可溯源记忆 ID，遵 C3 不编造）
+                text = p.get("text", "")
+                if text:
+                    output_log.append(f"[自传叙事] {str(text)[:200]}")
+                    logger.info(f"🗣️[SPEECH] 自传叙事转述: {str(text)[:80]}")
+            elif et == "simulation_result":
+                # ORG-SIMULATE 反事实预演接入言语：推演结果忠实转述（回答不再只靠模板匹配）
+                scene = p.get("scene", ""); action = p.get("action", "")
+                conf = p.get("sim_confidence")
+                if scene and action:
+                    line = f"[预演] {scene}:{action} 预期成功率={conf}"
+                    if p.get("limit_hit"):
+                        line += "（命中能力边界）"
+                    output_log.append(line[:200])
         # 2. 周期性自述：状态显著时生成（读数转述），与上次相同则不重复输出
         _speech_report_counter += 1
         if _speech_report_counter % SPEECH_REPORT_INTERVAL == 0:
@@ -2164,6 +2179,7 @@ def _setup_subscriptions():
     subscribe_event("selfmodel_update", "ORG-SPEECH")
     subscribe_event("meta_cognition_update", "ORG-SPEECH")
     subscribe_event("mood_state", "ORG-SPEECH")
+    subscribe_event("simulation_result", "ORG-SPEECH")
 
 
 # ====================== 阶段六修复4：后台心跳（器官常驻呼吸，不依赖对话驱动）======================

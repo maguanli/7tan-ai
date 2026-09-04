@@ -12,11 +12,11 @@
           AST 定位 src/agent/self_learn.py 白名单常量赋值语句 → 生成补丁变体
           → 沙盒子进程隔离回测 → 崩溃 / 恶化 → git checkout 回退（无 git 则 .bak 恢复）；
           改善 → 覆盖主程序源码并 git commit 快照。
-  · D3 总开关 ENABLE_7TAN_SELF_CODE_EVOLVE = True（默认关闭）
+  · D3 总开关 ENABLE_7TAN_SELF_CODE_EVOLVE = True（默认开启）
         关闭时：全部进化动作返回 disabled，不产生任何文件 / 进程 / 提交。
 
 安全红线（硬性，防"把自己改崩"）：
-  1. 总开关默认关闭；进化动作必须显式开启。
+  1. 总开关默认开启；进化动作受白名单 + 每日配额约束。
   2. 绝不原地修改运行中的主程序文件；任何源码改动先复制进沙盒子进程验证。
   3. 白名单：只允许修改 src/agent/self_learn.py 的 5 个阈值常量；其它文件一律拒绝。
   4. 崩溃或指标恶化 → 自动 git checkout 回退（无 git 则 .bak 恢复），保证可回退。
@@ -40,7 +40,7 @@ from typing import Optional
 
 from loguru import logger
 
-# ═══════════════ D3 总开关（默认关闭） ═══════════════
+# ═══════════════ D3 总开关（默认开启） ═══════════════
 ENABLE_7TAN_SELF_CODE_EVOLVE = True
 
 # 进化节流参数

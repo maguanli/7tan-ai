@@ -774,7 +774,7 @@ def register_organ_d():
         bio_analogy="丘脑保护回路，沙盒、git快照回退",
         enabled=True,
         tick_func=module_d_tick,
-        config={"ENABLE_7TAN_SELF_CODE_EVOLVE": False}
+        config={"ENABLE_7TAN_SELF_CODE_EVOLVE": True}
     ))
 
 

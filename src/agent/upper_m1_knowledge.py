@@ -34,10 +34,14 @@ try:  # 内核只读接口（本模块唯一允许接触内核的方式）
         register_post_tick_hook,
         register_external_source,
         memory_library,
+        save_organ_state,
+        subjective_time,
     )
 except Exception:  # pragma: no cover
     emit_event = register_post_tick_hook = register_external_source = None  # type: ignore
+    save_organ_state = None
     memory_library = []
+    subjective_time = {"subjective_clock": 0.0}
     _org_tick_fn = None
 
 # ═══════════════ 配置 ═══════════════
@@ -247,15 +251,47 @@ class UpperModuleM1:
         return n
 
     def drain_all(self) -> int:
-        """⚡ 立即学习全部：一次性投递队列所有 pending（用户手动触发，跳过 rate≤3 限速）。
+        """⚡ 立即学习全部：一次性把队列所有 pending 直接写入长期记忆库（memory_library），
+        绕过 12 格工作记忆瓶颈（方案 A：知识包直达长期记忆）。
 
-        用户明确授权突破「防事件洪水」红线时使用；一次性灌入可能冲击工作记忆栈，
-        故仅作为手动「立即学习全部」按钮的后端实现，日常 tick 仍守 rate≤3。"""
+        用户手动触发，跳过 rate≤3 限速。知识内容不再走 tool_result 事件链路（避免被
+        工作记忆 12 格上限挤出导致内容丢失），而是直接 append 进 memory_library 并立即
+        落盘。日常 tick 的 _drain_package_queue 仍走标准心智链路（少量、安全）。"""
         batch = self.pkg_queue.pop_batch(len(self.pkg_queue.pending))
         n = 0
+        subj = float((subjective_time or {}).get("subjective_clock", 0.0) or 0.0)
         for item in batch:
-            self._emit_knowledge(item["item_id"], item["content"])
+            content = str(item.get("content", "") or "").strip()
+            if not content:
+                continue
+            memory_library.append({
+                "thought": content[:M1_CHUNK_SIZE],
+                "focus": 0.5,
+                "valence": 0.1,
+                "origin": "external",
+                "subjective_time": subj,
+                "weight_eff": 1.0,
+                "goal_tag": f"知识包:{str(item.get('item_id', ''))[:16]}",
+                "pe": 0.0,
+                "success": None,
+            })
             n += 1
+        # 控制长期记忆库规模（与 module_a_tick 一致：按 weight_eff 最低淘汰，保护高权重记忆）
+        while len(memory_library) > 200:
+            if len(memory_library) <= 1:
+                break
+            _worst_i = min(
+                range(len(memory_library)),
+                key=lambda i: (float(memory_library[i].get("weight_eff", 1.0) or 0.0)
+                               if isinstance(memory_library[i], dict) else -1.0),
+            )
+            memory_library.pop(_worst_i)
+        # 立即落盘，确保知识真正写入记忆库文件
+        if save_organ_state is not None:
+            try:
+                save_organ_state()
+            except Exception as e:
+                logger.warning(f"[M1] 知识直达长期记忆后落盘失败: {e}")
         return n
 
     # ── post_tick_hook：每 tick 限速投递 ──

@@ -176,6 +176,7 @@ data/tan_model_organs.json
 data/organ_event_log.jsonl
 data/.instance.lock*
 data/evolution_report.txt
+data/evolution_snapshots/
 data/stage6_real_world_report.txt
 data/docx_content.txt
 

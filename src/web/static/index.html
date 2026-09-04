@@ -161,6 +161,41 @@
       </div>
 
       <div class="panel">
+        <h3>🧠 自我学习 <span class="muted">L1 记忆学习 · L2 进化 · M1 知识获取</span></h3>
+        <div class="mind-learn-ops">
+          <div class="mind-learn-row">
+            <input id="mindLearnUrl" placeholder="输入网页 URL，下载为知识包（网页自学）…">
+            <button id="mindLearnWeb" class="btn btn-sm">⬇️ 抓取自学</button>
+          </div>
+          <div class="mind-learn-row">
+            <textarea id="mindLearnText" rows="2" placeholder="或粘贴知识内容（每行一条）导入知识包…"></textarea>
+            <button id="mindLearnImport" class="btn btn-sm">📥 导入知识包</button>
+          </div>
+        </div>
+        <div id="mindLearnSummary" class="mind-kv" style="margin:6px 0 12px"></div>
+        <div class="grid-2">
+          <div class="panel-inner">
+            <h4>💬 最近对话经验</h4>
+            <div id="mindDialog" class="mem-list"></div>
+          </div>
+          <div class="panel-inner">
+            <h4>📚 最近知识条目</h4>
+            <div id="mindKnowledge" class="mem-list"></div>
+          </div>
+        </div>
+        <div class="grid-2" style="margin-top:16px">
+          <div class="panel-inner">
+            <h4>🧪 假设库（模块F）</h4>
+            <div id="mindHypoDetail" class="mem-list"></div>
+          </div>
+          <div class="panel-inner">
+            <h4>🔧 进化（模块D）+ 知识获取（M1）</h4>
+            <div id="mindEvolve"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
         <h3>📡 最近事件流 <span class="muted">事件总线 _event_log</span></h3>
         <pre class="mono" id="mindEvents"></pre>
       </div>

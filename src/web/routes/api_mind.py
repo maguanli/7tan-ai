@@ -8,6 +8,9 @@ GET /api/mind/status — 一次性快照：心跳 / 器官模块 / 长期记忆 
   3. 惰性——器官框架未初始化时返回空数据，不抛异常、不阻塞页面；
   4. 只溯源，不编造——所有字段直读内核结构化状态，不做任何文本杜撰。
 """
+import time
+from pathlib import Path
+
 from fastapi import APIRouter
 
 router = APIRouter(prefix="/api/mind", tags=["mind"])
@@ -143,6 +146,7 @@ def _snapshot() -> dict:
             "origin_stats": origin_stats,
             "meta_cognition": meta_summary,
             "recent_events": recent_events,
+            "learning": _learning_snapshot(),
         }
     finally:
         if lock is not None and acquired:
@@ -182,3 +186,155 @@ def _trunc(s: str, n: int) -> str:
 async def mind_status():
     """意识模型实时快照（只读）。"""
     return _snapshot()
+
+
+# ═══════════════ 自我学习模块（L1 模块F + L2 模块D + M1 知识获取）═══════════════
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]  # src/web/routes -> 项目根
+_HYPO_LOG = _PROJECT_ROOT / "data" / "tan_hypothesis.log"
+_EVOLUTION_LOG = _PROJECT_ROOT / "data" / "tan_evolution.log"
+
+
+def _tail_file(path: Path, n: int = 15) -> list:
+    """读取日志文件末尾 n 行（只读，容错）。"""
+    try:
+        if not path.exists():
+            return []
+        return path.read_text(encoding="utf-8", errors="ignore").splitlines()[-n:]
+    except Exception:
+        return []
+
+
+def _get_tan_model():
+    """只读获取 TanModel 单例；未初始化返回 None（不强行创建，避免副作用）。"""
+    try:
+        import src.agent.world_model as wm_mod
+        return getattr(wm_mod, "_TAN_MODEL_SINGLETON", None)
+    except Exception:
+        return None
+
+
+def _learning_snapshot() -> dict:
+    """自我学习实时快照：L1 记忆学习 + L2 进化 + M1 知识获取（全部只读，不注入不 tick）。"""
+    data = {
+        "l1": {"ready": False, "hypotheses": {"stats": {}, "recent": []},
+               "dialog": [], "dialog_total": 0,
+               "knowledge": [], "knowledge_total": 0, "recent_log": []},
+        "l2": {"ready": False, "status": {}, "constants": {}, "recent_log": []},
+        "m1": {"ready": False, "mounted": False, "package_pending": 0,
+               "package_processed": 0, "web_queue": 0, "rate_limit": 0},
+    }
+    wm = _get_tan_model()
+
+    # ── L1 模块F 记忆级学习 ──
+    sl = getattr(wm, "selflearn", None) if wm else None
+    if sl is not None:
+        data["l1"]["ready"] = True
+        reg = getattr(sl, "hypothesis_registry", []) or []
+        stat = {"total": len(reg), "pending": 0, "verified": 0,
+                "rejected": 0, "suspended": 0}
+        recent = []
+        for h in reg[-20:][::-1]:
+            d = h.to_dict() if hasattr(h, "to_dict") else h
+            if not isinstance(d, dict):
+                continue
+            st = str(d.get("status", "pending"))
+            stat[st] = stat.get(st, 0) + 1
+            recent.append({
+                "id": d.get("hypothesis_id", ""),
+                "content": _trunc(str(d.get("content", "")), 90),
+                "status": st,
+                "confidence": d.get("final_confidence"),
+                "raw": d.get("confidence_raw"),
+                "test_count": d.get("test_count"),
+                "success_count": d.get("success_count"),
+                "fail_count": d.get("fail_count"),
+            })
+        data["l1"]["hypotheses"] = {"stats": stat, "recent": recent}
+
+        mem = getattr(wm, "memory", None)
+        traces = getattr(mem, "traces", []) or []
+        dialogs = [t for t in traces if isinstance(t, dict) and t.get("scene") == "dialog"]
+        data["l1"]["dialog_total"] = len(dialogs)
+        data["l1"]["dialog"] = [{
+            "action": _trunc(str(d.get("action", "")), 30),
+            "user_text": _trunc(str(d.get("user_text", "")), 60),
+            "reply": _trunc(str(d.get("reply", "")), 80),
+            "intent": _trunc(str(d.get("intent", "")), 20),
+            "ts": d.get("ts"),
+        } for d in dialogs[-15:][::-1]]
+
+        knowledge = getattr(mem, "knowledge", []) or []
+        data["l1"]["knowledge_total"] = len(knowledge)
+        data["l1"]["knowledge"] = [{
+            "key": _trunc(str(k.get("key", "")), 40),
+            "content": _trunc(str(k.get("content", "")), 100),
+            "source": k.get("source", ""),
+            "ts": k.get("ts"),
+        } for k in knowledge[-15:][::-1] if isinstance(k, dict)]
+        data["l1"]["recent_log"] = _tail_file(_HYPO_LOG, 15)
+
+    # ── L2 模块D 进化 ──
+    ev = getattr(wm, "evolve", None) if wm else None
+    if ev is not None:
+        data["l2"]["ready"] = True
+        try:
+            data["l2"]["status"] = ev.status()
+        except Exception:
+            pass
+        try:
+            data["l2"]["constants"] = ev._current_constants()
+        except Exception:
+            pass
+        data["l2"]["recent_log"] = _tail_file(_EVOLUTION_LOG, 15)
+
+    # ── M1 知识获取 ──
+    try:
+        from src.agent.upper_m1_knowledge import get_m1
+        m1 = get_m1()
+        data["m1"]["ready"] = True
+        data["m1"]["mounted"] = bool(getattr(m1, "_mounted", False))
+        pkg = getattr(m1, "pkg_queue", None)
+        data["m1"]["package_pending"] = len(getattr(pkg, "pending", []) or [])
+        data["m1"]["package_processed"] = len(getattr(pkg, "processed_ids", set()) or set())
+        data["m1"]["web_queue"] = len(getattr(m1, "_deep_queue", []) or [])
+        data["m1"]["rate_limit"] = getattr(getattr(m1, "limiter", None), "rate", 0)
+    except Exception:
+        pass
+
+    return data
+
+
+@router.post("/knowledge-package")
+async def mind_import_knowledge(payload: dict):
+    """下载知识包：支持网页 URL 抓取（web_fetch）或直接文本条目导入（knowledge_package）。
+
+    只投递外部素材，不改任何器官算法；统一走 M1 限速器与游标去重（遵 C5）。
+    """
+    payload = payload or {}
+    url = payload.get("url")
+    entries = payload.get("entries")
+    try:
+        from src.agent.upper_m1_knowledge import get_m1
+        m1 = get_m1()
+        if url:
+            u = str(url).strip()
+            if not (u.startswith("http://") or u.startswith("https://")):
+                return {"ok": False, "error": "URL 必须以 http:// 或 https:// 开头"}
+            n = m1.learn_from_web(u, trigger="manual")
+            return {"ok": True, "action": "web_fetch", "queued": n, "url": u}
+        if isinstance(entries, list) and entries:
+            items = []
+            for i, e in enumerate(entries):
+                if isinstance(e, dict):
+                    content = str(e.get("content", "") or "").strip()
+                    if not content:
+                        continue
+                    iid = str(e.get("item_id", "") or "") or f"manual-{int(time.time())}-{i}"
+                    items.append({"item_id": iid, "content": content})
+            if not items:
+                return {"ok": False, "error": "没有可导入的有效知识条目"}
+            n = m1.import_knowledge_package(items)
+            return {"ok": True, "action": "knowledge_package", "imported": n}
+        return {"ok": False, "error": "缺少 url 或 entries 参数"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

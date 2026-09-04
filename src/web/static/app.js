@@ -1180,7 +1180,70 @@ function renderMind(d) {
   $("#mindOrigin").innerHTML = `<div class="mind-kv">内部信号 internal：<b>${os.internal || 0}</b></div><div class="mind-kv">外部输入 external：<b>${os.external || 0}</b></div><div class="muted" style="margin-top:6px">我-非我边界：区分「自身思维」与「外界输入」的证据来源（共 ${osTotal}）</div>`;
 
   $("#mindEvents").textContent = (d.recent_events || []).map((e) => `[${e.ts || ""}] #${e.tick || 0} ${e.type || ""}${e.origin ? " ←" + e.origin : ""}`).join("\n") || "暂无事件";
+
+  renderMindLearning(d.learning);
 }
+
+function renderMindLearning(ln) {
+  if (!ln) return;
+  const l1 = ln.l1 || {}, l2 = ln.l2 || {}, m1 = ln.m1 || {};
+  const hs = l1.hypotheses || {}, st = hs.stats || {};
+  let summary = `🧪 假设：共 <b>${st.total || 0}</b>（已验证 ${st.verified || 0} / 待定 ${st.suspended || 0} / 拒绝 ${st.rejected || 0}）`;
+  summary += ` ｜ 💬 对话经验 <b>${l1.dialog_total || 0}</b> ｜ 📚 知识条目 <b>${l1.knowledge_total || 0}</b>`;
+  const es = l2.status || {};
+  if (es.enabled !== undefined) {
+    summary += `<br>🔧 进化：${es.enabled ? "✅ 开启" : "⛔ 关闭"} ｜ 今日 ${es.today_attempts || 0}/${es.daily_quota || 0} ｜ 冷却 ${es.cooldown_left || 0}s`;
+  }
+  summary += `<br>📦 知识获取(M1)：${m1.mounted ? "✅ 已挂载" : "⛔ 未挂载"} ｜ 待投递 <b>${m1.package_pending || 0}</b> ｜ 已处理 <b>${m1.package_processed || 0}</b> ｜ 自学队列 <b>${m1.web_queue || 0}</b> ｜ 限速 <b>${m1.rate_limit || 0}</b>/tick`;
+  const smEl = $("#mindLearnSummary"); if (smEl) smEl.innerHTML = summary;
+
+  const dialogEl = $("#mindDialog"); if (dialogEl) dialogEl.innerHTML = (l1.dialog || []).map((x) => `
+    <div class="mem-item"><div class="mem-thought">${escapeHtml(x.user_text || "")}</div><div class="mem-meta muted">→ ${escapeHtml(x.reply || "")}${x.action ? " · " + escapeHtml(x.action) : ""}</div></div>`).join("") || "<div class='muted'>暂无对话经验</div>";
+
+  const knowEl = $("#mindKnowledge"); if (knowEl) knowEl.innerHTML = (l1.knowledge || []).map((k) => `
+    <div class="mem-item"><div class="mem-thought">${escapeHtml(k.key || "")}</div><div class="mem-meta muted">${escapeHtml(k.content || "")}${k.source ? " · 来源 " + escapeHtml(k.source) : ""}</div></div>`).join("") || "<div class='muted'>暂无知识条目</div>";
+
+  const hypoEl = $("#mindHypoDetail"); if (hypoEl) hypoEl.innerHTML = (hs.recent || []).map((h) => `
+    <div class="mem-item"><div class="mem-thought">${escapeHtml(h.content || h.id || "")}</div><div class="mem-meta muted"><span class="tag ${h.status === "verified" ? "published" : (h.status === "rejected" ? "failed" : "")}">${escapeHtml(h.status || "?")}</span> 置信 ${h.confidence == null ? "-" : h.confidence} · 验证 ${h.success_count || 0}/${h.test_count || 0}</div></div>`).join("") || "<div class='muted'>暂无假设</div>";
+
+  const evEl = $("#mindEvolve"); if (evEl) {
+    if (l2.ready) {
+      const cs = l2.constants || {};
+      let h = `<div class="mind-kv">进化白名单常量：</div>`;
+      h += `<div class="muted" style="margin:2px 0 8px;word-break:break-all">${Object.entries(cs).map(([k, v]) => `${k}=${v}`).join("、") || "（无）"}</div>`;
+      if (es.last_result) h += `<div class="mind-kv">最近进化结果：<b>${escapeHtml(JSON.stringify(es.last_result).slice(0, 140))}</b></div>`;
+      h += `<div class="mind-kv" style="margin-top:6px">最近进化日志：</div><pre class="mono" style="max-height:130px;overflow:auto;font-size:11px">${(l2.recent_log || []).map(escapeHtml).join("\n") || "（空）"}</pre>`;
+      evEl.innerHTML = h;
+    } else {
+      evEl.innerHTML = "<div class='muted'>进化模块未初始化</div>";
+    }
+  }
+}
+
+$("#mindLearnWeb") && $("#mindLearnWeb").addEventListener("click", async () => {
+  const url = ($("#mindLearnUrl").value || "").trim();
+  if (!url) { toast("请输入网页 URL", true); return; }
+  const btn = $("#mindLearnWeb"); btn.disabled = true; btn.textContent = "⏳ 抓取中…";
+  try {
+    const r = await API.post("/api/mind/knowledge-package", { url });
+    toast(r.ok ? `✅ 已抓取，排队 ${r.queued} 个片段（经 tick 链路吸收）` : ("⚠️ " + (r.error || "失败")), !r.ok);
+    if (r.ok) { $("#mindLearnUrl").value = ""; loadMind(); }
+  } catch (e) { toast("抓取失败: " + e.message, true); }
+  finally { btn.disabled = false; btn.textContent = "⬇️ 抓取自学"; }
+});
+$("#mindLearnImport") && $("#mindLearnImport").addEventListener("click", async () => {
+  const text = ($("#mindLearnText").value || "").trim();
+  if (!text) { toast("请粘贴知识内容", true); return; }
+  const entries = text.split("\n").map((s) => s.trim()).filter(Boolean)
+    .map((s, i) => ({ item_id: "manual-" + Date.now() + "-" + i, content: s }));
+  const btn = $("#mindLearnImport"); btn.disabled = true; btn.textContent = "⏳ 导入中…";
+  try {
+    const r = await API.post("/api/mind/knowledge-package", { entries });
+    toast(r.ok ? `✅ 已导入 ${r.imported} 条知识` : ("⚠️ " + (r.error || "失败")), !r.ok);
+    if (r.ok) { $("#mindLearnText").value = ""; loadMind(); }
+  } catch (e) { toast("导入失败: " + e.message, true); }
+  finally { btn.disabled = false; btn.textContent = "📥 导入知识包"; }
+});
 
 /* ---------- 源站管理 ---------- */
 async function loadSources() {

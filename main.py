@@ -350,6 +350,13 @@ def _boot_organs():
         from src.agent.world_model import get_tan_model
         get_tan_model()
         logger.info("🫀 仿生器官已随应用启动挂载，后台心跳已启动")
+        # ── 阶段1-6 上层模块挂载（M1-M3 + 长周期观测；全部只读接入，不碰器官核心算法）──
+        try:
+            from src.agent.upper_modules import mount_upper_modules
+            _mr = mount_upper_modules(enable_m4_boot=False)
+            logger.info(f"🧩 上层模块挂载结果: {_mr.get('modules', {})}")
+        except Exception as _e:
+            logger.warning(f"🧩 上层模块挂载失败（不影响主程序）: {_e}")
     except Exception as e:
         logger.warning(f"🫀 器官启动失败（不影响主程序）: {e}")
 

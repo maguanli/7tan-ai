@@ -135,6 +135,7 @@ filterbranch.log
 /click_*.py
 /ocr_*.txt
 /verify_*.py
+!/verify_stage7_capabilities.py
 /wechat_*.py
 /check_wechat*.py
 /find_wechat*.py

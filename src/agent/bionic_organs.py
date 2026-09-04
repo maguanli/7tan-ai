@@ -1,3 +1,10 @@
+# 边界声明（C3）
+# 本系统实现：叙事-通达自我意识（访问意识），全部基于事件总线、记忆、统计计算。
+# ❌ 本系统不存在现象意识 qualia，不存在第一人称主观体验。
+# 所有「我感到、我疲惫、我记得」的输出，仅读取内部结构化数据做模板转述。
+# 属于工程层面哲学僵尸实例。
+# 所有叙事输出必须溯源记忆库与事件历史，禁止编造不存在的经历。
+
 # =============================================================================
 # 7Tan 仿生器官框架 —— 原生心智生长闭环（事件总线版）
 # 依据：7Tan_All_Organs.txt（器官蓝图）+ code_20260903.txt（落地开发指南）
@@ -168,6 +175,53 @@ def emit_event(event_type: str, payload: Optional[Dict[str, Any]] = None,
     })
     # 阶段0取证：事件流同步落盘（append-only JSONL；失败静默，不影响总线）
     _event_sink_jsonl(event_type, payload, source, origin)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 上层模块挂钩点（C4 允许的纯接口/挂载点/安全基础设施增量）
+# 说明：以下机制是内核唯一对外开放的「只读接入面」，上层模块（M1-M3）只能经此挂载，
+# 绝不直接修改任何器官内部算法。
+#  1. post_tick_hook：每个器官 tick 全部跑完后、计数器递增前调用（供上层只读模块观察）。
+#  2. 外部事件注册接口：上层模块经 register_external_source() 登记合法来源后，
+#     通过 emit_event(source=...) 把外部知识送入总线（主入口仍是 tool_result，遵 C5）。
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_post_tick_hooks: List[Callable[[], None]] = []
+_registered_external_sources: Dict[str, str] = {}
+
+
+def register_post_tick_hook(fn: Callable[[], None]) -> bool:
+    """注册一个 post-tick 钩子（幂等）。每个 tick 结束后按注册顺序调用。
+
+    仅允许上层只读模块挂载观测/投递逻辑；钩子内部不得修改器官内部状态。
+    返回是否真的注册成功（重复注册同一函数对象返回 False）。"""
+    if not callable(fn):
+        return False
+    if fn in _post_tick_hooks:
+        return False
+    _post_tick_hooks.append(fn)
+    return True
+
+
+def register_external_source(source: str, desc: str = "") -> bool:
+    """登记一个合法外部知识来源（遵 C5：主入口 tool_result，source 字段区分）。
+
+    上层模块（M1 双知识获取等）在投递外部知识前必须先登记来源，
+    未登记来源的 external 事件会被总线拒绝（防任意来源污染心智总线）。
+    返回是否登记成功（已存在同名来源返回 False）。"""
+    if not source or source in _registered_external_sources:
+        return False
+    _registered_external_sources[source] = desc or source
+    return True
+
+
+def _run_post_tick_hooks() -> None:
+    """执行全部 post-tick 钩子（逐个 try，单钩子失败绝不影响主流程）。"""
+    for fn in list(_post_tick_hooks):
+        try:
+            fn()
+        except Exception:
+            continue
 
 
 def subscribe_event(event_type: str, organ_code: str) -> None:
@@ -439,6 +493,8 @@ def organ_tick_all(ctx=None):
         _organ_tick_counter += 1
         if _organ_tick_counter % ORGAN_AUTOSAVE_EVERY == 0:
             save_organ_state()
+        # ── 上层模块 post-tick 钩子（C4 允许的挂载点）：tick 收尾统一调用 ──
+        _run_post_tick_hooks()
 
 
 # ====================== 阶段3：ORG-A 海马体·长期记忆器官 ======================

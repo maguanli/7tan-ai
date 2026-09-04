@@ -78,6 +78,7 @@ class KnowledgePackageQueue:
     def __init__(self, cursor_path: Path = M1_CURSOR_PATH):
         self.cursor_path = cursor_path
         self.processed_ids: set = set()
+        self.content_hashes: set = set()
         self.pending: List[dict] = []
         self._load()
 
@@ -86,15 +87,34 @@ class KnowledgePackageQueue:
             if self.cursor_path.exists():
                 raw = json.loads(self.cursor_path.read_text(encoding="utf-8"))
                 self.processed_ids = set(raw.get("processed_ids", []) or [])
+                self.content_hashes = set(raw.get("content_hashes", []) or [])
                 self.pending = raw.get("pending", []) or []
+                self._migrate_pending()
         except Exception as e:
             logger.warning(f"[M1] 知识包游标加载失败（从空队列开始）: {e}")
+
+    def _migrate_pending(self) -> None:
+        """迁移旧队列：补 content_hash 并按内容去重（内容相同只留一条）。"""
+        seen = set(self.content_hashes)
+        kept: List[dict] = []
+        for p in self.pending:
+            if not isinstance(p, dict):
+                continue
+            content = str(p.get("content", "") or "")
+            ch = p.get("content_hash") or self._content_hash(content)
+            p["content_hash"] = ch
+            if ch in seen:
+                continue
+            seen.add(ch)
+            kept.append(p)
+        self.pending = kept
 
     def _save(self) -> None:
         try:
             self.cursor_path.parent.mkdir(parents=True, exist_ok=True)
             self.cursor_path.write_text(
                 json.dumps({"processed_ids": sorted(self.processed_ids),
+                            "content_hashes": sorted(self.content_hashes),
                             "pending": self.pending,
                             "saved_at": time.strftime("%Y-%m-%d %H:%M:%S")},
                            ensure_ascii=False, indent=1),
@@ -103,25 +123,39 @@ class KnowledgePackageQueue:
         except Exception as e:
             logger.warning(f"[M1] 知识包游标保存失败: {e}")
 
+    @staticmethod
+    def _content_hash(content: str) -> str:
+        """内容级去重哈希：内容一模一样（字节级）则哈希一致，跨文件/位置去重。"""
+        import hashlib
+        return hashlib.md5(str(content or "").encode("utf-8")).hexdigest()
+
     def enqueue(self, entries: List[dict]) -> tuple:
-        """批量入队，返回 (新增条数, 重复跳过条数)。已处理/已在队中的跳过（去重）。"""
+        """批量入队，返回 (新增条数, 重复跳过条数)。
+
+        去重规则（内容级优先）：内容一模一样（哈希一致）无论来自哪个文件/位置只存一条；
+        其次按 item_id 来源级去重（兼容历史旧游标）。"""
         added = 0
         skipped = 0
+        pending_hashes = {p.get("content_hash") for p in self.pending}
         for e in entries:
             if not isinstance(e, dict):
                 skipped += 1
                 continue
+            content = str(e.get("content", "") or "")
+            if not content.strip():
+                skipped += 1
+                continue
+            ch = self._content_hash(content)
             iid = str(e.get("item_id", "") or "")
-            if not iid:
+            if ch in self.content_hashes or ch in pending_hashes:
                 skipped += 1
                 continue
-            if iid in self.processed_ids:
+            if iid and iid in self.processed_ids:
                 skipped += 1
                 continue
-            if any(p.get("item_id") == iid for p in self.pending):
-                skipped += 1
-                continue
-            self.pending.append({"item_id": iid, "content": str(e.get("content", "") or "")})
+            item = {"item_id": iid, "content": content, "content_hash": ch}
+            self.pending.append(item)
+            pending_hashes.add(ch)
             added += 1
         self._save()
         return added, skipped
@@ -132,7 +166,9 @@ class KnowledgePackageQueue:
         if batch:
             self.pending = self.pending[n:]
             for b in batch:
-                self.processed_ids.add(b["item_id"])
+                if b.get("item_id"):
+                    self.processed_ids.add(b["item_id"])
+                self.content_hashes.add(b.get("content_hash") or self._content_hash(str(b.get("content", "") or "")))
             self._save()
         return batch
 

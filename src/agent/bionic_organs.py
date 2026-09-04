@@ -852,8 +852,17 @@ def module_e_tick(ctx=None):
                 # 阶段一：外部输入进入工作记忆草稿区（我-非我边界：external 信号）
                 wm_push_thought(f"user:{str(p.get('text', ''))[:40]}", 0.6, origin="external")
             elif et == "tool_result":
-                # 阶段一：工具返回结果作为 external 信号进入工作记忆
-                wm_push_thought(f"tool:{str(p.get('tool', ''))}:{str(p.get('summary', ''))[:40]}", 0.5, origin="external")
+                # 阶段一：工具返回结果作为 external 信号进入工作记忆。
+                # 上层模块 M1 投递外部知识时，内容放在 thought_fragment 字段（遵 C5），
+                # 普通工具结果才用 summary；优先取 thought_fragment，缺失回退 summary。
+                # 知识内容较长，放宽截断到 200 字符以保留完整知识；goal_tag 透传进长期记忆。
+                _tool_content = str(p.get("thought_fragment") or p.get("summary") or "")
+                wm_push_thought(
+                    f"tool:{str(p.get('tool', ''))}:{_tool_content[:200]}",
+                    0.5,
+                    origin="external",
+                    goal_tag=p.get("goal_tag"),
+                )
         # 2. focus 自然衰减
         working_memory["focus_weight"] = max(0.1, round(float(working_memory.get("focus_weight", 0.5)) * 0.98, 4))
         # 3. scratch_pad 清理

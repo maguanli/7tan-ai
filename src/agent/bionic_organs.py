@@ -333,6 +333,7 @@ _DEFAULT_SELFMODEL_META: Dict[str, Any] = {
 def save_organ_state(path=None) -> bool:
     """器官状态落盘：ORG-A memory_library + ORG-SELFMODEL self_model_data。返回是否成功。"""
     try:
+        consolidate_memory_library()   # 落盘前自动整理（去重/清垃圾/章节归位/智能淘汰）
         target = Path(path) if path else _ORGAN_STATE_PATH
         target.parent.mkdir(parents=True, exist_ok=True)
         state = {
@@ -501,6 +502,62 @@ def organ_tick_all(ctx=None):
 # 职责：唯一记忆写入口（接收 mem_consolidated 新记忆）+ 权重衰减（冷热闭环冷端）
 
 memory_library: List[Dict[str, Any]] = []
+
+
+# ═══════════════ 记忆自动整理（ORG-A 海马体维护，2026-09-05） ═══════════════
+# 用户诉求：记忆库没有自动整理。此处提供幂等整理器：清空壳垃圾 → 内容去重 →
+# 智能淘汰（保护高权重知识）。save_organ_state 落盘前自动调用。
+# 「新记忆优先」由检索层倒序保证，不做章节重排（数据已乱，重排会引入错误）。
+
+
+def _is_junk_memory(m: dict) -> bool:
+    """空壳垃圾判定：无 thought 或纯 tool: 空壳（旧代码丢弃内容遗留）。"""
+    thought = str(m.get("thought", "") or "").strip()
+    if not thought:
+        return True
+    if thought.startswith("tool:") and not thought[len("tool:"):].strip():
+        return True
+    return False
+
+
+def consolidate_memory_library() -> dict:
+    """记忆自动整理（幂等）：清垃圾 → 去重 → 智能淘汰。
+
+    不做章节重排（数据已因多次导入乱序，纯规则重排会引入错误），
+    「新记忆优先」由检索层倒序（最新在前）保证。
+
+    返回 {before, after, junk_removed, dedup_removed}。
+    """
+    global memory_library
+    try:
+        before = len(memory_library)
+        kept = [m for m in memory_library if isinstance(m, dict) and not _is_junk_memory(m)]
+        junk = before - len(kept)
+        seen = {}
+        dup = 0
+        for m in kept:
+            t = str(m.get("thought", "") or "").strip()
+            if t in seen:
+                prev = seen[t]
+                prev["weight_eff"] = min(2.0, float(prev.get("weight_eff", 1.0) or 0.0)
+                                         + float(m.get("weight_eff", 1.0) or 0.0))
+                dup += 1
+            else:
+                seen[t] = m
+        unique = list(seen.values())
+        while len(unique) > 200:
+            if len(unique) <= 1:
+                break
+            worst = min(range(len(unique)),
+                        key=lambda i: float(unique[i].get("weight_eff", 1.0) or 0.0)
+                        if isinstance(unique[i], dict) else -1.0)
+            unique.pop(worst)
+        memory_library = unique
+        return {"before": before, "after": len(memory_library),
+                "junk_removed": junk, "dedup_removed": dup}
+    except Exception as e:  # pragma: no cover
+        logger.warning(f"记忆自动整理失败（忽略）: {e}")
+        return {"before": len(memory_library), "after": len(memory_library), "error": str(e)}
 
 
 def module_a_tick(ctx=None):

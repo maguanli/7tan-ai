@@ -868,7 +868,19 @@ class TanModel:
         if prag is not None:
             logger.info(f"🌍 7Tan模型 → 语用回应（语用={self.pragmatic._last_pragma}）")
             return prag
-        # 2.5) 知识库优先：任何输入先查事实条目（用户身份/定义/边界），命中直接引用真实知识回答
+        # 2.5) 长期记忆库优先（新知识压旧）：先从 memory_library 检索内容型知识，避免旧事实条目拦截
+        lm_hits = self._search_longterm_memory(text)
+        if lm_hits:
+            logger.info(f"🌍 7Tan模型 → 长期记忆命中 {len(lm_hits)} 条（新知识）")
+            lines = ["📚 我在长期记忆里找到了相关的知识："]
+            for m in lm_hits[:5]:
+                t = (m.get("thought") or "").strip()
+                shown = t if len(t) <= 90 else t[:90] + "…"
+                lines.append(f"   · {shown}")
+            lines.append("")
+            lines.append("这是我真正记住的知识，不是现编的。")
+            return "\n".join(lines)
+        # 2.6) 旧知识库兜底：事实条目（用户身份/定义/边界）
         k_hits = self.memory.search_knowledge(text)
         if k_hits:
             logger.info(f"🌍 7Tan模型 → 知识库命中 {len(k_hits)} 条（内容型记忆）")
@@ -1225,7 +1237,18 @@ class TanModel:
         lines: list = []
         # —— 检索-1：指代回溯（对话上下文复用，修复「缺少对话回溯能力」）——
         search_text = self._resolve_context_reference(text)
-        # —— 检索0：知识库优先（事实条目直接命中，如「老马是谁」「7Tan 是什么」） ——
+        # —— 检索0：长期记忆库优先（新知识压旧，倒序检索最新在前）——
+        lm_hits = self._search_longterm_memory(search_text)
+        if lm_hits:
+            lines.append("📚 我在长期记忆里找到了相关的知识：")
+            for m in lm_hits[:5]:
+                t = (m.get("thought") or "").strip()
+                shown = t if len(t) <= 90 else t[:90] + "…"
+                lines.append(f"   · {shown}")
+            lines.append("")
+            lines.append("这是我真正记住的知识，不是现编的。")
+            return "\n".join(lines)
+        # —— 检索0.5：旧知识库兜底（事实条目，如「老马是谁」「7Tan 是什么」）——
         k_hits = self.memory.search_knowledge(search_text)
         if k_hits:
             lines.append("📌 这个问题我知识库里有答案（来自真实对话提取）：")
@@ -1313,6 +1336,39 @@ class TanModel:
         lines.append("")
         lines.append("你可以告诉我更多，我会把它记进记忆，下次就能答了。")
         return "\n".join(lines)
+
+    def _search_longterm_memory(self, query: str, limit: int = 5) -> list:
+        """从长期记忆库 memory_library 检索内容型知识（倒序，最新在前）。
+
+        检索范围：memory_library 中非空、非 tool: 空壳的条目（以知识包内容为主）。
+        排序：重叠词数降序 → 新近优先（index 越大越新）。
+        """
+        query = (query or "").strip()
+        if not query:
+            return []
+        words = self.memory._tokenize(query)
+        if not words:
+            return []
+        try:
+            from .bionic_organs import memory_library
+        except Exception:
+            return []
+        scored = []
+        for idx in range(len(memory_library) - 1, -1, -1):   # 倒序：最新在前
+            m = memory_library[idx]
+            if not isinstance(m, dict):
+                continue
+            thought = str(m.get("thought", "") or "").strip()
+            if not thought or thought.startswith("tool:"):
+                continue
+            hit = sum(1 for w in words if w.lower() in thought.lower())
+            if hit > 0:
+                item = dict(m)
+                item["_overlap"] = hit
+                item["_index"] = idx
+                scored.append(item)
+        scored.sort(key=lambda x: (-x["_overlap"], -x["_index"]))
+        return scored[:limit]
 
     def _search_memory_by_keywords(self, text: str) -> list:
         """把问题文本拆词，与长期记忆的 scene/action 做关键词重叠匹配。

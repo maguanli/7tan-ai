@@ -13,6 +13,7 @@ from .api_update import router as update_router
 from .api_code import router as code_router
 from .api_license import router as license_router
 from .api_adapt import router as adapt_router
+from .api_mind import router as mind_router
 
 __all__ = [
     "resources_router",
@@ -27,4 +28,5 @@ __all__ = [
     "code_router",
     "license_router",
     "adapt_router",
+    "mind_router",
 ]

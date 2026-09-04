@@ -253,6 +253,7 @@ function switchView(view) {
   // 会话列表仅在 AI 工作台时显示
   const ss = $("#sidebarSessions");
   if (ss) ss.classList.toggle("visible", view === "chat");
+  if (view !== "mind") stopMindPolling();
   refreshCurrent();
   if (window.innerWidth <= 768) setSidebar(false); // 移动端切换后自动收起抽屉
 }
@@ -262,7 +263,7 @@ function refreshCurrent() {
     tasks: loadTasks, chat: () => { loadSessions(); loadChatModels(); if (curSession) loadChatHistory(curSession); loadChatConsole(); },
     sources: loadSources, settings: loadSettings, plugins: loadMarketPlugins,
     code: loadCodeChanges, terminal: () => {}, logs: loadLogs, update: loadUpdate,
-    adapt: loadAdaptView,
+    adapt: loadAdaptView, mind: loadMind,
   };
   if (fns[currentView]) fns[currentView]();
 }
@@ -1091,6 +1092,95 @@ $("#chatNew").addEventListener("click", newChat);
 $("#chatInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); }
 });
+
+/* ---------- 意识模型（7Tan 仿生器官框架实时状态） ---------- */
+let mindTimer = null;
+function stopMindPolling() {
+  if (mindTimer) { clearInterval(mindTimer); mindTimer = null; }
+}
+function startMindPolling() {
+  if (mindTimer) return;
+  mindTimer = setInterval(() => { if (currentView === "mind") loadMind(); }, 3000);
+}
+$("#mindRefresh") && $("#mindRefresh").addEventListener("click", () => loadMind());
+$("#mindAuto") && $("#mindAuto").addEventListener("change", (e) => {
+  if (e.target.checked) { loadMind(); } else { stopMindPolling(); }
+});
+async function loadMind() {
+  try {
+    const d = await API.get("/api/mind/status");
+    if (!d || d.ok === false) {
+      $("#mindStatus").textContent = "⚠️ " + ((d && d.error) || "器官框架未挂载");
+      stopMindPolling();
+      return;
+    }
+    renderMind(d);
+    $("#mindStatus").textContent = "🟢 已连接 · 更新于 " + new Date().toLocaleTimeString();
+    if ($("#mindAuto") && $("#mindAuto").checked) startMindPolling();
+    else stopMindPolling();
+  } catch (e) {
+    $("#mindStatus").textContent = "❌ 加载失败: " + e.message;
+    stopMindPolling();
+  }
+}
+function _mindCard(cls, lbl, num) {
+  return `<div class="card ${cls}"><div class="lbl">${lbl}</div><div class="num">${num}</div></div>`;
+}
+function renderMind(d) {
+  const hb = d.heartbeat || {};
+  $("#mindHeartbeat").innerHTML = [
+    _mindCard("blue", "🫀 心跳 tick", hb.tick_counter),
+    _mindCard("violet", "⏱ 主观时钟", hb.subjective_clock),
+    _mindCard("yellow", "🌀 时间膨胀", hb.time_dilation),
+    _mindCard(hb.alive ? "green" : "", "💓 心跳线程", hb.alive ? "存活" : "停止"),
+  ].join("");
+
+  $("#mindOrganCount").textContent = `（${d.enabled_count}/${d.organ_count} 启用）`;
+  $("#mindOrgans").innerHTML = (d.organs || []).map((o) => `
+    <div class="organ-card ${o.enabled ? "" : "off"}">
+      <div class="organ-head"><b>${escapeHtml(o.code)}</b><span class="tag ${o.enabled ? "published" : "failed"}">${o.enabled ? "启用" : "停用"}</span></div>
+      <div class="organ-name">${escapeHtml(o.name)}</div>
+      <div class="organ-bio muted">${escapeHtml(o.bio)}</div>
+    </div>`).join("") || "<div class='muted'>无器官</div>";
+
+  const sm = d.self_model || {};
+  const cap = sm.capability || []; const lim = sm.limitations || []; const flaws = sm.mind_flaws || [];
+  const hs = sm.history_summary || {};
+  const conf = typeof sm.confidence === "number" ? (sm.confidence * 100).toFixed(1) + "%" : "-";
+  let smHtml = `<div class="mind-kv">置信度 confidence：<b>${conf}</b></div>`;
+  smHtml += `<div class="mind-kv">能力条目 capability：<b>${cap.length}</b></div>`;
+  if (cap.length) smHtml += `<div class="muted" style="margin:2px 0 8px">${cap.slice(0, 6).map((c) => escapeHtml(c && (c.key || c.goal_tag || ""))).filter(Boolean).join("、") || "（结构化条目）"}</div>`;
+  smHtml += `<div class="mind-kv">已知局限 limitations：<b>${lim.length}</b></div>`;
+  smHtml += `<div class="mind-kv">思维缺陷 mind_flaws：<b>${flaws.length}</b> ${flaws.length ? "⚠️" : "✅"}</div>`;
+  smHtml += `<div class="mind-kv">目标统计：成功 <b>${hs.total_success || 0}</b> / 失败 <b>${hs.total_fail || 0}</b> / 总 <b>${hs.total_goal || 0}</b></div>`;
+  $("#mindSelfModel").innerHTML = smHtml;
+
+  const wm = d.working_memory || {};
+  let wHtml = `<div class="mind-kv">活跃目标 active_goals：<b>${(wm.active_goals || []).length}</b></div>`;
+  if ((wm.active_goals || []).length) wHtml += `<div class="muted" style="margin:2px 0 8px">${(wm.active_goals || []).map(escapeHtml).join("、")}</div>`;
+  wHtml += `<div class="mind-kv">上下文栈 context_stack：<b>${wm.context_stack_len}</b></div>`;
+  $("#mindWorkingMemory").innerHTML = wHtml;
+
+  const mc = d.meta_cognition || {};
+  $("#mindMetaCognition").innerHTML = `<div class="mind-kv">假设接纳 <b>${mc.hypo_accepted || 0}</b> / 证伪 <b>${mc.hypo_rejected || 0}</b></div><div class="mind-kv">预测误差样本 <b>${mc.pe_sample_count || 0}</b> · 近20均值 <b>${mc.pe_mean_recent == null ? "-" : mc.pe_mean_recent}</b></div>`;
+
+  $("#mindMemoryCount").textContent = `（共 ${d.memory_total} 条，显示最近 ${(d.memory || []).length} 条）`;
+  $("#mindMemory").innerHTML = (d.memory || []).map((m) => `
+    <div class="mem-item">
+      <div class="mem-thought">${escapeHtml(m.thought)}</div>
+      <div class="mem-meta muted">效价 ${m.valence == null ? "-" : m.valence} · 权重 ${m.weight_eff == null ? "-" : m.weight_eff} · 成败 ${m.success == null ? "-" : m.success} · PE ${m.pe == null ? "-" : m.pe}${m.goal_tag ? " · 目标 " + escapeHtml(m.goal_tag) : ""}${m.subjective_time != null ? " · 主观时 " + m.subjective_time : ""}</div>
+    </div>`).join("") || "<div class='muted'>暂无长期记忆</div>";
+
+  $("#mindHypoCount").textContent = `（共 ${d.hypothesis_count} 条）`;
+  $("#mindHypotheses").innerHTML = (d.hypotheses || []).map((h) => `
+    <div class="mem-item"><div class="mem-thought">${escapeHtml(h.hypo || h.key || "")}</div><div class="mem-meta muted">tests=${h.tests} · score=${h.score}</div></div>`).join("") || "<div class='muted'>暂无假设</div>";
+
+  const os = d.origin_stats || {};
+  const osTotal = (os.internal || 0) + (os.external || 0);
+  $("#mindOrigin").innerHTML = `<div class="mind-kv">内部信号 internal：<b>${os.internal || 0}</b></div><div class="mind-kv">外部输入 external：<b>${os.external || 0}</b></div><div class="muted" style="margin-top:6px">我-非我边界：区分「自身思维」与「外界输入」的证据来源（共 ${osTotal}）</div>`;
+
+  $("#mindEvents").textContent = (d.recent_events || []).map((e) => `[${e.ts || ""}] #${e.tick || 0} ${e.type || ""}${e.origin ? " ←" + e.origin : ""}`).join("\n") || "暂无事件";
+}
 
 /* ---------- 源站管理 ---------- */
 async function loadSources() {

@@ -548,3 +548,18 @@ h3 { margin-bottom: 12px; font-size: 15px; color: var(--muted); font-weight: 600
 .session-tooltip .t-title { font-weight: 600; color: #fff; }
 .session-tooltip .t-count { margin-top: 3px; color: var(--blue); font-size: 11px; }
 
+
+
+/* ===== 意识模型（仿生器官框架实时状态） ===== */
+.organ-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.organ-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.organ-card.off { opacity: .55; }
+.organ-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.organ-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.organ-bio { font-size: 12px; line-height: 1.5; margin-top: 4px; }
+.mem-list { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; }
+.mem-item { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.mem-thought { font-size: 13px; line-height: 1.5; word-break: break-all; }
+.mem-meta { font-size: 12px; margin-top: 4px; }
+.mind-kv { padding: 3px 0; font-size: 13px; line-height: 1.5; }
+.mind-kv b { color: var(--blue); }

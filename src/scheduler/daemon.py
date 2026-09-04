@@ -95,6 +95,31 @@ def graceful_restart(delay_seconds: int = 2, close_browser_flag: bool = True):
     except Exception as e:
         logger.warning(f"关闭服务器失败（继续重启）: {e}")
 
+    # ===== 阶段 4.6: 释放本进程持有的单实例锁（让新进程能立即获取）=====
+    # 单实例锁由 main.py 用 msvcrt 文件锁持有，进程退出才自动释放。
+    # 但优雅重启是「先 spawn 新进程、后 os._exit 旧进程」，新进程启动时
+    # 旧进程仍持锁会误判「已有实例」而退出。这里在 spawn 前 unlink 锁文件，
+    # 新进程 os.open 会创建新文件并成功加锁（旧进程 fd 仍指向已 unlink 的 inode）。
+    try:
+        _lock_name = ".instance.lock"
+        _argv = sys.argv[1:]
+        if "--web" in _argv or "web" in _argv:
+            _port = 9900
+            try:
+                for _i, _a in enumerate(_argv):
+                    if _a in ("--port", "-p") and _i + 1 < len(_argv):
+                        _port = int(_argv[_i + 1])
+                        break
+            except (ValueError, IndexError):
+                _port = 9900
+            _lock_name = f".instance.lock.web{_port}"
+        _lp = _get_project_root() / "data" / _lock_name
+        if _lp.exists():
+            _lp.unlink()
+            logger.info(f"🔓 已释放单实例锁: {_lock_name}")
+    except Exception as _e:
+        logger.debug(f"释放单实例锁跳过: {_e}")
+
     # ===== 阶段 5: 启动新进程 =====
     if getattr(sys, 'frozen', False):
         cmd = [sys.executable, *sys.argv[1:]]

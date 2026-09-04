@@ -81,6 +81,74 @@ _inboxes: Dict[str, List[Dict[str, Any]]] = {}    # organ_code -> 待处理事�
 # 事件总线观测日志开关：默认静默；设置环境变量 ORGAN_BUS_LOG=1 才打印（肉眼可见信号流入）。
 _BUS_LOG_ENABLED = os.environ.get("ORGAN_BUS_LOG", "0") == "1"
 
+# ── 阶段0取证：事件流持久观测通道（append-only JSONL，黑盒复验判据来源）──
+# 设计边界：
+#   1. 只记元数据+关键判据字段，不记内容全文（隐私+体积）；
+#   2. 写失败静默（观测通道故障绝不影响心智主流程）；
+#   3. 开关 ORGAN_EVENT_LOG（默认开启=取证模式，=0 关闭）；
+#   4. 路径可用 ORGAN_EVENT_LOG_PATH 覆盖（验证脚本隔离用，防污染生产流）。
+_EVENT_LOG_PATH = Path(
+    os.environ.get("ORGAN_EVENT_LOG_PATH", "")
+    or (Path(__file__).resolve().parent.parent.parent / "data" / "organ_event_log.jsonl")
+)
+_EVENT_LOG_ENABLED = os.environ.get("ORGAN_EVENT_LOG", "1") == "1"
+
+
+def _event_sink_jsonl(event_type: str, payload: Optional[Dict[str, Any]],
+                       source: str, origin: str) -> None:
+    """事件落盘（append-only JSONL，每行一条）。阶段0取证：五项测试的真实运行证据来源。
+
+    字段：ts(墙钟)/tick/subj(主观时钟)/type/origin/src + extra(按事件类型的判据摘要)。
+    """
+    if not _EVENT_LOG_ENABLED:
+        return
+    try:
+        p = payload or {}
+        extra: Dict[str, Any] = {}
+        if event_type == "replay_thought_fragment":
+            extra = {"subj_of_memory": p.get("subjective_time"), "goal": p.get("goal_tag")}
+        elif event_type == "mem_consolidated":
+            extra = {"goal": p.get("goal_tag"), "success": p.get("success"),
+                     "subj": p.get("subjective_time")}
+        elif event_type == "mem_forgotten":
+            extra = {"count": p.get("count"), "infancy": p.get("infancy_active"),
+                     "subj": p.get("subjective_time")}
+        elif event_type == "selfmodel_update":
+            _caps = p.get("abilities") or [
+                c.get("key") for c in (p.get("capability") or []) if isinstance(c, dict)
+            ][:8]
+            extra = {"confidence": p.get("confidence"), "capability": list(_caps)[:8],
+                     "limitations": list(p.get("limitations") or [])[:8]}
+        elif event_type == "candidate_motives":
+            extra = {"motives": [
+                {"goal": m.get("goal"), "drive": m.get("drive")}
+                for m in (p.get("motives") or [])[:8] if isinstance(m, dict)
+            ]}
+        elif event_type == "final_goals":
+            extra = {"goals": list(p.get("goals") or [])[:8]}
+        elif event_type == "tool_result":
+            extra = {"tool": p.get("tool"), "ok": p.get("ok")}
+        row = {
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "tick": _organ_tick_counter,
+            "subj": subjective_time.get("subjective_clock"),
+            "type": event_type,
+            "origin": origin,
+            "src": source,
+            "extra": extra,
+        }
+        _EVENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(_EVENT_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        # 简单轮转：超 50MB 改名 .old，防无限膨胀
+        try:
+            if _EVENT_LOG_PATH.stat().st_size > 50 * 1024 * 1024:
+                _EVENT_LOG_PATH.rename(_EVENT_LOG_PATH.with_suffix(".jsonl.old"))
+        except Exception:
+            pass
+    except Exception:
+        pass
+
 
 def emit_event(event_type: str, payload: Optional[Dict[str, Any]] = None,
                source: str = "", subjective_ts: float = 0.0,
@@ -98,6 +166,8 @@ def emit_event(event_type: str, payload: Optional[Dict[str, Any]] = None,
         "wall_ts": time.time(),
         "origin": origin,
     })
+    # 阶段0取证：事件流同步落盘（append-only JSONL；失败静默，不影响总线）
+    _event_sink_jsonl(event_type, payload, source, origin)
 
 
 def subscribe_event(event_type: str, organ_code: str) -> None:
@@ -1283,7 +1353,8 @@ def organ_consolidate_tick(ctx=None):
         cfg = get_organ("ORG-CONSOLIDATE").config
         focus_thr = float(cfg.get("FOCUS_THRESHOLD", 0.3))
         valence_thr = float(cfg.get("VALENCE_ABS_THRESHOLD", 0.2))
-        replay_interval = int(cfg.get("REPLAY_INTERVAL_TICKS", 20))
+        # 阶段0取证（文档红线）：正式证据必须使用原始阈值 50，调低值仅限调试。
+        replay_interval = int(cfg.get("REPLAY_INTERVAL_TICKS", 50))
         replay_sample = int(cfg.get("REPLAY_SAMPLE_COUNT", 8))
 
         # 1. 订阅 wm_snapshot（ORG-E 工作记忆快照）
@@ -1475,7 +1546,10 @@ self_model_data: Dict[str, Any] = {
 
 # SELFMODEL 归纳配置（伪代码配置项：低频周期增量归纳，禁止每 tick 全量重算）
 SELFMODEL_UPDATE_INTERVAL: int = 60    # 每 60 tick 执行一次归纳
-SELFMODEL_EARLY_SAMPLE_N: int = 3      # 阶段六修复3：新增「目标成败」样本 ≥3 条即提前归纳（样本驱动，不必等满周期）
+# 阶段0取证（文档红线）：正式证据必须使用原始周期触发（每 60 tick 归纳一次）。
+# 样本驱动提前归纳默认禁用（极大值=永不触发），保留代码路径；
+# 调试/阶段1/消融实验需再开启时：设环境变量 ORGAN_SAMPLE_INDUCTION=1（样本阈值 3）。
+SELFMODEL_EARLY_SAMPLE_N: int = 3 if os.environ.get("ORGAN_SAMPLE_INDUCTION", "0") == "1" else 10 ** 9
 _last_induction_key: Optional[tuple] = None   # 上次样本驱动归纳时的最新样本身份（去重：无新样本不重复归纳）
 SAMPLE_MEMORY_COUNT: int = 40          # 采样记忆事件条数
 SAMPLE_HYPOTHESIS_COUNT: int = 25      # 采样假设事件条数
@@ -1933,10 +2007,11 @@ def register_extra_core_organs():
         enabled=True,
         tick_func=organ_consolidate_tick,
         config={
-            # 阶段六修复1：重放间隔 50→20（对齐真实会话长度——每轮对话 1 tick、单会话仅 7~11 tick；
-            # 旧阈值 + 计数器重启清零 = 自然运行永远不触发的死结；现计数器已落盘跨会话累计）。
-            # 采样 8→6（工作记忆 context_stack 上限 12，重放占比不超一半，防挤占当下思考）。
-            "REPLAY_INTERVAL_TICKS": 20,    # 每 20 tick（跨会话累计）执行一次记忆重放
+            # 阶段0取证（文档红线）：恢复原始阈值 50——正式证据必须使用原始配置；
+            # 之前的 20（阶段六修复1为对齐短会话调低）属调试用调参，不再用于取证。
+            # 计数器已跨会话累计落盘，长期自然运行可达标（50 tick × 120s ≈ 100 分钟）。
+            # 采样 6（阶段六修复1调整：context_stack 上限 12，重放占比不超一半，防挤占当下思考）。
+            "REPLAY_INTERVAL_TICKS": 50,    # 每 50 tick（跨会话累计）执行一次记忆重放
             "REPLAY_SAMPLE_COUNT": 6,       # 每次重放采样几条高权重记忆
             "FOCUS_THRESHOLD": 0.3,         # focus 低于该值且效价低才不写入长期记忆
             "VALENCE_ABS_THRESHOLD": 0.2,   # 效价绝对值过低且 focus 低才不写入长期记忆

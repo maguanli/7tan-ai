@@ -61,13 +61,30 @@ _INSTANCE_LOCK_FD = None
 def _acquire_single_instance() -> bool:
     """获取单实例文件锁。返回 True = 本进程是唯一实例。"""
     args = sys.argv[1:]
-    # CLI 单次任务/向导不阻塞（run / setup / web 可与桌面共存）
-    if any(a in args for a in ("run", "setup", "--cli", "web", "--web", "web_autostart", "--web-autostart")):
+    # CLI 单次任务/向导/自启管理是短命进程，不阻塞（run/setup/--cli 可与桌面或网页共存）
+    if any(a in args for a in ("run", "setup", "--cli", "web_autostart", "--web-autostart")):
         return True
     if os.name != "nt":
         return True  # 非 Windows 暂不启用
     global _INSTANCE_LOCK_FD
-    lock_path = PROJECT_ROOT / "data" / ".instance.lock"
+
+    # 判断运行形态：web 服务（--web）用「按端口独立」的锁，桌面版用默认锁。
+    # 桌面版(9800)与网页版(9900)可共存，但同一端口只允许一个实例。
+    is_web = "--web" in args or "web" in args
+    if is_web:
+        port = 9900
+        try:
+            for i, a in enumerate(args):
+                if a in ("--port", "-p") and i + 1 < len(args):
+                    port = int(args[i + 1])
+                    break
+        except (ValueError, IndexError):
+            port = 9900
+        lock_name = f".instance.lock.web{port}"
+    else:
+        lock_name = ".instance.lock"
+
+    lock_path = PROJECT_ROOT / "data" / lock_name
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         import msvcrt
@@ -86,15 +103,17 @@ def _acquire_single_instance() -> bool:
 
 
 if not _acquire_single_instance():
-    _MSG = ("7Tan 已经在运行中！\n\n"
-            "检测到另一个 7Tan 实例正在运行。\n"
-            "请先关闭现有窗口（或任务管理器结束 python.exe），再重新启动。")
     print("❌ 7Tan 已在运行中，本实例退出（单实例保护）")
-    try:
-        import ctypes
-        ctypes.windll.user32.MessageBoxW(0, _MSG, "7Tan 已在运行", 0x30)
-    except Exception:
-        pass
+    # 网页版是无窗口后台服务，重复启动时静默退出，不弹窗（桌面版才弹窗提示）
+    if "--web" not in sys.argv[1:] and "web" not in sys.argv[1:]:
+        _MSG = ("7Tan 已经在运行中！\n\n"
+                "检测到另一个 7Tan 实例正在运行。\n"
+                "请先关闭现有窗口（或任务管理器结束 python.exe），再重新启动。")
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(0, _MSG, "7Tan 已在运行", 0x30)
+        except Exception:
+            pass
     sys.exit(1)
 
 # 🔧 全局修复: subprocess text=True 在 Windows 中文系统下默认用 GBK 解码，

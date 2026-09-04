@@ -47,6 +47,7 @@ ENABLE_7TAN_SELF_CODE_EVOLVE = True
 EVOLUTION_COOLDOWN_SECONDS = 600      # 两次进化最小间隔（秒）
 EVOLUTION_DAILY_QUOTA = 5             # 每天最多进化次数
 EVOLUTION_TIMEOUT_SECONDS = 60        # 沙盒子进程超时
+EVOLUTION_BACKTEST_MAX_TRACES = 500   # 回测限样本量：只取最近 N 条轨迹（防 O(n²) 阻塞对话）
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _AGENT_DIR = _PROJECT_ROOT / "src" / "agent"
@@ -201,20 +202,25 @@ class BacktestEvaluator:
     @staticmethod
     def load_traces() -> list:
         # 主存储：SQLite 数据库（tan_model_memory 表）；回退：JSON 镜像
+        traces = None
         try:
             from ..database.db import load_tan_model_memory
             data = load_tan_model_memory()
             if data.get("traces"):
-                return data["traces"]
+                traces = data["traces"]
         except Exception as e:
             logger.warning(f"从数据库读取 7Tan 模型记忆失败（回退 JSON 镜像）: {e}")
-        try:
-            if _MEMORY_PATH.exists():
-                raw = json.loads(_MEMORY_PATH.read_text(encoding="utf-8"))
-                return raw.get("traces") or []
-        except Exception as e:
-            logger.warning(f"读取记忆库失败: {e}")
-        return []
+        if traces is None:
+            try:
+                if _MEMORY_PATH.exists():
+                    raw = json.loads(_MEMORY_PATH.read_text(encoding="utf-8"))
+                    traces = raw.get("traces") or []
+            except Exception as e:
+                logger.warning(f"读取记忆库失败: {e}")
+        if not traces:
+            return []
+        # 回测限样本量：只取最近 N 条轨迹，避免 O(n²) 回测在大样本下阻塞对话（方案B）
+        return traces[-EVOLUTION_BACKTEST_MAX_TRACES:]
 
 
 # ═══════════════ 沙盒运行器 ═══════════════
@@ -255,7 +261,7 @@ import sys, json
 sys.path.insert(0, {str(sandbox_dir)!r})
 import self_learn  # 验证补丁后模块可导入
 params = {{k: getattr(self_learn, k) for k in {constant_names!r}}}
-traces = json.load(open({str(_MEMORY_PATH)!r}, encoding="utf-8"))["traces"]
+traces = json.load(open({str(_MEMORY_PATH)!r}, encoding="utf-8"))["traces"][-{EVOLUTION_BACKTEST_MAX_TRACES}:]
 correct, n, conf_sum = 0, 0, 0.0
 pass_threshold = 0.55
 for i, t in enumerate(traces):

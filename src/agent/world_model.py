@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -581,6 +582,7 @@ class TanModel:
         self.speech = SpeechGenerator(self)
         self.pragmatic = PragmaticLayer(self)   # 语用层：寒暄/情绪/挫败/时间语境（2026-09-03）
         self._honest_rot = 0                    # 诚实兜底模板轮换计数器（不再一字不差复读）
+        self._evolve_lock = threading.Lock()    # 模块D 后台进化互斥锁（防多线程并发进化）
         # ── 模块E/F：无条件启用（无开关） ──
         self.wm = None                       # 模块E：工作记忆
         self.thinking = None                 # 模块E：三层思考
@@ -723,12 +725,9 @@ class TanModel:
                 self.selflearn.f_selflearn_tick()
             except Exception as e:
                 logger.warning(f"模块F tick 异常（忽略，不影响回复）: {e}")
-        # ⑤ 模块D 自我进化 tick（总开关默认关闭时零开销直接返回）
+        # ⑤ 模块D 自我进化 tick（异步后台执行，不阻塞对话回复；总开关关闭时零开销）
         if self.evolve is not None:
-            try:
-                self.evolve.tick()
-            except Exception as e:
-                logger.warning(f"模块D tick 异常（忽略，不影响回复）: {e}")
+            self._run_evolve_async()
         # ⑥ 仿生器官主循环 tick（启用的器官每轮对话呼吸一次）
         try:
             from .bionic_organs import organ_tick_all
@@ -742,6 +741,28 @@ class TanModel:
         except Exception:
             pass
         return reply
+
+    def _run_evolve_async(self) -> None:
+        """模块D 自我进化挪到后台线程执行，避免留一法回测 + 沙盒子进程阻塞对话回复。
+
+        非阻塞锁：若上一轮进化仍在后台运行则直接跳过（防线程堆积）。
+        进化本身的冷却/配额仍由 MetaEvolutionLayer._can_evolve 控制。
+        """
+        if not self._evolve_lock.acquire(blocking=False):
+            return  # 已有进化线程在跑，跳过
+        def _worker():
+            try:
+                self.evolve.tick()
+            except Exception as e:
+                logger.warning(f"模块D 后台进化异常（忽略）: {e}")
+            finally:
+                self._evolve_lock.release()
+        try:
+            t = threading.Thread(target=_worker, daemon=True, name="7tan-self-evolve")
+            t.start()
+        except Exception as e:
+            self._evolve_lock.release()
+            logger.warning(f"模块D 后台线程启动失败（忽略）: {e}")
 
     # ---------------- 思考循环：上下文吸收 / 观察回写 / 记忆检索推理 ----------------
     def _absorb_context(self, user_text: str) -> None:

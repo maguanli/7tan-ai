@@ -1181,7 +1181,37 @@ function renderMind(d) {
 
   $("#mindEvents").textContent = (d.recent_events || []).map((e) => `[${e.ts || ""}] #${e.tick || 0} ${e.type || ""}${e.origin ? " ←" + e.origin : ""}`).join("\n") || "暂无事件";
 
+  renderMindGrowth(d.growth);
   renderMindLearning(d.learning);
+}
+
+function renderMindGrowth(g) {
+  const el = $("#mindGrowth");
+  if (!el) return;
+  g = g || {};
+  if (g.ok !== true) {
+    el.innerHTML = `<div class="muted">${g.error ? escapeHtml(g.error) : "暂无心智成长数据"}</div>`;
+    return;
+  }
+  let html = `<div class="mind-kv">主观心智年龄：<b>${g.subj_now == null ? "-" : g.subj_now}</b></div>`;
+  html += `<div class="mind-kv">记忆库 <b>${g.memory_count || 0}</b> 条 · 关键经历 <b>${g.key_memory_count || 0}</b> 条</div>`;
+  html += `<div class="mind-kv">心智阶段 <b>${g.stage_count || 0}</b> 个 · 可溯源 <b>${g.traceable_count || 0}</b> 条</div>`;
+  if ((g.stages || []).length) {
+    html += `<div class="muted" style="margin:2px 0 8px">${(g.stages || []).map(s => `${s.start_subj}→${s.end_subj}(${s.count})`).join(" · ")}</div>`;
+  }
+  if ((g.conflicts || []).length) {
+    html += `<div class="mind-kv">认知矛盾 <b>${g.conflicts.length}</b> ⚠️</div>`;
+    html += `<div class="muted" style="margin:2px 0 8px">${(g.conflicts || []).map(c => escapeHtml(c.detail || c.type || "")).join("<br>")}</div>`;
+  } else {
+    html += `<div class="mind-kv">认知矛盾 <b>0</b> ✅</div>`;
+  }
+  if ((g.high_freq_motives || []).length) {
+    html += `<div class="mind-kv">高频动机：<b>${(g.high_freq_motives || []).map(m => escapeHtml(m[0]) + "×" + m[1]).join("、")}</b></div>`;
+  }
+  const pe = g.pe_classification || {};
+  html += `<div class="mind-kv">预测误差：正 <b>${pe.pos || 0}</b> / 负 <b>${pe.neg || 0}</b> / 零 <b>${pe.zero || 0}</b></div>`;
+  html += `<div class="mind-kv">记忆留存率：<b>${g.memory_retention == null ? "-" : (g.memory_retention * 100).toFixed(1) + "%"}</b></div>`;
+  el.innerHTML = html;
 }
 
 function renderMindLearning(ln) {

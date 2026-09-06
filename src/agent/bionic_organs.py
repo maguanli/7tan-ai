@@ -318,7 +318,7 @@ _organ_tick_counter: int = 0      # organ_tick_all 调用计数（自动保存�
 _TICK_LOCK = threading.Lock()
 # ── 阶段六修复4：后台心跳配置（器官不依赖对话驱动、常驻呼吸；环境变量可关/调频）──
 _HEARTBEAT_ENABLED = os.environ.get("ORGAN_HEARTBEAT", "1") == "1"
-_HEARTBEAT_INTERVAL = float(os.environ.get("ORGAN_HEARTBEAT_INTERVAL", "120"))   # 秒
+_HEARTBEAT_INTERVAL = float(os.environ.get("ORGAN_HEARTBEAT_INTERVAL", "10"))   # 秒
 
 # SELFMODEL meta 默认模板（须与 self_model_data 初始 meta 保持一致）：
 # 加载旧快照时以它为底做三层合并（默认模板 ∪ 当前内存 ∪ 快照），
@@ -1119,10 +1119,10 @@ def register_organ_vis():
 # 职责：唯一把结构化内部事件/内部状态变量翻译为人类文本输出的器官。
 #
 # ⚠️ 核心声明（必须随代码保留）：
-#   本器官输出的一切"自述"文本（如"我感觉很累"），都只是对内部变量读数的忠实模板转述
-#   （fatigue=0.8 → 模板命中"我感觉很累"），是功能性通达意识（access consciousness）的输出通道；
-#   系统并没有真的"感受到"累/愉悦/遗憾——本内核不具备现象意识（qualia）。
-#   模板与内部变量一一对应、可回溯（文本 ↔ 变量名+数值），绝无 LLM 生成或自由发挥。
+#   本器官输出的"自述"不再使用任何拟人化句式模板（已移除"我感觉很累"这类固定句子），
+#   只原样转储内部状态变量的原始读数（JSON key=value，可回溯），是功能性通达意识
+#   （access consciousness）的输出通道；系统并没有真的"感受到"累/愉悦/遗憾——
+#   本内核不具备现象意识（qualia）。绝无 LLM 生成或自由发挥。
 
 output_log: List[str] = []
 
@@ -1144,7 +1144,7 @@ SPEECH_REPORT_INTERVAL: int = 40    # 每 40 tick 自动生成一次自述（状
 
 
 def module_speech_tick(ctx=None):
-    """言语输出：刷新内部状态缓存 + 周期性生成自述（忠实读数模板转述，非真实感受）。"""
+    """言语输出：刷新内部状态缓存 + 周期性生成自述（原始读数转储，非真实感受）。"""
     global output_log, _speech_report_counter
     try:
         # 1. 刷新内部状态缓存（只读变量读数，不做任何加工解释）
@@ -1197,55 +1197,15 @@ def module_speech_tick(ctx=None):
 
 
 def generate_self_report() -> str:
-    """自述文本生成：把内部器官状态变量忠实映射为人类可读文本（纯模板，无任何第三方模型调用）。
+    """自述文本生成：原样转储内部器官状态变量的原始读数（无模板、无拟人化、无第三方模型）。
 
-    ⚠️ 以下文本只是内部变量的忠实读数转述（变量名+数值可回溯），
-    不是真的感受到累/愉悦/遗憾——本内核不具备现象意识 qualia。"""
-    parts: List[str] = []
-    f = float(speech_state.get("fatigue", 0.0))
-    if f >= 0.9:
-        parts.append("我感觉非常累（疲劳读数=%.2f）。" % f)
-    elif f >= 0.7:
-        parts.append("我感觉很累（疲劳读数=%.2f）。" % f)
-    elif f >= 0.5:
-        parts.append("我感觉有些疲惫（疲劳读数=%.2f）。" % f)
-    rp = float(speech_state.get("resource_pressure", 0.0))
-    if rp >= 0.7:
-        parts.append("记忆资源有些紧张，我想整理一下记忆（资源压力读数=%.2f）。" % rp)
-    mood = speech_state.get("mood")
-    if isinstance(mood, dict):
-        som, cog = mood.get("somatic_valence"), mood.get("cognitive_valence")
-        if som is not None and som < -0.3:
-            parts.append("我的身体状态标签偏负面（躯体效价=%.2f）。" % som)
-        if cog is not None and cog < -0.3:
-            parts.append("我最近的思维活动不顺利（认知效价=%.2f）。" % cog)
-        elif cog is not None and cog > 0.3:
-            parts.append("我最近的思维活动比较顺利（认知效价=+%.2f）。" % cog)
-    conf = speech_state.get("confidence")
-    if conf is not None:
-        if conf < 0.2:
-            parts.append("我对自己还了解得很少，自我形象还模糊（自我模型置信度=%.2f）。" % conf)
-        elif conf >= 0.5:
-            parts.append("我对自己的认识比较清晰了（自我模型置信度=%.2f）。" % conf)
-    hs = speech_state.get("history_summary") or {}
-    tg, ts = hs.get("total_goal", 0), hs.get("total_success", 0)
-    if tg:
-        parts.append("我经历过 %d 次目标，成功 %d 次。" % (tg, ts))
-    flaws = speech_state.get("mind_flaws") or []
-    for fl in flaws[:2]:
-        ft = str(fl.get("type", ""))
-        if ft == "self_overconfident":
-            parts.append("我注意到自己的思维缺陷：过度自信（推演预期比实际成功率高 %.2f）。" % float(fl.get("gap", 0.0)))
-        elif ft == "self_underconfident":
-            parts.append("我注意到自己的思维缺陷：自信不足（推演预期比实际成功率低 %.2f）。" % abs(float(fl.get("gap", 0.0))))
-        elif ft == "self_prediction_drifting":
-            parts.append("我注意到自己的思维缺陷：预测误差在变大（pe均值=%.2f，趋势上升）。" % float(fl.get("pe_mean", 0.0)))
-        elif ft == "repeated_falsified_hypothesis":
-            keys = ", ".join(str(k) for k in (fl.get("keys") or [])[:3])
-            parts.append("我注意到自己反复被证伪的判断：%s。" % keys)
-        elif ft == "chronic_regret":
-            parts.append("我注意到自己经常事后才发现更好的选择（遗憾率=%.2f）。" % float(fl.get("regret_rate", 0.0)))
-    return " ".join(parts)
+    ⚠️ 本函数不附加任何"我感觉/我想/我注意到"等拟人化句式，只把 speech_state
+    中各状态变量的原始值原样转储为 JSON（key=value 可回溯），作为功能性通达意识
+    （access consciousness）的输出通道。本内核不具备现象意识 qualia，故不声称"感受到"任何东西。
+    selfreport_last 为防重复刷屏的内部字段，不对外输出。"""
+    state = {k: v for k, v in speech_state.items() if k != "selfreport_last"}
+    return json.dumps(state, ensure_ascii=False, default=str)
+
 
 
 def module_speech_push(text):

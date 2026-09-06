@@ -149,6 +149,7 @@ def _snapshot() -> dict:
             "hypothesis_count": len(getattr(bo, "hypothesis_registry", []) or []),
             "origin_stats": origin_stats,
             "meta_cognition": meta_summary,
+            "growth": _growth_snapshot(),
             "recent_events": recent_events,
             "learning": _learning_snapshot(),
         }
@@ -158,6 +159,78 @@ def _snapshot() -> dict:
                 lock.release()
             except Exception:
                 pass
+
+
+def _growth_snapshot() -> dict:
+    """心智成长实时信息：自传叙事装配器（M2）+ 扩展统计（高频动机 / 预测误差分类 / 留存率）。
+
+    全部只读——assemble_autobiography 只排序读取记忆库，compute_extended_stats 只读回放缓冲，
+    均不消费、不写入、不编造文本（遵架构红线 1/4）。"""
+    empty = {
+        "ok": False, "error": "M2 自传叙事模块未挂载",
+        "subj_now": None, "memory_count": 0, "key_memory_count": 0,
+        "traceable_count": 0, "stage_count": 0, "stages": [],
+        "conflicts": [], "high_freq_motives": [],
+        "pe_classification": {}, "memory_retention": None,
+    }
+    try:
+        from src.agent.upper_m2_autobiography import assemble_autobiography, compute_extended_stats
+        from src.agent import bionic_organs as _bo
+    except Exception as e:
+        empty["error"] = f"M2 自传叙事模块未挂载: {e}"
+        return empty
+
+    try:
+        bio = assemble_autobiography()
+    except Exception as e:
+        empty["error"] = f"自传叙事装配失败: {e}"
+        return empty
+
+    try:
+        ext = _safe_dict(compute_extended_stats())
+    except Exception:
+        ext = {}
+
+    mem_total = len(getattr(_bo, "memory_library", []) or [])
+
+    if not isinstance(bio, dict) or not bio.get("ok"):
+        reason = "无相关经历记录"
+        if isinstance(bio, dict):
+            reason = str(bio.get("reason", reason) or reason)
+        empty["error"] = reason
+        empty["memory_count"] = mem_total
+        return empty
+
+    stages = []
+    for s in (bio.get("stages") or [])[:20]:
+        if isinstance(s, dict):
+            stages.append({
+                "start_subj": _fnum(s.get("start_subj")),
+                "end_subj": _fnum(s.get("end_subj")),
+                "count": int(s.get("count", 0) or 0),
+            })
+
+    conflicts = []
+    for c in (bio.get("conflicts") or [])[:10]:
+        if isinstance(c, dict):
+            conflicts.append({
+                "type": c.get("type"),
+                "detail": _trunc(str(c.get("detail", "") or ""), 80),
+            })
+
+    return {
+        "ok": True,
+        "subj_now": _fnum(bio.get("subj_now")),
+        "memory_count": mem_total,
+        "key_memory_count": len(bio.get("fragments") or []),
+        "traceable_count": len(bio.get("traceable_ids") or []),
+        "stage_count": len(stages),
+        "stages": stages,
+        "conflicts": conflicts,
+        "high_freq_motives": (ext.get("high_freq_motives") or [])[:5],
+        "pe_classification": _safe_dict(ext.get("pe_classification")),
+        "memory_retention": _fnum(ext.get("memory_retention")),
+    }
 
 
 def _safe_dict(v) -> dict:

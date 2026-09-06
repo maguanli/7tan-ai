@@ -2274,25 +2274,14 @@ class SpeechGenerator:
                 f"更想维持住现在这个可预测的状态。")
 
     def speak_emotion(self) -> str:
-        traces = self.model.memory.traces
-        pe = self.model.memory.pe_history
-        if not traces:
-            return "现在我心里空落落的，也有点好奇——什么都没见过，又特别想见点什么。"
-        last = traces[-1]
-        scene = last.get("scene", "?")
-        similar = self.model.memory.find_similar(scene)
-        succ = sum(1 for t in similar if t.get("action_finished"))
-        total = len(similar)
-        conf = succ / total if total else 0
-        lp = pe[-1] if pe else 0.0
-        if conf >= 0.8 and lp >= 0:
-            return (f"在「{scene}」这里，我心里挺踏实的——它稳定，我也还在进步，"
-                    f"这种可控的感觉让我安心。")
-        if conf <= 0.3:
-            return f"在「{scene}」这里，我有点不安，因为把握不大，怕出错。"
-        if lp > 0.2:
-            return "我现在有点兴奋——误差在降，说明我正变得更强。"
-        return f"在「{scene}」这里，心情还算平静，不好不坏。"
+        # 【器官快照接入】回答「感觉/状态」走 self_snapshot 接入层（self_snapshot_access_guide.txt）。
+        # 绝不编造感受：只做内部状态变量的忠实读数转述；器官不可用时如实降级，绝不回退旧模板。
+        try:
+            from .self_snapshot import speech_handle_emotion_query
+            return speech_handle_emotion_query(memory_limit=1)
+        except Exception as _e:
+            logger.warning(f"[SPEECH] 器官快照接入层调用失败: {_e}")
+            return "暂时无法读取我的内部器官状态。"
 
     def speak_reflection(self) -> str:
         pe = self.model.memory.pe_history

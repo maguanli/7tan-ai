@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "1.0.18",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.18.zip",
+      "md5": "c1ea81eb7582fa1ff5b0e8f16b06372d",
+      "size": 423193343,
+      "notes": "1.0.18 更新：修复 Windows 绿色版「启动网页版服务(Windows).bat」无法启动 WEB 版的问题——打包时遗漏 tools/web_autostart.py，自启模块找不到目标文件即静默退出（现已在打包流程中补齐，并写入 exe 同级 tools/ 目录）；启动脚本新增失败检测，加载失败时打印原因并暂停，不再误开浏览器（以前失败无提示，只看到浏览器打不开）；修复 7tan:// 协议路径（绿色版启动脚本位于解压根目录，新增上级目录回退）；AI 模型名统一为 deepseek-flash——试用接口强制使用 Flash（禁止请求方指定 pro/reasoner，杜绝外部烧钱）、兜底与默认配置同步调整、费用统计价格修正；修复电脑重启后需重新登录的问题（机器指纹改为缓存+候选回退，解密失败不再删除登录态，安全模块已重新编译为 pyd）；发布包安全加固（移除安全模块源码明文、修复 WEB 包内启动脚本重复条目、密钥扫描脚本在输出重定向时不再崩溃）。",
+      "release_date": "2026-09-13"
+    },
+    {
       "version": "1.0.17",
       "channel": "stable",
       "platform": "windows",

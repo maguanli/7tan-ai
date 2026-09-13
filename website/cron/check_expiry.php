@@ -102,7 +102,7 @@ foreach ($soon_users as $user) {
 
             ':content' => "尊敬的用户 {$user['ll_name']}，您的服务将在 {$days_left} 天后（"
 
-                          . date('Y-m-d', $user['expires_at']) . "）到期。本软件完全免费，无需续费：/pro.php",
+                          . date('Y-m-d', $user['expires_at']) . "）到期。本软件完全免费，无需续费：/plugins.php",
 
             ':type'    => 'system',
 

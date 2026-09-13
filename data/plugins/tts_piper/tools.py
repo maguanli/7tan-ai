@@ -104,7 +104,11 @@ def tts_is_busy() -> bool:
 
 
 def _play_sound_with_watchdog(winsound, wav_path: str, timeout: int = 180) -> None:
-    """带看门狗的同步播放：音频设备卡死时强制停止，防播放线程永久阻塞。
+    """【已停用·勿再使用】带看门狗的同步播放。
+
+    ⚠️ 2026-09-13 实测：同步播放无法被停止，且 SND_PURGE 会阻塞到音频播完
+    （60 秒音频阻塞 58 秒）。播放线程已改为「异步播放 + 可中断等待」，
+    本函数仅作历史保留，禁止在请求线程 / 事件循环线程中调用。
 
     - 正常音频在 timeout 秒内必然播完（默认 3 分钟）
     - 超时 → SND_PURGE 强制停止 + 告警（不影响后续播放）
@@ -132,8 +136,29 @@ def _play_sound_with_watchdog(winsound, wav_path: str, timeout: int = 180) -> No
         stop_flag.set()
 
 
+# —— 播放中断标记：tts_stop() 置位 → 播放线程立即停止当前音频 ——
+_stop_evt = threading.Event()
+
+
+def _wav_duration(wav_path: str, default: float = 30.0) -> float:
+    """从 WAV 头读取音频时长（秒），失败返回 default"""
+    try:
+        import wave
+        with wave.open(wav_path, "rb") as w:
+            rate = w.getframerate() or 0
+            if rate <= 0:
+                return default
+            return w.getnframes() / float(rate)
+    except Exception:
+        return default
+
+
 def _player_worker():
-    """播放线程：串行播放队列中的 WAV，播完再取下一条（不再互相打断）"""
+    """播放线程：串行播放队列中的 WAV；可被 tts_stop() 立即打断。
+
+    采用「异步播放 + 可中断等待」：既不阻塞调用方，也能真正停止正在播放的音频。
+    历史教训：同步播放（SND_FILENAME）无法被停止，SND_PURGE 还会阻塞到音频播完。
+    """
     while True:
         wav_path = _play_queue.get()
         if wav_path is None:  # 停止信号
@@ -148,9 +173,19 @@ def _player_worker():
                 logger.info(f"[TTS] ▶ 播放: {os.path.basename(wav_path)} ({os.path.getsize(wav_path) // 1024}KB)")
                 _set_tts_busy(True)
                 import winsound
-                # 同步播放：阻塞直到播完（SND_FILENAME 默认同步），带看门狗防卡死
-                _play_sound_with_watchdog(winsound, wav_path)
-                logger.info("[TTS] ⏹ 播放完成")
+                # ⚠️ 必须异步播放：同步播放无法被停止，SND_PURGE 会阻塞到播完（实测 60s 音频阻塞 58s）
+                _stop_evt.clear()   # 新一轮播放：清除上一轮的中断标记
+                winsound.PlaySound(wav_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                _dur = max(1.0, min(_wav_duration(wav_path, 30.0), 600.0))
+                if _stop_evt.wait(_dur + 0.3):
+                    # 被 tts_stop() 唤醒 → 立即停止（异步模式下 SND_PURGE 约 0.02s 生效）
+                    try:
+                        winsound.PlaySound(None, winsound.SND_PURGE)
+                    except Exception:
+                        pass
+                    logger.info("[TTS] ⏹ 播放被中断")
+                else:
+                    logger.info("[TTS] ⏹ 播放完成")
                 _set_tts_busy(False)
         except Exception as e:
             logger.warning(f"[TTS] 播放失败（音频设备不可用？）: {wav_path}: {e}")
@@ -195,12 +230,15 @@ def _enqueue_play(wav_path: str) -> None:
     _play_queue.put(wav_path)
 
 def tts_stop() -> dict:
-    """停止播放：清空队列并停止当前正在播放的声音"""
-    try:
-        import winsound
-        winsound.PlaySound(None, winsound.SND_PURGE)
-    except Exception:
-        pass
+    """停止播放：立即打断当前音频 + 清空待播队列（不阻塞调用方）
+
+    ⚠️ 绝不能再直接调用 winsound.PlaySound(None, SND_PURGE)：
+    实测该调用会一直阻塞到音频自然播完（60 秒音频阻塞 58 秒）。
+    若在 Web 事件循环/请求线程里调用，会导致整个服务卡死，
+    前端 12 秒超时后误报「网页版服务未运行」（2026-09-13 事故根因）。
+    改为：置位中断标记唤醒播放线程，由播放线程执行 SND_PURGE（异步模式下约 0.02s 生效）。
+    """
+    _stop_evt.set()
     try:
         while not _play_queue.empty():
             try:

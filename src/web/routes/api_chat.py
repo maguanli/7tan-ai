@@ -239,9 +239,13 @@ def _load_system_prompt() -> str:
 def _interrupt_prev_speech(reason: str = "") -> None:
     """新用户消息到达 → 立即打断上一次回复的朗读。
 
-    实时控制台的 💬 Agent 朗读会同步停止（清空待读缓冲 + SND_PURGE 打断当前音频）；
+    实时控制台的 💬 Agent 朗读会同步停止（清空待读缓冲 + 通知播放线程停止当前音频）；
     本轮新回复的 💬 Agent 内容随后会重新触发朗读，不会与旧语音叠加。
-    同步执行（耗时仅一次 SND_PURGE + 清空队列），保证 Agent 启动前就已静音。
+
+    ⚠️ 必须保持「非阻塞」：本函数在 asyncio 事件循环里同步执行，
+    一旦内部出现阻塞调用（历史事故：winsound 的 SND_PURGE 会阻塞到音频播完），
+    整个 Web 服务都会卡住 → 前端 12 秒超时 → 误弹「网页版服务未运行」。
+    现由 speak_bridge.interrupt_speaking() 保证快速返回（内含耗时告警兜底）。
     """
     try:
         from ...agent.speak_bridge import interrupt_speaking

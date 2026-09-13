@@ -88,18 +88,26 @@ def init_global_tts() -> None:
 
 
 def interrupt_speaking(reason: str = "") -> dict:
-    """立即打断正在进行的朗读（用户发送新消息 / 中止任务时调用）。
+    """立即打断正在进行的朗读（用户发送新消息时调用）。
 
     顺序至关重要：
       1. 先清空各控制台通道的待读缓冲 —— 否则 tts_stop() 触发的“播放完成回调”
          会把暂存的旧内容又补读一遍（防漏读机制的反作用）；
-      2. 再 tts_stop() —— 清空播放队列并 SND_PURGE 打断当前正在播放的音频。
+      2. 再 tts_stop() —— 通知播放线程立即停止当前音频 + 清空播放队列。
+
+    ⚠️ 本函数会被 Web 请求线程（asyncio 事件循环）直接调用，**必须快速返回**。
+    历史事故（2026-09-13）：tts_stop() 内部直接调用 winsound.PlaySound(None, SND_PURGE)，
+    而该调用会阻塞到音频自然播完（实测 60 秒音频阻塞 58 秒）→ 整个 Web 服务卡死
+    → 前端 12 秒超时 → 误弹「网页版服务未运行」。tts_stop() 已改为非阻塞的
+    「置位中断标记」，此处再加一道耗时告警兜底。
 
     只处理“已加载”的通道（sys.modules 判定）：未加载说明该通道从未发声，
     无需打断；同时避免在 WEB 进程里误导入 PyQt6（console_panel）产生副作用。
     """
     import sys
+    import time as _time
 
+    _t0 = _time.monotonic()
     cleared = []
 
     # 1. 清空各通道待读缓冲（必须先于 tts_stop，防打断后被补读）
@@ -128,7 +136,12 @@ def interrupt_speaking(reason: str = "") -> dict:
         except Exception as e:
             logger.warning(f"[TTS-Bridge] 停止播放失败: {e}")
 
+    _el = _time.monotonic() - _t0
+    if _el > 2.0:
+        logger.warning(
+            f"[TTS-Bridge] ⚠️ 打断朗读耗时过长 {_el:.1f}s（禁止在请求/事件循环线程调用阻塞式音频 API！）"
+        )
     lgr.info(
-        f"[TTS-Bridge] 已打断上一次朗读（触发={reason or 'unknown'}，清理={cleared if cleared else '无'}）"
+        f"[TTS-Bridge] 已打断上一次朗读（触发={reason or 'unknown'}，耗时={_el:.3f}s，清理={cleared if cleared else '无'}）"
     )
-    return {"status": "ok", "cleared": cleared}
+    return {"status": "ok", "cleared": cleared, "elapsed": round(_el, 3)}

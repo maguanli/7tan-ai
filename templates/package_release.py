@@ -3,7 +3,7 @@
 """
 7Tan 发布打包工具 — 纯 exe 单包模式（2026-08-07 v3）
 
-生成 1 个完整版发布 zip（免安装，双击即用）：
+生成 1 个发布 zip（免安装，双击即用）：
     7tan-editor-v<VER>[-<BUILD_ID>].zip
 
 包内结构：
@@ -11,7 +11,7 @@
     BUILD_INFO.txt          构建水印（--uid 提供时写入，用于分发溯源）
     README.txt              使用说明
 
-商业模式：软件本体免费，核心功能全部开放；个别高级插件需付费解锁。
+商业模式：完全免费（v1.0.21 起）——全部功能与全部插件均免费开放，无付费项目。
 
 敏感数据剔除（P1-7 规则保留）：
   - 剔除 .encryption_key、games.db*、auth/、memory/ 等开发者本地数据
@@ -88,6 +88,7 @@ EXCLUDE_FILE_PATTERNS = {
     "*.db-wal",
     "*.db-shm",
     "*.bak",
+    "*.bak_*",
     "*.broken_*",
     "*.tmp",
     "test_*.py",
@@ -226,7 +227,7 @@ def _safe_cleanup(path: Path) -> None:
 
 # ============================================================
 # 源码构建工具链打包（7tan-src/）
-# 完整版 = exe（免安装运行） + 源码（可自行构建打包）
+# 发布包 = exe（免安装运行） + 源码（可自行构建打包）
 # ============================================================
 
 # 显式文件清单：(项目内相对路径, zip 内路径)
@@ -302,7 +303,7 @@ _WEB_ROOT_FILES = [
     ("requirements-web.txt",            "requirements-web.txt"),
     ("启动网页版服务(macOS).command",    "启动网页版服务(macOS).command"),
     ("启动网页版服务(Linux).sh",        "启动网页版服务(Linux).sh"),
-    # Windows 启动脚本不取源码根目录同名 bat（那是完整版 exe 专用，web 包无 exe/.venv），
+    # Windows 启动脚本不取源码根目录同名 bat（那是 exe 包专用，web 包无 exe/.venv），
     # 统一由下方 _WEB_WINDOWS_BAT 内置模板写入，避免同名条目重复。
     # ("启动网页版服务(Windows).bat",     "启动网页版服务(Windows).bat"),
 ]
@@ -400,6 +401,81 @@ _WEB_EXCLUDE_FILES = EXCLUDE_FILE_PATTERNS | _SECURITY_SRC_EXCLUDE | {
     "*.pyc",
 }
 
+# 首次运行必读：随包放在 ZIP 根目录，解压即见（文件名以 ! 开头以排在最前）
+_FIRST_RUN_NAME = "!首次运行必读.txt"
+_FIRST_RUN_README = r"""========================================
+  7Tan 首次运行必读（先看这个）
+========================================
+
+如果你双击 7tan-editor.exe 没反应，或者文件突然"消失了"，
+大概率不是软件坏了，而是被杀毒软件 / Windows 安全中心拦截隔离了。
+
+【为什么会这样】
+7Tan 具备自动更新、本地服务、桌面自动化（截图 / 键鼠 / 剪贴板）
+等完整能力，这类行为特征与部分安全软件的启发式规则接近；
+加上软件暂未购买商业代码签名证书（Windows 会提示"未知发布者"），
+因此首次运行时可能被拦截、隔离甚至直接删除。
+这是保守拦截，不代表文件有毒。
+
+
+【三步解决（设置一次，长期有效）】
+
+第一步  从"隔离区"还原文件
+  · Windows 安全中心：病毒和威胁防护 → 保护历史记录
+                       → 找到 7Tan 相关项 → 操作 → 允许在设备上
+  · 火绒安全   ：病毒查杀 → 隔离区 → 恢复
+  · 360 安全卫士：木马查杀 → 恢复区 / 隔离区 → 恢复
+  · 腾讯电脑管家：病毒查杀 → 隔离区 → 恢复
+  · 金山毒霸   ：病毒查杀 → 隔离区 → 恢复
+
+第二步  给"整个文件夹"加白名单（关键！）
+  不要只信任 7tan-editor.exe 一个文件。
+  软件还包含 7tan-updater.exe、tools\、_internal\ 等组件，
+  只信任主程序会在下次自动更新时再次被拦。
+  → 请把"解压后的整个目录"（例如 D:\7tan-editor）加入白名单。
+
+  · Windows 安全中心：设置 → 隐私和安全性 → 病毒和威胁防护
+      → "病毒和威胁防护"设置 → 管理设置 → 拉到底部"排除项"
+      → 添加或删除排除项 → 添加排除项 → 选"文件夹" → 选择解压目录
+  · 火绒安全   ：右上角菜单 → 信任区 → 添加目录
+  · 360 安全卫士：木马查杀 → 右下角 信任区 → 添加目录
+  · 腾讯电脑管家：病毒查杀 → 设置 → 白名单 → 添加文件夹
+  · 金山毒霸   ：设置中心 → 信任设置 → 添加目录
+
+  命令行方式（管理员 PowerShell 执行一次）：
+      Add-MpPreference -ExclusionPath "D:\7tan-editor"
+
+第三步  换到独立目录（可选，推荐）
+  放在 桌面 / 下载 / C:\Program Files 下的程序，检查会更严格。
+  建议解压到独立目录，例如 D:\7tan-editor\，路径不含中文更佳。
+
+
+【在服务器 / 云主机上运行】
+  除了本机杀软，服务器侧的安全软件（安全狗、云锁、宝塔安全、
+  主机卫士等）也可能隔离或删除文件，请把 7Tan 目录加入其白名单。
+  注意：部分虚拟主机不支持运行本地服务（7Tan 需在本机启动
+  127.0.0.1:9900 服务），如遇无法启动，建议改用云服务器（VPS）。
+
+
+【怎么使用】
+  解压后进入 7tan-editor\ 目录，双击 7tan-editor.exe 即可运行，
+  无需安装 Python 或任何依赖。
+  系统要求：Windows 10 / 11 64 位。
+
+
+【仍然被拦？】
+  请把"安全软件名称 + 拦截提示截图"发给客服，
+  我们会向对应厂商提交误报申诉。
+
+  官网    ：https://www.7tan.com
+  说明书  ：https://www.7tan.com/manual.html#faq-antivirus
+  更新中心：https://www.7tan.com/updates/
+
+========================================
+7Tan 团队
+========================================"""
+
+
 _WEB_README = (
     "7Tan WEB 版（其他操作系统通用包）\n"
     "====================================\n"
@@ -472,10 +548,13 @@ def build_web_only_zip(out: Path, ver: str, uid: str, project_root) -> int:
                             f"BUILD_ID   : {build_id}\n"
                             f"渠道       : {uid}\n"
                             f"说明       : 本文件用于分发溯源，请勿删除。\n")
+            # 3.5 首次运行必读（ZIP 根目录，解压即见）
+            zf.writestr(_FIRST_RUN_NAME, _FIRST_RUN_README.replace("\n", "\r\n").encode("utf-8-sig"))
+            print("  [OK] first-run README (%dB)" % len(_FIRST_RUN_README))
             # 4. 使用说明
             zf.writestr("README_WEB.txt", _WEB_README)
             # 4.1 Windows 启动脚本（始终用内置模板：源码根目录同名 bat 是
-            #     完整版 exe 专用，web 包无 exe/.venv，必须用 web 适配模板）
+            #     exe 包专用，web 包无 exe/.venv，必须用 web 适配模板）
             zf.writestr("启动网页版服务(Windows).bat", _WEB_WINDOWS_BAT)
             print(f"  [OK] 启动网页版服务(Windows).bat (web 内置模板)")
             # 5. 说明书
@@ -591,9 +670,13 @@ def main() -> int:
                             f"渠道       : {args.uid}\n"
                             f"说明       : 本文件用于分发溯源，请勿删除。\n")
 
-            # 2.3 根 README 使用说明
+            # 2.3 首次运行必读（ZIP 根目录，解压即见）
+            zf.writestr(_FIRST_RUN_NAME, _FIRST_RUN_README.replace("\n", "\r\n").encode("utf-8-sig"))
+            print("  [OK] first-run README (%dB)" % len(_FIRST_RUN_README))
+
+            # 2.4 根 README 使用说明
             zf.writestr("README.txt",
-                        "7Tan 编辑器（完整版）\n"
+                        "7Tan 编辑器\n"
                         "=====================\n"
                         "目录结构：\n"
                         "  7tan-editor/    免安装版，双击 7tan-editor.exe 即可运行\n"
@@ -615,10 +698,10 @@ def main() -> int:
                         "系统要求：Windows 10/11 64 位\n"
                         "\n"
                         "功能说明：\n"
-                        "  本软件本体免费，核心功能全部开放使用；\n  个别高级插件（如爆款写作等）需付费解锁。\n"
+                        "  本软件完全免费：全部功能与全部插件（含爆款写作）均免费开放，\n  无需付费、无需授权码、无试用次数限制。\n"
                         "  详细使用说明见《7Tan使用说明书.md / .html》。\n")
 
-            # 2.3.1 使用说明书（完全免费版随包附带）
+            # 2.3.1 使用说明书（随包附带）
             for _doc_name in ["7Tan使用说明书.md", "7Tan使用说明书.html"]:
                 _doc_src = Path(__file__).resolve().parent.parent / "templates" / _doc_name
                 if _doc_src.exists():
@@ -638,7 +721,7 @@ def main() -> int:
                 else:
                     print(f"  [WARN] {_launcher_name} 不存在，已跳过（{_os_name} 用户将无一键启动）")
 
-            # 2.4 完整源码 + 构建工具链（7tan-src/，让"完整版"可自行构建）
+            # 2.4 完整源码 + 构建工具链（7tan-src/，可自行构建）
             n_src = add_source_bundle(zf, Path(__file__).resolve().parent.parent)
             print(f"  [OK] 7tan-src/  {n_src} 文件")
             n_total += n_src

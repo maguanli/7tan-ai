@@ -214,7 +214,7 @@ if (!$is_pro) {
 
             'code'    => -1,
 
-            'message' => 'AI 试用次数已用完（共 3 次）。请在软件设置中填入你自己的 DeepSeek API Key，或在 7tan.com 升级完整版。',
+            'message' => 'AI 试用次数已用完（共 3 次）。请在软件设置中填入你自己的 DeepSeek API Key 即可继续使用。',
 
             'data'    => [
 

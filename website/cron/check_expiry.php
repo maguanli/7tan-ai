@@ -36,7 +36,7 @@ $now = time();
 
 
 
-echo "[" . date('Y-m-d H:i:s') . "] 完整版到期检查开始\n";
+echo "[" . date('Y-m-d H:i:s') . "] 订阅状态检查开始\n";
 
 echo str_repeat('-', 50) . "\n";
 
@@ -98,11 +98,11 @@ foreach ($soon_users as $user) {
 
             ':uid'     => $user['user_id'],
 
-            ':title'   => '完整版即将到期',
+            ':title'   => '服务状态提醒',
 
-            ':content' => "尊敬的用户 {$user['ll_name']}，您的完整版会员将在 {$days_left} 天后（"
+            ':content' => "尊敬的用户 {$user['ll_name']}，您的服务将在 {$days_left} 天后（"
 
-                          . date('Y-m-d', $user['expires_at']) . "）到期。续费可享优惠，点击查看：/pro.php",
+                          . date('Y-m-d', $user['expires_at']) . "）到期。本软件完全免费，无需续费：/plugins.php",
 
             ':type'    => 'system',
 
@@ -130,7 +130,7 @@ echo "  → 7天内到期提醒: " . count($soon_users) . " 人\n\n";
 
 // ============================================================
 
-// 2. 处理已过期的完整版（标记为过期）
+// 2. 处理已过期的订阅（标记为过期）
 
 // ============================================================
 

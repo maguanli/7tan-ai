@@ -5,10 +5,10 @@
 // 从 ?redirect=xxx 获取登录后跳转地址
 // ============================================================
 
-$redirect = $_GET['redirect'] ?? '/pro.php';
+$redirect = $_GET['redirect'] ?? '/plugins.php';
 // 安全：只允许相对路径
 if (!preg_match('#^/[a-zA-Z0-9_./]*$#', $redirect)) {
-    $redirect = '/pro.php';
+    $redirect = '/plugins.php';
 }
 ?>
 <!DOCTYPE html>
@@ -134,7 +134,7 @@ async function doLogin() {
         const data = await resp.json();
 
         if (data.code === 0) {
-            // 🔑 写入 Cookie（pro.php 依赖此 Cookie 判断登录状态）
+            // 🔑 写入 Cookie（plugins.php 依赖此 Cookie 判断登录状态）
             const token = data.data?.token || '';
             if (token) {
                 document.cookie = 'auth_token=' + token + '; path=/; max-age=2592000; SameSite=Lax';

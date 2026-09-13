@@ -128,15 +128,35 @@ def _run_key_exists() -> bool:
     return _read_reg() is not None
 
 
+def find_start_bat() -> str:
+    """定位「启动网页版服务(Windows).bat」的绝对路径。
+
+    两种部署形态下 bat 与 exe 的相对位置不同：
+      - 绿色版（ZIP 解压）：bat 在解压根目录，exe 在 7tan-editor/ 子目录，
+        即 ROOT(exe 所在目录) 的【上一级】；
+      - 开发版 / 源码部署：bat 与 main.py 同级，即 ROOT 本身。
+    依次探测，命中即返回；都不存在时回退 ROOT（保持旧行为，路径自愈时会再次校准）。
+    """
+    name = "启动网页版服务(Windows).bat"
+    candidates = [
+        os.path.join(ROOT, name),
+        os.path.join(os.path.dirname(ROOT), name),
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+    return candidates[0]
+
+
 def install_protocol(silent: bool = False) -> bool:
     # 注册 7tan:// URL 协议 -> 触发本地启动脚本（服务死亡时也能一键拉起）。
-    # 协议 handler 固定指向项目根目录的「启动网页版服务(Windows).bat」，
+    # 协议 handler 指向实际存在的启动脚本（绿色版位于 ROOT 上一级，见 find_start_bat），
     # 该 bat 内部用 %~dp0 动态定位且幂等。绿色版移动目录后，由 install()
     # 每次启动路径自愈时顺带重新注册，保证协议始终指向正确路径。
     if os.name != "nt":
         return False
     import winreg
-    bat = os.path.join(ROOT, "启动网页版服务(Windows).bat")
+    bat = find_start_bat()
     proto_key = "Software" + "\\" + "Classes" + "\\" + "7tan"
     cmd_key = proto_key + "\\" + "shell" + "\\" + "open" + "\\" + "command"
     try:

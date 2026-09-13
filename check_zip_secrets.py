@@ -9,6 +9,15 @@
 """
 import zipfile, re, os, sys, glob
 
+# 输出编码容错：构建脚本会用 `> 日志` 重定向输出，此时 stdout 退化为系统区域
+# 编码（GBK/936），print 中文或 emoji 会抛 UnicodeEncodeError 导致扫描中断。
+# 这里强制 UTF-8 + errors=replace，控制台 / 管道 / 重定向三种场景都不会崩。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 DEFAULT_ZIP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist", "release")
 
 SENSITIVE_NAME = re.compile(
@@ -113,10 +122,10 @@ def main():
             print("跳过(不存在):", p)
     print("=" * 70)
     if ok:
-        print("检查完成：所有 zip 均未发现敏感内容 ✅")
+        print("检查完成：所有 zip 均未发现敏感内容 [OK]")
         sys.exit(0)
     else:
-        print("检查完成：发现敏感内容 ⚠️ 请勿分发该 zip！")
+        print("检查完成：发现敏感内容 [!] 请勿分发该 zip！")
         sys.exit(1)
 
 

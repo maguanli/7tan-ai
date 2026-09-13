@@ -115,6 +115,12 @@ EXCLUDE_FILE_PATTERNS = {
     "device_last_report.json",
 }
 
+# 安全模块源码额外排除：token_store.py 含 token 加密 / 机器指纹方案的完整实现，
+# 不随发布包分发（编译产物 src/security/token_store.pyd 已随包提供，不影响用户重建）。
+_SECURITY_SRC_EXCLUDE = {
+    "token_store.py",
+}
+
 
 def gen_build_id() -> str:
     """生成唯一水印：PRO-20260801-023456-8F3A"""
@@ -271,7 +277,7 @@ def add_source_bundle(zf: zipfile.ZipFile, project_root) -> int:
             continue
         n = zip_dir(zf, src, arc,
                     exclude_dirs=_SOURCE_EXCLUDE_DIRS,
-                    exclude_files=EXCLUDE_FILE_PATTERNS)
+                    exclude_files=EXCLUDE_FILE_PATTERNS | _SECURITY_SRC_EXCLUDE)
         count += n
     return count
 
@@ -288,7 +294,9 @@ _WEB_ROOT_FILES = [
     ("requirements-web.txt",            "requirements-web.txt"),
     ("启动网页版服务(macOS).command",    "启动网页版服务(macOS).command"),
     ("启动网页版服务(Linux).sh",        "启动网页版服务(Linux).sh"),
-    ("启动网页版服务(Windows).bat",     "启动网页版服务(Windows).bat"),
+    # Windows 启动脚本不取源码根目录同名 bat（那是完整版 exe 专用，web 包无 exe/.venv），
+    # 统一由下方 _WEB_WINDOWS_BAT 内置模板写入，避免同名条目重复。
+    # ("启动网页版服务(Windows).bat",     "启动网页版服务(Windows).bat"),
 ]
 
 # WEB 版 Windows 启动脚本（WEB 包专用：检测 Python → 装依赖 → 起服务 → 开浏览器）
@@ -344,7 +352,7 @@ _WEB_DIRS = [
 ]
 
 # WEB 版额外排除文件（PyQt6 桌面专用，避免非 Windows 依赖报错）
-_WEB_EXCLUDE_FILES = EXCLUDE_FILE_PATTERNS | {
+_WEB_EXCLUDE_FILES = EXCLUDE_FILE_PATTERNS | _SECURITY_SRC_EXCLUDE | {
     "browser_bridge.py",
     "cookie_manager.py",
     "*.pyc",
@@ -507,7 +515,7 @@ def main() -> int:
             # 2.1 exe 目录（免安装直接运行，全部功能）
             n1 = zip_dir(zf, free_dir, "7tan-editor",
                          exclude_dirs=EXCLUDE_DIRS,
-                         exclude_files=EXCLUDE_FILE_PATTERNS)
+                         exclude_files=EXCLUDE_FILE_PATTERNS | _SECURITY_SRC_EXCLUDE)
             print(f"  [OK] 7tan-editor/  {n1} 文件")
             n_total += n1
 
@@ -515,7 +523,7 @@ def main() -> int:
             _logo_src = Path(__file__).resolve().parent.parent / "data" / "logo"
             if _logo_src.exists():
                 n_logo = zip_dir(zf, _logo_src, "7tan-editor/data/logo",
-                                 exclude_files=EXCLUDE_FILE_PATTERNS)
+                                 exclude_files=EXCLUDE_FILE_PATTERNS | _SECURITY_SRC_EXCLUDE)
                 print(f"  [OK] 7tan-editor/data/logo/  {n_logo} 文件")
                 n_total += n_logo
 

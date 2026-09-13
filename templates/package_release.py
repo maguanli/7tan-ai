@@ -3,7 +3,7 @@
 """
 7Tan 发布打包工具 — 纯 exe 单包模式（2026-08-07 v3）
 
-生成 1 个完整版发布 zip（免安装，双击即用）：
+生成 1 个发布 zip（免安装，双击即用）：
     7tan-editor-v<VER>[-<BUILD_ID>].zip
 
 包内结构：
@@ -88,6 +88,7 @@ EXCLUDE_FILE_PATTERNS = {
     "*.db-wal",
     "*.db-shm",
     "*.bak",
+    "*.bak_*",
     "*.broken_*",
     "*.tmp",
     "test_*.py",
@@ -226,7 +227,7 @@ def _safe_cleanup(path: Path) -> None:
 
 # ============================================================
 # 源码构建工具链打包（7tan-src/）
-# 完整版 = exe（免安装运行） + 源码（可自行构建打包）
+# 发布包 = exe（免安装运行） + 源码（可自行构建打包）
 # ============================================================
 
 # 显式文件清单：(项目内相对路径, zip 内路径)
@@ -302,7 +303,7 @@ _WEB_ROOT_FILES = [
     ("requirements-web.txt",            "requirements-web.txt"),
     ("启动网页版服务(macOS).command",    "启动网页版服务(macOS).command"),
     ("启动网页版服务(Linux).sh",        "启动网页版服务(Linux).sh"),
-    # Windows 启动脚本不取源码根目录同名 bat（那是完整版 exe 专用，web 包无 exe/.venv），
+    # Windows 启动脚本不取源码根目录同名 bat（那是 exe 包专用，web 包无 exe/.venv），
     # 统一由下方 _WEB_WINDOWS_BAT 内置模板写入，避免同名条目重复。
     # ("启动网页版服务(Windows).bat",     "启动网页版服务(Windows).bat"),
 ]
@@ -553,7 +554,7 @@ def build_web_only_zip(out: Path, ver: str, uid: str, project_root) -> int:
             # 4. 使用说明
             zf.writestr("README_WEB.txt", _WEB_README)
             # 4.1 Windows 启动脚本（始终用内置模板：源码根目录同名 bat 是
-            #     完整版 exe 专用，web 包无 exe/.venv，必须用 web 适配模板）
+            #     exe 包专用，web 包无 exe/.venv，必须用 web 适配模板）
             zf.writestr("启动网页版服务(Windows).bat", _WEB_WINDOWS_BAT)
             print(f"  [OK] 启动网页版服务(Windows).bat (web 内置模板)")
             # 5. 说明书
@@ -675,7 +676,7 @@ def main() -> int:
 
             # 2.4 根 README 使用说明
             zf.writestr("README.txt",
-                        "7Tan 编辑器（完整版）\n"
+                        "7Tan 编辑器\n"
                         "=====================\n"
                         "目录结构：\n"
                         "  7tan-editor/    免安装版，双击 7tan-editor.exe 即可运行\n"
@@ -700,7 +701,7 @@ def main() -> int:
                         "  本软件完全免费：全部功能与全部插件（含爆款写作）均免费开放，\n  无需付费、无需授权码、无试用次数限制。\n"
                         "  详细使用说明见《7Tan使用说明书.md / .html》。\n")
 
-            # 2.3.1 使用说明书（完全免费版随包附带）
+            # 2.3.1 使用说明书（随包附带）
             for _doc_name in ["7Tan使用说明书.md", "7Tan使用说明书.html"]:
                 _doc_src = Path(__file__).resolve().parent.parent / "templates" / _doc_name
                 if _doc_src.exists():
@@ -720,7 +721,7 @@ def main() -> int:
                 else:
                     print(f"  [WARN] {_launcher_name} 不存在，已跳过（{_os_name} 用户将无一键启动）")
 
-            # 2.4 完整源码 + 构建工具链（7tan-src/，让"完整版"可自行构建）
+            # 2.4 完整源码 + 构建工具链（7tan-src/，可自行构建）
             n_src = add_source_bundle(zf, Path(__file__).resolve().parent.parent)
             print(f"  [OK] 7tan-src/  {n_src} 文件")
             n_total += n_src

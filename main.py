@@ -447,7 +447,7 @@ def run_desktop(args):
     except Exception:
         pass
 
-    # ===== 遥测上报（专业版水印回传，静默不阻塞）=====
+    # ===== 遥测上报（构建水印回传，静默不阻塞）=====
     try:
         from src.core.telemetry import report_async
         report_async()

@@ -1,5 +1,5 @@
 """
-授权状态 API — 完整版（Pro）激活状态
+账号状态 API — 登录状态与账号信息
 
 GET  /api/license/status   — 返回授权等级 + 用户名 + 能力值（RSA 验签，防伪造）
 POST /api/license/login    — 登录 7tan.com（复用桌面版 auth_client）
@@ -44,7 +44,7 @@ def _resolve_status():
     token_data = load_token()
     username = (token_data or {}).get("username", "") or ""
     if not token_data:
-        return False, "free", "未登录（免费版）", username
+        return False, "free", "未登录", username
 
     level = token_data.get("level", "free")
     pro_license = token_data.get("pro_license") or ""
@@ -54,7 +54,7 @@ def _resolve_status():
             try:
                 result = verify_license(pro_license)
                 if result.get("level") == "pro":
-                    return True, "pro", "完整版已激活 ✓", username
+                    return True, "pro", "已登录 ✓", username
             except LicenseError:
                 logger.warning("[License] RSA 验签失败，level 可能被篡改，降级为 free")
                 level = "free"
@@ -65,7 +65,7 @@ def _resolve_status():
                 level = "free"
 
     is_pro = level in ("pro", "enterprise")
-    return is_pro, level, ("完整版已激活 ✓" if is_pro else "当前为免费版"), username
+    return is_pro, level, "已登录 ✓", username
 
 
 def _compute_score():

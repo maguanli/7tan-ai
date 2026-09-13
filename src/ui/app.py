@@ -680,7 +680,7 @@ class Sidebar(QFrame):
         links_layout.addWidget(_make_side_link("📮 投诉建议", "https://www.7tan.com/bbs/board/26/"), 1)
         layout.addWidget(links_row)
         layout.addSpacing(4)
-        # --- 完整版状态组件 ---
+        # --- 账号状态组件（用户名 / 能力值 / 刷新 / 退出）---
         from .pro_status_widget import ProStatusWidget
         self._pro_widget = ProStatusWidget(user_info=self._user_info)
         self._pro_widget.logout_requested.connect(self.logout_requested.emit)
@@ -3608,85 +3608,6 @@ class SettingsPage(QWidget):
         self._plugin_status = QLabel("")
         self._plugin_status.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
         layout.addWidget(self._plugin_status)
-        # ── 授权管理（付费插件激活）──
-        self._license_group = QGroupBox("🔑 授权管理（付费插件）")
-        self._license_group.setStyleSheet(f"""
-
-            QGroupBox {{ color: {THEME['text_primary']}; font-weight: bold; font-size: 13px;
-
-                border: 1px solid {THEME['border']}; border-radius: 8px; margin-top: 8px; padding-top: 18px; }}
-
-            QGroupBox::title {{ subcontrol-origin: margin; left: 14px; padding: 0 8px; }}
-
-        """)
-        license_layout = QVBoxLayout(self._license_group)
-        license_layout.setSpacing(8)
-        license_layout.setContentsMargins(12, 12, 12, 12)
-        self._license_status_label = QLabel("")
-        self._license_status_label.setWordWrap(True)
-        self._license_status_label.setStyleSheet(f"color: {THEME['text_secondary']}; font-size: 12px;")
-        license_layout.addWidget(self._license_status_label)
-        license_input_row = QHBoxLayout()
-        license_input_row.setSpacing(8)
-        self._license_input = QLineEdit()
-        self._license_input.setPlaceholderText("粘贴购买获得的授权码（指纹.签名）")
-        self._license_input.setStyleSheet(f"""
-
-            QLineEdit {{ background: {THEME['bg_input']}; color: {THEME['text_primary']};
-
-                border: 1px solid {THEME['border']}; border-radius: 6px; padding: 6px 10px; font-size: 12px; }}
-
-        """)
-        license_input_row.addWidget(self._license_input, 1)
-        self._license_activate_btn = QPushButton("✅ 激活")
-        self._license_activate_btn.setFixedHeight(32)
-        self._license_activate_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self._license_activate_btn.clicked.connect(self._activate_plugin_license)
-        self._license_activate_btn.setStyleSheet(f"""
-
-            QPushButton {{ background: {THEME['success']}; color: #fff; border: none;
-
-                border-radius: 6px; padding: 4px 18px; font-size: 13px; font-weight: bold; }}
-
-            QPushButton:hover {{ background: #059669; }}
-
-        """)
-        license_input_row.addWidget(self._license_activate_btn)
-        license_layout.addLayout(license_input_row)
-        license_btn_row = QHBoxLayout()
-        license_btn_row.setSpacing(8)
-        self._license_copy_fp_btn = QPushButton("📋 复制本机指纹")
-        self._license_copy_fp_btn.setFixedHeight(30)
-        self._license_copy_fp_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self._license_copy_fp_btn.clicked.connect(self._copy_plugin_fingerprint)
-        self._license_copy_fp_btn.setStyleSheet(f"""
-
-            QPushButton {{ background: {THEME['hover']}; color: {THEME['text_primary']};
-
-                border: 1px solid {THEME['border']}; border-radius: 6px; padding: 2px 12px; font-size: 12px; }}
-
-            QPushButton:hover {{ background: {THEME['accent']}33; }}
-
-        """)
-        license_btn_row.addWidget(self._license_copy_fp_btn)
-        self._license_buy_btn = QPushButton("🛒 在线购买")
-        self._license_buy_btn.setFixedHeight(30)
-        self._license_buy_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self._license_buy_btn.clicked.connect(self._open_plugin_buy_page)
-        self._license_buy_btn.setStyleSheet(f"""
-
-            QPushButton {{ background: {THEME['accent2']}; color: #fff; border: none;
-
-                border-radius: 6px; padding: 2px 12px; font-size: 12px; font-weight: bold; }}
-
-            QPushButton:hover {{ background: {THEME['accent2']}dd; }}
-
-        """)
-        license_btn_row.addWidget(self._license_buy_btn)
-        license_btn_row.addStretch()
-        license_layout.addLayout(license_btn_row)
-        self._license_group.setVisible(False)
-        layout.addWidget(self._license_group)
         # 初始加载
         self._refresh_plugins()
     # =================== 能力清单 Tab ===================
@@ -4623,159 +4544,11 @@ class SettingsPage(QWidget):
 
 
 状态: {'✅ 已安装（重启后可用）' if is_installed else '⬇️ 未安装'}"""
-        # ── 付费插件：授权状态醒目提示 ──
-        if info.get('paid') or info.get('type') == 'paid':
-            lic_html = self._plugin_license_status_html(info.get('id', ''))
-            if lic_html:
-                detail += f"\n\n🔑 授权状态: {lic_html}"
         if info.get('source') == 'remote' and not is_installed:
             detail += "\n\n💡 此插件来自在线仓库，点击安装将自动下载。"
         self._detail_label.setText(detail)
         self._install_btn.setEnabled(not is_installed)
         self._uninstall_btn.setEnabled(is_installed)
-        self._update_license_panel()
-    # =================== 付费插件授权管理 ===================
-
-    def _plugin_license_status_html(self, plugin_id: str) -> str:
-        """付费插件授权状态（HTML 彩色，供详情区显示）"""
-        mod = self._plugin_license_module(plugin_id)
-        if mod is None:
-            return '<span style="color:#EF4444;font-weight:bold;">⚠️ 付费插件未安装，需先安装</span>'
-        try:
-            if mod.is_activated():
-                return '<span style="color:#10B981;font-weight:bold;">✅ 已激活（永久授权，全部功能可用）</span>'
-            left = mod.trial_left()
-            if left > 0:
-                return f'<span style="color:#F59E0B;font-weight:bold;">🔓 未激活 · 免费试用剩余 {left} 次</span>'
-            return '<span style="color:#EF4444;font-weight:bold;">🚫 免费试用已用完，无法继续使用，请购买激活！</span>'
-        except Exception:
-            return ''
-
-    def _plugin_license_module(self, plugin_id: str):
-        """动态加载插件目录下的 license.py（无则返回 None）"""
-        try:
-            from src.plugins.manager import PLUGIN_DIR
-            license_path = PLUGIN_DIR / plugin_id / "license.py"
-            if not license_path.exists():
-                return None
-            import importlib.util
-            spec = importlib.util.spec_from_file_location(f"{plugin_id}_license_ui", license_path)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            return mod
-        except Exception:
-            return None
-
-
-    def _current_license_plugin_id(self) -> str:
-        """当前选中插件的 id（仅付费插件）"""
-        row = self._plugin_list.currentRow()
-        if row < 0:
-            return ""
-        item = self._plugin_list.item(row)
-        if not item:
-            return ""
-        info = item.data(Qt.ItemDataRole.UserRole + 1) or {}
-        if not (info.get("paid") or info.get("type") == "paid"):
-            return ""
-        return info.get("id", "")
-
-
-    def _update_license_panel(self):
-        """根据当前选中的插件刷新授权面板"""
-        pid = self._current_license_plugin_id()
-        if not pid:
-            self._license_group.setVisible(False)
-            return
-        self._license_group.setVisible(True)
-        self._license_input.clear()
-        mod = self._plugin_license_module(pid)
-        if mod is None:
-            self._license_status_label.setText("⚠️ 该付费插件尚未安装，请先点击「📥 安装」后再激活。")
-            self._license_activate_btn.setEnabled(False)
-            return
-        self._license_activate_btn.setEnabled(True)
-        try:
-            color = THEME['text_secondary']
-            font_size = '12px'
-            if mod.is_activated():
-                text = "✅ 本插件已激活，永久授权，全部功能可用！"
-                color = THEME['success']
-                font_size = '13px'
-            elif hasattr(mod, "status_text"):
-                text = mod.status_text()
-                try:
-                    left = mod.trial_left()
-                except Exception:
-                    left = 1
-                if left <= 0:
-                    color = '#EF4444'
-                    font_size = '13px'
-                else:
-                    color = '#F59E0B'
-                    font_size = '13px'
-            else:
-                text = "🔑 输入授权码并点击「激活」解锁本插件。"
-            self._license_status_label.setStyleSheet(
-                f"color: {color}; font-size: {font_size}; font-weight: bold;")
-            self._license_status_label.setText(text)
-        except Exception as e:
-            self._license_status_label.setStyleSheet(
-                f"color: {THEME['text_secondary']}; font-size: 12px;")
-            self._license_status_label.setText(f"⚠️ 读取授权状态失败: {e}")
-
-
-    def _activate_plugin_license(self):
-        """激活当前付费插件"""
-        pid = self._current_license_plugin_id()
-        key = self._license_input.text().strip()
-        if not pid:
-            return
-        if not key:
-            self._license_status_label.setText("⚠️ 请先粘贴授权码再点击激活。")
-            return
-        mod = self._plugin_license_module(pid)
-        if mod is None:
-            self._license_status_label.setText("⚠️ 授权模块不可用，请先安装插件。")
-            return
-        try:
-            ok, msg = mod.activate(key)
-            if ok:
-                self._license_input.clear()
-                self._license_status_label.setText("🎉 激活成功！" + (msg or "全部功能已解锁"))
-            else:
-                self._license_status_label.setText(msg or "❌ 激活失败")
-        except Exception as e:
-            self._license_status_label.setText(f"❌ 激活异常: {e}")
-
-
-    def _copy_plugin_fingerprint(self):
-        """复制本机指纹，供购买页面使用"""
-        pid = self._current_license_plugin_id()
-        mod = self._plugin_license_module(pid) if pid else None
-        fp = ""
-        if mod is not None and hasattr(mod, "get_fingerprint"):
-            try:
-                fp = mod.get_fingerprint()
-            except Exception:
-                fp = ""
-        if not fp:
-            try:
-                from data.plugins.viral_writer import license as _vlic
-                fp = _vlic.get_fingerprint()
-            except Exception:
-                fp = ""
-        if fp:
-            QApplication.clipboard().setText(fp)
-            self._license_status_label.setText(f"📋 本机指纹已复制：{fp}\n购买时在插件中心粘贴此指纹，付款后即可获得授权码。")
-        else:
-            self._license_status_label.setText("⚠️ 获取本机指纹失败，请稍后重试。")
-
-
-    def _open_plugin_buy_page(self):
-        """打开在线购买页面"""
-        QDesktopServices.openUrl(QUrl("https://www.7tan.com/pro.php"))
-        self._license_status_label.setText("🛒 已打开在线购买页面（https://www.7tan.com/pro.php），登录后粘贴指纹即可购买。")
 
 
     def _refresh_plugins(self):
@@ -4811,35 +4584,13 @@ class SettingsPage(QWidget):
             else:
                 local_count += 1
                 status = "⬇️"
-            is_paid = p.get("paid") or p.get("type") == "paid"
-            paid_flag = " 💰付费" if is_paid else ""
-            lic_tag = ""
-            lic_color = None
-            if is_paid and is_installed:
-                mod = self._plugin_license_module(pid)
-                if mod is not None:
-                    try:
-                        if mod.is_activated():
-                            lic_tag = " ✅已激活"
-                        else:
-                            left = int(mod.trial_left())
-                            if left > 0:
-                                lic_tag = f" 🔓试用剩{left}次"
-                                lic_color = QColor("#F59E0B")
-                            else:
-                                lic_tag = " 🚫试用已用完·需购买激活"
-                                lic_color = QColor("#EF4444")
-                    except Exception:
-                        lic_tag = ""
-            item_text = f"{icon} {name}  v{ver}  [{status}]{paid_flag}{lic_tag}\n     {desc}\n     👤 {author} | 🔧 {', '.join(tools)}"
+            item_text = f"{icon} {name}  v{ver}  [{status}]\n     {desc}\n     👤 {author} | 🔧 {', '.join(tools)}"
             item = QListWidgetItem(item_text)
             item.setSizeHint(QSize(0, 92))
             item.setData(Qt.ItemDataRole.UserRole, pid)
             item.setData(Qt.ItemDataRole.UserRole + 1, p)  # 存储完整信息
             item.setData(Qt.ItemDataRole.UserRole + 2, is_installed)
-            if lic_color is not None:
-                item.setForeground(lic_color)
-            elif is_installed:
+            if is_installed:
                 item.setForeground(QColor(THEME['success']))
             elif source == "remote":
                 item.setForeground(QColor(THEME['accent2']))

@@ -519,6 +519,19 @@ def main() -> int:
                 print(f"  [OK] 7tan-editor/data/logo/  {n_logo} 文件")
                 n_total += n_logo
 
+            # 2.1.2 exe 同级 tools/web_autostart.py（网页版一键启动依赖）
+            # main.py 的 --web-autostart 从 PROJECT_ROOT（打包后 = exe 所在目录）/tools/
+            # web_autostart.py 加载自启工具；PyInstaller 只把该文件打进了 _internal/tools/，
+            # exe 同级缺失时「启动网页版服务(Windows).bat」会静默失败
+            # （窗口程序 console=False，报错无法显示，只能看到"启动失败"）。
+            _autostart_src = Path(__file__).resolve().parent.parent / "tools" / "web_autostart.py"
+            if _autostart_src.exists():
+                _safe_write(zf, _autostart_src, "7tan-editor/tools/web_autostart.py")
+                print(f"  [OK] 7tan-editor/tools/web_autostart.py ({_autostart_src.stat().st_size:,}B)")
+                n_total += 1
+            else:
+                print("  [WARN] tools/web_autostart.py 缺失，网页版一键启动将无法工作")
+
             # 2.2 水印说明
             if build_id:
                 zf.writestr("BUILD_INFO.txt",

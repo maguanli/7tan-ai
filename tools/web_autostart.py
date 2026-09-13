@@ -254,6 +254,35 @@ def http_ok(port: int = DEFAULT_PORT, timeout: float = 2.0) -> bool:
         return False
 
 
+def instance_lock_held(port: int = DEFAULT_PORT) -> bool:
+    """检测是否存在「已在运行 / 正在启动」的同端口实例。
+
+    背景：main.py 用 data/.instance.lock.web<port> 做单实例文件锁（msvcrt）。
+    开机时有两处自启（旧 VBS + 注册表）会先后触发，此时服务还没监听端口
+    （源码版约需 6 秒），仅凭 port_open 判断会误认为「没在跑」而重复拉起
+    一个注定被单实例保护杀掉的进程。
+
+    这里直接探锁：能拿到锁 = 没有实例；拿不到 = 已有实例在跑/在启动。
+    锁文件不存在时返回 False（不误判，保持原有行为）。
+    """
+    lock_path = os.path.join(ROOT, "data", f".instance.lock.web{port}")
+    if not os.path.isfile(lock_path):
+        return False
+    try:
+        import msvcrt
+        fd = os.open(lock_path, os.O_RDWR)
+        try:
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            return False  # 能立即加锁 → 无实例
+        except OSError:
+            return True   # 锁被占用 → 已有实例
+        finally:
+            os.close(fd)
+    except Exception:
+        return False  # 探测失败时放行，避免影响正常启动
+
+
 def kill_port_owner(port: int) -> bool:
     """只杀掉占用指定端口的进程（比 taskkill /IM pythonw.exe 安全，不误伤其他 pythonw）。"""
     try:
@@ -293,6 +322,17 @@ def launch() -> int:
         log("[launch] ⚠️ 端口被占用但 HTTP 无响应（疑似假活），强制重启…")
         kill_port_owner(DEFAULT_PORT)
         time.sleep(2)
+
+    # 端口未就绪，但单实例锁已被占用 → 已有实例正在启动中，等它，别重复拉起
+    if instance_lock_held(DEFAULT_PORT):
+        log("[launch] ⏳ 检测到同端口实例正在运行/启动（单实例锁被占用），等待其就绪…")
+        for i in range(20):
+            time.sleep(1)
+            if http_ok():
+                log(f"[launch] ✅ 9900 已由既有实例就绪（{i + 1}s），跳过启动")
+                return 0
+        log("[launch] ⚠️ 等待 20s 仍未见健康服务，跳过启动以避免重复实例")
+        return 1
 
     if is_exe_mode():
         exe = find_main_exe()

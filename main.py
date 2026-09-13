@@ -25,6 +25,33 @@ PROJECT_ROOT = _get_project_root()
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
+# ============================================================
+# 🖥️ 控制台编码安全 — 防止 print() 因 GBK 无法编码 emoji 而崩溃
+#
+# 背景：当 stdout/stderr 被重定向到文件时（web_autostart.py 会把子进程
+# 输出写进 logs/web_9900.log），Python 使用系统 locale(GBK) 编码，遇到
+# ❌ / ✅ 等字符会抛 UnicodeEncodeError。
+# 曾经的实际后果：单实例保护里的 print("❌ 7Tan 已在运行中…") 抛异常，
+# 于是「干净退出」变成「打印一大段 traceback」写进日志（反复刷屏）。
+#
+# 这里只把 errors 改成 replace：编码保持不变（控制台显示效果不受影响），
+# 只是无法表示的字符降级为 '?'，绝不抛异常。
+# ============================================================
+def _harden_console_streams():
+    """让 stdout/stderr 永不因编码问题抛异常（幂等，失败不影响启动）。"""
+    for _name in ("stdout", "stderr"):
+        _stream = getattr(sys, _name, None)
+        if _stream is None:
+            continue
+        try:
+            _stream.reconfigure(errors="replace")
+        except Exception:
+            pass
+
+
+_harden_console_streams()
+
+
 def _prewarm_system_fingerprint():
     """启动预热：提前触发 WMI 查询，避免冷启动"机器指纹漂移"。
 
@@ -146,7 +173,10 @@ def _acquire_single_instance() -> bool:
 
 
 if not _acquire_single_instance():
-    print("❌ 7Tan 已在运行中，本实例退出（单实例保护）")
+    try:
+        print("❌ 7Tan 已在运行中，本实例退出（单实例保护）")
+    except Exception:
+        pass  # 输出失败绝不能阻塞退出（历史上这里曾抛 UnicodeEncodeError）
     # 网页版是无窗口后台服务，重复启动时静默退出，不弹窗（桌面版才弹窗提示）
     if "--web" not in sys.argv[1:] and "web" not in sys.argv[1:]:
         _MSG = ("7Tan 已经在运行中！\n\n"

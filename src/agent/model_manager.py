@@ -304,6 +304,11 @@ class ModelManager:
                     return bool(content.strip()) or has_tool_calls
                 return True
             kwargs["messages"] = [m for m in kwargs["messages"] if _keep_message(m)]
+            # 🔧 双向修复孤儿 tool 消息（assistant.tool_calls ↔ role=tool 配对），
+            #    防止历史被截断 / 任务中止后残留孤儿导致 API 400。
+            #    这里是所有 LLM 调用的最终兜底（Agent 循环内已先修一次）。
+            from .message_guard import sanitize_tool_messages
+            kwargs["messages"] = sanitize_tool_messages(kwargs["messages"], label="model_manager")
 
         return self._chat_with_retry(client, **kwargs)
 
@@ -315,7 +320,9 @@ class ModelManager:
         """
         from ..security.auth_client import trial_call
 
-        messages = kwargs.get("messages", [])
+        # 🔧 试用通道同样需要双向修复孤儿 tool 消息（与 chat() 兜底一致）
+        from .message_guard import sanitize_tool_messages
+        messages = sanitize_tool_messages(kwargs.get("messages", []), label="trial")
         model = kwargs.get("model", self.model_name)
         result = trial_call(self._trial_token, model, messages)
 

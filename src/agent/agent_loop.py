@@ -1099,34 +1099,12 @@ def _cleanup_ctx_on_abort(ctx, messages):
 
 
 def _repair_messages(messages: list) -> list:
-    """修复消息历史中的孤儿 tool_calls，防止 API 400 错误
-    
-    API 要求：assistant 消息的 tool_calls 必须紧跟着对应的 tool 响应消息。
-    如果 tool_calls 后面没有 tool 响应，则需要移除这些孤儿 tool_calls。
+    """修复消息序列中的孤儿 tool 消息，防止 API 400 错误
+
+    兼容旧接口：统一委托给 message_guard.sanitize_tool_messages 做双向修复
+      · 正向：assistant 带 tool_calls 但没有 tool 响应
+      · 反向：role=tool 但前面找不到声明它的 assistant（本次修复的一类）
+    详见 src/agent/message_guard.py 模块文档。
     """
-    repaired = []
-    i = 0
-    while i < len(messages):
-        msg = messages[i]
-        if msg.get("role") == "assistant" and msg.get("tool_calls"):
-            # 检查后面是否有 tool 响应
-            has_tool_response = False
-            call_ids = {tc.get("id", "") for tc in msg["tool_calls"]}
-            j = i + 1
-            while j < len(messages) and messages[j].get("role") == "tool":
-                if messages[j].get("tool_call_id") in call_ids:
-                    has_tool_response = True
-                j += 1
-            
-            if has_tool_response:
-                repaired.append(msg)
-            else:
-                # 移除孤儿 tool_calls，只保留 content；content 为空则整条跳过（避免空 assistant 消息导致 API 400）
-                content = msg.get("content", "") or ""
-                if content.strip():
-                    repaired.append({"role": "assistant", "content": content})
-        else:
-            repaired.append(msg)
-        i += 1
-    
-    return repaired
+    from .message_guard import sanitize_tool_messages
+    return sanitize_tool_messages(messages, label="agent_loop")

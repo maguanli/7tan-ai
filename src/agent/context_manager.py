@@ -150,15 +150,28 @@ class ContextManager:
             return self._rule_summarize(messages)
 
     def _trim_if_needed(self):
-        """按消息数量截断"""
+        """按消息数量截断（在安全边界处切，避免产生孤儿 tool 消息）"""
         if len(self.history) > self.max_messages:
-            self.history = self.history[-self.max_messages:]
-            logger.debug(f"📎 截断后保留 {len(self.history)} 条消息")
+            cut = len(self.history) - self.max_messages
+            # 🔧 安全边界：切口不得落在 tool 响应中间。
+            #    self.history[-N:] 可能切掉了声明 tool_calls 的 assistant，
+            #    却把 role=tool 的响应留在窗口内 → 下次请求 API 400:
+            #    "Messages with role 'tool' must be a response to a preceding
+            #     message with 'tool_calls'"。
+            #    若 history[cut] 仍是 tool 响应，向后顺延到第一条非 tool 消息。
+            _shift = 0
+            while cut < len(self.history) and self.history[cut].get("role") == "tool":
+                cut += 1
+                _shift += 1
+            self.history = self.history[cut:]
+            logger.debug(
+                f"📎 截断后保留 {len(self.history)} 条消息"
+                + (f"（安全边界顺延 {_shift} 条，避免孤儿 tool 响应）" if _shift else "")
+            )
 
         if self._total_tokens > self.max_tokens_estimate:
             logger.debug(f"📎 Token 估算 {self._total_tokens} > {self.max_tokens_estimate}")
             self.summarize()
-
     def __len__(self):
         return len(self.history)
 

@@ -54,18 +54,8 @@ if exist ".git" (
 )
 echo.
 
-REM ===== Step 0.5: Regenerate plugin SHA-256 whitelist =====
-echo [0.5/4] Regenerating plugin whitelist (SHA-256 + HMAC)...
-if exist "tools\gen_plugin_hashes.py" (
-    ".venv\Scripts\python.exe" tools\gen_plugin_hashes.py
-    if errorlevel 1 (
-        echo [WARN] Plugin whitelist regeneration failed, continuing with existing hashes.json
-    ) else (
-        echo [0.5/4] Plugin whitelist OK
-    )
-) else (
-    echo [SKIP] gen_plugin_hashes.py not found
-)
+REM ===== Step 0.5: (removed 2026-09-13) plugin hash whitelist no longer used =====
+REM Removed together with the whitelist check in src/plugins/manager.py.
 echo.
 
 REM ===== Step 0.9: Sanitize config (发布前脱敏，防 API Key 泄露) =====

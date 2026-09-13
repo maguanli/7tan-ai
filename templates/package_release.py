@@ -356,7 +356,8 @@ _WEB_DIRS = [
     ("config",        "config",        set()),
     ("data/plugins",  "data/plugins",  {"backup", "__pycache__"}),
     ("data/logo",     "data/logo",     set()),
-    ("tools",         "tools",         {"__pycache__", "ocr_work", "_secrets_backup"}),
+    ("tools",         "tools",         {"__pycache__", "ocr_work", "_secrets_backup",
+                                        "gzh_publish"}),
 ]
 
 # WEB 包 tools/ 顶层文件白名单
@@ -368,8 +369,11 @@ _WEB_DIRS = [
 #     python-3.12.5-amd64.exe   25.28 MB（+ install_python.bat）
 # WEB 包面向 macOS / Linux / 鸿蒙，上述内容纯属占体积与噪音，
 # 故改为"白名单制"：只保留经全量引用扫描确认被源码/插件引用的脚本。
-# 5 个子目录（camera_vision / desktop_bot / gzh_publish / viral_writer /
-# security_src）被插件与运行时引用，整目录保留。
+# 4 个子目录（camera_vision / desktop_bot / viral_writer / security_src）
+# 被插件与运行时引用，整目录保留。
+# gzh_publish（微信公众号桌面自动化：pyautogui 坐标点击 + 剪贴板）
+# 为 Windows 专属，非 Windows 系统无法运行，故从 WEB 包剔除；
+# 对应插件 data/plugins/gzh_publish 会返回"缺少发布入口脚本"的友好提示。
 _WEB_TOOLS_KEEP = {
     "_wait.py",
     "article_v3.py",

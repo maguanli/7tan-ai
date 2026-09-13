@@ -207,6 +207,30 @@ def _clear_pending_speak():
         _pending_speak = None
 
 
+def reset_console_speech_state():
+    """清空控制台朗读的待读缓冲（用户发新消息 / 打断上一次朗读时调用）。
+
+    只清“待读”状态，不动全局去重登记（避免同一内容被反复朗读）：
+      - 取消截断合并窗口定时器，丢弃待读的截断内容
+      - 丢弃忙碌暂存内容（否则打断后“播放完成回调”会把旧内容又补读一遍）
+      - 清空“已读截断前缀”（新回复重新计算，防误跳过新内容）
+
+    必须先于 tts_stop() 调用，否则 tts_stop 触发的播放完成回调会补读旧内容。
+    """
+    global _trunc_pending_text, _trunc_pending_timer, _last_trunc_read
+    with _trunc_lock:
+        if _trunc_pending_timer is not None:
+            try:
+                _trunc_pending_timer.cancel()
+            except Exception:
+                pass
+            _trunc_pending_timer = None
+        _trunc_pending_text = None
+    _clear_pending_speak()
+    with _last_trunc_read_lock:
+        _last_trunc_read = None
+
+
 def _speak_console_async(text: str, trunc_prefix: str = None):
     """后台朗读控制台 Agent 内容（带防重复 + 播放中检测 + 全链路日志）。
 

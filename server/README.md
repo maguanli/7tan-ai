@@ -16,11 +16,11 @@ server/
 
 ### 1. 上传文件到服务器
 
-将 `server/` 目录下的文件上传到 `img.7tan.cn`：
+将 `server/` 目录下的文件上传到 `img.7tan.com`：
 
 ```
-api/7tan_ping.php  →  https://img.7tan.cn/api/7tan_ping.php
-7tan_stats.php     →  https://img.7tan.cn/7tan_stats.php
+api/7tan_ping.php  →  https://img.7tan.com/api/7tan_ping.php
+7tan_stats.php     →  https://img.7tan.com/7tan_stats.php
 ```
 
 ### 2. 建表
@@ -28,7 +28,7 @@ api/7tan_ping.php  →  https://img.7tan.cn/api/7tan_ping.php
 在 phpMyAdmin 中执行 `sql/create_table.sql`，或者直接访问一次 API（会自动建表）：
 
 ```
-https://img.7tan.cn/api/7tan_ping.php?id=test123456789012&ver=5.1.0
+https://img.7tan.com/api/7tan_ping.php?id=test123456789012&ver=5.1.0
 ```
 
 ### 3. 数据库连接配置

@@ -94,7 +94,7 @@ security:
   sensitive_words_filter: true
 site_7tan:
   base_url: ${TANTAN_BASE_URL}
-  login_url: https://img.7tan.cn/login.php/login.php
+  login_url: https://img.7tan.com/login.php/login.php
   password: ''
   publish_delay_max: 120
   publish_delay_min: 30

@@ -1878,6 +1878,14 @@ class ChatPage(QWidget):
 
             return
 
+        # ⏹ 新消息发出 → 立即打断上一次回复的朗读（含实时控制台 💬 Agent 朗读），
+        #    避免旧语音继续念、与新回复语音叠加；本轮回复随后会重新触发朗读。
+        try:
+            from ..agent.speak_bridge import interrupt_speaking
+            interrupt_speaking("chat_send")
+        except Exception as _tts_int_err:
+            logger.debug(f"[TTS] 打断上一次朗读失败: {_tts_int_err}")
+
         # 🎤 每轮新消息：无条件重置语音防重状态（防止残留标记拦截本轮朗读）
         self._tts_streamed_this_reply = False
         self._tts_stream_done_ts = 0.0

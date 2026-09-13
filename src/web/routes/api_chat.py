@@ -236,9 +236,24 @@ def _load_system_prompt() -> str:
     return ""
 
 
+def _interrupt_prev_speech(reason: str = "") -> None:
+    """新用户消息到达 → 立即打断上一次回复的朗读。
+
+    实时控制台的 💬 Agent 朗读会同步停止（清空待读缓冲 + SND_PURGE 打断当前音频）；
+    本轮新回复的 💬 Agent 内容随后会重新触发朗读，不会与旧语音叠加。
+    同步执行（耗时仅一次 SND_PURGE + 清空队列），保证 Agent 启动前就已静音。
+    """
+    try:
+        from ...agent.speak_bridge import interrupt_speaking
+        interrupt_speaking(reason)
+    except Exception as e:
+        logger.debug(f"[TTS] 打断上一次朗读失败: {e}")
+
+
 @router.post("/send")
 async def send_message(req: ChatRequest):
     """发送对话消息"""
+    _interrupt_prev_speech("api_chat_send")
     session_id = req.session_id or create_session()
     system_prompt = _load_system_prompt()
     used_model = _resolve_model_name(req.model)
@@ -331,6 +346,7 @@ def _get_executor():
 @router.post("/send/stream")
 async def send_message_stream(req: ChatRequest, request: Request):
     """SSE 流式发送对话消息 — 逐步返回思考过程和结果"""
+    _interrupt_prev_speech("api_chat_send_stream")
     session_id = req.session_id or create_session()
     used_model = _resolve_model_name(req.model)
     # 组装用户消息（若带图片：先视觉分析，描述并入消息）

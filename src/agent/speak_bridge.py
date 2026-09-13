@@ -85,3 +85,50 @@ def init_global_tts() -> None:
         print(f"[TTS-Bridge] 注册失败: {e}")
         logger.warning(f"[TTS-Bridge] 注册失败: {e}")
         lgr.warning(f"[TTS-Bridge] 注册失败: {e}")
+
+
+def interrupt_speaking(reason: str = "") -> dict:
+    """立即打断正在进行的朗读（用户发送新消息 / 中止任务时调用）。
+
+    顺序至关重要：
+      1. 先清空各控制台通道的待读缓冲 —— 否则 tts_stop() 触发的“播放完成回调”
+         会把暂存的旧内容又补读一遍（防漏读机制的反作用）；
+      2. 再 tts_stop() —— 清空播放队列并 SND_PURGE 打断当前正在播放的音频。
+
+    只处理“已加载”的通道（sys.modules 判定）：未加载说明该通道从未发声，
+    无需打断；同时避免在 WEB 进程里误导入 PyQt6（console_panel）产生副作用。
+    """
+    import sys
+
+    cleared = []
+
+    # 1. 清空各通道待读缓冲（必须先于 tts_stop，防打断后被补读）
+    for mod_name, fn_name in (
+        ("src.ui.console_panel", "reset_console_speech_state"),
+        ("src.agent.web_console_tts", "reset_web_console_speech_state"),
+    ):
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            continue
+        fn = getattr(mod, fn_name, None)
+        if not callable(fn):
+            continue
+        try:
+            fn()
+            cleared.append(fn_name)
+        except Exception as e:
+            logger.warning(f"[TTS-Bridge] 清空待读缓冲失败({mod_name}): {e}")
+
+    # 2. 停止播放：清空播放队列 + 打断当前音频
+    tools = sys.modules.get("data.plugins.tts_piper.tools")
+    if tools is not None:
+        try:
+            tools.tts_stop()
+            cleared.append("tts_stop")
+        except Exception as e:
+            logger.warning(f"[TTS-Bridge] 停止播放失败: {e}")
+
+    lgr.info(
+        f"[TTS-Bridge] 已打断上一次朗读（触发={reason or 'unknown'}，清理={cleared if cleared else '无'}）"
+    )
+    return {"status": "ok", "cleared": cleared}

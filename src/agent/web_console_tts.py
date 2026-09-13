@@ -88,6 +88,24 @@ def _clear_pending_speak() -> None:
         _pending_speak = None
 
 
+def reset_web_console_speech_state() -> None:
+    """清空 WEB 控制台朗读的待读缓冲（用户发新消息 / 打断上一次朗读时调用）。
+
+    必须先于 tts_stop() 调用：否则 tts_stop 触发的播放完成回调
+    （_on_play_finished）会把暂存的旧内容又补读一遍。
+    """
+    global _trunc_pending_text, _trunc_pending_timer
+    with _trunc_lock:
+        if _trunc_pending_timer is not None:
+            try:
+                _trunc_pending_timer.cancel()
+            except Exception:
+                pass
+            _trunc_pending_timer = None
+        _trunc_pending_text = None
+    _clear_pending_speak()
+
+
 def _speak_agent(text: str) -> None:
     """后台朗读一段 Agent 文本（防重复 + 播放中暂存补读 + 全链路日志）"""
     if not text or not text.strip():

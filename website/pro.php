@@ -3,7 +3,7 @@ header('Content-Type: text/html; charset=UTF-8');
 // ============================================================
 // 插件购买页面（原完整版购买页升级为插件中心）
 // 位置: /pro.php
-// 支持: BBS 登录会话 + 余额购买插件 + 自动签发授权码
+// 支持: BBS 登录会话 + 插件列表展示（全部插件免费）
 // ============================================================
 ?><!DOCTYPE html>
 <html lang="zh-CN">
@@ -121,7 +121,7 @@ function renderPlugin(p) {
             <span class="plugin-icon">${p.icon}</span>
             <div>
                 <span class="plugin-name">${escHtml(p.name)}</span>
-                <span class="plugin-tag">${p.type === 'free' ? '🎉 完全免费' : (p.type === 'per_device' ? '按台永久授权' : '订阅')}</span>
+                <span class="plugin-tag">🎉 完全免费</span>
             </div>
             <div class="plugin-price">免费<small> 永久</small></div>
         </div>
@@ -134,7 +134,7 @@ function renderPlugin(p) {
 }
 
 function renderOrders(orders) {
-    if (!orders || !orders.length) return '<div class="order-empty">暂无购买记录</div>';
+    if (!orders || !orders.length) return '<div class="order-empty">全部插件免费，无需购买</div>';
     return orders.map(o => `
         <div class="order-item">
             <span class="oi-name">${escHtml(o.plugin_name)}</span>
@@ -201,7 +201,7 @@ async function doBuy(pluginId) {
         msg.className = 'msg error';
         msg.textContent = '网络错误：' + e.message;
     } finally {
-        btn.disabled = false; btn.textContent = '💰 余额购买 ¥' + (window.CURRENT_PRICE || 50);
+        btn.disabled = false; btn.textContent = '🎉 完全免费';
     }
 }
 
@@ -212,7 +212,7 @@ async function init() {
         const json = await resp.json();
         if (json.code !== 0) {
             if (json.need_login) {
-                app.innerHTML = '<div class="login-prompt"><h2>请先登录</h2><p>登录后即可使用余额购买插件</p><a href="/bbs/login.php?redirect=/pro.php">立即登录</a></div>';
+                app.innerHTML = '<div class="login-prompt"><h2>请先登录</h2><p>登录后可查看全部插件与安装方式</p><a href="/bbs/login.php?redirect=/pro.php">立即登录</a></div>';
                 return;
             }
             app.innerHTML = '<div class="login-prompt"><h2>加载失败</h2><p>' + escHtml(json.message || '') + '</p><a href="javascript:location.reload()">重试</a></div>';
@@ -220,7 +220,7 @@ async function init() {
         }
         const d = json.data || {};
         const b = d.balance || {};
-        window.CURRENT_PRICE = (d.plugins && d.plugins[0]) ? d.plugins[0].price_yuan : 50;
+        window.CURRENT_PRICE = 0; // 全部插件免费
         const pluginsHtml = (d.plugins || []).map(renderPlugin).join('');
         app.innerHTML = `
             <div class="balance-card">
@@ -239,7 +239,7 @@ async function init() {
             </div>
             ${pluginsHtml}
             <div class="orders-section">
-                <h3>📦 我的授权</h3>
+                <h3>📦 授权记录</h3>
                 ${renderOrders(d.orders || [])}
             </div>`;
     } catch (e) {

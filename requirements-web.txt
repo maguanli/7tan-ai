@@ -1,0 +1,58 @@
+# 7Tan WEB 版跨平台依赖（macOS / Linux 源码版使用）
+# 说明：不含 Windows 专属依赖（pywin32/pyaudio/PyQt6 等），
+#       使「其他系统包」解压后即可在 macOS/Linux 上启动 9900 WEB 服务。
+
+# === AI ===
+openai>=1.0.0
+
+# === HTTP & Crawler ===
+httpx>=0.25.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+feedparser>=6.0.0
+
+# === Scheduler ===
+apscheduler>=3.10.0
+
+# === Cloud Storage ===
+oss2>=2.18.0
+
+# === Database ===
+sqlalchemy>=2.0.0
+aiosqlite>=0.19.0
+
+# === Config ===
+pyyaml>=6.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# === Imaging ===
+Pillow>=10.0.0
+
+# === Logging ===
+loguru>=0.7.0
+
+# === Utilities ===
+jedi>=0.19.0
+python-dotenv>=1.0.0
+tqdm>=4.66.0
+python-slugify>=8.0.0
+
+# === Security ===
+cryptography>=41.0.0
+
+# === Web Server ===
+fastapi>=0.104.0
+uvicorn>=0.24.0
+websockets>=12.0
+python-multipart>=0.0.9  # FastAPI 文件上传（聊天图片）
+
+# === UI 渲染 ===
+pygments>=2.0.0
+
+# === 可选功能增强（缺失时降级） ===
+markdown>=3.0.0
+edge-tts>=6.0.0
+numpy>=1.24
+mss>=9.0

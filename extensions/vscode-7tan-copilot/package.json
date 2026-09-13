@@ -1,0 +1,215 @@
+{
+  "name": "vscode-7tan-copilot",
+  "displayName": "7Tan — AI 智能编程助手",
+  "description": "7Tan AI 编程助手：代码补全、AI 对话、代码审查、Git 操作、安全扫描、Docker/K8s 管理 — 一站式 AI DevOps 工具集",
+  "version": "2.0.0",
+  "publisher": "7tan",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "ai", "copilot", "code completion", "chat", "deepseek",
+    "code review", "git", "docker", "kubernetes", "security",
+    "devops", "7tan"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "7tan-sidebar",
+          "title": "7Tan AI",
+          "icon": "media/icon-sidebar.svg"
+        }
+      ]
+    },
+    "views": {
+      "7tan-sidebar": [
+        {
+          "type": "webview",
+          "id": "7tan.chatView",
+          "name": "AI 对话"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "7tan.toggleCompletion",
+        "title": "7Tan: 切换代码补全 开/关"
+      },
+      {
+        "command": "7tan.configure",
+        "title": "7Tan: 配置 API"
+      },
+      {
+        "command": "7tan.codeReview",
+        "title": "7Tan: AI 代码审查当前文件"
+      },
+      {
+        "command": "7tan.codeReviewFolder",
+        "title": "7Tan: AI 代码审查当前目录"
+      },
+      {
+        "command": "7tan.securityScan",
+        "title": "7Tan: 安全扫描当前文件"
+      },
+      {
+        "command": "7tan.generateCommitMsg",
+        "title": "7Tan: AI 生成 Commit 信息"
+      },
+      {
+        "command": "7tan.explainCode",
+        "title": "7Tan: AI 解释选中代码"
+      },
+      {
+        "command": "7tan.fixCode",
+        "title": "7Tan: AI 修复选中代码"
+      },
+      {
+        "command": "7tan.optimizeCode",
+        "title": "7Tan: AI 优化选中代码"
+      },
+      {
+        "command": "7tan.addComment",
+        "title": "7Tan: AI 添加注释"
+      },
+      {
+        "command": "7tan.gitCommit",
+        "title": "7Tan: Git 提交 (AI Commit Message)"
+      },
+      {
+        "command": "7tan.gitPush",
+        "title": "7Tan: Git 推送"
+      },
+      {
+        "command": "7tan.gitLog",
+        "title": "7Tan: Git 提交历史"
+      },
+      {
+        "command": "7tan.openChat",
+        "title": "7Tan: 打开 AI 对话面板"
+      },
+      {
+        "command": "7tan.adbInstall",
+        "title": "7Tan: ADB 安装 APK"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "7tan.explainCode",
+          "group": "7tan",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "7tan.fixCode",
+          "group": "7tan",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "7tan.optimizeCode",
+          "group": "7tan",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "7tan.addComment",
+          "group": "7tan",
+          "when": "editorHasSelection"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "7tan.codeReview",
+          "group": "7tan"
+        },
+        {
+          "command": "7tan.securityScan",
+          "group": "7tan"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "7tan.generateCommitMsg",
+          "group": "navigation",
+          "when": "scmProvider == git"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "7tan.openChat",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "7tan.explainCode",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorHasSelection"
+      },
+      {
+        "command": "7tan.fixCode",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
+        "when": "editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "7Tan AI",
+      "properties": {
+        "7tan.completion.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用/禁用 AI 代码补全"
+        },
+        "7tan.api.endpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:17890",
+          "description": "7Tan 后端 API 地址"
+        },
+        "7tan.api.key": {
+          "type": "string",
+          "default": "",
+          "description": "DeepSeek API Key（留空使用 7Tan 本地代理）"
+        },
+        "7tan.completion.maxTokens": {
+          "type": "number",
+          "default": 128,
+          "description": "每次补全最大 token 数"
+        },
+        "7tan.completion.debounceMs": {
+          "type": "number",
+          "default": 300,
+          "description": "输入后延迟触发补全（毫秒）"
+        },
+        "7tan.chat.model": {
+          "type": "string",
+          "default": "deepseek-v4-pro",
+          "description": "对话使用的模型",
+          "enum": ["deepseek-v4-pro", "deepseek-coder"]
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "install-local": "npm run compile && code --install-extension vscode-7tan-copilot-2.0.0.vsix"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
+  }
+}

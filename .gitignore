@@ -1,0 +1,233 @@
+# 加密密钥 - 绝对不能提交！
+data/.encryption_key
+data/.encryption_salt
+data/.api_token
+data/auth/token.dat
+data/auth/owner.dat
+data/auth/device_last_report.json
+website/config/private_key.pem
+*.pem
+
+# 数据库文件（含密码等敏感数据）
+data/games.db
+data/games.db-shm
+data/games.db-wal
+data/*.db
+data/*.bak*
+
+# 用户数据与记忆（敏感个人数据，禁止提交）
+data/users/
+data/memory/
+data/state.json
+data/tan_model_memory.json
+data/world_model_memory.json
+
+# 配置文件（含 API Key）
+config/config.yaml
+
+# 费用记录
+data/costs.json
+
+# 下载包和截图（体积大）—— 整体忽略，仅白名单放行两部小说
+downloads/*
+!downloads/fanqie/
+downloads/fanqie/*
+!downloads/fanqie/novel/
+!downloads/fanqie/html_global_npc/
+!downloads/fanqie/quality_report_latest.md
+data/screenshots/
+
+# 大型安装文件
+tools/*.exe
+
+# 编译产物 .pyd（授权/安全组件，通过发布包分发，不入库）
+*.pyd
+!src/**/*.py
+
+# 语音模型大文件
+data/plugins/tts_piper/models/
+
+# 沙盒临时文件
+data/sandbox/
+
+# 插件运行状态（含激活授权码等个人数据，禁止提交）
+data/plugins/*/state.json
+data/plugins/*/state_backup.json
+
+# 运行时数据与调试临时文件
+data/tmp/
+data/code_changes.jsonl
+data/.instance.lock
+data/.restart_lock
+
+# 备份文件
+*.bak
+backups/
+*.pyd.broken*
+*.pyd.bad*
+*.moved_from_security
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 临时文件
+*.tmp
+*.log
+downloads/temp/
+
+# 测试覆盖率
+.coverage
+.coverage.*
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# 构建产物
+dist/
+dist*.zip
+dist - */
+build/
+*.spec
+
+# 环境变量
+.env
+.env.local
+
+# 日志文件
+logs/*.txt
+
+# 视频编辑器缩略图缓存
+data/video_editor/thumbs/
+
+# 输出产物
+output/
+
+# WEB 服务进程 PID 文件（运行时生成，不入库）
+data/*.pid
+
+# 用户聊天上传的图片（个人数据，不入库）
+data/uploads/
+
+# 文章/公众号封面等运行时下载图片（个人数据，不入库）
+data/downloads/
+
+# 编译旧版残留（进程占用时临时改名）
+*.pyd.old
+\"tracked_list.txt\"  
+
+# 运行时状态：代码修改实时面板窗口几何
+data/panel_geometry.json
+
+# 调试临时脚本与运行时检查文件
+tmp/
+data/tasklist_check.txt
+src/security/auth_client_new.pyd
+filterrepo.log
+filterbranch.log  
+
+# 根目录调试垃圾（微信调试/临时脚本/截图）— 防止再次误提交
+/click_*.py
+/ocr_*.txt
+/verify_*.py
+!/verify_stage7_capabilities.py
+/wechat_*.py
+/check_wechat*.py
+/find_wechat*.py
+/temp_*
+/test_*.py
+/_audit*.py
+/_test*.py
+/_screen*.png
+/_sidebar*.png
+/_crop*.py
+/_extract*.py
+/_fix*.py
+/_proc*.txt
+/analyze_layout.py
+/layout*.py
+/ocr_file.py
+/*.ps1
+# 调试用 bat（正式构建脚本 build.bat/rebuild.bat/start.bat 仍跟踪）
+/run_check.bat
+/test_debug.bat
+/output.txt
+/tracked_list.txt
+# 根目录数据库（敏感数据不入库）
+/games.db
+mobile/  
+data/plugins/adapt_report.json
+data/plugins/adapt_status.json
+data/adapt_running.lock
+data/plugins/*/variants/backup/
+data/plugins/*/variants/backup/**
+
+# 智能生命 模块E/F（第四册）
+*.workingmem.json       # 模块E：导出调试用工作记忆快照
+*.hypothesis.log        # 模块F：假设验证变更日志
+
+# 智能生命 器官状态与运行时文件（敏感，运行时生成，禁止提交）
+data/tan_model_organs.json
+data/organ_event_log.jsonl
+data/.instance.lock*
+data/evolution_report.txt
+data/evolution_snapshots/
+data/stage6_real_world_report.txt
+data/docx_content.txt
+data/m1_knowledge_cursor.json
+
+# 公众号渲染产物与文章临时目录（运行时下载/生成，不入库）
+data/gzh_render/
+data/articles/
+
+# ===== 临时/诊断脚本与运行时垃圾（防止再次误提交）=====
+# 机器指纹缓存（敏感，与 token.dat 同级，必须忽略）
+data/auth/
+
+# 根目录历史调试脚本（点名精确忽略，避免误伤已跟踪的 check_*.py 系列）
+/check_html.py
+/check_imgs.py
+/check_v11.py
+/audit_*.py
+/scan_align*.py
+/scan_tmp_snapshots.py
+/render_v*.py
+/crop_v*.py
+/fix_v*_align.py
+/montage_v*.py
+/final_check*.py
+/find_all_versions.py
+/search_v*.py
+/search_cats.py
+/dl_teacher*.py
+/tmp_i18n_scan.py
+
+# 文章生成一次性脚本（scripts/ 下，历史遗留较多）
+/scripts/*teacher*.py
+/scripts/dl_imgs.py
+/scripts/search_imgs*.py
+/scripts/t_ov.py
+
+# data/ 下运行时垃圾
+/data/_clean_junk.py
+/data/_scan_junk*.py
+/data/hot_2026*.txt
+/data/organ_event_log.jsonl.*
+
+# 构建/打包日志（build_and_sync.bat 输出重定向产物，勿入库）
+/_build_log.txt
+/build_log*.txt
+
+
+# 根目录自愈/诊断探针产物（后台自愈进程运行时生成，勿入库）
+/_probe*.py
+/_probe_log.txt
+/_diag*.py
+
+# 带时间戳的备份文件（已有 *.bak，此处覆盖 .bak_YYYYmmdd_HHMMSS 形式）
+*.bak_*

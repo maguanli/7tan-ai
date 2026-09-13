@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>7Tan 网页控制面板</title>
+<link rel="icon" type="image/x-icon" href="/favicon.ico?v=20260816p">
+<link rel="icon" type="image/png" sizes="256x256" href="/favicon.png?v=20260816p">
+<link rel="apple-touch-icon" href="/favicon.png?v=20260816p">
+<link rel="stylesheet" href="/style.css?v=20260816o">
+
+<script>
+/* 7Tan WEB 版访问统计上报（2026-08-16） */
+(function(){try{var s=(location.hostname||'')+(location.port?':'+location.port:'');var u='https://img.7tan.com/7tan_stats.php?action=track&site='+encodeURIComponent(s)+'&page='+encodeURIComponent(location.pathname+location.search)+'&ref='+encodeURIComponent(document.referrer||'');new Image().src=u;}catch(e){}})();
+</script>
+</head>
+<body>
+<div id="app">
+  <aside class="sidebar">
+    <div class="logo"><img class="logo-icon" src="/logo/sidebar_icon.png" alt="7Tan"><span class="logo-name">7Tan</span></div>
+    <nav id="nav">
+      <!-- 仪表盘已隐藏（2026-08-14）：<button class="nav-item" data-view="dashboard">📊 仪表盘</button> -->
+      <button class="nav-item active" data-view="chat">💬 AI 工作台</button>
+      <button class="nav-item" data-view="plugins">🧩 插件市场</button>
+      <button class="nav-item" data-view="resources" style="display:none">📦 资源管理</button> <!-- 已隐藏：改为意识模型入口 -->
+      <button class="nav-item" data-view="mind">🧠 意识模型</button>
+      <button class="nav-item" data-view="tasks">⚙️ 任务中心</button>
+      <button class="nav-item" data-view="sources">🌐 源站管理</button>
+      <button class="nav-item" data-view="settings">🔧 系统设置</button>
+      <button class="nav-item" data-view="code">🛠️ 代码变更</button>
+      <button class="nav-item" data-view="adapt">🔀 平台适配</button>
+      <!-- 会话列表（仅 AI 工作台时显示） -->
+      <div id="sidebarSessions" class="sidebar-sessions visible">
+        <div class="sidebar-sessions-title">💬 对话列表</div>
+        <button id="chatNew" class="btn btn-sidebar-new">＋ 新对话</button>
+        <div id="sessionList" class="sidebar-session-list"></div>
+        <div id="sessionCount" class="sidebar-session-count">0 条对话</div>
+      </div>
+      <button class="nav-item" data-view="terminal" style="display:none">💻 终端</button> <!-- 已隐藏终端 -->
+      <button class="nav-item" data-view="logs" style="display:none" title="系统日志(已隐藏)">📜 系统日志</button>
+      <button class="nav-item" data-view="update" style="display:none" title="软件更新(已隐藏)">⬆️ 更新</button>
+    </nav>
+    <div class="sidebar-links">
+      <a class="sidebar-link" href="https://www.7tan.com/bbs/" target="_blank" title="7坛社区">🌐 7坛社区</a>
+      <a class="sidebar-link" href="https://www.7tan.com/bbs/board/3/" target="_blank" title="现金任务">💰 现金任务</a>
+    </div>
+    <div class="sidebar-links">
+      <a class="sidebar-link" href="https://www.7tan.com/bbs/board/25/" target="_blank" title="问题求助">🙋 问题求助</a>
+      <a class="sidebar-link" href="https://www.7tan.com/bbs/board/26/" target="_blank" title="投诉建议">📮 投诉建议</a>
+    </div>
+    <div class="pro-status">
+      <div class="pro-user" id="proUser">👤 未登录</div>
+      <div class="pro-score" id="proScore">⚡ 能力值: -</div>
+      <div class="pro-actions" id="proActionsUser" style="display:none">
+        <button id="proRefresh" class="btn btn-pro-refresh" title="刷新会员状态">🔄 刷新</button>
+        <button id="proLogout" class="btn btn-pro-logout" title="退出登录">🚪 退出</button>
+      </div>
+      <div class="pro-actions" id="proActionsGuest">
+        <button id="proLogin" class="btn btn-pro-login" title="登录会员账号">🔑 登录</button>
+        <button id="proRegister" class="btn btn-pro-register" title="注册 7tan 账号">📝 注册</button>
+      </div>
+    </div>
+    <a class="sidebar-version" id="webVersion" href="https://www.7tan.com/" target="_blank" rel="noopener">7tan.com V1.0.20</a>
+    <div class="sidebar-copyright">© 7坛版权所有</div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button id="menuBtn" class="menu-btn" title="打开菜单" aria-label="菜单">☰</button>
+      <div class="token-box">
+        <input type="password" id="tokenInput" placeholder="API Token（远程访问必填，本地可留空）" autocomplete="off">
+        <button id="tokenBtn" class="btn btn-sm">保存</button>
+      </div>
+      <span class="conn-info" id="connInfo"></span>
+      <a class="topbar-guide" href="/guide.html" target="_blank" rel="noopener" title="7Tan 升级进化指南：修改7Tan、UI个性化设计、制作插件、实现更多功能">✨ 一切皆由你！请看说明</a>
+      <div class="topbar-right">
+        <label class="model-label" for="chatModelSelect">当前模型</label>
+        <select id="chatModelSelect" class="model-select" title="选择对话使用的AI模型"><option value="">加载模型…</option></select>
+      </div>
+    </header>
+
+    <!-- 仪表盘（已隐藏，保留代码可恢复） -->
+    <section id="view-dashboard" class="view" style="display:none">
+      <h2>📊 仪表盘</h2>
+      <div class="cards" id="dashCards"></div>
+      <div class="grid-2">
+        <div class="panel"><h3>近 7 日发布趋势</h3><div class="bar-chart" id="dashTrend"></div></div>
+        <div class="panel"><h3>资源类型分布</h3><div class="donut-wrap" id="dashTypes"></div></div>
+      </div>
+      <div class="panel"><h3>系统状态</h3><pre class="mono" id="dashSystem"></pre></div>
+    </section>
+
+    <!-- 资源管理 -->
+    <section id="view-resources" class="view">
+      <h2>📦 资源管理</h2>
+      <div class="toolbar">
+        <input id="resSearch" placeholder="搜索标题…">
+        <select id="resType"><option value="">全部类型</option><option value="game">游戏</option><option value="software">软件</option></select>
+        <select id="resStatus"><option value="">全部状态</option><option value="pending">待处理</option><option value="downloading">下载中</option><option value="rewriting">重写中</option><option value="uploading">上传中</option><option value="published">已发布</option><option value="failed">失败</option></select>
+        <button id="resRefresh" class="btn">刷新</button>
+        <span class="spacer"></span>
+        <span id="resTotal" class="muted"></span>
+      </div>
+      <table class="table">
+        <thead><tr><th>ID</th><th>标题</th><th>类型</th><th>状态</th><th>源站</th><th>大小</th><th>创建时间</th><th>操作</th></tr></thead>
+        <tbody id="resBody"></tbody>
+      </table>
+      <div class="pager">
+        <button id="resPrev" class="btn btn-sm">◀ 上一页</button>
+        <span id="resPage" class="muted"></span>
+        <button id="resNext" class="btn btn-sm">下一页 ▶</button>
+      </div>
+    </section>
+
+    <!-- 意识模型（7Tan 仿生器官框架实时状态） -->
+    <section id="view-mind" class="view">
+      <h2>🧠 意识模型</h2>
+      <div class="toolbar">
+        <span class="muted" id="mindStatus">加载中…</span>
+        <span class="spacer"></span>
+        <button id="mindRefresh" class="btn btn-sm">🔄 刷新</button>
+        <label class="muted" style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="mindAuto" checked> 自动刷新</label>
+      </div>
+
+      <div class="cards" id="mindHeartbeat"></div>
+
+      <div class="panel">
+        <h3>🫀 器官模块 <span class="muted" id="mindOrganCount"></span></h3>
+        <div id="mindOrgans" class="organ-grid"></div>
+      </div>
+
+      <div class="grid-3">
+        <div class="panel">
+          <h3>🪞 自我模型 <span class="muted">ORG-SELFMODEL</span></h3>
+          <div id="mindSelfModel"></div>
+        </div>
+        <div class="panel">
+          <h3>🎯 工作记忆 & 元认知</h3>
+          <div id="mindWorkingMemory"></div>
+          <div id="mindMetaCognition" style="margin-top:12px"></div>
+        </div>
+        <div class="panel">
+          <h3>🌱 心智成长 <span class="muted">M2</span></h3>
+          <div id="mindGrowth"></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <h3>🔬 假设库 <span class="muted">ORG-F</span> <span class="muted" id="mindHypoCount"></span></h3>
+          <div id="mindHypotheses" class="mem-list"></div>
+        </div>
+        <div class="panel">
+          <h3>🧭 我-非我边界 <span class="muted">来源统计</span></h3>
+          <div id="mindOrigin"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>🧠 自我学习 <span class="muted">L1 记忆学习 · L2 进化 · M1 知识获取</span></h3>
+        <div class="mind-learn-ops" id="mindLearnOps">
+          <div class="mind-learn-row">
+            <input id="mindLearnUrl" placeholder="输入网页 URL，下载为知识包（网页自学）…">
+            <button id="mindLearnWeb" class="btn btn-sm">⬇️ 抓取自学</button>
+          </div>
+          <div class="mind-learn-row">
+            <textarea id="mindLearnText" rows="2" placeholder="或粘贴知识内容（每行一条）导入知识包…"></textarea>
+            <button id="mindLearnImport" class="btn btn-sm">📥 导入知识包</button>
+          </div>
+          <div class="mind-learn-row">
+            <button id="mindLearnPick" class="btn btn-sm">📄 选择文件导入</button>
+            <button id="mindLearnFolder" class="btn btn-sm">📂 打开文件夹导入</button>
+            <button id="mindLearnDrainAll" class="btn btn-sm btn-warn">⚡ 立即学习全部</button>
+            <span class="muted" style="font-size:12px">支持 .txt/.md/.json/.csv/.log/.docx（每行一条，同文件去重）· 也可拖拽文件到此处</span>
+            <input type="file" id="mindLearnFilePick" multiple style="display:none">
+            <input type="file" id="mindLearnFile" multiple webkitdirectory style="display:none">
+          </div>
+        </div>
+        <div id="mindLearnSummary" class="mind-kv" style="margin:6px 0 12px"></div>
+        <div class="grid-2">
+          <div class="panel-inner">
+            <h4>💬 最近对话经验</h4>
+            <div id="mindDialog" class="mem-list"></div>
+          </div>
+          <div class="panel-inner">
+            <h4>📚 最近知识条目</h4>
+            <div id="mindKnowledge" class="mem-list"></div>
+          </div>
+        </div>
+        <div class="grid-2" style="margin-top:16px">
+          <div class="panel-inner">
+            <h4>🧪 假设库（模块F）</h4>
+            <div id="mindHypoDetail" class="mem-list"></div>
+          </div>
+          <div class="panel-inner">
+            <h4>🔧 进化（模块D）+ 知识获取（M1）</h4>
+            <div id="mindEvolve"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>💭 长期记忆 <span class="muted" id="mindMemoryCount"></span></h3>
+        <div id="mindMemory" class="mem-list"></div>
+      </div>
+
+      <div class="panel">
+        <h3>📡 最近事件流 <span class="muted">事件总线 _event_log</span></h3>
+        <pre class="mono" id="mindEvents"></pre>
+      </div>
+    </section>
+
+    <!-- 任务中心 -->
+    <section id="view-tasks" class="view">
+      <h2>⚙️ 任务中心</h2>
+      <div class="panel"><h3>运行中 / 队列</h3><div id="taskActive" class="task-list"></div></div>
+      <div class="panel"><h3>最近任务日志</h3><div class="table-wrap"><table class="table">
+        <thead><tr><th>资源ID</th><th>类型</th><th>状态</th><th>开始时间</th><th>消息</th></tr></thead>
+        <tbody id="taskBody"></tbody>
+      </table></div></div>
+    </section>
+
+    <!-- AI 工作台（默认页） -->
+    <section id="view-chat" class="view active">
+      <h2>💬 AI 工作台</h2>
+      <div class="chat-layout">
+        <div class="chat-console-pane">
+          <div class="console-head">
+            <span>🖥️ 实时控制台</span>
+            <span class="console-btns">
+              <button id="consolePause" class="btn btn-sm" title="暂停/恢复自动刷新">⏸</button>
+              <button id="consoleClear" class="btn btn-sm" title="清空显示">清</button>
+            </span>
+          </div>
+          <pre id="consoleOutput" class="console-out mono">加载中…</pre>
+        </div>
+        <div class="chat-resizer" title="拖动调整宽度"></div>
+        <div class="chat-main">
+          <div class="chat-topbar" id="chatTopbar"><span class="chat-topbar-icon">💬</span><span class="chat-topbar-title">对话</span></div>
+          <div id="chatMessages" class="chat-messages"><div class="muted center">选择或新建一个会话开始对话</div></div>
+          <div class="chat-inputbar">
+            <div class="chat-input-wrap">
+              <div class="chat-attach-row" id="chatAttachRow" style="display:none">
+                <div class="chat-attach-item">
+                  <img id="chatAttachPreview" alt="图片预览">
+                  <button id="chatAttachRemove" class="chat-attach-remove" title="移除图片">✕</button>
+                  <span id="chatAttachName" class="muted"></span>
+                </div>
+              </div>
+            <textarea id="chatInput" rows="3" placeholder="输入任务描述，例如：帮我检查磁盘空间并汇报…（Enter 发送，Shift+Enter 换行，可直接粘贴图片）"></textarea>
+            </div>
+            <div class="chat-bottom-row">
+              <div class="chat-btns">
+                <button id="chatImageBtn" class="btn btn-image" title="添加图片（支持粘贴/拖拽）">📎 图片</button>
+                <input type="file" id="chatImageFile" accept="image/*" style="display:none">
+                <button id="voiceGender" class="btn btn-gender male" title="切换语音性别：男声/女声">♂ 男声</button>
+                <button id="voiceToggle" class="btn btn-voice" title="开启/关闭语音朗读">🔇 语音</button>
+                <button id="chatSend" class="btn btn-send">发送 ▲</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 插件市场（独立页面，位于 AI 工作台下方） -->
+    <section id="view-plugins" class="view">
+      <h2>🧩 插件市场</h2>
+      <div class="panel">
+        <div class="toolbar">
+          <h3 style="margin:0">可用插件</h3>
+          <span class="muted" id="marketPluginStats"></span>
+          <span class="spacer"></span>
+          <button id="marketPluginRefresh" class="btn btn-sm">🔄 刷新插件</button>
+        </div>
+        <div id="marketPluginList" class="plugin-list"></div>
+      </div>
+    </section>
+
+    <!-- 源站管理 -->
+    <section id="view-sources" class="view">
+      <h2>🌐 源站管理</h2>
+      <div class="grid-2">
+        <div class="panel"><h3>添加源站</h3>
+          <form id="sourceForm" class="form">
+            <input name="name" placeholder="源站名称 *" required>
+            <input name="url" placeholder="URL *" required>
+            <select name="site_type"><option value="game">游戏</option><option value="software">软件</option></select>
+            <input name="crawl_interval" type="number" value="360" placeholder="爬取间隔(分钟)">
+            <label class="chk"><input type="checkbox" name="need_login"> 需要登录</label>
+            <input name="login_url" placeholder="登录页 URL">
+            <input name="login_username" placeholder="登录账号">
+            <input name="login_password" type="password" placeholder="登录密码">
+            <input name="notes" placeholder="备注">
+            <button type="submit" class="btn btn-primary">添加</button>
+          </form>
+        </div>
+        <div class="panel"><h3>源站列表</h3><div class="table-wrap"><table class="table">
+          <thead><tr><th>名称</th><th>类型</th><th>间隔</th><th>启用</th><th>操作</th></tr></thead>
+          <tbody id="sourceBody"></tbody>
+        </table></div></div>
+      </div>
+    </section>
+
+    <!-- 系统设置（9 Tab：与桌面版对齐） -->
+    <section id="view-settings" class="view">
+      <h2>🔧 系统设置</h2>
+      <div class="settings-tabs">
+        <button class="stab active" data-stab="ai">🤖 AI 模型</button>
+        <button class="stab" data-stab="site">🌐 站点设置</button>
+        <button class="stab" data-stab="oss">☁️ OSS 存储</button>
+        <button class="stab" data-stab="plugin">🧩 插件市场</button>
+        <button class="stab" data-stab="cap">🧠 能力清单</button>
+        <button class="stab" data-stab="sw">🖥 环境引擎</button>
+        <button class="stab" data-stab="memory">🧠 记忆系统</button>
+        <button class="stab" data-stab="prompt">📝 系统提示词</button>
+        <button class="stab" data-stab="remote">🌐 远程访问</button>
+        <button class="stab" data-stab="about">ℹ️ 关于</button>
+      </div>
+
+      <!-- 🤖 AI 模型 -->
+      <div id="stab-ai" class="stab-panel">
+        <div class="panel">
+          <h3>🤖 AI 大模型配置 <span class="muted" id="aiActiveLabel"></span></h3>
+          <div class="ai-config-wrap">
+            <div class="ai-config-list">
+              <label class="muted">已保存的模型</label>
+              <select id="aiConfigList" size="9"></select>
+              <div class="ai-config-btns">
+                <button id="aiAdd" class="btn btn-sm">＋ 新建</button>
+                <button id="aiDel" class="btn btn-sm btn-danger">✕ 删除</button>
+                <button id="aiActivate" class="btn btn-sm">⭐ 启用</button>
+                <button id="aiQuickGlm" class="btn btn-sm" style="margin-top:6px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;">⚡ 一键添加 GLM-4.7-Flash</button>
+              </div>
+            </div>
+            <div class="ai-config-form">
+              <div class="form">
+                <label>配置名称 <input id="aiName" placeholder="如 deepseek"></label>
+                <label>提供商
+                  <select id="aiProvider">
+                    <option value="deepseek">deepseek</option>
+                    <option value="openai">openai</option>
+                    <option value="siliconflow">siliconflow</option>
+                    <option value="doubao">doubao</option>
+                    <option value="zhipu">zhipu</option>
+                    <option value="moonshot">moonshot</option>
+                    <option value="mimo">mimo</option>
+                    <option value="sensetime">sensetime</option>
+                    <option value="qwen">qwen</option>
+                    <option value="ollama">ollama</option>
+                    <option value="custom">custom</option>
+                  </select>
+                </label>
+                <label>模型 <input id="aiModel" placeholder="如 glm-4-flash / deepseek-chat"></label>
+                <label style="display:block;">API Key<span style="display:block;position:relative;margin-top:2px;"><input id="aiKey" type="password" placeholder="sk-...（留空保持不变）" style="width:100%;box-sizing:border-box;padding-right:38px;"><button onclick="toggleKeyVis('aiKey',this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;opacity:0.9;color:#f0f0f0;display:flex;align-items:center;" title="显示/隐藏"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></span></label>
+                <label>Base URL <input id="aiBase" placeholder="https://api.deepseek.com/v1"></label>
+                <button id="aiSave" class="btn btn-primary">💾 保存模型配置</button>
+              </div>
+              <h3 style="margin-top:16px">👁️ 视觉模型（识图）</h3>
+              <div class="form">
+                <label style="display:block;">API Key<span style="display:block;position:relative;margin-top:2px;"><input id="visKey" type="password" placeholder="视觉模型 Key（留空保持不变）" style="width:100%;box-sizing:border-box;padding-right:38px;"><button onclick="toggleKeyVis('visKey',this)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:4px;opacity:0.9;color:#f0f0f0;display:flex;align-items:center;" title="显示/隐藏"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></span></label>
+                <label>Base URL <input id="visBase" value="https://open.bigmodel.cn/api/paas/v4"></label>
+                <label>模型 <input id="visModel" value="glm-4v-flash"></label>
+                <button id="visSave" class="btn btn-primary">💾 保存视觉模型</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 🌐 站点设置 -->
+      <div id="stab-site" class="stab-panel hidden">
+        <div class="panel">
+          <h3>🌐 7坛站点设置</h3>
+          <div class="form">
+            <label>站点 API URL <input id="siteUrl" placeholder="https://www.7tan.com/api"></label>
+            <label>用户名 <input id="siteUser" placeholder="7坛账号"></label>
+            <label>密码 <input id="sitePass" type="password" placeholder="留空保持不变"></label>
+            <button id="siteSave" class="btn btn-primary">💾 保存站点设置</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ☁️ OSS 存储 -->
+      <div id="stab-oss" class="stab-panel hidden">
+        <div class="panel">
+          <h3>☁️ OSS 存储</h3>
+          <div class="form">
+            <label>Bucket <input id="ossBucket" placeholder="bucket 名称"></label>
+            <label>Endpoint <input id="ossEndpoint" placeholder="如 oss-cn-hangzhou.aliyuncs.com"></label>
+            <label>Access Key <input id="ossKey" placeholder="AK"></label>
+            <label>Secret Key <input id="ossSecret" type="password" placeholder="SK（留空保持不变）"></label>
+            <button id="ossSave" class="btn btn-primary">💾 保存 OSS 配置</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 🧩 插件市场 -->
+      <div id="stab-plugin" class="stab-panel hidden">
+        <div class="panel">
+          <div class="toolbar">
+            <h3 style="margin:0">🧩 插件市场</h3>
+            <span class="muted" id="pluginStats"></span>
+            <span class="spacer"></span>
+            <button id="pluginRefresh" class="btn btn-sm">🔄 刷新插件</button>
+          </div>
+          <div id="pluginList" class="plugin-list"></div>
+        </div>
+      </div>
+
+      <!-- 🧠 能力清单 -->
+      <div id="stab-cap" class="stab-panel hidden">
+        <div class="panel">
+          <div class="toolbar">
+            <h3 style="margin:0">🧠 能力清单</h3>
+            <span class="muted" id="capStats"></span>
+          </div>
+          <div id="capList" class="cap-list"></div>
+        </div>
+      </div>
+
+      <!-- 🖥 环境引擎 -->
+      <div id="stab-sw" class="stab-panel hidden">
+        <div class="panel">
+          <div class="toolbar">
+            <h3 style="margin:0">🖥 环境引擎（已安装软件）</h3>
+            <span class="spacer"></span>
+            <button id="swScan" class="btn btn-sm">🔄 重新扫描</button>
+          </div>
+          <div class="table-wrap"><table class="table">
+            <thead><tr><th>分类</th><th>名称</th><th>版本</th><th>路径</th><th>可用</th></tr></thead>
+            <tbody id="swBody"></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- 🧠 记忆系统 -->
+      <div id="stab-memory" class="stab-panel hidden">
+        <div class="panel">
+          <div class="toolbar">
+            <h3 style="margin:0">🧠 记忆系统</h3>
+            <select id="memSection">
+              <option value="">全部</option>
+              <option value="games">games</option>
+              <option value="skills">skills</option>
+              <option value="config">config</option>
+              <option value="general">general</option>
+            </select>
+            <input id="memKeyword" placeholder="搜索关键词…" style="width:160px">
+            <button id="memRefresh" class="btn btn-sm">🔄 刷新</button>
+            <span class="spacer"></span>
+            <span class="muted" id="memTotal"></span>
+          </div>
+          <div id="memList" class="mem-list"></div>
+        </div>
+      </div>
+
+      <!-- 📝 系统提示词 -->
+      <div id="stab-prompt" class="stab-panel hidden">
+        <div class="panel">
+          <div class="toolbar">
+            <h3 style="margin:0">📝 系统提示词（只读）</h3>
+            <select id="promptType">
+              <option value="system">system</option>
+              <option value="scraper">scraper</option>
+              <option value="rewriter">rewriter</option>
+              <option value="reviewer">reviewer</option>
+              <option value="publisher">publisher</option>
+            </select>
+            <button id="promptRefresh" class="btn btn-sm">🔄 刷新</button>
+            <span class="muted" id="promptMeta"></span>
+          </div>
+          <pre class="mono" id="promptContent" style="max-height:60vh;overflow:auto;white-space:pre-wrap"></pre>
+        </div>
+      </div>
+
+      <!-- 🌐 远程访问 -->
+      <div id="stab-remote" class="stab-panel hidden">
+        <div class="panel">
+          <h3>🌐 远程访问</h3>
+          <div id="remoteInfo" class="form"></div>
+        </div>
+        <div class="panel">
+          <h3>🔑 API Token（远程访问凭据）</h3>
+          <div class="form">
+            <label>Token <input id="remoteToken" type="password" readonly value="" placeholder="点击「👁 显示」查看"></label>
+            <div class="toolbar" style="margin-top:8px">
+              <button id="remoteToggleToken" class="btn btn-sm">👁 显示</button>
+              <button id="remoteCopyToken" class="btn btn-sm">📋 复制</button>
+              <button id="remoteRegenToken" class="btn btn-sm btn-danger">🔄 重新生成</button>
+              <span class="muted" id="remoteTokenMsg"></span>
+            </div>
+            <p class="muted" style="margin-top:8px">⚠️ Token 是远程访问的钥匙：外网访问始终需要它（即使开启局域网免 Token，也只放行局域网）。重新生成后旧 Token 立即失效，重启服务后生效。</p>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>🌍 外网访问（内网穿透）</h3>
+          <div id="remoteWan" class="form"></div>
+        </div>
+      </div>
+
+      <!-- ℹ️ 关于 -->
+      <div id="stab-about" class="stab-panel hidden">
+        <div class="panel">
+          <h3>ℹ️ 关于 7Tan AI工具</h3>
+          <div id="aboutInfo" class="form"></div>
+          <div class="toolbar" style="margin-top:12px">
+            <button id="aboutCheckUpdate" class="btn btn-primary">🔄 检查更新</button>
+            <span id="aboutUpdateMsg" class="muted"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel"><h3>⏰ 定时调度</h3>
+        <div id="schedulerBox" class="form"></div>
+      </div>
+      <div class="panel"><h3>📄 核心配置（JSON 只读，敏感字段已脱敏）</h3><pre class="mono" id="settingsRaw"></pre></div>
+      <div class="panel"><h3>⚠️ 危险操作</h3>
+        <button id="btnRestart" class="btn btn-danger">重启软件服务</button>
+        <span class="muted"> 重启后当前连接会断开，约 30~60 秒恢复</span>
+      </div>
+    </section>
+
+    <!-- 代码变更 -->
+    <section id="view-code" class="view">
+      <h2>🛠️ 代码变更</h2>
+      <div class="toolbar">
+        <span class="muted">AI 最近修改的文件（含 unified diff），自动刷新</span>
+        <span class="spacer"></span>
+        <button id="codeRefresh" class="btn btn-sm">刷新</button>
+      </div>
+      <div id="codeList" class="code-list"></div>
+    </section>
+
+    <!-- 终端 -->
+    <!-- 平台适配（其他系统包 WEB 版：插件复制适配向导） -->
+    <section id="view-adapt" class="view">
+      <h2>🔀 平台适配</h2>
+      <div class="panel" id="adaptSystem">
+        <h3>系统检测</h3>
+        <div class="muted" id="adaptSystemInfo">检测中…</div>
+      </div>
+      <div class="panel" id="adaptResultPanel" style="display:none">
+        <h3>✅ 适配完成</h3>
+        <div id="adaptResult"></div>
+      </div>
+      <div class="panel">
+        <h3>插件兼容性清单</h3>
+        <div class="table-wrap"><table class="table">
+          <thead><tr><th>插件</th><th>状态</th><th>说明</th></tr></thead>
+          <tbody id="adaptBody"></tbody>
+        </table></div>
+      </div>
+      <div class="panel" id="adaptActionPanel" style="display:none">
+        <h3>插件复制适配</h3>
+        <p class="muted" id="adaptActionText"></p>
+        <button id="adaptRunBtn" class="btn btn-primary">✅ 确认适配（一键完成）</button>
+        <button id="adaptRefreshBtn" class="btn">🔄 重新检测</button>
+      </div>
+      <div class="panel" id="adaptProgressPanel" style="display:none">
+        <h3>⏳ 适配进行中</h3>
+        <div style="height:14px;background:#eee;border-radius:7px;overflow:hidden">
+          <div id="adaptProgressBar" style="height:100%;width:0;background:#4caf50;transition:width .6s"></div>
+        </div>
+        <pre class="mono" id="adaptLog" style="max-height:280px;overflow:auto;margin-top:10px"></pre>
+      </div>
+    </section>
+
+    <section id="view-terminal" class="view">
+      <h2>💻 终端</h2>
+      <div class="panel">
+        <div class="toolbar">
+          <input id="termInput" placeholder="输入命令：python / pip / git status / dir / type 等（白名单）…" autocomplete="off">
+          <button id="termRun" class="btn btn-primary">执行</button>
+          <button id="termClear" class="btn btn-sm">清空</button>
+        </div>
+        <pre class="term-out mono" id="termOutput">就绪。仅允许编译 / 构建 / 查询类安全命令（见后端白名单）。</pre>
+      </div>
+    </section>
+
+    <!-- 系统日志 -->
+    <section id="view-logs" class="view">
+      <h2>📜 系统日志</h2>
+      <div class="toolbar">
+        <span class="muted" id="logFileInfo"></span>
+        <span class="spacer"></span>
+        <button id="logRefresh" class="btn btn-sm">刷新</button>
+        <button id="logAuto" class="btn btn-sm">⏸ 暂停自动刷新</button>
+      </div>
+      <pre class="term-out mono" id="logOutput" style="max-height:70vh;overflow:auto">加载中…</pre>
+    </section>
+
+    <!-- 更新 -->
+    <section id="view-update" class="view">
+      <h2>⬆️ 软件更新</h2>
+      <div class="panel" id="updateBox">
+        <div class="muted">正在检查更新…</div>
+      </div>
+    </section>
+  </main>
+</div>
+<!-- 移动端侧边栏遮罩 -->
+<div id="sidebarMask" class="sidebar-mask"></div>
+
+<!-- 登录对话框 -->
+<div id="loginModal" class="modal-mask" style="display:none">
+  <div class="modal-box">
+    <div class="modal-head">🔐 登录 7tan.com <button id="loginClose" class="modal-close" title="关闭">✕</button></div>
+    <div class="modal-body">
+      <label class="field-label" for="loginUser">用户名 / 手机号</label>
+      <input id="loginUser" class="field-input" type="text" placeholder="请输入用户名或手机号" autocomplete="username">
+      <label class="field-label" for="loginPwd">密码</label>
+      <input id="loginPwd" class="field-input" type="password" placeholder="请输入密码" autocomplete="current-password">
+      <label class="field-chk"><input id="loginRemember" type="checkbox" checked> 记住登录（30天）</label>
+      <label class="field-chk"><input id="loginAgree" type="checkbox"> 我已阅读并同意 <a href="https://www.7tan.com/agreement.php" target="_blank" rel="noopener">《用户协议》</a> 与 <a href="https://www.7tan.com/privacy.php" target="_blank" rel="noopener">《隐私政策》</a></label>
+      <div id="loginError" class="login-error"></div>
+      <div class="login-btns">
+        <button id="loginSubmit" class="btn btn-primary">登 录</button>
+        <a href="https://www.7tan.com/bbs/register.php" target="_blank" rel="noopener" class="btn btn-link">没有账号？去注册</a>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- 编辑消息对话框 -->
+<div id="editMsgModal" class="modal-mask" style="display:none">
+  <div class="modal-box" style="width:520px">
+    <div class="modal-head">✏️ 编辑消息 <button class="modal-close" onclick="closeEditMsg()" title="关闭">✕</button></div>
+    <div class="modal-body">
+      <textarea id="editMsgText" class="edit-msg-text" rows="10" placeholder="输入消息内容"></textarea>
+      <div class="login-btns">
+        <button class="btn" onclick="closeEditMsg()">取消</button>
+        <button class="btn btn-primary" onclick="saveEditMsg()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+<!-- 服务掉线：一键重启 -->
+<div id="serviceDownModal" class="modal-mask" style="display:none">
+  <div class="modal-box">
+    <div class="modal-head">⚠️ 网页版服务未运行 <button class="modal-close" onclick="closeServiceDownModal()" title="关闭">✕</button></div>
+    <div class="modal-body">
+      <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.7">检测到本地网页版服务（9900 端口）未运行或已停止，部分功能无法使用。</p>
+      <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.7">点击下方按钮即可一键重新启动服务（无需手动查找脚本）。</p>
+      <div class="login-btns" style="margin-top:6px">
+        <button class="btn" onclick="closeServiceDownModal()">关闭</button>
+        <button id="svcRestartBtn" class="btn btn-primary" onclick="restartService()">🔄 一键重启服务</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/app.js?v=20260816o"></script>
+</body>
+</html>

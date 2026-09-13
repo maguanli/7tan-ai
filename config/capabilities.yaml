@@ -1,0 +1,200 @@
+# ============================================================
+# 盘古 AI — 功能与能力清单
+# 此文件同时用于：
+#   1. 设置页「🧠 能力清单」Tab 展示
+#   2. AI System Prompt 能力概览
+# ============================================================
+
+capabilities:
+  - category: "🌐 浏览器与网页"
+    icon: "🌐"
+    items:
+      - { name: "浏览网页", desc: "在源站/管理后台打开任意网页，读取页面文字、链接和图片", tool: "browse_page" }
+      - { name: "点击 & 滚动", desc: "模拟点击按钮、链接，滚动懒加载页面", tool: "click_element / scroll_down" }
+      - { name: "截图 & OCR", desc: "对网页截图保存，OCR 识别图片中的文字", tool: "screenshot / ocr_screenshot" }
+      - { name: "提取图片/LOGO", desc: "自动识别页面中的游戏LOGO、截图等图片资源", tool: "get_page_images / extract_logo" }
+      - { name: "查找下载链接", desc: "自动识别页面中的 APK/IPA/ZIP/RAR/EXE 等安装包链接", tool: "find_download_links" }
+
+  - category: "📁 文件操作"
+    icon: "📁"
+    items:
+      - { name: "下载文件", desc: "支持断点续传、伪装搜索引擎蜘蛛下载", tool: "download_file" }
+      - { name: "读写文件", desc: "读取文本/JSON/代码，写入文本或二进制文件", tool: "read_file_content / write_file" }
+      - { name: "目录管理", desc: "列出目录文件、删除文件/目录", tool: "list_files / delete_file" }
+      - { name: "图片压缩", desc: "压缩 LOGO/截图，调整尺寸和质量", tool: "compress_image" }
+      - { name: "磁盘检查", desc: "检查磁盘剩余空间，下载前自动确认", tool: "check_disk" }
+
+  - category: "🎮 游戏内容处理"
+    icon: "🎮"
+    items:
+      - { name: "游戏深度分析", desc: "分析游戏玩法/画面/剧情，生成结构化评测报告", tool: "analyze_game" }
+      - { name: "游戏对比", desc: "对比两款游戏的差异，输出竞品分析", tool: "compare_games" }
+      - { name: "用户评价汇总", desc: "提取正面/负面评价关键词和主题", tool: "summarize_reviews" }
+      - { name: "撰写游戏简介", desc: "自动生成 HTML 格式专业游戏简介（150-300字）", tool: "cloud_write_intro" }
+      - { name: "翻译（英→中）", desc: "将英文游戏介绍翻译为中文", tool: "translate_text" }
+      - { name: "敏感词检查", desc: "发布前审核内容是否包含违规词汇", tool: "check_sensitive_words" }
+      - { name: "内容质量检查", desc: "检查简介长度、截图数量是否达标", tool: "check_content_quality" }
+
+  - category: "📤 发布与存储"
+    icon: "📤"
+    items:
+      - { name: "发布到7坛", desc: "自动填写表单、上传LOGO/截图、提交发布", tool: "publish_to_7tan" }
+      - { name: "OSS云存储", desc: "上传/删除文件到云存储，返回外链URL，大文件自动分片", tool: "oss_upload / oss_delete" }
+      - { name: "表单检测", desc: "自动识别页面所有表单字段及类型", tool: "detect_form_fields" }
+      - { name: "批量填表", desc: "一次性填写发布表单所有字段", tool: "fill_all_fields" }
+
+  - category: "🗄️ 数据库"
+    icon: "🗄️"
+    items:
+      - { name: "资源查重", desc: "按源站ID检查资源是否已存在，避免重复发布", tool: "db_check_duplicate" }
+      - { name: "资源存取", desc: "保存/查询/更新资源信息到数据库", tool: "db_save_resource / db_query_resources" }
+      - { name: "版本比对", desc: "检查是否已有更早版本，实现增量更新", tool: "db_check_version" }
+      - { name: "任务日志", desc: "记录浏览/下载/改写/上传/发布各环节日志", tool: "db_add_task_log" }
+      - { name: "软件清单", desc: "查询/写入已安装软件的路径和版本，避免重复安装", tool: "get_installed_software_by_name / upsert_installed_software" }
+
+  - category: "🧠 AI 推理能力"
+    icon: "🧠"
+    items:
+      - { name: "深度分析", desc: "单独调用大模型进行深度推理，适合复杂任务", tool: "cloud_analyze" }
+      - { name: "互联网搜索", desc: "搜索最新游戏资讯、攻略、补丁、新闻", tool: "web_search" }
+      - { name: "行业新闻", desc: "获取最新游戏行业动态、新游上线、版本更新", tool: "fetch_news" }
+      - { name: "推理框架", desc: "复杂任务自动启用：拆解→多角度→预判→验证→反思", tool: "内置能力" }
+
+  - category: "🔧 自我管理"
+    icon: "🔧"
+    items:
+      - { name: "修改配置", desc: "安全修改 config.yaml，带审计日志", tool: "self_modify_config" }
+      - { name: "更新提示词", desc: "优化自己的 system prompt 或子任务模板", tool: "self_update_prompt" }
+      - { name: "创建插件", desc: "动态编写并注册新插件，扩展自身能力", tool: "create_plugin" }
+      - { name: "沙盒执行", desc: "在安全沙盒中运行 Python 代码，验证自身逻辑", tool: "sandbox_execute" }
+      - { name: "自建重启", desc: "重新构建项目、重启自身进程", tool: "self_rebuild / self_restart" }
+      - { name: "完整性验证", desc: "校验所有关键文件 SHA-256 是否一致", tool: "verify_integrity" }
+      - { name: "健康检查", desc: "检查数据库、浏览器、网络、磁盘状态", tool: "health_check" }
+      - { name: "记忆系统", desc: "持久化存储/召回/管理知识和经验", tool: "memory_store / memory_recall" }
+
+  - category: "💻 开发运维"
+    icon: "💻"
+    items:
+      - { name: "Git 全系列", desc: "init/clone/add/commit/push/pull/branch/checkout/stash/tag/log/diff/remote", tool: "git_* (20+ 工具)" }
+      - { name: "Docker 管理", desc: "容器/镜像/构建/日志/compose/prune 全生命周期", tool: "docker_* (8 工具)" }
+      - { name: "Kubernetes", desc: "pods/svc/deploy/events/logs/exec/scale/rollout/helm", tool: "kubectl_* (15+ 工具)" }
+      - { name: "VS Code 集成", desc: "打开文件/项目、对比差异、安装扩展", tool: "vscode_* (7 工具)" }
+      - { name: "Android 调试", desc: "ADB 设备管理、安装/卸载APK、截图、Shell", tool: "adb_* (6 工具)" }
+      - { name: "远程部署", desc: "SSH执行命令、SCP上传、rsync同步", tool: "ssh_execute / scp_upload / rsync_deploy" }
+      - { name: "Gradle 构建", desc: "执行 Gradle 构建任务，支持 Android 打包", tool: "gradle_build" }
+      - { name: "代码审查", desc: "静态分析代码质量、安全漏洞扫描", tool: "code_review_* / security_scan_*" }
+      - { name: "LSP 语言服务", desc: "跳转定义/查找引用/诊断检查/代码补全/悬停文档，基于 jedi+pyflakes", tool: "go_to_definition / find_all_references / get_diagnostics / get_completions / get_hover_info" }
+
+  - category: "🔍 代码搜索与重构"
+    icon: "🔍"
+    items:
+      - { name: "代码搜索", desc: "全局正则搜索、文件名查找、内容检索、符号引用追踪", tool: "grep_code / find_files / search_in_files / find_references" }
+      - { name: "项目扫描", desc: "快速扫描项目结构、语言分布、文件统计", tool: "scan_project" }
+      - { name: "批量替换", desc: "对文本文件执行多对批量字符串替换", tool: "file_replace" }
+
+  - category: "🏗️ 终端与构建"
+    icon: "🏗️"
+    items:
+      - { name: "执行命令", desc: "在项目目录中执行任意 shell 命令", tool: "run_command" }
+      - { name: "自动构建", desc: "自动检测项目类型并执行构建", tool: "run_build" }
+      - { name: "安装依赖", desc: "自动检测并安装 Python/Node/Go/Rust 依赖", tool: "install_deps" }
+      - { name: "环境检查", desc: "检查 Python/Node/Go/Rust 版本、Git 状态、磁盘空间", tool: "check_env" }
+      - { name: "Shell 脚本", desc: "执行 Shell 脚本内容", tool: "run_shell_script" }
+
+  - category: "📝 文档与重构"
+    icon: "📝"
+    items:
+      - { name: "文档生成", desc: "为函数/类生 docstring，为项目生成 README", tool: "generate_docstring / generate_readme" }
+      - { name: "符号重命名", desc: "安全地重命名函数/类/变量，预览所有修改位置", tool: "rename_symbol" }
+      - { name: "代码格式化", desc: "autopep8/black/prettier 格式化代码", tool: "format_code" }
+      - { name: "函数提取", desc: "分析代码块是否适合提取为独立函数", tool: "extract_function" }
+      - { name: "导入整理", desc: "排序导入语句，移除未使用的导入", tool: "organize_imports" }
+      - { name: "API 路由分析", desc: "分析 FastAPI/Flask/Express 项目的 API 端点", tool: "analyze_api_routes" }
+
+  - category: "🔬 差异与依赖"
+    icon: "🔬"
+    items:
+      - { name: "差异对比", desc: "生成文件/目录差异；对比 Git 分支；检查工作区变更", tool: "generate_diff / compare_branches / check_changes" }
+      - { name: "冲突解决", desc: "检测 Git 合并冲突并辅助决策", tool: "resolve_conflict" }
+      - { name: "依赖检查", desc: "检查 pip/npm 依赖、循环导入、过期包", tool: "check_dependencies / detect_circular_imports / check_outdated" }
+      - { name: "依赖图", desc: "生成 Mermaid 模块依赖关系图", tool: "generate_dependency_graph" }
+
+  - category: "🧪 测试"
+    icon: "🧪"
+    items:
+      - { name: "运行测试", desc: "自动检测测试框架并运行（pytest/unittest/jest/mocha）", tool: "run_tests" }
+      - { name: "覆盖率", desc: "生成 pytest-cov 覆盖率报告", tool: "run_coverage" }
+      - { name: "发现测试", desc: "列出项目中所有测试文件和测试函数", tool: "discover_tests" }
+      - { name: "测试模板", desc: "为 Python 函数生成 pytest 测试模板", tool: "generate_test_template" }
+
+  - category: "🐛 调试与诊断"
+    icon: "🐛"
+    items:
+      - { name: "错误分析", desc: "分析 Python 错误堆栈，解释原因并提供修复建议", tool: "analyze_error" }
+      - { name: "日志分析", desc: "搜索项目日志中的错误和警告，按严重程度排序", tool: "analyze_log" }
+      - { name: "崩溃诊断", desc: "诊断程序崩溃原因，检查崩溃日志和事件日志", tool: "diagnose_crash" }
+
+  - category: "🗄️ 数据库探索"
+    icon: "🗄️"
+    items:
+      - { name: "数据库浏览", desc: "列出所有表、查看结构、行数，支持 SQLite/MySQL/PostgreSQL", tool: "explore_db" }
+      - { name: "SQL 查询", desc: "对 SQLite 执行 SELECT 查询（安全只读）", tool: "query_db" }
+      - { name: "ORM 生成", desc: "根据表结构生成 Python SQLAlchemy ORM 模型代码", tool: "generate_model" }
+
+  - category: "🌐 API 与集成"
+    icon: "🌐"
+    items:
+      - { name: "HTTP 请求", desc: "发送 GET/POST/PUT/DELETE/PATCH 请求，支持 JSON/Header/认证", tool: "http_request" }
+      - { name: "API 测试", desc: "快速测试 API 端点，报告状态码和响应时间", tool: "test_api_endpoint" }
+      - { name: "OpenAPI 探索", desc: "解析 OpenAPI/Swagger 文档，列出所有端点", tool: "openapi_explore" }
+
+  - category: "🚀 CI/CD 管理"
+    icon: "🚀"
+    items:
+      - { name: "CI 配置生成", desc: "生成 GitHub Actions / GitLab CI 配置", tool: "generate_ci_config" }
+      - { name: "Changelog", desc: "根据 Git 提交历史自动生成 CHANGELOG.md", tool: "generate_changelog" }
+      - { name: "版本管理", desc: "自动升级语义化版本号（patch/minor/major）", tool: "bump_version" }
+
+  - category: "⚙️ 配置与安全"
+    icon: "⚙️"
+    items:
+      - { name: "环境变量管理", desc: "管理 .env 文件：列出/添加/更新/检查变量", tool: "manage_env" }
+      - { name: "密钥扫描", desc: "扫描代码中泄露的密码、Token、敏感信息", tool: "scan_secrets" }
+      - { name: "环境模板生成", desc: "扫描代码中的环境变量调用，生成 .env.example", tool: "generate_env_template" }
+
+  - category: "🎬 录屏与制图"
+    icon: "🎬"
+    items:
+      - { name: "屏幕录制", desc: "录制屏幕视频，输出 MP4 格式", tool: "录屏 (本地)" }
+      - { name: "图像生成", desc: "Pillow 程序化生成画面（几何图形/文字/特效）", tool: "Pillow (G盘本地)" }
+      - { name: "语音合成", desc: "Edge TTS 微软免费语音合成，十几种中文音色", tool: "Edge TTS (G盘本地)" }
+
+  - category: "📊 费用管理"
+    icon: "📊"
+    items:
+      - { name: "费用记录", desc: "每次调用 AI 模型后自动记录 token 和费用", tool: "track_cost" }
+      - { name: "费用报告", desc: "按日期/任务类型汇总费用统计", tool: "get_cost_report" }
+
+  - category: "📦 代码片段管理"
+    icon: "📦"
+    items:
+      - { name: "保存片段", desc: "保存代码片段到跨项目代码库，支持标签分类和语言标记", tool: "save_snippet" }
+      - { name: "搜索片段", desc: "按名称/标签/语言搜索已保存的代码片段", tool: "search_snippets" }
+      - { name: "获取片段", desc: "获取已保存代码片段的完整内容", tool: "get_snippet" }
+      - { name: "列出片段", desc: "列出所有已保存的代码片段，按语言分组", tool: "list_snippets" }
+
+  - category: "⏱️ 性能分析"
+    icon: "⏱️"
+    items:
+      - { name: "基准测试", desc: "对 Python 函数进行基准测试：运行N次，统计最小/最大/平均/中位数", tool: "benchmark_function" }
+      - { name: "性能热点", desc: "使用 cProfile 分析 Python 代码的性能热点，找出耗时最多的函数", tool: "profile_code_block" }
+      - { name: "内存检查", desc: "检查 Python 进程的内存使用情况和项目磁盘占用", tool: "check_memory" }
+
+# ============================================================
+# 统计信息（自动生成）
+# ============================================================
+summary:
+  total_categories: 21
+  total_tools: 142+
+  local_tools: ["Edge TTS", "Pillow"]
+  cloud_services: ["OSS存储", "AI大模型(DeepSeek/GLM等)", "7坛管理后台"]

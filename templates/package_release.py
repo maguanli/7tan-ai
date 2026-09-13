@@ -146,11 +146,13 @@ def _safe_write(zf: zipfile.ZipFile, src: Path, arc: str) -> None:
 
 
 def zip_dir(zf: zipfile.ZipFile, src_dir, arc_root: str,
-            exclude_dirs=(), exclude_files=()) -> int:
+            exclude_dirs=(), exclude_files=(), include_top_files=None) -> int:
     """递归打包目录，返回文件数
 
-    exclude_dirs  : 目录名黑名单（路径任意段命中即跳过）
-    exclude_files : 文件名黑名单（支持 fnmatch 通配符）
+    exclude_dirs      : 目录名黑名单（路径任意段命中即跳过）
+    exclude_files     : 文件名黑名单（支持 fnmatch 通配符）
+    include_top_files : 顶层文件白名单（仅对 src 直属文件生效；None=不启用）
+                        用于发布包只保留必需的顶层脚本（如 WEB 包的 tools/）
     """
     src = Path(src_dir)
     count = 0
@@ -160,6 +162,10 @@ def zip_dir(zf: zipfile.ZipFile, src_dir, arc_root: str,
             continue
         rel = p.relative_to(src)
         if any(part in exclude_dirs for part in rel.parts):
+            skipped += 1
+            continue
+        if (include_top_files is not None and len(rel.parts) == 1
+                and p.name not in include_top_files):
             skipped += 1
             continue
         if any(fnmatch.fnmatch(p.name, pat) for pat in exclude_files):
@@ -350,8 +356,38 @@ _WEB_DIRS = [
     ("config",        "config",        set()),
     ("data/plugins",  "data/plugins",  {"backup", "__pycache__"}),
     ("data/logo",     "data/logo",     set()),
-    ("tools",         "tools",         {"__pycache__", "ocr_work"}),
+    ("tools",         "tools",         {"__pycache__", "ocr_work", "_secrets_backup"}),
 ]
+
+# WEB 包 tools/ 顶层文件白名单
+# ------------------------------------------------------------------
+# tools/ 在源码仓库中同时充当"开发临时脚本目录"：183 个顶层文件里绝大多数
+# 是一次性调试产物（_debug_ocr5.py / _scroll_hot_list.py / click_hot2.py ...），
+# 以及目标平台无法运行的 Windows 工具：
+#     cloudflared.exe           52.35 MB
+#     python-3.12.5-amd64.exe   25.28 MB（+ install_python.bat）
+# WEB 包面向 macOS / Linux / 鸿蒙，上述内容纯属占体积与噪音，
+# 故改为"白名单制"：只保留经全量引用扫描确认被源码/插件引用的脚本。
+# 5 个子目录（camera_vision / desktop_bot / gzh_publish / viral_writer /
+# security_src）被插件与运行时引用，整目录保留。
+_WEB_TOOLS_KEEP = {
+    "_wait.py",
+    "article_v3.py",
+    "build.py",
+    "compile_harden.py",
+    "diag.py",
+    "encrypt_strings.py",
+    "full_flow.py",
+    "gen_plugin_guard.py",
+    "gen_plugin_hashes.py",
+    "gen_sec_config.py",
+    "list_windows.py",
+    "ocr_locate_click.py",
+    "platform_adapter.py",
+    "region_ocr.py",
+    "web_autostart.py",
+    "wechat_scan.py",
+}
 
 # WEB 版额外排除文件（PyQt6 桌面专用，避免非 Windows 依赖报错）
 _WEB_EXCLUDE_FILES = EXCLUDE_FILE_PATTERNS | _SECURITY_SRC_EXCLUDE | {
@@ -419,9 +455,11 @@ def build_web_only_zip(out: Path, ver: str, uid: str, project_root) -> int:
                 if not src.exists():
                     print(f"  [WARN] 缺少目录（跳过）: {rel}")
                     continue
+                # tools/ 走白名单：只保留运行时/维护确需的顶层脚本
                 n = zip_dir(zf, src, arc,
                             exclude_dirs=EXCLUDE_DIRS | extra_dirs,
-                            exclude_files=_WEB_EXCLUDE_FILES)
+                            exclude_files=_WEB_EXCLUDE_FILES,
+                            include_top_files=_WEB_TOOLS_KEEP if arc == "tools" else None)
                 print(f"  [OK] {arc}/  {n} 文件")
                 n_total += n
             # 3. 水印

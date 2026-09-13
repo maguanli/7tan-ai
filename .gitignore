@@ -219,3 +219,7 @@ data/auth/
 /data/hot_2026*.txt
 /data/organ_event_log.jsonl.*
 
+# 构建/打包日志（build_and_sync.bat 输出重定向产物，勿入库）
+/_build_log.txt
+/build_log*.txt
+

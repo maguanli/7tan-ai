@@ -1,3 +1,0 @@
-
-===== 2026-08-07T19:00:25.557886 region=[400, 510, 900, 200] scale=1.0 =====
-Microsoft Store Education Developer

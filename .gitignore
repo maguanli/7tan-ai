@@ -24,6 +24,8 @@ data/world_model_memory.json
 
 # 配置文件（含 API Key）
 config/config.yaml
+# 发布凭据（含服务器密码 + GitHub Token，绝对禁止提交）
+config/deploy.json
 
 # 费用记录
 data/costs.json

@@ -223,3 +223,11 @@ data/auth/
 /_build_log.txt
 /build_log*.txt
 
+
+# 根目录自愈/诊断探针产物（后台自愈进程运行时生成，勿入库）
+/_probe*.py
+/_probe_log.txt
+/_diag*.py
+
+# 带时间戳的备份文件（已有 *.bak，此处覆盖 .bak_YYYYmmdd_HHMMSS 形式）
+*.bak_*

@@ -42,7 +42,7 @@ PROVIDER_BASE_SCORE = {
 
 MODEL_TIER_BONUS = {
     # 顶级模型 → 加分
-    "deepseek-v4-pro": 15,
+    "deepseek-flash": 8,
     "deepseek-reasoner": 12,
     "gpt-4o": 15,
     "gpt-4-turbo": 12,

@@ -25,6 +25,48 @@ PROJECT_ROOT = _get_project_root()
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
+def _prewarm_system_fingerprint():
+    """启动预热：提前触发 WMI 查询，避免冷启动"机器指纹漂移"。
+
+    背景：本地登录态 data/auth/token.dat 的加密密钥由「机器指纹」派生，
+    指纹依赖 wmic 读取主板序列号。冷启动时 WMI 服务尚未就绪，查询极易超时，
+    指纹与上次不一致 → Token 解密失败 → 「每次重启都要重新登录」。
+
+    这里在进程最早期主动跑一次同样的查询，把 WMI 焐热。放后台线程执行，
+    不拖慢启动；失败也不影响运行（token_store v4 另有指纹缓存回退兜底）。
+    """
+    if os.name != "nt":
+        return
+    try:
+        import threading
+        import subprocess
+        import time as _time
+
+        def _warm():
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            t0 = _time.time()
+            for attempt in range(3):
+                try:
+                    r = subprocess.run(
+                        ["wmic", "baseboard", "get", "serialnumber"],
+                        capture_output=True, text=True, timeout=30,
+                        creationflags=flags,
+                    )
+                    if r.stdout and r.stdout.strip():
+                        print(f"[Startup] OK 设备指纹预热完成 "
+                              f"({_time.time() - t0:.2f}s, 第{attempt + 1}次)")
+                        return
+                except Exception:
+                    pass
+                _time.sleep(1)
+            print(f"[Startup] WARN 设备指纹预热未成功（{_time.time() - t0:.1f}s），已启用缓存回退")
+
+        threading.Thread(target=_warm, name="fp-prewarm", daemon=True).start()
+    except Exception:
+        pass
+
+
+
 def _apply_pending_security_update():
     """启动早期应用待更新的安全模块（auth_client_new.pyd → auth_client.pyd）。
 
@@ -49,6 +91,7 @@ def _apply_pending_security_update():
 
 
 _apply_pending_security_update()
+_prewarm_system_fingerprint()
 
 # ============================================================
 # 🔒 单实例保护 — 防止多个 7Tan 主程序同时运行

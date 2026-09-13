@@ -36,13 +36,13 @@ class TestAIConfig:
         db.save_ai_config(
             config_key="test_deepseek",
             provider="deepseek",
-            model="deepseek-v4-pro",
+            model="deepseek-flash",
             base_url="https://api.deepseek.com/v1",
             api_key="sk-test-123",
         )
         cfg = db.get_ai_config_by_key("test_deepseek")
         assert cfg is not None
-        assert cfg["model"] == "deepseek-v4-pro"
+        assert cfg["model"] == "deepseek-flash"
 
     def test_api_key_encrypted_at_rest(self, temp_db):
         db.save_ai_config(

@@ -765,7 +765,7 @@ def run_agent_loop(
         
         # 添加 assistant 消息到历史
         msg_dict = {"role": "assistant"}
-        # 🔧 DeepSeek reasoning 模型（deepseek-v4-pro 等）在 tool_calls 时会返回
+        # 🔧 DeepSeek reasoning 模型（deepseek-flash 等）在 tool_calls 时会返回
         # reasoning_content，必须原样回传，否则下一轮 API 会 400 报错
         reasoning_content = getattr(msg, "reasoning_content", None)
         if reasoning_content is None:
@@ -879,7 +879,7 @@ def run_agent_loop(
         
         # 处理工具调用
         if not tool_calls_raw:
-            # 🛡️ 防死循环：reasoning 模型（deepseek-v4-pro 等）可能只返回思考内容，
+            # 🛡️ 防死循环：reasoning 模型（deepseek-flash 等）可能只返回思考内容，
             # content=None 且 tool_calls=None，且 finish_reason 非 stop/length。
             # 连续多次空响应则中止，避免无限 append「请继续」死循环。
             _empty_resp_count += 1

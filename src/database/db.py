@@ -833,7 +833,7 @@ def ensure_default_ai_config():
             cfg = AiConfig(
                 config_key="deepseek",
                 provider="deepseek",
-                model="deepseek-v4-pro",
+                model="deepseek-flash",
                 base_url="https://api.deepseek.com/v1",
                 context_window=128000,
                 max_tokens=16384,

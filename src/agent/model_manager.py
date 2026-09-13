@@ -61,7 +61,7 @@ def _fix_surrogates(s: str) -> str:
 # ===== 各模型价格（每百万 token，人民币，参考各厂商公开定价）=====
 
 MODEL_PRICES = {
-    "deepseek-v4-pro":     {"prompt": 3.0,  "completion": 6.0},
+    "deepseek-flash":     {"prompt": 1.0,  "completion": 2.0},
     "deepseek-v4-flash":   {"prompt": 1.0,  "completion": 2.0},
     "deepseek-reasoner": {"prompt": 4.0,  "completion": 16.0},
     "GLM-5.2":           {"prompt": 1.5,  "completion": 6.0},
@@ -108,12 +108,6 @@ class ModelManager:
             self.max_tokens = 384_000
             self.temperature = 1.0
             self.extra_config = {"reasoning_effort": "max"}
-        elif model_name == "deepseek-v4-pro":
-            # deepseek-v4-pro 正式版专属默认值（1M 上下文 / 384K 输出 / temp=0.3）
-            self.context_window = 1_000_000
-            self.max_tokens = 384_000
-            self.temperature = 0.3
-            self.extra_config = {}
         else:
             self.context_window = 128000
             self.max_tokens = 16384
@@ -575,9 +569,9 @@ def get_model(model_name: str) -> ModelManager:
         try:
             from ..database.db import get_active_ai_config_raw
             cfg = get_active_ai_config_raw()
-            model_name = cfg.get("model", "deepseek-v4-pro") if cfg else "deepseek-v4-pro"
+            model_name = cfg.get("model", "deepseek-flash") if cfg else "deepseek-flash"
         except Exception:
-            model_name = "deepseek-v4-pro"
+            model_name = "deepseek-flash"
 
     if model_name not in _model_cache:
         logger.debug(f"🤖 加载模型: {model_name}")

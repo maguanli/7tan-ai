@@ -65,6 +65,7 @@ EXCLUDE_DIRS = {
     "memory",
     "sandbox",
     "screenshots",
+    "ocr_work",
     "video_editor",
     "web_cache",
 }
@@ -107,6 +108,7 @@ EXCLUDE_FILE_PATTERNS = {
     "db_summary.txt",
     "capabilities_verify.txt",
     "*_result.txt",
+    "shot_*.png",
     "hl_*.txt",
     "sw_*.txt",
     "costs.json",
@@ -348,7 +350,7 @@ _WEB_DIRS = [
     ("config",        "config",        set()),
     ("data/plugins",  "data/plugins",  {"backup", "__pycache__"}),
     ("data/logo",     "data/logo",     set()),
-    ("tools",         "tools",         {"__pycache__"}),
+    ("tools",         "tools",         {"__pycache__", "ocr_work"}),
 ]
 
 # WEB 版额外排除文件（PyQt6 桌面专用，避免非 Windows 依赖报错）

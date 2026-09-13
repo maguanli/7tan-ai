@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "1.0.21",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.21.zip",
+      "md5": "865306a5e5c19ba32a1d461e2bdd3aed",
+      "size": 423209899,
+      "notes": "1.0.21 更新：🎉 7Tan 至此完全免费——「爆款写作」插件（爆款选题 / 标题 / 大纲 / 正文 / 金句 / 发布前检查 / 搜一搜诊断）正式改为永久完全免费，移除授权码与试用次数限制；插件市场的「付费」标记、软件内「授权管理」面板与官网在线购买入口同步下线；全部插件与全部功能均无需付费、无需激活。同时包含：发布包内置《首次运行必读》；《7Tan使用说明书》新增「杀毒软件 / Windows Defender 拦截怎么办」完整章节（隔离区还原 + 各主流安全软件添加白名单步骤 + 服务器场景说明）。",
+      "release_date": "2026-09-13"
+    },
+    {
       "version": "1.0.20",
       "channel": "stable",
       "platform": "windows",

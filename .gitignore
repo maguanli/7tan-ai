@@ -184,3 +184,38 @@ data/m1_knowledge_cursor.json
 # 公众号渲染产物与文章临时目录（运行时下载/生成，不入库）
 data/gzh_render/
 data/articles/
+
+# ===== 临时/诊断脚本与运行时垃圾（防止再次误提交）=====
+# 机器指纹缓存（敏感，与 token.dat 同级，必须忽略）
+data/auth/
+
+# 根目录历史调试脚本（点名精确忽略，避免误伤已跟踪的 check_*.py 系列）
+/check_html.py
+/check_imgs.py
+/check_v11.py
+/audit_*.py
+/scan_align*.py
+/scan_tmp_snapshots.py
+/render_v*.py
+/crop_v*.py
+/fix_v*_align.py
+/montage_v*.py
+/final_check*.py
+/find_all_versions.py
+/search_v*.py
+/search_cats.py
+/dl_teacher*.py
+/tmp_i18n_scan.py
+
+# 文章生成一次性脚本（scripts/ 下，历史遗留较多）
+/scripts/*teacher*.py
+/scripts/dl_imgs.py
+/scripts/search_imgs*.py
+/scripts/t_ov.py
+
+# data/ 下运行时垃圾
+/data/_clean_junk.py
+/data/_scan_junk*.py
+/data/hot_2026*.txt
+/data/organ_event_log.jsonl.*
+

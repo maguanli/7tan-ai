@@ -101,7 +101,7 @@ header('Content-Type: text/html; charset=UTF-8');
 </div>
 <div class="container">
     <h1 class="page-title">🧩 7Tan 插件中心</h1>
-    <p class="page-subtitle">软件本体完全免费，个别高级插件需付费解锁（永久授权，绑定购买时电脑）。</p>
+    <p class="page-subtitle">🎉 7Tan 已<b>完全免费</b>：全部插件与工具永久免费开放，无任何付费项目。</p>
     <div id="app"><p style="text-align:center;color:#888;padding:40px;">加载中...</p></div>
 </div>
 
@@ -121,20 +121,14 @@ function renderPlugin(p) {
             <span class="plugin-icon">${p.icon}</span>
             <div>
                 <span class="plugin-name">${escHtml(p.name)}</span>
-                <span class="plugin-tag">${p.type === 'per_device' ? '按台永久授权' : '订阅'}</span>
+                <span class="plugin-tag">${p.type === 'free' ? '🎉 完全免费' : (p.type === 'per_device' ? '按台永久授权' : '订阅')}</span>
             </div>
-            <div class="plugin-price">¥${p.price_yuan}<small> / 台 永久</small></div>
+            <div class="plugin-price">免费<small> 永久</small></div>
         </div>
         <p class="plugin-desc">${escHtml(p.desc)}</p>
         <ul class="plugin-features">${(p.features||[]).map(f => '<li>'+escHtml(f)+'</li>').join('')}</ul>
         <div class="plugin-buy">
-            <label>🖥️ 机器指纹（32 位，在软件「爆款写作」插件状态页点击复制）</label>
-            <div class="fp-row">
-                <input class="fp-input" id="fpInput" placeholder="例如：a1b2c3d4e5f60718293a4b5c6d7e8f90" autocomplete="off">
-                <button class="buy-btn" id="buyBtn" onclick="doBuy('${p.id}')">💰 余额购买 ¥${p.price_yuan}</button>
-            </div>
-            <div class="msg" id="msg"></div>
-            <div id="result"></div>
+            <div class="msg success" style="display:block">🎉 该插件已<b>完全免费</b>：无需购买、无需授权码，在软件「插件市场」安装后即可使用全部功能。</div>
         </div>
     </div>`;
 }
@@ -187,14 +181,9 @@ async function doBuy(pluginId) {
             msg.textContent = '✅ ' + (data.message || '购买成功');
             document.getElementById('result').innerHTML = `
                 <div class="license-result">
-                    <h4>🔑 授权码（复制后在软件中激活）</h4>
-                    <div class="license-box">${escHtml(data.data.license_key)}</div>
-                    <button class="copy-btn" onclick="copyText(this, '${escHtml(data.data.license_key).replace(/'/g, "\\'")}')">📋 复制授权码</button>
+                    <h4>🎉 该插件已完全免费</h4>
                     <div class="activate-steps">
-                        <b>激活步骤：</b><br>
-                        ① 打开 7Tan 软件 → 插件市场 → 爆款写作<br>
-                        ② 输入命令 <b>viral_activate</b>，粘贴授权码回车<br>
-                        ③ 激活成功，永久使用全部功能 ✅
+                        在软件「插件市场 → 爆款写作」点击「安装」即可使用全部功能，<b>无需授权码</b>。
                     </div>
                 </div>`;
             setTimeout(() => location.reload(), 4000);
@@ -245,8 +234,8 @@ async function init() {
                 </div>
             </div>
             <div class="tips">
-                📌 <b>购买流程</b>：① 打开 7Tan 软件 → 插件市场 → 爆款写作 → 查看状态，复制「机器指纹」→ ② 粘贴到下方输入框 → ③ 点击「余额购买」，系统自动扣款并生成授权码 → ④ 复制授权码，在软件中运行 <b>viral_activate</b> 输入即可激活。<br>
-                💡 未购买用户可免费试用 5 次；授权码<b>绑定当前电脑</b>，换机/重装可联系作者免费补发。
+                📌 <b>安装方式</b>：打开 7Tan 软件 → 插件市场 → 爆款写作 → 点击「安装」，即可免费使用全部功能。<br>
+                💡 7Tan 全部插件均为<b>永久免费</b>，无需购买、无需授权码、无试用次数限制。
             </div>
             ${pluginsHtml}
             <div class="orders-section">

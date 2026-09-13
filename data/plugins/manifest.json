@@ -656,9 +656,9 @@
     "name": "爆款写作",
     "version": "2.1.0",
     "author": "7Tan",
-    "type": "paid",
+    "type": "custom",
     "category": "写作",
-    "description": "爆款写作（付费插件）：爆款选题/标题/大纲/正文/金句/发布前检查，DeepSeek 深度推理一站式产出高传播公众号文章。免费试用5次，viral_activate 输入授权码激活。",
+    "description": "爆款写作（完全免费）：爆款选题/标题/大纲/正文/金句/发布前检查/搜一搜诊断，DeepSeek 深度推理一站式产出高传播公众号文章。全部功能永久免费，无需授权码、无需激活。",
     "tools": [
       "viral_topic",
       "viral_title",
@@ -666,14 +666,9 @@
       "viral_write",
       "viral_quotes",
       "viral_check",
-      "viral_soso",
-      "viral_activate",
-      "viral_status"
+      "viral_soso"
     ],
-    "icon": "🚀",
-    "paid": true,
-    "price": "50元/台（永久）",
-    "trial": 5
+    "icon": "🚀"
   },
   {
     "id": "desktop_bot",

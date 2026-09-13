@@ -36,8 +36,8 @@ $PLUGINS = [
     'viral_writer' => [
         'id'          => 'viral_writer',
         'name'        => '爆款写作',
-        'price'       => 5000,
-        'price_yuan'  => 50,
+        'price'       => 0,
+        'price_yuan'  => 0,
         'desc'        => '公众号爆款文章一站式生成',
         'license_file'=> __DIR__ . '/../../config/viral_private_key.pem', // 私钥（服务器）
     ],
@@ -61,6 +61,12 @@ if (!preg_match('/^[0-9a-f]{32}$/', $fp)) {
 
 $plugin = $PLUGINS[$pluginId];
 $price  = (int)$plugin['price'];
+
+// 2026-09-13 起插件已完全免费，关闭购买通道（价格 <= 0 即视为免费）
+if ($price <= 0) {
+    echo json_encode(['code' => -1, 'message' => '该插件已完全免费，无需购买；请在软件「插件市场」点击安装，即可无限次使用'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 // ========== 防重复：同用户+同插件+同指纹已购 → 直接返回原授权码（不重复扣费） ==========
 $stmt = $pdo->prepare(

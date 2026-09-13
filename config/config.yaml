@@ -33,7 +33,7 @@ ai:
     model: glm-5v-Turbo
 analytics:
   fallback: ${TANTAN_PING_FALLBACK}
-  primary: ${TANTAN_PING_URL}
+  primary: ${TANTAN_PING_FALLBACK}
 app: {}
 browser:
   proxy: null

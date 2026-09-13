@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-爆款写作插件 — 授权模块（付费插件核心）
+爆款写作插件 — 授权模块（已于 2026-09-13 起完全免费）
 
 机制：
   1. RSA-2048 签名授权码：作者持有私钥（private_key.pem，不公开），
      本文件内嵌公钥。授权码 = 机器指纹 + RSA 签名。
      开源后公钥公开也没关系 —— 没有私钥就无法伪造授权码。
   2. 授权码绑定机器指纹（MAC + 主机名 + 平台），换机需联系作者重新发码。
-  3. 未激活用户可免费试用 TRIAL_LIMIT 次，之后必须激活才能继续使用。
+  3. 2026-09-13 起：插件已永久免费，check_access() 恒放行，
+     授权码/试用次数机制仅作为旧版兼容保留，新用户无需任何激活。
 
 用法（在 tools.py 中）：
   from license 模块 import check_access
@@ -44,15 +45,9 @@ TRIAL_LIMIT = 5
 
 # ─── 购买引导文案（作者可修改：价格 / 联系方式）───
 PURCHASE_INFO = (
-    "💳 爆款写作插件为付费插件\n"
-    f"   • 免费试用 {TRIAL_LIMIT} 次，之后需要授权码激活\n"
-    "   • 价格：50 元/台（永久授权，绑定当前电脑）\n"
-    "   • 购买方式：在线购买，余额付款秒发授权码\n"
-    "   • 购买页面：https://www.7tan.com/pro.php\n"
-    "   • 流程：登录 → 粘贴机器指纹 → 余额购买 → 复制授权码\n"
-    "   • 余额不足先去充值：https://www.7tan.com/task/wallet.php\n"
-    "   • 换机 / 重装系统可联系作者免费补发\n"
-    "   • 获取授权码后，用 viral_activate 输入即可激活\n"
+    "🎉 爆款写作插件已完全免费\n"
+    "   • 全部功能永久免费，无需授权码、无需激活\n"
+    "   • 无需试用次数，安装后即可无限次使用\n"
 )
 
 # ─── 状态文件（激活状态 + 试用计数）───
@@ -252,18 +247,12 @@ def _consume_trial() -> bool:
 # ─── 统一访问闸门 ───
 
 def check_access():
-    """工具调用前的统一检查。返回 (allowed, 消息)"""
-    if is_activated():
-        return True, ""
-    left = trial_left()
-    if left > 0:
-        if _consume_trial():
-            return True, f"（免费试用剩余 {left - 1} 次）"
-        return True, ""
-    return False, (
-        f"🚫 爆款写作插件免费试用已用完（{TRIAL_LIMIT} 次）。\n"
-        f"{PURCHASE_INFO}"
-    )
+    """工具调用前的统一检查。返回 (allowed, 消息)
+
+    2026-09-13 起：爆款写作插件已永久完全免费，本函数恒放行。
+    保留函数签名与激活/试用接口，仅为兼容旧调用点与旧版授权码。
+    """
+    return True, ""
 
 
 def status_text() -> str:

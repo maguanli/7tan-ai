@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "version": "1.0.20",
+      "channel": "stable",
+      "platform": "windows",
+      "url": "https://www.7tan.com/updates/7tan-editor-free-v1.0.20.zip",
+      "md5": "7b62c38107d74ced8d551851937f3615",
+      "size": 423204088,
+      "notes": "1.0.20 更新：修复「发送消息后偶发报错 AI 调用失败（提示 Messages with role 'tool' must be a response to a preceding message with 'tool_calls'）」的问题——对话历史中残留的孤立工具调用消息会导致其后的每一次请求都被模型接口拒绝，现新增消息序列守卫模块，每次请求前按索引严格配对并双向剔除孤儿消息，同时收紧历史截断边界（不再从工具调用中间切断）并在模型调用的统一出口增加兜底清洗；移除插件哈希白名单校验机制（该机制此前默认即为「校验失败不拦截」的解除模式，未实际提供保护却增加维护成本，现统一为直接加载，不影响登录与付费插件授权）；重新构建发布包并同步版本号至 1.0.20。本次更新同时包含 1.0.19 的全部修复：语音朗读可被新消息立即打断、发送带图片消息不再卡顿与误弹「网页版服务未运行」、开机不再重复启动服务实例。",
+      "release_date": "2026-09-13"
+    },
+    {
       "version": "1.0.19",
       "channel": "stable",
       "platform": "windows",

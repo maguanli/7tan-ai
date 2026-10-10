@@ -1,0 +1,23 @@
+登录后URL: https://www.7tan.com/
+含'退出': True
+
+=== GET /bbs/post.php -> https://www.7tan.com/bbs/post.php (len=51790) ===
+FORM: <form method="post">
+[upload] 1 hits:
+   ndow.PT = {"dragTip":"：点击上传或拖拽文件到此处","preparing":"准备上传...","uploading":"上传中...","uploaded":"上传完成","uploadErr":"上传失败","parseErr
+[图片] 1 hits:
+   help">支持UBB代码: [b]粗体[/b], [i]斜体[/i], [url=链接]文字[/url], [img]图片地址[/img], [input=15]内容[/input], [c]电话[/c], [left/center/righ
+
+=== GET /bbs/post.php?bankuai=16 -> https://www.7tan.com/bbs/post.php?bankuai=16 (len=51790) ===
+FORM: <form method="post">
+[upload] 1 hits:
+   ndow.PT = {"dragTip":"：点击上传或拖拽文件到此处","preparing":"准备上传...","uploading":"上传中...","uploaded":"上传完成","uploadErr":"上传失败","parseErr
+[图片] 1 hits:
+   help">支持UBB代码: [b]粗体[/b], [i]斜体[/i], [url=链接]文字[/url], [img]图片地址[/img], [input=15]内容[/input], [c]电话[/c], [left/center/righ
+
+=== GET /bbs/post/ -> https://www.7tan.com/bbs/post/ (len=51790) ===
+FORM: <form method="post">
+[upload] 1 hits:
+   ndow.PT = {"dragTip":"：点击上传或拖拽文件到此处","preparing":"准备上传...","uploading":"上传中...","uploaded":"上传完成","uploadErr":"上传失败","parseErr
+[图片] 1 hits:
+   help">支持UBB代码: [b]粗体[/b], [i]斜体[/i], [url=链接]文字[/url], [img]图片地址[/img], [input=15]内容[/input], [c]电话[/c], [left/center/righ

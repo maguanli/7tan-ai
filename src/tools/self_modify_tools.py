@@ -81,6 +81,40 @@ MAX_OUTPUT_SIZE = 100 * 1024  # 100KB
 _REAL_PYTHON = None
 
 
+def _is_valid_python(path) -> bool:
+    """校验给定路径是否是可用于沙盒的独立 Python 解释器。
+
+    关键用途：PyInstaller 打包环境下 sys.executable / sys._base_executable
+    都指向 7tan-editor.exe 自身；若拿它当解释器去跑脚本，会弹出新的 GUI
+    窗口（build.spec: console=False），随即崩溃——这正是历史 segfault
+    与「7Tan 已在运行」弹窗的根因。所以必须在此排除自身/打包产物。
+    """
+    try:
+        p = Path(str(path))
+        if not p.exists() or p.is_dir():
+            return False
+
+        # 排除自身：frozen 环境下 sys.executable 就是 exe 自身
+        try:
+            if p.resolve() == Path(sys.executable).resolve():
+                return False
+        except Exception:
+            pass
+
+        # 排除本项目打包产物
+        if "7tan-editor" in str(p).lower():
+            return False
+
+        # 必须是“像 Python”的可执行文件
+        name = p.name.lower()
+        if not (name.startswith("python") or name in ("py.exe", "py", "pythonw.exe")):
+            return False
+
+        return True
+    except Exception:
+        return False
+
+
 def _find_real_python() -> str:
     """找到真正的 Python 解释器（而非 PyInstaller exe）"""
     global _REAL_PYTHON
@@ -97,10 +131,15 @@ def _find_real_python() -> str:
     # ===== PyInstaller 打包环境：需要找到真正的 Python =====
 
     # 候选1：_base_executable（某些 PyInstaller 版本支持）
+    # ⚠️ 修复：frozen 环境下 _base_executable 常等于 exe 自身，必须先排除自身，
+    #    否则沙盒会把 exe 当解释器启动 → 弹窗 → 崩溃（历史 segfault 根因）。
     base_exe = getattr(sys, '_base_executable', None)
-    if base_exe and Path(base_exe).exists():
-        _REAL_PYTHON = base_exe
+    if base_exe and _is_valid_python(base_exe):
+        _REAL_PYTHON = str(base_exe)
+        logger.info(f"🔍 沙盒找到 Python (_base_executable): {_REAL_PYTHON}")
         return _REAL_PYTHON
+    if base_exe:
+        logger.warning(f"⚠️ 忽略无效解释器候选 (_base_executable): {base_exe}")
 
     # 候选2：项目虚拟环境（使用修复后的 PROJECT_ROOT）
     candidates = [
@@ -119,7 +158,7 @@ def _find_real_python() -> str:
     ])
 
     for candidate in candidates:
-        if candidate.exists():
+        if _is_valid_python(candidate):
             _REAL_PYTHON = str(candidate)
             logger.info(f"🔍 沙盒找到 Python: {_REAL_PYTHON}")
             return _REAL_PYTHON
@@ -128,12 +167,10 @@ def _find_real_python() -> str:
     import shutil
     for name in ["python", "python3", "py"]:
         found = shutil.which(name)
-        if found:
-            # 验证不是 PyInstaller exe 自身
-            if "7tan-editor" not in found.lower():
-                _REAL_PYTHON = found
-                logger.info(f"🔍 沙盒找到 Python (PATH): {_REAL_PYTHON}")
-                return _REAL_PYTHON
+        if found and _is_valid_python(found):
+            _REAL_PYTHON = found
+            logger.info(f"🔍 沙盒找到 Python (PATH): {_REAL_PYTHON}")
+            return _REAL_PYTHON
 
     # 最后回退：在 frozen 环境下找不到独立 Python 时直接报错
     # 不要 fallback 到 sys.executable，因为它指向 exe 自身，会导致启动新 GUI 窗口

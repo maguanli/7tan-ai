@@ -13,4 +13,4 @@ for /f "usebackq tokens=1,* delims==" %%a in ("D:\7tan\7tanAI\.env") do (
 )
 
 cd /d D:\nodejs\node-v22.16.0-win-x64
-start "dsh-web" /min cmd /c "node.exe node_modules\@deepseek-ai\dsh\lib\bin.js web > D:\7tan\7tanAI\logs\dsh_web.log 2> D:\7tan\7tanAI\logs\dsh_web_err.log"
+start "dsh-web" /min cmd /c "D:\nodejs\node-v24.19.0-win-x64\node.exe node_modules\@deepseek-ai\dsh\lib\bin.js web > D:\7tan\7tanAI\logs\dsh_web.log 2> D:\7tan\7tanAI\logs\dsh_web_err.log"

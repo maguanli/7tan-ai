@@ -19,6 +19,8 @@ from fastapi import APIRouter
 
 router = APIRouter(prefix="/api/mind", tags=["mind"])
 
+_M2_STAGE_DISPLAY_MAX = 60   # 面板展示的「最近」阶段数上限（stage_count 仍按全量统计）
+
 
 def _snapshot() -> dict:
     """在 _TICK_LOCK 内读取器官框架全部实时状态，返回纯 JSON 可序列化快照。"""
@@ -201,8 +203,9 @@ def _growth_snapshot() -> dict:
         empty["memory_count"] = mem_total
         return empty
 
+    all_stages = list(bio.get("stages") or [])
     stages = []
-    for s in (bio.get("stages") or [])[:20]:
+    for s in all_stages[-_M2_STAGE_DISPLAY_MAX:]:
         if isinstance(s, dict):
             stages.append({
                 "start_subj": _fnum(s.get("start_subj")),
@@ -224,7 +227,7 @@ def _growth_snapshot() -> dict:
         "memory_count": mem_total,
         "key_memory_count": len(bio.get("fragments") or []),
         "traceable_count": len(bio.get("traceable_ids") or []),
-        "stage_count": len(stages),
+        "stage_count": len(all_stages),
         "stages": stages,
         "conflicts": conflicts,
         "high_freq_motives": (ext.get("high_freq_motives") or [])[:5],

@@ -42,6 +42,23 @@ from .context_manager import (
 
 logger = logging.getLogger(__name__)
 
+# 🛡️ 零产出响应（空回复/截断无产出）时的策略降级链：
+# 逐级换成“更小的输出请求”，直到产出为止；三级都试完仍零产出 → 打包进度上报用户（不静默中止）。
+_EMPTY_RETRY_STRATEGIES = [
+    (
+        "简写模式",
+        "⚠️ 系统提示：你的上一条回复没有实际内容（空回复或只有思考）。请改变输出方式，不要再一次性长篇输出：若任务涉及长文，先给出不超过 10 行的简要大纲，然后只写第一部分（不超过 1000 字），并立即用工具把已完成内容写入文件；若是普通问答，直接给出简短完整的回答即可。",
+    ),
+    (
+        "分段模式",
+        "⚠️ 系统提示：仍然没有产出。请改用【分段模式】：不要一次输出多节，本轮只处理一小节（500~800 字）；涉及长文时直接用工具追加写入文件后结束本轮；不要重复已完成的任何内容。",
+    ),
+    (
+        "小片模式",
+        "⚠️ 系统提示：仍然没有产出。请改用【小片模式】：本轮只输出一段（300~500 字）的正文；涉及长文时用工具写入文件后立即结束本轮；若是普通问答，用一两句话直接回答。",
+    ),
+]
+
 
 class AgentAbortedError(Exception):
     """系统中止 Agent 任务时抛出（_call_llm 检测到 abort_event 后立即抛出）。
@@ -590,6 +607,31 @@ Instructions:
         return "pass"  # 已达最大轮次，放行
 
 
+def _register_abort_on_call(fn):
+    """装饰器：run_agent_loop 执行期间把 abort_event 注册为全局中止信号。
+
+    这样工具执行层（agent_optimizer / 子进程执行器）才能通过
+    abort_signal.is_aborted() 感知用户中止，及时停掉正在跑的工具/子进程。
+    """
+    import functools
+    import inspect
+
+    @functools.wraps(fn)
+    def _wrapper(*args, **kwargs):
+        sig = kwargs.get("abort_event")
+        if sig is None:
+            try:
+                sig = inspect.signature(fn).bind(*args, **kwargs).arguments.get("abort_event")
+            except Exception:
+                sig = None
+        from ..utils.abort_signal import track_abort
+        with track_abort(sig):
+            return fn(*args, **kwargs)
+
+    return _wrapper
+
+
+@_register_abort_on_call
 def run_agent_loop(
     task: str,
     model=None,
@@ -651,7 +693,48 @@ def run_agent_loop(
     all_logs = []
     iteration = 0
     _last_text_iteration = 0  # 🛡️ 最近一次有文本输出的迭代（防工具死循环）
-    _empty_resp_count = 0  # 🛡️ 连续空响应计数（防 reasoning 模型只输出思考内容导致死循环）
+    _empty_resp_count = 0  # 🛡️ 连续零产出计数（空/截断无产出 → 策略降级链 _zero_output_retry）
+
+    def _zero_output_retry(cause: str):
+        """零产出响应的统一处理：策略降级链（简写 → 分段 → 小片）。
+
+        返回 None = 已注入新策略提示，继续主循环；
+        返回 dict = 三级策略已全部用尽仍零产出，打包进度上报用户（不静默中止）。
+        """
+        nonlocal _empty_resp_count
+        _empty_resp_count += 1
+        if _empty_resp_count > len(_EMPTY_RETRY_STRATEGIES):
+            _tool_n = sum(1 for _e in all_logs if _e.get("role") == "tool")
+            _wf_n = sum(
+                1 for _e in all_logs
+                if _e.get("role") == "tool" and _e.get("tool_name") in ("write_file", "file_replace", "delete_file", "create_plugin")
+            )
+            logger.error(f"🛑 [Agent] 连续 {_empty_resp_count} 次零产出（{cause}），三级策略已用尽，打包上报用户，会话: {session_id}")
+            return {
+                "success": False,
+                "result": (
+                    f"⚠️ 任务未完成：AI 连续 {_empty_resp_count} 次没有产出有效内容（{cause}）。\n"
+                    f"已自动尝试 3 种输出方式（简写 → 分段 → 小片）仍未成功，先暂停并上报，避免空转。\n"
+                    f"📋 进度未丢失：共迭代 {iteration} 轮、工具调用 {_tool_n} 次"
+                    + (f"、文件写入 {_wf_n} 次" if _wf_n else "")
+                    + "。\n"
+                    "👉 你可以：① 回复「继续」，我从当前进度接着做；② 把任务拆小一点（例如先只写第一节）；③ 到 设置→AI设置 更换模型或调低推理强度后重试。"
+                ),
+                "iterations": iteration,
+                "cost": total_cost,
+                "total_tokens": total_tokens,
+                "logs": all_logs,
+                "reason": "no_output_escalation",
+            }
+        _name, _prompt = _EMPTY_RETRY_STRATEGIES[_empty_resp_count - 1]
+        logger.warning(f"🛡️ [Agent] 零产出响应（{cause}，第 {_empty_resp_count} 次），自动切换【{_name}】重试，会话: {session_id}")
+        if event_callback:
+            try:
+                event_callback({"type": "thinking", "message": f"⚠️ 空响应，已自动切换【{_name}】重试（{_empty_resp_count}/{len(_EMPTY_RETRY_STRATEGIES)}）…"})
+            except Exception:
+                pass
+        messages.append({"role": "user", "content": _prompt})
+        return None
     
     # 🔔 流式事件：开始分析
     if event_callback:
@@ -755,8 +838,9 @@ def run_agent_loop(
             total_tokens += (response.usage.prompt_tokens or 0) + (response.usage.completion_tokens or 0)
         
         if not response.choices:
-            logger.warning("⚠️ 空响应，重试...")
-            messages.append({"role": "user", "content": "你的回复似乎为空，请重新输出。"})
+            _esc = _zero_output_retry("API 返回空响应（无 choices）")
+            if _esc:
+                return _esc
             continue
         
         choice = response.choices[0]
@@ -822,8 +906,16 @@ def run_agent_loop(
             except Exception:
                 pass
 
+        # 🛡️ 零产出响应（无正文且无工具调用）→ 统一进入策略降级链（换打法重试；三级试完则打包上报）
+        if not content and not tool_calls_raw:
+            _esc = _zero_output_retry("空回复/截断无产出")
+            if _esc:
+                return _esc
+            continue
+
         # 判断是否需要工具调用
         if finish_reason == "length":
+            _empty_resp_count = 0  # 有产出（正文/工具调用），视为输出通道已恢复
             messages.append({"role": "user", "content": "你的输出被截断了，请从中断处继续生成剩余内容，不要重复已输出的部分。"})
             continue
         
@@ -879,23 +971,13 @@ def run_agent_loop(
         
         # 处理工具调用
         if not tool_calls_raw:
-            # 🛡️ 防死循环：reasoning 模型（deepseek-flash 等）可能只返回思考内容，
-            # content=None 且 tool_calls=None，且 finish_reason 非 stop/length。
-            # 连续多次空响应则中止，避免无限 append「请继续」死循环。
-            _empty_resp_count += 1
-            if _empty_resp_count >= 3:
-                logger.error(f"🛑 [Agent] 连续 {_empty_resp_count} 次空响应（无内容且无工具调用），中止循环，会话: {session_id}")
-                return {
-                    "success": False,
-                    "result": "⚠️ AI 连续返回空响应，任务已中止。请重试或换一个更具体的描述。",
-                    "iterations": iteration,
-                    "cost": total_cost,
-                    "total_tokens": total_tokens,
-                    "logs": all_logs,
-                }
-            messages.append({"role": "user", "content": "你的回复为空，请直接给出最终回答，不要只输出思考过程。"})
+            # 兜底分支：正常情况下零产出已在上方统一处理、有正文会走最终返回；
+            # 保留以防静默空转（同样进入策略降级链，而非静默跳过）
+            _esc = _zero_output_retry("未预期的无工具调用分支")
+            if _esc:
+                return _esc
             continue
-        _empty_resp_count = 0  # 有工具调用，重置空响应计数
+        _empty_resp_count = 0  # 有工具调用，重置零产出计数
         
         # 并行执行工具
         tc_dicts = []

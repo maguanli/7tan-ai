@@ -1,0 +1,99 @@
+\(url= : 4026
+\[url= : 21
+\(/url\) : 4053
+\[/url\] : 25
+\(img : 4317
+\[img : 8
+\(b\) : 473
+\[b\] : 7
+\(color : 2
+\[color : 12
+\(size : 4
+\[size : 0
+\(center : 257
+\[center : 1
+\(quote : 0
+\[quote : 0
+\(hide : 1
+\[hide : 0
+\(title : 0
+\[title : 0
+\(note : 0
+\[note : 0
+\(reply : 160
+\[reply : 1
+
+-- 圆括号标签 --
+img 25453
+url 13510
+big 4103
+br 2789
+input 2315
+b 2005
+hellos 1987
+center 1140
+left 729
+right 613
+i 572
+c 563
+u 543
+reply 395
+s 386
+URL 298
+hyname 281
+now 267
+marquee 239
+IMG 198
+hello 169
+buy 163
+coin 137
+nimg 127
+time 126
+Java 109
+day 89
+yk 89
+hyjf 80
+useid 79
+select 75
+hydj 74
+hynames 62
+grade 45
+option 44
+ds 42
+forecolor 35
+call 34
+oo 26
+back 25
+
+-- 圆括号带=标签 --
+url 4470
+URL 258
+buy 139
+coin 133
+c 43
+input 42
+grade 32
+forecolor 12
+img 7
+size 5
+backcolor 4
+login 4
+call 3
+font 3
+Url 2
+color 2
+i 1
+urk 1
+align 1
+URl 1
+method 1
+blackcolor 1
+body 1
+mima 1
+select 1
+C 1
+link 1
+ancho 1
+optiononpick 1
+users 1
+br 1

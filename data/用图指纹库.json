@@ -1,0 +1,758 @@
+{
+ "说明": "用图指纹库（v2 感知哈希版）。旧版按 MD5 查重，识别不了「重新压缩过的同一张图」，已废弃为 .md5版.bak.json。",
+ "算法": "aHash(64bit)+dHash(64bit)；两段汉明距离之和 <= 6 视为同一张图（含重压缩副本）",
+ "收录范围": "data/gzh_render 下各文章目录（排除 backup/cand/raw 等中间目录）",
+ "生成时间": "2026-09-16 13:20:39",
+ "图片总数": 261,
+ "唯一图片数": 243,
+ "重复组数": 18,
+ "指纹": {
+  "0692829eb8b83020:2c2e2e3073636cc8": [
+   "100万躺平四笔账/100万躺平四笔账\\img\\final_01.jpg"
+  ],
+  "fff3a32000f8f8f8:689646606260f0f0": [
+   "100万躺平四笔账/100万躺平四笔账\\img\\final_02.jpg"
+  ],
+  "0010303710f1f7ff:eba3e666a5a1a7a6": [
+   "100万躺平四笔账/100万躺平四笔账\\img\\final_03.jpg"
+  ],
+  "7f1f001014060403:fd764564242c19f7": [
+   "100万躺平四笔账/100万躺平四笔账\\img\\final_04.jpg"
+  ],
+  "27231c1e33fffcff:4fe7f8f2e7cac046": [
+   "100万躺平四笔账/100万躺平四笔账\\img\\final_05.jpg"
+  ],
+  "012121f1f7fff1f3:2769c9a327054347": [
+   "100万躺平四笔账/100万躺平四笔账\\img\\final_06.jpg",
+   "老人比孩子多/老人比孩子多\\cand2\\piggy_0.jpg"
+  ],
+  "00f0e8ece0e7efef:e6121a484a4e0c8c": [
+   "2026调休/2026调休\\1_alarm.jpg"
+  ],
+  "bd3c1c818bc3c33d:5968f8316b8e06c1": [
+   "2026调休/2026调休\\2_subway.jpg"
+  ],
+  "9eddc3e3f0f0ff7f:a4b19786c6e1f9f0": [
+   "2026调休/2026调休\\3_coaster.jpg"
+  ],
+  "f1f09fbdfdbf8cc0:05093329516d194d": [
+   "2026调休/2026调休\\4_calendar.png"
+  ],
+  "870f0f0f058292f0:3e7e78969936264a": [
+   "2026调休/2026调休\\5_suitcase.jpg"
+  ],
+  "f9612331786d841f:829fcee7d3996d7f": [
+   "2026调休/2026调休\\6_desk.jpg"
+  ],
+  "1030a0e0f7f7f7e3:a3e34144cdc7c607": [
+   "2026调休/2026调休\\7_night.jpg"
+  ],
+  "00009000001cf8ff:d9ca61a2d4711363": [
+   "2026调休/2026调休\\8_highway.jpg"
+  ],
+  "efff0743e2f60286:cca4ac864eac1e2c": [
+   "2026调休/2026调休\\9_wage.jpg"
+  ],
+  "0f0d07070f0f0fcf:fcf96c5e5a5e3e9b": [
+   "62岁阿姨撸铁/62岁阿姨撸铁\\01_dumbbell_woman.jpg"
+  ],
+  "000019909005fdff:45717122366d49a9": [
+   "62岁阿姨撸铁/62岁阿姨撸铁\\02_running.jpg"
+  ],
+  "282040c0fffefeff:d1d5c58589426018": [
+   "62岁阿姨撸铁/62岁阿姨撸铁\\03_senior_training.jpg"
+  ],
+  "0010e0e94947ff7f:323189d39b9d94dc": [
+   "62岁阿姨撸铁/62岁阿姨撸铁\\04_dumbbells_rack.jpg"
+  ],
+  "ff0097ff07062200:99d82727de84eec5": [
+   "62岁阿姨撸铁/62岁阿姨撸铁\\05_park_senior.jpg"
+  ],
+  "0000002f3f7b7f7f:9ab2e369fbd3f2fc": [
+   "三角洲行动/三角洲行动\\img\\1.jpg"
+  ],
+  "031f0008183cbeff:b7bb797171b1309c": [
+   "三角洲行动/三角洲行动\\img\\2.jpg"
+  ],
+  "00170301013f3eff:7d662b6b75e9602c": [
+   "三角洲行动/三角洲行动\\img\\3.jpg"
+  ],
+  "030f0006640e1eff:3fda49bccdddbcb3": [
+   "三角洲行动/三角洲行动\\img\\4.jpg"
+  ],
+  "031f091f0c0050ff:7f6e7b3859d9a7b1": [
+   "三角洲行动/三角洲行动\\img\\5.jpg"
+  ],
+  "1000c0e3f3c1c191:31320d972b0f0733": [
+   "三角洲行动/三角洲行动\\img\\logo.png"
+  ],
+  "00ffff030001ffff:7151011f1379795f": [
+   "教师节38年/教师节38年\\crop_mid.png"
+  ],
+  "0100ffff0021ffff:3d054331794f4313": [
+   "教师节38年/教师节38年\\crop_top.png"
+  ],
+  "00e1ff3f0000ffff:3d8100f1f9030d92": [
+   "教师节38年/教师节38年\\crop_v12_part1.png"
+  ],
+  "0000ffff0000ffff:81e1809d17517917": [
+   "教师节38年/教师节38年\\crop_v12_part2.png"
+  ],
+  "ff0015ff0000ffff:8155750021272121": [
+   "教师节38年/教师节38年\\crop_v12_part3.png"
+  ],
+  "ffffff000000ffff:5111010d2d959d21": [
+   "教师节38年/教师节38年\\crop_v12_part4.png"
+  ],
+  "fc06fdf9ffff0000:8c8c058311099313": [
+   "教师节38年/教师节38年\\crop_v12_subtitle.png"
+  ],
+  "80dd9d81ffff0081:0d1d555d00155575": [
+   "教师节38年/教师节38年\\crop_v7_mid.png"
+  ],
+  "a0ff190000e0ffff:4103717949011913": [
+   "教师节38年/教师节38年\\crop_v7_top.png"
+  ],
+  "fefc001b36c34660:0060e3f2cecedcde": [
+   "教师节38年/教师节38年\\montage_cand.jpg"
+  ],
+  "3020a0ff302063fb:4646464c45c5d252": [
+   "教师节38年/教师节38年\\montage_emb.jpg"
+  ],
+  "ffffffffffffff00:00000000004d134f": [
+   "教师节38年/教师节38年\\preview_bottom.png"
+  ],
+  "ffffb181d1818181:00036d6d35471f63": [
+   "教师节38年/教师节38年\\preview_full.png"
+  ],
+  "8181ff81f19981ff:1f797d1d05796b07": [
+   "教师节38年/教师节38年\\preview_top.png"
+  ],
+  "89ffffff83818581:79390149571f3d11": [
+   "教师节38年/教师节38年\\preview_v10_1988.png"
+  ],
+  "808000ffffffffff:1147416513032727": [
+   "教师节38年/教师节38年\\preview_v10_1988b.png"
+  ],
+  "ffff000099ffffff:0513696979010101": [
+   "教师节38年/教师节38年\\preview_v10_bottom.png"
+  ],
+  "ffffff8181818100:0000006915251f79": [
+   "教师节38年/教师节38年\\preview_v10_full.png",
+   "教师节38年/教师节38年\\preview_v11_full.png"
+  ],
+  "f3ff8181ffc78181:27014171011f1779": [
+   "教师节38年/教师节38年\\preview_v10_mid.png"
+  ],
+  "818189ff8f8181ff:171b79295f3d0143": [
+   "教师节38年/教师节38年\\preview_v10_mid2.png"
+  ],
+  "ff010481e181ffff:6171790b43091107": [
+   "教师节38年/教师节38年\\preview_v10_top.png"
+  ],
+  "ffff81000081ffff:1702516d69710101": [
+   "教师节38年/教师节38年\\preview_v11_bottom.png"
+  ],
+  "ffcd91f1ff010100:011d55259937b5d9": [
+   "教师节38年/教师节38年\\preview_v12_full.png"
+  ],
+  "ff7d0000c0c0ffff:0de1f95903098413": [
+   "教师节38年/教师节38年\\preview_v12_top.png"
+  ],
+  "ffff81818181ffff:07233b3b030b1b03": [
+   "教师节38年/教师节38年\\preview_v12_wide.png"
+  ],
+  "008dff00fd9d01ff:13795e3505796b07": [
+   "教师节38年/教师节38年\\preview_v4.png"
+  ],
+  "ffff81f1ff810180:690d5525411b7d69": [
+   "教师节38年/教师节38年\\preview_v5_full.png"
+  ],
+  "080480e1c0fdffff:7179094309150107": [
+   "教师节38年/教师节38年\\preview_v8_top.png"
+  ],
+  "00ffff0000e0fdff:0543617979430903": [
+   "教师节38年/教师节38年\\preview_v9_mid.png"
+  ],
+  "00e0a18080ffffff:094349090d130107": [
+   "教师节38年/教师节38年\\preview_v9_top.png"
+  ],
+  "09410181e0f0feff:13db4b2e0565884a": [
+   "教师节38年/教师节38年\\cand2\\academy_liuxi.jpg"
+  ],
+  "00000000ecbf3fff:f8f82372986c73d7": [
+   "教师节38年/教师节38年\\cand2\\bike_gate_0.jpg"
+  ],
+  "0000007cffffffff:f3d1f2e8f06c2020": [
+   "教师节38年/教师节38年\\cand2\\bike_gate_1.jpg"
+  ],
+  "000000183fffffff:d9703572f2ae9894": [
+   "教师节38年/教师节38年\\cand2\\bike_gate_2.jpg"
+  ],
+  "0400000087f7ffff:dcf8b81e160c8c40": [
+   "教师节38年/教师节38年\\cand2\\bike_guilin.jpg"
+  ],
+  "63ffffff80c3c0f6:848580a1298686a4": [
+   "教师节38年/教师节38年\\cand2\\cn_teacher_0.jpg"
+  ],
+  "2f10001000373f7f:6ee2e3e3fc6ee6d9": [
+   "教师节38年/教师节38年\\cand2\\cn_village_school_0.jpg"
+  ],
+  "000000687d7cfeff:e1829a9889e0e4ba": [
+   "教师节38年/教师节38年\\cand2\\cn_village_school_1.jpg"
+  ],
+  "000000301f3ffefc:901041e071f0c4c0": [
+   "教师节38年/教师节38年\\cand2\\cn_village_school_2.jpg"
+  ],
+  "000000c0ffffffff:6453061199eb90e8": [
+   "教师节38年/教师节38年\\cand2\\gate_guangde.jpg"
+  ],
+  "400000081278feff:b3b5b1b2b6a0a8ac": [
+   "教师节38年/教师节38年\\cand2\\old_bicycle_cn_0.jpg"
+  ],
+  "f0f00000080f7f7f:c1c5616a6aedbdb9": [
+   "教师节38年/教师节38年\\cand2\\old_bicycle_cn_1.jpg"
+  ],
+  "00f0b0e4c0b3336f:180665081877f79d": [
+   "教师节38年/教师节38年\\cand2\\old_bicycle_cn_2.jpg"
+  ],
+  "7a7e7e7e7e7e0000:c2ead2e2eafa8201": [
+   "教师节38年/教师节38年\\cand2\\old_man_back_0.jpg"
+  ],
+  "00fffefefefe20e0:4bcc88888cc04949": [
+   "教师节38年/教师节38年\\cand2\\old_man_back_1.jpg"
+  ],
+  "3f7c68787400070f:f8b9c8c9c5ec5d6c": [
+   "教师节38年/教师节38年\\cand2\\old_man_back_2.jpg"
+  ],
+  "0c3cd4fe7cf8e06c:78f02434f9d190d9": [
+   "教师节38年/教师节38年\\cand2\\school_courtyard_0.jpg"
+  ],
+  "7818e0f4fcf8f8f1:e97984246cc123c7": [
+   "教师节38年/教师节38年\\cand2\\school_courtyard_1.jpg"
+  ],
+  "00101f1d7e3b978e:e5b57431f4e2253a": [
+   "教师节38年/教师节38年\\cand2\\school_courtyard_2.jpg"
+  ],
+  "000001050f07cfdf:9ccdc929798d9f34": [
+   "教师节38年/教师节38年\\cand2\\stone_steps_0.jpg"
+  ],
+  "00000016031f7f7f:383834b4b6b4f2f4": [
+   "教师节38年/教师节38年\\cand2\\stone_steps_1.jpg"
+  ],
+  "00000109079f3ffe:32d3cb5b1d3c70c4": [
+   "教师节38年/教师节38年\\cand2\\stone_steps_2.jpg"
+  ],
+  "ff878080e2d2070e:0f3f2e1e06b4adbc": [
+   "教师节38年/教师节38年\\cand3\\bike_gardener_kunming.jpg"
+  ],
+  "3c1f0e04fbf9fcfe:f8f2fc7d02c3090c": [
+   "教师节38年/教师节38年\\cand3\\corridor_hsnu_old.jpg"
+  ],
+  "e00000ffff0000ff:0b2c3c3000b0df18": [
+   "教师节38年/教师节38年\\cand3\\hangzhou_1978.jpg"
+  ],
+  "00000024ffffff7f:6048ecece8e8f0f0": [
+   "教师节38年/教师节38年\\cand3\\silhouette_beach.jpg",
+   "教师节38年/教师节38年\\images\\08_walk.jpg"
+  ],
+  "00008a81f9f9ffff:c4645a0331111b10": [
+   "教师节38年/教师节38年\\cand3\\teacher_student_hk.jpg"
+  ],
+  "3c1f0e04fbf9fcfe:f8f2fc7d02c3080c": [
+   "教师节38年/教师节38年\\images\\01_corridor.jpg"
+  ],
+  "0f030f9fdfd0e070:5e96b73d3cb087ca": [
+   "教师节38年/教师节38年\\images\\02_classroom.jpg",
+   "教师节38年/教师节38年\\_tmp_extract\\emb_02.jpeg"
+  ],
+  "8f838381a11f3f1f:1f1e121b49594938": [
+   "教师节38年/教师节38年\\images\\03_desk.jpg",
+   "教师节38年/教师节38年\\_tmp_extract\\emb_03.jpeg"
+  ],
+  "000000183f7ffffe:00a7f8e1f4f8f0f0": [
+   "教师节38年/教师节38年\\images\\04_chalk.jpg",
+   "教师节38年/教师节38年\\_tmp_extract\\emb_04.jpeg"
+  ],
+  "b880f0f0f0f0b193:612802828d852727": [
+   "教师节38年/教师节38年\\images\\05_names.jpg",
+   "教师节38年/教师节38年\\_tmp_extract\\emb_05.jpeg"
+  ],
+  "0000b4a0009fffff:55a9555554557575": [
+   "教师节38年/教师节38年\\images\\06_students.jpg",
+   "教师节38年/教师节38年\\_tmp_extract\\emb_06.jpeg"
+  ],
+  "e00000ffff0000ff:0b2c3c3000b0df98": [
+   "教师节38年/教师节38年\\images\\07_schoolside.jpg"
+  ],
+  "0808080f777f7ffb:f8f9f97bcdc6c24b": [
+   "教师节38年/教师节38年\\_tmp_extract\\emb_01.jpeg"
+  ],
+  "7e7e3e3604a8fc6f:c8e444cc4d4ad9cd": [
+   "教师节38年/教师节38年\\_tmp_extract\\emb_07.jpeg"
+  ],
+  "01c3838389fff0f0:6f0f1e4f2b3b6044": [
+   "教师节38年/教师节38年\\_tmp_extract\\emb_08.jpeg"
+  ],
+  "7cffff5f0a000000:e0b2b3925a4b24e5": [
+   "炎症饮食/炎症饮食\\三文鱼.jpg"
+  ],
+  "1f0f8fffe3e2ce00:767b5f464e0cac3c": [
+   "炎症饮食/炎症饮食\\奶茶.jpg"
+  ],
+  "fcffff07ef380000:b090d63e9cf07002": [
+   "炎症饮食/炎症饮食\\彩色蔬果.jpg"
+  ],
+  "6cc4ceeefcf16100:d88818d8b0c7cf49": [
+   "炎症饮食/炎症饮食\\快餐.jpg"
+  ],
+  "808fedfdc58108bc:1f59ddc90d1b7969": [
+   "炎症饮食/炎症饮食\\烤串.jpg"
+  ],
+  "010000bfffffffff:45494d3474743432": [
+   "皮肤衰老/皮肤衰老\\crop_end.png"
+  ],
+  "ffe9fffefe8100f9:1119010400676f6b": [
+   "皮肤衰老/皮肤衰老\\crop_title.png"
+  ],
+  "ff00f9ff0000e1ff:31a5816fcdf14347": [
+   "皮肤衰老/皮肤衰老\\preview_final.png"
+  ],
+  "8100e1ffffffffff:7347cf3949051183": [
+   "皮肤衰老/皮肤衰老\\sl_1.png"
+  ],
+  "ffff000000ffffff:1b0983f3e5254923": [
+   "皮肤衰老/皮肤衰老\\sl_2.png"
+  ],
+  "ffff7fffff3d0000:cdc7dc2117616915": [
+   "皮肤衰老/皮肤衰老\\sl_3.png"
+  ],
+  "ffff8e9ffffff100:4151387861054107": [
+   "皮肤衰老/皮肤衰老\\sl_4.png"
+  ],
+  "10b3ffff810040ff:362749212d858157": [
+   "皮肤衰老/皮肤衰老\\sl_5.png"
+  ],
+  "fffffffffff10000:55518941030565b4": [
+   "皮肤衰老/皮肤衰老\\sl_6.png"
+  ],
+  "f3f3f3f3f3f7ffff:562624262424241a": [
+   "皮肤衰老/皮肤衰老\\cand\\cosmE_0.jpg"
+  ],
+  "810101b9fbc3c3c3:337173733396968e": [
+   "皮肤衰老/皮肤衰老\\cand\\cosmE_1.jpg"
+  ],
+  "c7fefff1f97e0800:ae8c868381e2308c": [
+   "皮肤衰老/皮肤衰老\\cand\\cosmE_2.jpg"
+  ],
+  "ffffc3c1c1c1ffff:92c493939383c4c0": [
+   "皮肤衰老/皮肤衰老\\cand\\cosmE_3.jpg"
+  ],
+  "088ece8e879fbfbf:78381a3a2d7c6064": [
+   "皮肤衰老/皮肤衰老\\cand\\faucet_0.jpg",
+   "皮肤衰老/皮肤衰老\\images\\05_faucet.jpg"
+  ],
+  "ff160f06362f26fe:26acaaacecca4e64": [
+   "皮肤衰老/皮肤衰老\\cand\\faucet_1.jpg"
+  ],
+  "fbfbff8080c181d8:0303030716921b11": [
+   "皮肤衰老/皮肤衰老\\cand\\hatB_0.jpg"
+  ],
+  "9f818180c1e1f3ff:791313530b4b43c6": [
+   "皮肤衰老/皮肤衰老\\cand\\hatB_1.jpg",
+   "皮肤衰老/皮肤衰老\\images\\01_hat.jpg"
+  ],
+  "e0e0e0e0e0e0e0e0:0101010101010101": [
+   "皮肤衰老/皮肤衰老\\cand\\hatB_2.jpg"
+  ],
+  "43dbc383187e0000:8e171723f0f0e0e0": [
+   "皮肤衰老/皮肤衰老\\cand\\hoodX_0.jpg"
+  ],
+  "707e5f7f70406624:c69ab8b68397cccc": [
+   "皮肤衰老/皮肤衰老\\cand\\hoodX_1.jpg"
+  ],
+  "e080ff7ff7e22e06:a316ccecc7cad6a4": [
+   "皮肤衰老/皮肤衰老\\cand\\hoodX_2.jpg",
+   "皮肤衰老/皮肤衰老\\images\\04_kitchen.jpg"
+  ],
+  "ffe9c8416140f39f:965b5dddc7954331": [
+   "皮肤衰老/皮肤衰老\\cand\\kitchenB_0.jpg"
+  ],
+  "810123a3e7e7fdff:0f6b6b6f4eefe994": [
+   "皮肤衰老/皮肤衰老\\cand\\kitchenB_1.jpg"
+  ],
+  "f7f1e18080d0e1ff:06230d2961218b47": [
+   "皮肤衰老/皮肤衰老\\cand\\kitchen_0.jpg"
+  ],
+  "78f8e0f6f0f0f0f0:c1400ccc244144e6": [
+   "皮肤衰老/皮肤衰老\\cand\\kitchen_1.jpg"
+  ],
+  "ffffe1e18101fbff:00062b0b2b638730": [
+   "皮肤衰老/皮肤衰老\\cand\\kitchen_2.jpg"
+  ],
+  "ff9f0c01078fffff:cd3f79dbce38b4d8": [
+   "皮肤衰老/皮肤衰老\\cand\\kitchen_3.jpg"
+  ],
+  "0603bf3e3e000000:fca7656560320a08": [
+   "皮肤衰老/皮肤衰老\\cand\\milk_tea_0.jpg"
+  ],
+  "0000050f0fffbd3f:3b793dfd7c697951": [
+   "皮肤衰老/皮肤衰老\\cand\\milk_tea_1.jpg"
+  ],
+  "ffffe078f8f84000:d2dfcdd2b3929e93": [
+   "皮肤衰老/皮肤衰老\\cand\\milk_tea_2.jpg"
+  ],
+  "0060e2e300e0e37f:cececece8e8f8fbb": [
+   "皮肤衰老/皮肤衰老\\cand\\milk_tea_3.jpg"
+  ],
+  "070000808ffffffe:e60603537d76726a": [
+   "皮肤衰老/皮肤衰老\\cand\\mirrorB_0.jpg"
+  ],
+  "f0f0f0f0f8fcf8f8:0000000000000000": [
+   "皮肤衰老/皮肤衰老\\cand\\mirrorC_0.jpg"
+  ],
+  "fffffc00008080fc:0000014101002101": [
+   "皮肤衰老/皮肤衰老\\cand\\mirrorC_1.jpg"
+  ],
+  "e0e0e0c0e0e0e3e3:0000000100000303": [
+   "皮肤衰老/皮肤衰老\\cand\\mirror_0.jpg"
+  ],
+  "ff7f00dcf62187df:80d595b1cccb2525": [
+   "皮肤衰老/皮肤衰老\\cand\\panC_0.jpg"
+  ],
+  "0000003c7effff20:00001070d496c4ec": [
+   "皮肤衰老/皮肤衰老\\cand\\panC_1.jpg"
+  ],
+  "0000597f7f7f7f3e:c887d2d2b2d8ecf0": [
+   "皮肤衰老/皮肤衰老\\cand\\phoneB_0.jpg",
+   "皮肤衰老/皮肤衰老\\images\\02_phone.jpg"
+  ],
+  "1e3737171b1b0e0c:3a6ee6f672f26ad8": [
+   "皮肤衰老/皮肤衰老\\cand\\phoneB_1.jpg"
+  ],
+  "e7ffff818181cbff:1f0b14553313160f": [
+   "皮肤衰老/皮肤衰老\\cand\\phoneB_2.jpg"
+  ],
+  "f0f03000f0f0f8f8:a565671191b6e0f3": [
+   "皮肤衰老/皮肤衰老\\cand\\phone_0.jpg"
+  ],
+  "fef8f082a821c000:1232221662451e92": [
+   "皮肤衰老/皮肤衰老\\cand\\phone_1.jpg"
+  ],
+  "407c74c41c3d3d1c:90e08cacedf1f9e9": [
+   "皮肤衰老/皮肤衰老\\cand\\phone_night_0.jpg"
+  ],
+  "7e3c0c4e7e70163a:f0d8d0948ca56466": [
+   "皮肤衰老/皮肤衰老\\cand\\phone_night_1.jpg"
+  ],
+  "10204c0e0ffe7e01:e2cc94325970c0d3": [
+   "皮肤衰老/皮肤衰老\\cand\\phone_night_2.jpg"
+  ],
+  "ff3d000cff0000ff:8e7979b9d94ded65": [
+   "皮肤衰老/皮肤衰老\\cand\\straw_hat_0.jpg"
+  ],
+  "001050d0f1f6f6ff:36b5a1a18384a4a5": [
+   "皮肤衰老/皮肤衰老\\cand\\sunnyB_0.jpg"
+  ],
+  "0080c670f8fc70c0:c8008c9490c88196": [
+   "皮肤衰老/皮肤衰老\\cand\\sunnyB_1.jpg",
+   "皮肤衰老/皮肤衰老\\images\\06_outdoor.jpg"
+  ],
+  "0010d3d3d3dfdbd3:7524a2a2a6b2b696": [
+   "皮肤衰老/皮肤衰老\\cand\\sunnyB_2.jpg"
+  ],
+  "010101071b3f7ffc:c3c3d3defa6ae1c5": [
+   "皮肤衰老/皮肤衰老\\cand\\sunny_road_0.jpg"
+  ],
+  "001286868e9e9e9c:3665242c141c3c30": [
+   "皮肤衰老/皮肤衰老\\cand\\sunny_road_1.jpg"
+  ],
+  "040000e0faf8fc7e:7c66219a9290f0e8": [
+   "皮肤衰老/皮肤衰老\\cand\\sunny_road_2.jpg"
+  ],
+  "090d1f3f0b08cf9f:bbb97d7c53139a3c": [
+   "皮肤衰老/皮肤衰老\\cand\\sweet_food_0.jpg"
+  ],
+  "30dcfc7c78f8d81c:ec3044e8c293b1b0": [
+   "皮肤衰老/皮肤衰老\\cand\\sweet_food_1.jpg"
+  ],
+  "fcfe7f3e3c280000:70c8dc4c61c8d8c8": [
+   "皮肤衰老/皮肤衰老\\cand\\sweet_food_2.jpg"
+  ],
+  "000012fefeffff1b:598a3636b2b23232": [
+   "皮肤衰老/皮肤衰老\\cand\\window_0.jpg"
+  ],
+  "3e3e3e3e3e3e3820:eaeae8c8c8c8c8c1": [
+   "皮肤衰老/皮肤衰老\\cand\\window_1.jpg"
+  ],
+  "0002021a7efefede:b6b6b2b2f0323232": [
+   "皮肤衰老/皮肤衰老\\cand\\window_2.jpg"
+  ],
+  "00183c7c688fdfdf:73f0e9e9d93b3f18": [
+   "皮肤衰老/皮肤衰老\\cand\\wokX_0.jpg"
+  ],
+  "91ebc583c7c7667e:25cb8d248cadccec": [
+   "皮肤衰老/皮肤衰老\\cand\\wokX_1.jpg"
+  ],
+  "80181c3c9cc0e8fe:1030706930321840": [
+   "皮肤衰老/皮肤衰老\\cand\\wokX_2.jpg"
+  ],
+  "3e3c3e3e3c000000:6565696c70122c18": [
+   "皮肤衰老/皮肤衰老\\images\\03_tea.jpg"
+  ],
+  "0000bebefeffff10:4a263632b2b23232": [
+   "皮肤衰老/皮肤衰老\\images\\07_window.jpg"
+  ],
+  "ffffffff0000fdff:516703004d15a101": [
+   "老人比孩子多/老人比孩子多\\crop_end.png"
+  ],
+  "f1e0fcfffcb0c0c0:0905340001750989": [
+   "老人比孩子多/老人比孩子多\\crop_head.png"
+  ],
+  "fd0000c1e0c0d4fe:01510b2b4d051500": [
+   "老人比孩子多/老人比孩子多\\crop_line.png"
+  ],
+  "ffff0000ffffffff:49032765d953012d": [
+   "老人比孩子多/老人比孩子多\\crop_mid.png"
+  ],
+  "fff1000000ffffff:0145373551090505": [
+   "老人比孩子多/老人比孩子多\\crop_tail.png"
+  ],
+  "ffff0000ffffffff:5102452101110949": [
+   "老人比孩子多/老人比孩子多\\crop_tail2.png"
+  ],
+  "0101000000ffffff:1f2545d55185510b": [
+   "老人比孩子多/老人比孩子多\\crop_zone2.png"
+  ],
+  "ffff8180ffff8181:4100457101013737": [
+   "老人比孩子多/老人比孩子多\\preview_bottom.png"
+  ],
+  "fff991ff01000081:03012549594d1d15": [
+   "老人比孩子多/老人比孩子多\\preview_final.png"
+  ],
+  "ffffffffff800000:0000000000254d4d": [
+   "老人比孩子多/老人比孩子多\\preview_full.png"
+  ],
+  "818181ffff0081ff:495f3901117d4501": [
+   "老人比孩子多/老人比孩子多\\preview_mid.png"
+  ],
+  "f981818181ffffff:5167171f51110105": [
+   "老人比孩子多/老人比孩子多\\preview_top.png"
+  ],
+  "ff8181c1818181ff:0b1b332b0b233f23": [
+   "老人比孩子多/老人比孩子多\\preview_wide.png"
+  ],
+  "010000ffffffffff:1735551149050545": [
+   "老人比孩子多/老人比孩子多\\sl_1.png"
+  ],
+  "ef00007fffffff00:c99d154919014d77": [
+   "老人比孩子多/老人比孩子多\\sl_2.png"
+  ],
+  "ffff080000ffffff:4105317505011115": [
+   "老人比孩子多/老人比孩子多\\sl_3.png"
+  ],
+  "ffffffffed00008d:d3438521495b7f39": [
+   "老人比孩子多/老人比孩子多\\sl_4.png"
+  ],
+  "ffffff8100006dff:011951272765c951": [
+   "老人比孩子多/老人比孩子多\\sl_5.png"
+  ],
+  "ffffff0000fdffff:1143004d31a10111": [
+   "老人比孩子多/老人比孩子多\\sl_6.png"
+  ],
+  "ff000000ffffff01:69cd1d69c911054d": [
+   "老人比孩子多/老人比孩子多\\v_mid0.png"
+  ],
+  "ffffff0000ffffff:19c1057945051119": [
+   "老人比孩子多/老人比孩子多\\v_mid1.png"
+  ],
+  "ff000021ffffffff:032765c951d30101": [
+   "老人比孩子多/老人比孩子多\\v_mid2.png"
+  ],
+  "00ffffffffff0100:454911c30129597f": [
+   "老人比孩子多/老人比孩子多\\v_mid2b.png"
+  ],
+  "00ffffffffffdb00:2101010545092727": [
+   "老人比孩子多/老人比孩子多\\v_mid3.png"
+  ],
+  "ffffffff8981ff00:0000010011470245": [
+   "老人比孩子多/老人比孩子多\\v_tail.png"
+  ],
+  "01010000ffffffff:3737455149091509": [
+   "老人比孩子多/老人比孩子多\\v_top.png"
+  ],
+  "ffffffffff000000:0000010001255d1d": [
+   "老人比孩子多/老人比孩子多\\_tall.png"
+  ],
+  "060010003f7fffff:7cfcf4c7c9c08000": [
+   "老人比孩子多/老人比孩子多\\cand\\sunset_path_0.jpg"
+  ],
+  "00000098ffffffff:9ff48430e0804080": [
+   "老人比孩子多/老人比孩子多\\cand\\sunset_path_1.jpg",
+   "老人比孩子多/老人比孩子多\\images\\06_sunset.jpg"
+  ],
+  "cf6727400000f7ff:1ecccd9e1ec8c526": [
+   "老人比孩子多/老人比孩子多\\cand\\village_house_0.jpg"
+  ],
+  "00f0e0f0f0f0f0ff:20c4c0c0a1a20080": [
+   "老人比孩子多/老人比孩子多\\cand\\yuan_money_0.jpg"
+  ],
+  "81012525058181ff:4d4d6949494d552a": [
+   "老人比孩子多/老人比孩子多\\cand\\yuan_money_1.jpg"
+  ],
+  "818181818181e7ff:3d2b691717691784": [
+   "老人比孩子多/老人比孩子多\\cand\\yuan_money_2.jpg"
+  ],
+  "04042526263fbff7:ededed6c6df56dac": [
+   "老人比孩子多/老人比孩子多\\cand2\\apartment_0.jpg"
+  ],
+  "00a4a4fffdfdff80:8d6969496969e969": [
+   "老人比孩子多/老人比孩子多\\cand2\\apartment_1.jpg"
+  ],
+  "5f020e226e66e6af:b2badacecacece4d": [
+   "老人比孩子多/老人比孩子多\\cand2\\apartment_2.jpg"
+  ],
+  "20343c1ee160feff:6de5e0f583d296a6": [
+   "老人比孩子多/老人比孩子多\\cand2\\nursing_0.jpg"
+  ],
+  "003818007afbff7b:147073cbd2d3f3b3": [
+   "老人比孩子多/老人比孩子多\\cand2\\nursing_1.jpg"
+  ],
+  "1c9e84808cb0bcfc:54302c29686a6048": [
+   "老人比孩子多/老人比孩子多\\cand2\\piggy_1.jpg"
+  ],
+  "001e7f7e380303c7:1abab8cc65869e96": [
+   "老人比孩子多/老人比孩子多\\cand3\\coins_0.jpg",
+   "老人比孩子多/老人比孩子多\\images\\03_money.jpg"
+  ],
+  "9fbd6464662624bd:33694d4d4d556969": [
+   "老人比孩子多/老人比孩子多\\cand3\\coins_1.jpg"
+  ],
+  "9b1f163c346d199f:33556c69e9895533": [
+   "老人比孩子多/老人比孩子多\\cand3\\coins_2.jpg"
+  ],
+  "ff03030383c1ffc2:83be1e8f170b2f0e": [
+   "老人比孩子多/老人比孩子多\\cand3\\elderly_pair_0.jpg"
+  ],
+  "e523fbf82837fcb8:c94e225152ef9161": [
+   "老人比孩子多/老人比孩子多\\cand3\\elderly_pair_1.jpg"
+  ],
+  "d313909333feff7d:37273626e744b5c9": [
+   "老人比孩子多/老人比孩子多\\cand3\\elderly_pair_2.jpg",
+   "老人比孩子多/老人比孩子多\\images\\05_pair.jpg"
+  ],
+  "e3c19838198183e7:83137163732d378e": [
+   "老人比孩子多/老人比孩子多\\cand3\\elderly_window_0.jpg"
+  ],
+  "81030323633f7f3f:336bcec6cffbd3ee": [
+   "老人比孩子多/老人比孩子多\\cand3\\elderly_window_1.jpg"
+  ],
+  "0303c3c3c3c1c3c3:ce8e0b071f3b0f13": [
+   "老人比孩子多/老人比孩子多\\cand3\\elderly_window_2.jpg"
+  ],
+  "0001ffc3cfb77f08:ff7367371f25c4d2": [
+   "老人比孩子多/老人比孩子多\\cand3\\hospital_0.jpg",
+   "老人比孩子多/老人比孩子多\\images\\01_hospital.jpg"
+  ],
+  "3c1c58426f6767ff:f038b29696cece56": [
+   "老人比孩子多/老人比孩子多\\cand3\\hospital_1.jpg"
+  ],
+  "010303cfffeb8300:7b763a1a9a0a6acc": [
+   "老人比孩子多/老人比孩子多\\cand3\\hospital_2.jpg"
+  ],
+  "05c507020037ffff:3d9da67ad6ee6c9a": [
+   "老人比孩子多/老人比孩子多\\cand3\\oldstreet_0.jpg"
+  ],
+  "190808000c3efeff:f1f91a187964c480": [
+   "老人比孩子多/老人比孩子多\\cand3\\oldstreet_1.jpg"
+  ],
+  "03030101032fffff:fe4fe323afac1020": [
+   "老人比孩子多/老人比孩子多\\cand3\\oldstreet_2.jpg"
+  ],
+  "c0c0c3e7e7feffff:0e0f0e4c4cb0f0d0": [
+   "老人比孩子多/老人比孩子多\\cand3\\piggy_0.jpg"
+  ],
+  "000303271f5f1f1f:bcaec64cb9b677f7": [
+   "老人比孩子多/老人比孩子多\\cand3\\piggy_1.jpg"
+  ],
+  "79108180e7effe7e:81a1b3298cccd8f0": [
+   "老人比孩子多/老人比孩子多\\cand3\\piggy_2.jpg"
+  ],
+  "0507ef4f0f071e08:cd4dc9dd5b7f3c38": [
+   "老人比孩子多/老人比孩子多\\cand4\\bench_old_0.jpg",
+   "老人比孩子多/老人比孩子多\\images\\04_alone.jpg"
+  ],
+  "ff3f07464c000000:fdfbef88984989b2": [
+   "老人比孩子多/老人比孩子多\\cand4\\bench_old_1.jpg"
+  ],
+  "ffb300011784dcff:e867656d273d99ac": [
+   "老人比孩子多/老人比孩子多\\cand4\\bench_old_2.jpg"
+  ],
+  "d0787ff6fe7e7e3c:b5d55444d8d0f0f0": [
+   "老人比孩子多/老人比孩子多\\cand4\\money_hand_0.jpg"
+  ],
+  "083e3a1b3f330100:f370727272f69fdd": [
+   "老人比孩子多/老人比孩子多\\cand4\\money_hand_1.jpg"
+  ],
+  "30e08103e3f3fbfb:e44d4fcacfc79797": [
+   "老人比孩子多/老人比孩子多\\cand4\\money_hand_2.jpg"
+  ],
+  "ff1f7e7f3d180000:f2b8f8dcf9f8c0d5": [
+   "老人比孩子多/老人比孩子多\\cand4\\night_window_0.jpg"
+  ],
+  "0001037fff7e7f00:33332fa8b2a2aa33": [
+   "老人比孩子多/老人比孩子多\\cand4\\night_window_1.jpg"
+  ],
+  "3c1c1c3cffff0081:69e870d4f4f0700f": [
+   "老人比孩子多/老人比孩子多\\cand4\\night_window_2.jpg"
+  ],
+  "6767e2e280001e7f:cccade8c332becd6": [
+   "老人比孩子多/老人比孩子多\\images\\02_village.jpg"
+  ],
+  "00000000003effff:e6799cd4e6fcfcfc": [
+   "血脂早起信号/血脂早起信号\\01_open.jpg"
+  ],
+  "83fffefefcf07010:0244545451c0c424": [
+   "血脂早起信号/血脂早起信号\\02_alarm.jpg"
+  ],
+  "fffda40000ffff01:386969696dfc2535": [
+   "血脂早起信号/血脂早起信号\\03_brush.jpg"
+  ],
+  "003838343e3e1c00:7672606dece8f898": [
+   "血脂早起信号/血脂早起信号\\04_heart.jpg"
+  ],
+  "ff878793a3938386:bf2d2d6767271e06": [
+   "血脂早起信号/血脂早起信号\\05_eye.jpg"
+  ],
+  "3f4b6f7501236767:cbdadbc5cdcfcecc": [
+   "血脂早起信号/血脂早起信号\\06_blood.jpg"
+  ],
+  "0000c0f0f0f8fcff:18302287cbc3a1e0": [
+   "血脂早起信号/血脂早起信号\\07_walk.jpg"
+  ],
+  "01010707de9ce4fd:bf97d6de38308d8d": [
+   "血脂早起信号/血脂早起信号\\08_120.jpg"
+  ],
+  "08000000003effff:f99c9ac4e6e6fcfc": [
+   "血脂早起信号/血脂早起信号\\cover_900x383.jpg"
+  ],
+  "05300c071a1f872f:cde3d94d72fc0e4e": [
+   "黄昏恋/黄昏恋\\img\\01.jpg"
+  ],
+  "ffc404c4c4e7ffff:619d8d8d89cc4ab4": [
+   "黄昏恋/黄昏恋\\img\\02.jpg"
+  ],
+  "1f025a7f3b380000:fdf2d2b2b2e96e74": [
+   "黄昏恋/黄昏恋\\img\\03.jpg"
+  ],
+  "0c0c0272b3b9dff7:383c46c6632134ae": [
+   "黄昏恋/黄昏恋\\img\\04.jpg"
+  ],
+  "f000fea2021e1e3c:c324ac2e6efcfc70": [
+   "黄昏恋/黄昏恋\\img\\05.jpg"
+  ],
+  "cb400003133f3f1f:92949537667ff9d9": [
+   "黄昏恋/黄昏恋\\img\\06.jpg"
+  ]
+ }
+}

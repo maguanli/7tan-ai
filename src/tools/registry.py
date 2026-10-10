@@ -26,6 +26,29 @@ class Tool:
 # 全局注册表
 TOOL_REGISTRY: dict[str, Tool] = {}
 
+# 工具别名：LLM 按通用习惯输出的工具名 -> 本机真实工具名。
+# 2026-10-01: Agent 连调 10 次 bash 全部失败，且每次失败都被
+# _feed_tan_model 灌进 action_finished=false 的垃圾记忆。
+# 在此兜底，幻觉工具名直接落到真实工具，不再产生 ❌ 未知工具。
+TOOL_ALIASES: dict[str, str] = {
+    # shell
+    "bash": "run_command",
+    "sh": "run_command",
+    "shell": "run_command",
+    "exec": "run_command",
+    "execute_command": "run_command",
+    # 文件 (read_file 是最常见的幻觉名, 2026-10-01 我自己也踩了一次)
+    "read_file": "read_file_content",
+    "cat": "read_file_content",
+    "read": "read_file_content",
+    # 代码检索
+    "grep": "grep_code",
+    "search": "grep_code",
+    "glob": "find_files",
+    "find": "find_files",
+    "ls": "list_files",
+}
+
 # 已警告过的 dict 类型工具名（避免重复告警）
 _warned_dict_tools: set = set()
 
@@ -255,6 +278,12 @@ def _result_is_error(result) -> bool:
 def execute_tool(name: str, args: dict) -> str:
     """执行工具并返回结果字符串。
     """
+    # 别名兜底: 先按 TOOL_ALIASES 归一到真实工具名, 再查注册表
+    alias = TOOL_ALIASES.get(name)
+    if alias and alias in TOOL_REGISTRY:
+        logger.debug(f"\U0001f500 工具别名: {name} -> {alias}")
+        name = alias
+
     tool = TOOL_REGISTRY.get(name)
     if not tool:
         # 阶段六修复5：调用了不存在的工具 = 真实失败经历（LLM 幻觉工具名）

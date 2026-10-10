@@ -1,0 +1,10 @@
+== site_credentials == cols=['id', 'site', 'username', 'password_encrypted', 'jwt_token', 'token_expires_at', 'cookies_json', 'api_base_url', 'notes', 'created_at', 'updated_at']
+
+== source_sites == cols=['id', 'name', 'url', 'site_type', 'need_login', 'login_url', 'login_username', 'login_password', 'cookies_json', 'enabled', 'last_crawl_at', 'crawl_interval', 'notes']
+(1, '7273资源网', 'http://www.7273.com', 'game', 0, None, None, None, None, 1, None, 360, None)
+(2, 'TapTap', 'https://www.taptap.cn', 'game', 0, None, None, None, None, 1, None, 360, None)
+(3, '7723游戏', 'https://www.7723.cn', 'game', 0, None, None, None, None, 0, None, 360, None)
+
+== app_settings == cols=['key', 'value']
+('voice_gender', 'male')
+('voice_mode', 'true')

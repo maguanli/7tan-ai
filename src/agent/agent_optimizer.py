@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -125,12 +126,17 @@ def execute_tools_parallel(tool_calls: list[dict], execute_fn) -> list[dict]:
     Returns:
         与 tool_calls 顺序一致的结果列表，每个元素为 {"tool_call_id": str, "content": str}
     """
+    from ..utils.abort_signal import is_aborted as _is_aborted
+
     if len(tool_calls) <= 1:
         # 单个或零个工具，直接串行
         results = []
         for tc in tool_calls:
             name = _extract_tool_name(tc)
             args = _parse_tool_args(tc)
+            if _is_aborted():
+                results.append({"tool_call_id": tc.get("id", ""), "content": f"⏹ 已中止（用户终止任务），未执行: {name}"})
+                continue
             try:
                 content = _execute_with_watchdog(execute_fn, name, args)
             except Exception as e:
@@ -156,6 +162,9 @@ def execute_tools_parallel(tool_calls: list[dict], execute_fn) -> list[dict]:
             for tc in independent:
                 name = _extract_tool_name(tc)
                 args = _parse_tool_args(tc)
+                if _is_aborted():
+                    results_map[tc.get("id", "")] = f"⏹ 已中止（用户终止任务），未执行: {name}"
+                    continue
                 future = pool.submit(_safe_execute, execute_fn, name, args)
                 future_to_tc[future] = tc
             try:
@@ -178,6 +187,9 @@ def execute_tools_parallel(tool_calls: list[dict], execute_fn) -> list[dict]:
         for tc in independent:
             name = _extract_tool_name(tc)
             args = _parse_tool_args(tc)
+            if _is_aborted():
+                results_map[tc.get("id", "")] = f"⏹ 已中止（用户终止任务），未执行: {name}"
+                continue
             try:
                 results_map[tc.get("id", "")] = _execute_with_watchdog(execute_fn, name, args)
             except Exception as e:
@@ -187,6 +199,9 @@ def execute_tools_parallel(tool_calls: list[dict], execute_fn) -> list[dict]:
     for tc in dependent:
         name = _extract_tool_name(tc)
         args = _parse_tool_args(tc)
+        if _is_aborted():
+            results_map[tc.get("id", "")] = f"⏹ 已中止（用户终止任务），未执行: {name}"
+            continue
         try:
             results_map[tc.get("id", "")] = execute_fn(name, args)
         except Exception as e:
@@ -235,7 +250,20 @@ def _execute_with_watchdog(execute_fn, name: str, args: dict, timeout: int = TOO
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="tool_watchdog")
     future = pool.submit(_safe_execute, execute_fn, name, args)
     try:
-        return future.result(timeout=timeout)
+        # 🔔 用户中止感知：轮询中止信号，命中后立即返回，不等工具跑完
+        from ..utils.abort_signal import is_aborted as _is_aborted
+        _deadline = time.time() + timeout
+        while True:
+            if _is_aborted():
+                logger.info(f"⏹ 工具 {name} 执行中被用户中止，立即返回（后台线程已脱离）")
+                return f"⏹ 已中止（用户终止任务）：{name}"
+            _remain = _deadline - time.time()
+            if _remain <= 0:
+                raise concurrent.futures.TimeoutError()
+            try:
+                return future.result(timeout=min(0.5, _remain))
+            except concurrent.futures.TimeoutError:
+                continue
     except concurrent.futures.TimeoutError:
         logger.warning(f"⏱ 工具 {name} 执行超过 {timeout}s，看门狗中断（后台线程已脱离，不再阻塞）")
         pool.shutdown(wait=False)

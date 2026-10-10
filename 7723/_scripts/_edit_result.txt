@@ -1,0 +1,4 @@
+登录'退出': True
+编辑页可访问: https://www.7tan.com/bbs/edit.php?id=82483 | 含原正文: True
+更新返回URL: https://www.7tan.com/bbs/edit.php?id=82483
+是否含'修改成功': True

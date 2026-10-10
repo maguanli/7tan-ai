@@ -1,0 +1,1344 @@
+{
+ "time": "2026-10-01 15:44:49",
+ "freed_bytes": 373294207,
+ "items": [
+  {
+   "tag": "rotated-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\data\\organ_event_log.jsonl.old",
+   "bytes": 218140443
+  },
+  {
+   "tag": "pyinstaller-build",
+   "type": "dir",
+   "path": "D:\\7tan\\7tanAI\\build",
+   "files": 16,
+   "bytes": 80241284
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\app_2026-09-06.log",
+   "bytes": 2612319
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\app_2026-09-12.log",
+   "bytes": 409790
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\app_2026-09-13.log",
+   "bytes": 2090379
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\app_2026-09-14.log",
+   "bytes": 983408
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\app_2026-09-15.log",
+   "bytes": 829464
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\app_2026-09-16.log",
+   "bytes": 806075
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\app_2026-09-17.log",
+   "bytes": 1811320
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\app_2026-09-19.log",
+   "bytes": 2641156
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\app_2026-09-21.log",
+   "bytes": 1202738
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\app_2026-09-22.log",
+   "bytes": 1873440
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\app_2026-09-23.log",
+   "bytes": 962008
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\backup_7tan_protocol_20260916_201354.reg",
+   "bytes": 708
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\backup_run_20260917_080036.reg",
+   "bytes": 1566
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\backup_startupapproved_20260917_080036.reg",
+   "bytes": 1230
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\dsh_web.log",
+   "bytes": 95
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\dsh_web_err.log",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\error_2026-09-06.log",
+   "bytes": 8859
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\error_2026-09-12.log",
+   "bytes": 1108
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\error_2026-09-13.log",
+   "bytes": 3856
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\error_2026-09-14.log",
+   "bytes": 6805
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\error_2026-09-15.log",
+   "bytes": 3901
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\error_2026-09-16.log",
+   "bytes": 2704
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\error_2026-09-17.log",
+   "bytes": 16646
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\error_2026-09-19.log",
+   "bytes": 27053
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\error_2026-09-21.log",
+   "bytes": 21313
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\error_2026-09-22.log",
+   "bytes": 14615
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\error_2026-09-23.log",
+   "bytes": 3867
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_10096.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_2184.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_2716.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_2892.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_3232.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_4332.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_4724.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_4948.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_5692.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_6660.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_7800.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_7836.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_8040.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_8212.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_8412.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_8680.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_8708.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_8900.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_8940.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_9116.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_9128.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_9140.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_9388.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\segfault_9972.txt",
+   "bytes": 0
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-08-18.log",
+   "bytes": 3046689
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-08-25.log",
+   "bytes": 6025650
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-08-27.log",
+   "bytes": 4506746
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-09-06.log",
+   "bytes": 8438885
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-09-12.log",
+   "bytes": 806961
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-09-13.log",
+   "bytes": 4343929
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-09-14.log",
+   "bytes": 2762306
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-09-15.log",
+   "bytes": 1630371
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-09-16.log",
+   "bytes": 1983613
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-09-17.log",
+   "bytes": 4155634
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-09-19.log",
+   "bytes": 6069195
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-09-21.log",
+   "bytes": 2150478
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-09-22.log",
+   "bytes": 3748922
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\std_python_2026-09-23.log",
+   "bytes": 1949254
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\watchdog_dump_1789823068.txt",
+   "bytes": 6917
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\watchdog_dump_1789823083.txt",
+   "bytes": 7561
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260906.log",
+   "bytes": 1108
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260907.log",
+   "bytes": 752
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260908.log",
+   "bytes": 1923
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260909.log",
+   "bytes": 9269
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260910.log",
+   "bytes": 1086
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260912.log",
+   "bytes": 3413
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260913.log",
+   "bytes": 12446
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260914.log",
+   "bytes": 28928
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260915.log",
+   "bytes": 2610
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260916.log",
+   "bytes": 23960
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260917.log",
+   "bytes": 25093
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260918.log",
+   "bytes": 18837
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260919.log",
+   "bytes": 24177
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260920.log",
+   "bytes": 45188
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260921.log",
+   "bytes": 70314
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260922.log",
+   "bytes": 39910
+  },
+  {
+   "tag": "old-log",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\logs\\audit\\audit_20260923.log",
+   "bytes": 18913
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_abort_test.py",
+   "bytes": 4680
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_abort_test_out.txt",
+   "bytes": 5380
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_b.txt",
+   "bytes": 41297
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_bal.py",
+   "bytes": 2551
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_bal2.py",
+   "bytes": 1524
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_bjh_fill_wangzhe.py",
+   "bytes": 3961
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_bjh_inspect.py",
+   "bytes": 933
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_bjh_inspect_out.txt",
+   "bytes": 9063
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_bjh_readback_wangzhe.py",
+   "bytes": 1848
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_bjh_refill_wangzhe.py",
+   "bytes": 3313
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_build_bjh_paste.py",
+   "bytes": 2155
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_chk_words.py",
+   "bytes": 534
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_clean_phase1.py",
+   "bytes": 3651
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_cost_probe.py",
+   "bytes": 984
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_cost_probe.txt",
+   "bytes": 2124
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_desk_scroll.py",
+   "bytes": 868
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_diag_git.py",
+   "bytes": 1708
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_diag_git2.py",
+   "bytes": 958
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_diag_model.py",
+   "bytes": 1815
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_diag_net.py",
+   "bytes": 1243
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_diag_sohu.py",
+   "bytes": 1671
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_diff_agentloop.txt",
+   "bytes": 8824
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_diff_optimizer.txt",
+   "bytes": 3975
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_find_browser.py",
+   "bytes": 1144
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_get_bjh_mem.py",
+   "bytes": 292
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_gzh_set_clip_hotlife.py",
+   "bytes": 2047
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_gzh_single.py",
+   "bytes": 1327
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_junk_report.txt",
+   "bytes": 87013
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_m.txt",
+   "bytes": 15420
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_mem_dump.py",
+   "bytes": 591
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_mem_dump2.py",
+   "bytes": 720
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_mem_gzh.txt",
+   "bytes": 4321
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_mp.py",
+   "bytes": 1434
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_open_editors.py",
+   "bytes": 1061
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_open_gzh.py",
+   "bytes": 397
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_open_gzh_editor.py",
+   "bytes": 692
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_page_top.png",
+   "bytes": 469320
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe3.py",
+   "bytes": 1915
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe3.txt",
+   "bytes": 2775
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe4.py",
+   "bytes": 1675
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe4.txt",
+   "bytes": 831
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe5.py",
+   "bytes": 2422
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe5.txt",
+   "bytes": 6518
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe6.py",
+   "bytes": 1516
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe6.txt",
+   "bytes": 33827
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe7.py",
+   "bytes": 2144
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe7.txt",
+   "bytes": 12552
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe8.py",
+   "bytes": 2019
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe8.txt",
+   "bytes": 860
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe9.py",
+   "bytes": 1147
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe9.txt",
+   "bytes": 2455
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probeA.py",
+   "bytes": 908
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probeA.txt",
+   "bytes": 636
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_cost.py",
+   "bytes": 2164
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_env_db.py",
+   "bytes": 1895
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_logs.py",
+   "bytes": 1590
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_logs.txt",
+   "bytes": 4549
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_logs2.py",
+   "bytes": 1270
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_logs2.txt",
+   "bytes": 11519
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_out.txt",
+   "bytes": 7513
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_out2.txt",
+   "bytes": 7832
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_out3.txt",
+   "bytes": 18823
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_restart.py",
+   "bytes": 3439
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_restart2.py",
+   "bytes": 4641
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_restart3.py",
+   "bytes": 3000
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_settings.py",
+   "bytes": 1393
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_settings.txt",
+   "bytes": 7676
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_probe_tl.txt",
+   "bytes": 10583
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_ps_check.py",
+   "bytes": 671
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_ps_check2.py",
+   "bytes": 2028
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_ps_check3.py",
+   "bytes": 2152
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_ps_check4.py",
+   "bytes": 1650
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_ps_check5.py",
+   "bytes": 1672
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_ps_check6.py",
+   "bytes": 1944
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_ps_check7.py",
+   "bytes": 1819
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_ps_check8.py",
+   "bytes": 773
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_ps_out.txt",
+   "bytes": 772
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_ps_out5.txt",
+   "bytes": 8322
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_ps_out6.txt",
+   "bytes": 1626
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_ps_out7.txt",
+   "bytes": 60689
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_ps_out8.txt",
+   "bytes": 4917
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_q.py",
+   "bytes": 654
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_search_test.py",
+   "bytes": 3384
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_after_paste.html",
+   "bytes": 27864
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_after_struct.py",
+   "bytes": 1049
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_after_struct.txt",
+   "bytes": 14141
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_check.py",
+   "bytes": 1580
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_clear.py",
+   "bytes": 1172
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_clear_now.py",
+   "bytes": 1566
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_clear_out.txt",
+   "bytes": 70
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_dump_html.txt",
+   "bytes": 28445
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_dump_now.py",
+   "bytes": 1622
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_dump_out.txt",
+   "bytes": 803
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_dump_text.txt",
+   "bytes": 17808
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_open.py",
+   "bytes": 490
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_otman_after.html",
+   "bytes": 68061
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_otman_paste_out.txt",
+   "bytes": 655
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_page_top.py",
+   "bytes": 412
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_paste_html.py",
+   "bytes": 3309
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_paste_out.txt",
+   "bytes": 419
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_shots.py",
+   "bytes": 694
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_struct.py",
+   "bytes": 1122
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_struct.txt",
+   "bytes": 13542
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_struct_run.txt",
+   "bytes": 9829
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_verify2.html",
+   "bytes": 26874
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_verify2.py",
+   "bytes": 1750
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_sohu_verify2.txt",
+   "bytes": 13609
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_tap.py",
+   "bytes": 2110
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_tap2.py",
+   "bytes": 2332
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_tap3.py",
+   "bytes": 1771
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_tap4.py",
+   "bytes": 2092
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_test_alias.py",
+   "bytes": 2326
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_tmp_backup_v2.py",
+   "bytes": 323
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_up4b.py",
+   "bytes": 305
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_v_fig1.png",
+   "bytes": 507831
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_v_fig2.png",
+   "bytes": 399121
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_v_top.png",
+   "bytes": 515810
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_whoami.py",
+   "bytes": 3170
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_whoami2.py",
+   "bytes": 3519
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_whoami3.py",
+   "bytes": 3079
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_whoami4.py",
+   "bytes": 2765
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_whoami5.py",
+   "bytes": 3164
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_whoami6.py",
+   "bytes": 2172
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_whoami7.py",
+   "bytes": 1082
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_whoami8.py",
+   "bytes": 1132
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_wz_imgmap.json",
+   "bytes": 2210
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_zhihu_build.py",
+   "bytes": 1584
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_zhihu_fill.py",
+   "bytes": 3951
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_zhihu_probe.py",
+   "bytes": 2454
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_zhihu_probe2.py",
+   "bytes": 2519
+  },
+  {
+   "tag": "root-temp",
+   "type": "file",
+   "path": "D:\\7tan\\7tanAI\\_zhihu_single.py",
+   "bytes": 1128
+  },
+  {
+   "tag": "tmp-dir",
+   "type": "dir",
+   "path": "D:\\7tan\\7tanAI\\tmp_webtest2",
+   "files": 9,
+   "bytes": 1597727
+  },
+  {
+   "tag": "temp-scripts-dir",
+   "type": "dir",
+   "path": "D:\\7tan\\7tanAI\\临时脚本",
+   "files": 7,
+   "bytes": 219285
+  },
+  {
+   "tag": "my-screenshots",
+   "type": "dir",
+   "path": "D:\\7tan\\7tanAI\\_shot",
+   "files": 4,
+   "bytes": 2131048
+  },
+  {
+   "tag": "tmp-dir",
+   "type": "dir",
+   "path": "D:\\7tan\\7tanAI\\video_tmp",
+   "files": 8,
+   "bytes": 13657
+  },
+  {
+   "tag": "tmp-dir",
+   "type": "dir",
+   "path": "D:\\7tan\\7tanAI\\cover_tmp",
+   "files": 1,
+   "bytes": 2467
+  }
+ ]
+}

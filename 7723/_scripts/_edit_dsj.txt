@@ -1,0 +1,5 @@
+登录'退出': True
+编辑页: https://www.7tan.com/bbs/edit.php?id=82484 | 含原正文(大事记): True | 标题框: True
+现标题: 7723(7坛) 大事记 | 从一个人的WAP手机游戏网，到一群人的七坛（2009—2015·附原帖链接）
+更新后URL: https://www.7tan.com/bbs/edit.php?id=82484
+含'修改成功': True | 含'成功': True

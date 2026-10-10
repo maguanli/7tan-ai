@@ -18,7 +18,7 @@ if os.path.exists(env_path):
             break
 
 cmd = [
-    r"D:\nodejs\node-v22.16.0-win-x64\node.exe",
+    r"D:\nodejs\node-v24.19.0-win-x64\node.exe",
     r"node_modules\@deepseek-ai\dsh\lib\bin.js",
     "web",
 ]

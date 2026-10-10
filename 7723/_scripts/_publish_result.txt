@@ -1,0 +1,5 @@
+登录后URL: https://www.7tan.com/
+是否含'退出': True
+发帖后URL: https://www.7tan.com/bbs/82484/
+NEW_POST_ID=82484
+body[:300]=<!DOCTYPE html> <html lang="zh-CN"> <head>     <meta charset="UTF-8">     <base href="/bbs/">     <meta name="viewport" content="width=device-width, initial-scale=1.0">     <title>7723(7坛) 大事记 | 从一个人的WAP手机游戏网,到一群人的七坛(2009—2015·附原帖链接) - 7坛游戏社区</title>     <link rel="canonical" href="/bbs/82484

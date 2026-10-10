@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>发布帖子 - 7坛社区</title>
+    <meta name="robots" content="noindex,follow">
+    <link rel="canonical" href="https://www.7tan.com/bbs/post.php">
+    <link rel="stylesheet" href="/bbs/css/style.css">
+    <link rel="stylesheet" href="/bbs/css/mobile-nav.css?v=20260919">
+    <link rel="stylesheet" href="/bbs/css/ubb_plus.css?v=20260917">
+<script>
+var _hmt = _hmt || [];
+(function() {
+  var hm = document.createElement("script");
+  hm.src = "https://hm.baidu.com/hm.js?f5f121dbbaa5fca7a5d5fba84a19576c";
+  var s = document.getElementsByTagName("script")[0]; 
+  s.parentNode.insertBefore(hm, s);
+})();
+</script>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9874557266132949" crossorigin="anonymous"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <a href="/" class="logo">
+                    <span class="logo-icon">🎮</span>
+                    <span class="logo-text">7坛游戏社区</span>
+                </a>
+                <nav class="nav">
+                    <a href="https://www.7tan.com/">首页</a>
+                    <a href="/android/">游戏</a>
+                    <a href="/baike/">百科</a>
+                    <a href="https://www.7tan.com/ai-tool/">AI工具</a>
+                    <a href="user.php">老马</a>
+                    <a href="logout.php">退出</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <div class="breadcrumb">
+                <a href="/">社区首页</a>
+                <span class="separator">></span>
+                <span class="current">发布帖子</span>
+            </div>
+
+            <div class="post-form">
+                <h2>发布新帖子</h2>
+                
+                                
+                <form method="post">
+                    <div class="form-group">
+                        <label>发布版块</label>
+                        <div class="bankuai-badge" id="bankuaiBadge" onclick="showBankuaiModal()">
+                            <span class="badge-icon">📋</span>
+                            <span class="badge-name" id="currentBankuaiName">活动公告</span>
+                            <span class="badge-change">切换板块</span>
+                        </div>
+                        <input type="hidden" name="bankuai" id="bankuaiInput" value="16">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="title">帖子标题</label>
+                        <input type="text" name="title" id="title" required maxlength="100" placeholder="请输入帖子标题">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="content">帖子内容</label>
+                        <textarea name="content" id="content" rows="10" required placeholder="请输入帖子内容，支持UBB代码"></textarea>
+                        <!-- UBB快捷工具栏 -->
+                        <div class="ubb-toolbar">
+                            <button type="button" class="ubb-btn" data-ubb="[b]|[/b]" data-placeholder="输入文字" title="粗体">
+                                <strong>B</strong>
+                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[i]|[/i]" data-placeholder="输入文字" title="斜体">
+                                <em>I</em>
+                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[u]|[/u]" data-placeholder="输入文字" title="下划线">
+                                <u>U</u>
+                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[s]|[/s]" data-placeholder="输入文字" title="删除线">
+                                <s>S</s>
+                            </button>
+                            <span class="ubb-divider"></span>
+                            <button type="button" class="ubb-btn" data-ubb="[url=http://]|输入链接[/url]" data-placeholder="输入链接" title="超链接">
+                                🔗
+                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[img]|输入图片地址[/img]" data-placeholder="输入图片地址" title="图片">
+                                🖼️
+                            </button>
+                            <span class="ubb-divider"></span>
+                            <button type="button" class="ubb-btn" data-ubb="[red]|[/red]" data-placeholder="输入文字" title="红色文字">
+                                <span style="color:#ff4d4f;">红</span>
+                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[green]|[/green]" data-placeholder="输入文字" title="绿色文字">
+                                <span style="color:#52c41a;">绿</span>
+                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[blue]|[/blue]" data-placeholder="输入文字" title="蓝色文字">
+                                <span style="color:#1890ff;">蓝</span>
+                            </button>
+                            <span class="ubb-divider"></span>
+                            <button type="button" class="ubb-btn" data-ubb="[quote]|[/quote]" data-placeholder="输入引用内容" title="引用">
+                                💬
+                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[big]|[/big]" data-placeholder="输入文字" title="大字体">
+                                大                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[small]|[/small]" data-placeholder="输入文字" title="小字体">
+                                小                            </button>
+                            <span class="ubb-divider"></span>
+                            <button type="button" class="ubb-btn" data-ubb="[input=15]|内容[/input]" data-placeholder="内容" title="输入框(数字=宽度)">
+                                📝
+                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[c]|电话[/c]" data-placeholder="电话" title="拨打电话">
+                                📞
+                            </button>
+                            <span class="ubb-divider"></span>
+                            <button type="button" class="ubb-btn" data-ubb="[left]|[/left]" data-placeholder="文字" title="居左">
+                                ◀
+                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[center]|[/center]" data-placeholder="文字" title="居中">
+                                ☗
+                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[right]|[/right]" data-placeholder="文字" title="居右">
+                                ▶
+                            </button>
+                            <span class="ubb-divider"></span>
+                            <button type="button" class="ubb-btn" data-ubb="[now]" data-placeholder="" title="当前时间">
+                                🕐
+                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[hellos]" data-placeholder="" title="问候语">
+                                👋
+                            </button>
+                            <span class="ubb-divider"></span>
+                            <button type="button" class="ubb-btn" data-ubb="[hl]|[/hl]" data-placeholder="输入文字" title="高亮">
+                                <span style="background:#fff3b0;padding:0 3px;border-radius:3px;">高</span>
+                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[color=#ff6600]|[/color]" data-placeholder="输入文字" title="彩色文字">
+                                <span style="color:#ff6600;font-weight:600;">A</span>
+                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[size=18]|[/size]" data-placeholder="输入文字" title="自定义字号">
+                                字号                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[badge]|[/badge]" data-placeholder="徽章" title="徽章">
+                                徽章                            </button>
+                            <span class="ubb-divider"></span>
+                            <button type="button" class="ubb-btn" data-ubb="[title]|[/title]" data-placeholder="小节标题" title="小节标题">
+                                标题                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[subtitle]|[/subtitle]" data-placeholder="副标题" title="副标题">
+                                副标题                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[caption]|[/caption]" data-placeholder="图注文字" title="图注">
+                                图注                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[divider]" data-placeholder="" title="分割线">
+                                分割线                            </button>
+                            <span class="ubb-divider"></span>
+                            <button type="button" class="ubb-btn" data-ubb="[note]|[/note]" data-placeholder="提示内容" title="信息框">
+                                信息框                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[warn]|[/warn]" data-placeholder="警示内容" title="警示框">
+                                警示框                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[tip]|[/tip]" data-placeholder="技巧内容" title="技巧框">
+                                技巧框                            </button>
+                            <span class="ubb-divider"></span>
+                            <button type="button" class="ubb-btn" data-ubb="[card=标题]|[/card]" data-placeholder="卡片内容" title="卡片">
+                                卡片                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[fold=标题]|[/fold]" data-placeholder="折叠内容" title="折叠面板">
+                                折叠                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[btn=http://]|按钮文字[/btn]" data-placeholder="按钮文字" title="按钮">
+                                按钮                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[code]|[/code]" data-placeholder="代码" title="代码块">
+                                代码                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[img=400]|图片地址[/img]" data-placeholder="图片地址" title="限宽图片">
+                                限宽图                            </button>
+                            <button type="button" class="ubb-btn" data-ubb="[table]|[/table]" data-placeholder="[tr][th]表头[/th][/tr][tr][td]内容[/td][/tr]" title="表格">
+                                表格                            </button>
+                            <span class="ubb-divider"></span>
+                            <button type="button" class="ubb-btn ubb-help-btn" onclick="showUbbHelp()" title="UBB帮助">
+                                ❓
+                            </button>
+                        </div>
+                        <div class="form-help">支持UBB代码: [b]粗体[/b], [i]斜体[/i], [url=链接]文字[/url], [img]图片地址[/img], [input=15]内容[/input], [c]电话[/c], [left/center/right]文字[/left/center/right], [now], [hellos]；精美组件: [hl]高亮[/hl], [color=#ff6600]彩色[/color], [size=18]字号[/size], [title]小节标题[/title], [note]信息框[/note], [warn]警示[/warn], [tip]技巧[/tip], [card=标题]卡片[/card], [fold=标题]折叠[/fold], [badge]徽章[/badge], [btn=链接]按钮[/btn], [divider]分割线, [table]表格[/table]（详见工具栏 ❓）</div>
+                    </div>
+                    
+                    <!-- 文件上传区域 -->
+                    <div class="form-group">
+                        <label>上传附件（可选）</label>
+                        <div class="file-upload-area" id="uploadArea">
+                            <div class="upload-tabs">
+                                <button type="button" class="upload-tab active" data-type="image">📷 图片</button>
+                                <button type="button" class="upload-tab" data-type="video">🎬 视频</button>
+                                <button type="button" class="upload-tab" data-type="audio">🎵 音频</button>
+                                <button type="button" class="upload-tab" data-type="game">📦 游戏</button>
+                            </div>
+                            <div class="upload-btn" id="uploadBtn">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                                <span id="uploadTip">点击上传或拖拽文件到此处</span>
+                            </div>
+                            <input type="file" id="fileInput" style="display:none;">
+                        </div>
+                        <!-- 上传进度区域 -->
+                        <div class="upload-progress-wrapper" id="uploadProgressWrapper">
+                            <div id="uploadProgressList"></div>
+                        </div>
+                        <div class="uploaded-files" id="uploadedFiles"></div>
+                        <input type="hidden" name="images" id="imagesInput" value="">
+                        <div class="upload-help">
+                            <span>图片: JPG/PNG/GIF/WebP (最大10MB)</span>
+                            <span>视频: MP4/MOV/AVI/MKV (最大500MB)</span>
+                            <span>音频: MP3/WAV/FLAC (最大500MB)</span>
+                            <span>游戏: APK/ZIP/RAR/7Z (最大500MB)</span>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" id="submitBtn">发布帖子</button>
+                        <a href="/bbs/" class="btn btn-default">取消</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 7坛游戏社区 All Rights Reserved</p>
+        </div>
+    </footer>
+
+    <!-- UBB帮助弹窗 -->
+    <div class="ubb-help-modal" id="ubbHelpModal">
+        <div class="ubb-help-content">
+            <button type="button" class="ubb-help-close" onclick="closeUbbHelp()">&times;</button>
+            <h3>UBB代码帮助</h3>
+            <table class="ubb-help-table">
+                <tr>
+                    <th>功能</th>
+                    <th>语法</th>
+                </tr>
+                <tr>
+                    <td>粗体</td>
+                    <td><code>[b]文字[/b]</code></td>
+                </tr>
+                <tr>
+                    <td>斜体</td>
+                    <td><code>[i]文字[/i]</code></td>
+                </tr>
+                <tr>
+                    <td>下划线</td>
+                    <td><code>[u]文字[/u]</code></td>
+                </tr>
+                <tr>
+                    <td>删除线</td>
+                    <td><code>[s]文字[/s]</code></td>
+                </tr>
+                <tr>
+                    <td>超链接</td>
+                    <td><code>[url=地址]文字[/url]</code></td>
+                </tr>
+                <tr>
+                    <td>图片</td>
+                    <td><code>[img]图片地址[/img]</code></td>
+                </tr>
+                <tr>
+                    <td>红色文字</td>
+                    <td><code>[red]文字[/red]</code></td>
+                </tr>
+                <tr>
+                    <td>绿色文字</td>
+                    <td><code>[green]文字[/green]</code></td>
+                </tr>
+                <tr>
+                    <td>蓝色文字</td>
+                    <td><code>[blue]文字[/blue]</code></td>
+                </tr>
+                <tr>
+                    <td>引用</td>
+                    <td><code>[quote]内容[/quote]</code></td>
+                </tr>
+                <tr>
+                    <td>大字体</td>
+                    <td><code>[big]文字[/big]</code></td>
+                </tr>
+                <tr>
+                    <td>小字体</td>
+                    <td><code>[small]文字[/small]</code></td>
+                </tr>
+                <tr>
+                    <td>输入框</td>
+                    <td><code>[input=15]内容[/input]</code></td>
+                </tr>
+                <tr>
+                    <td>拨打电话</td>
+                    <td><code>[c]电话号码[/c]</code></td>
+                </tr>
+                <tr>
+                    <td>居左</td>
+                    <td><code>[left]文字[/left]</code></td>
+                </tr>
+                <tr>
+                    <td>居中</td>
+                    <td><code>[center]文字[/center]</code></td>
+                </tr>
+                <tr>
+                    <td>居右</td>
+                    <td><code>[right]文字[/right]</code></td>
+                </tr>
+                <tr>
+                    <td>当前时间</td>
+                    <td><code>[now]</code></td>
+                </tr>
+                <tr>
+                    <td>问候语</td>
+                    <td><code>[hellos]</code> 或 <code>[hello]</code></td>
+                </tr>
+                <tr>
+                    <td>高亮</td>
+                    <td><code>[hl]文字[/hl]</code></td>
+                </tr>
+                <tr>
+                    <td>彩色文字</td>
+                    <td><code>[color=#ff6600]文字[/color]</code></td>
+                </tr>
+                <tr>
+                    <td>自定义字号</td>
+                    <td><code>[size=18]文字[/size]</code></td>
+                </tr>
+                <tr>
+                    <td>徽章</td>
+                    <td><code>[badge]徽章[/badge]</code></td>
+                </tr>
+                <tr>
+                    <td>小节标题</td>
+                    <td><code>[title]标题[/title]</code></td>
+                </tr>
+                <tr>
+                    <td>副标题</td>
+                    <td><code>[subtitle]副标题[/subtitle]</code></td>
+                </tr>
+                <tr>
+                    <td>图注</td>
+                    <td><code>[caption]图注文字[/caption]</code></td>
+                </tr>
+                <tr>
+                    <td>分割线</td>
+                    <td><code>[divider]</code></td>
+                </tr>
+                <tr>
+                    <td>信息框</td>
+                    <td><code>[note]提示内容[/note]</code></td>
+                </tr>
+                <tr>
+                    <td>警示框</td>
+                    <td><code>[warn]警示内容[/warn]</code></td>
+                </tr>
+                <tr>
+                    <td>技巧框</td>
+                    <td><code>[tip]技巧内容[/tip]</code></td>
+                </tr>
+                <tr>
+                    <td>卡片</td>
+                    <td><code>[card=标题]内容[/card]</code></td>
+                </tr>
+                <tr>
+                    <td>折叠面板</td>
+                    <td><code>[fold=标题]内容[/fold]</code></td>
+                </tr>
+                <tr>
+                    <td>按钮</td>
+                    <td><code>[btn=链接]按钮文字[/btn]</code></td>
+                </tr>
+                <tr>
+                    <td>代码块</td>
+                    <td><code>[code]代码[/code]</code></td>
+                </tr>
+                <tr>
+                    <td>限宽图片</td>
+                    <td><code>[img=400]图片地址[/img]</code></td>
+                </tr>
+                <tr>
+                    <td>表格</td>
+                    <td><code>[table][tr][th]表头[/th][/tr][tr][td]内容[/td][/tr][/table]</code></td>
+                </tr>
+            </table>
+            <p style="margin-top:12px;font-size:13px;color:#666;">💡 提示：数字可自定义，如 <code>[input=20]</code> 表示更大的输入框、<code>[size=18]</code> 表示 18px 字号（12~32）。精美组件（高亮/标题/提示框/卡片/折叠/按钮/表格等）可点工具栏按钮一键插入，发帖后自动渲染。</p>
+            <div class="ubb-help-footer">
+                <button type="button" class="btn btn-primary" onclick="closeUbbHelp()">知道了</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 板块选择Modal -->
+    <div class="modal" id="bankuaiModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>选择板块</h3>
+                <button type="button" class="modal-close" onclick="closeBankuaiModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="bankuai-grid">
+                                        <div class="bankuai-item" data-id="400" data-name="意识模型">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">意识模型</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="401" data-name="AI工具">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">AI工具</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="3" data-name="现金任务">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">现金任务</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="16" data-name="活动公告">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">活动公告</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="17" data-name="游戏分享">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">游戏分享</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="18" data-name="游戏交流">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">游戏交流</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="20" data-name="自拍交友">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">自拍交友</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="21" data-name="聊天灌水">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">聊天灌水</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="22" data-name="情感文学">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">情感文学</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="23" data-name="新人报道">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">新人报道</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="24" data-name="七坛次元">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">七坛次元</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="25" data-name="问题求助">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">问题求助</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="26" data-name="投诉建议">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">投诉建议</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="27" data-name="申版辞版">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">申版辞版</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="28" data-name="版主议事">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">版主议事</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="29" data-name="点播游戏">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">点播游戏</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="50" data-name="游戏报错">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">游戏报错</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="64" data-name="开心乐园">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">开心乐园</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="65" data-name="手机网游交流讨论区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">手机网游交流讨论区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="66" data-name="JAVA单机游戏交流区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">JAVA单机游戏交流区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="73" data-name="玩转扣扣交流讨论区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">玩转扣扣交流讨论区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="79" data-name="时空猎人专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">时空猎人专区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="83" data-name="帝王三国专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">帝王三国专区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="100" data-name="游戏破解交流讨论区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">游戏破解交流讨论区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="137" data-name="PY编程平台交流专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">PY编程平台交流专区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="139" data-name="MRP交流讨论专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">MRP交流讨论专区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="146" data-name="s６０v２游戏专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">s６０v２游戏专区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="147" data-name="s６０v３游戏专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">s６０v３游戏专区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="148" data-name="JAVA、塞班游戏专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">JAVA、塞班游戏专区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="149" data-name="音乐分享专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">音乐分享专区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="188" data-name="勋章申请专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">勋章申请专区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="189" data-name="原创小说发布专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">原创小说发布专区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="191" data-name="猜猜看娱乐大专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">猜猜看娱乐大专区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="192" data-name="网游交易出售专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">网游交易出售专区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="193" data-name="网游交易求购专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">网游交易求购专区</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="195" data-name="交易必看">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">交易必看</span>
+                    </div>
+                                        <div class="bankuai-item" data-id="196" data-name="电影电视粉丝专区">
+                        <span class="bankuai-icon">📋</span>
+                        <span class="bankuai-title">电影电视粉丝专区</span>
+                    </div>
+                                    </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // 页面文案（前端 JS 用）
+    window.PT = {"dragTip":"：点击上传或拖拽文件到此处","preparing":"准备上传...","uploading":"上传中...","uploaded":"上传完成","uploadErr":"上传失败","parseErr":"解析响应失败","httpErr":"HTTP错误","sizeLimit":"文件超过大小限制，最大"};
+    // 文件上传相关
+    const uploadBtn = document.getElementById('uploadBtn');
+    const fileInput = document.getElementById('fileInput');
+    const uploadedFiles = document.getElementById('uploadedFiles');
+    const imagesInput = document.getElementById('imagesInput');
+    const uploadTip = document.getElementById('uploadTip');
+    const uploadProgressWrapper = document.getElementById('uploadProgressWrapper');
+    const uploadProgressList = document.getElementById('uploadProgressList');
+    let uploadedUrls = [];
+    let currentType = 'image';
+    let uploadTasks = []; // 跟踪所有上传任务
+    
+    // 文件类型配置
+    const typeConfig = {
+        image: {
+            accept: '.jpg,.jpeg,.png,.gif,.webp,.bmp',
+            maxSize: 10 * 1024 * 1024,
+            maxCount: 9,
+            icon: '📷'
+        },
+        video: {
+            accept: '.mp4,.avi,.mov,.mkv,.flv,.wmv,.webm,.3gp',
+            maxSize: 500 * 1024 * 1024,
+            maxCount: 3,
+            icon: '🎬'
+        },
+        audio: {
+            accept: '.mp3,.wav,.flac,.aac,.ogg,.wma,.m4a',
+            maxSize: 500 * 1024 * 1024,
+            maxCount: 5,
+            icon: '🎵'
+        },
+        game: {
+            accept: '.apk,.ipa,.zip,.rar,.7z,.tar,.gz',
+            maxSize: 500 * 1024 * 1024,
+            maxCount: 3,
+            icon: '📦'
+        }
+    };
+
+    // 切换上传类型
+    document.querySelectorAll('.upload-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.upload-tab').forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            currentType = this.dataset.type;
+            fileInput.accept = typeConfig[currentType].accept;
+            uploadTip.textContent = this.textContent.replace(/^[^\s]+\s/, '') + window.PT.dragTip;
+        });
+    });
+
+    // 点击上传按钮
+    uploadBtn.addEventListener('click', function() {
+        fileInput.click();
+    });
+
+    // 选择文件后上传
+    fileInput.addEventListener('change', function() {
+        const files = Array.from(this.files);
+        files.forEach(file => {
+            uploadFile(file);
+        });
+        this.value = '';
+    });
+
+    // 格式化文件大小
+    function formatSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // 格式化上传速度
+    function formatSpeed(bytesPerSecond) {
+        if (bytesPerSecond === 0) return '0 KB/s';
+        const k = 1024;
+        const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+        const i = Math.floor(Math.log(bytesPerSecond) / Math.log(k));
+        return parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // 创建进度条HTML
+    function createProgressItem(fileName, fileSize, taskId) {
+        return `
+            <div class="upload-progress-item" id="progress-${taskId}">
+                <div class="upload-progress-header">
+                    <span class="upload-progress-name">${fileName}</span>
+                    <span class="upload-progress-status" id="status-${taskId}">${window.PT.preparing}</span>
+                </div>
+                <div class="upload-progress-bar">
+                    <div class="upload-progress-bar-fill" id="bar-${taskId}"></div>
+                </div>
+                <div class="upload-progress-info">
+                    <span id="percent-${taskId}">0%</span>
+                    <span id="speed-${taskId}">0 KB/s</span>
+                    <span id="loaded-${taskId}">0 / ${formatSize(fileSize)}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    // 显示进度区域
+    function showProgress() {
+        uploadProgressWrapper.classList.add('active');
+    }
+
+    // 更新进度
+    function updateProgress(taskId, loaded, total, speed) {
+        const percent = Math.round((loaded / total) * 100);
+        document.getElementById('bar-' + taskId).style.width = percent + '%';
+        document.getElementById('percent-' + taskId).textContent = percent + '%';
+        document.getElementById('speed-' + taskId).textContent = formatSpeed(speed);
+        document.getElementById('loaded-' + taskId).textContent = formatSize(loaded) + ' / ' + formatSize(total);
+    }
+
+    // 设置完成状态
+    function setComplete(taskId) {
+        const bar = document.getElementById('bar-' + taskId);
+        const status = document.getElementById('status-' + taskId);
+        bar.classList.add('complete');
+        status.className = 'upload-progress-status complete';
+        status.textContent = window.PT.uploaded;
+        document.getElementById('percent-' + taskId).textContent = '100%';
+    }
+
+    // 设置错误状态
+    function setError(taskId, message) {
+        const bar = document.getElementById('bar-' + taskId);
+        const status = document.getElementById('status-' + taskId);
+        bar.classList.add('error');
+        bar.style.width = '100%';
+        status.className = 'upload-progress-status error';
+        status.textContent = window.PT.uploadErr;
+        if (message) {
+            setTimeout(() => {
+                const item = document.getElementById('progress-' + taskId);
+                if (item) item.style.display = 'none';
+            }, 3000);
+        }
+    }
+
+    // 移除进度项
+    function removeProgressItem(taskId) {
+        setTimeout(() => {
+            const item = document.getElementById('progress-' + taskId);
+            if (item) item.style.display = 'none';
+        }, 1000);
+    }
+
+    // 上传文件（带进度）
+    function uploadFile(file) {
+        const config = typeConfig[currentType];
+        
+        // 检查文件大小
+        if (file.size > config.maxSize) {
+            const sizeLimit = config.maxSize > 1024 * 1024 ? 
+                (config.maxSize / (1024 * 1024)).toFixed(0) + 'MB' : 
+                (config.maxSize / 1024).toFixed(0) + 'KB';
+            alert(window.PT.sizeLimit + sizeLimit);
+            return;
+        }
+        
+        const taskId = Date.now() + Math.random().toString(36).substr(2, 9);
+        const fileName = file.name.length > 20 ? file.name.substring(0, 17) + '...' : file.name;
+        
+        // 显示进度区域
+        showProgress();
+        
+        // 添加进度条
+        uploadProgressList.insertAdjacentHTML('beforeend', createProgressItem(fileName, file.size, taskId));
+        
+        const formData = new FormData();
+        formData.append('image', file);
+
+        const xhr = new XMLHttpRequest();
+        uploadTasks.push(taskId);
+        
+        // 上传进度事件
+        xhr.upload.addEventListener('progress', function(e) {
+            if (e.lengthComputable) {
+                const speed = e.loaded > 0 ? e.loaded / (Date.now() - uploadStartTime) * 1000 : 0;
+                updateProgress(taskId, e.loaded, e.total, speed);
+            }
+        });
+        
+        // 更新状态为上传中
+        const statusEl = document.getElementById('status-' + taskId);
+        statusEl.className = 'upload-progress-status uploading';
+        statusEl.textContent = window.PT.uploading;
+        
+        const uploadStartTime = Date.now();
+        
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200) {
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        if (data.success) {
+                            uploadedUrls.push({
+                                url: data.url,
+                                name: data.filename,
+                                size: data.sizeStr,
+                                isImage: data.isImage,
+                                icon: data.icon || config.icon
+                            });
+                            renderFiles();
+                            setComplete(taskId);
+                            removeProgressItem(taskId);
+                        } else {
+                            setError(taskId, data.error);
+                        }
+                    } catch (e) {
+                        setError(taskId, window.PT.parseErr);
+                    }
+                } else {
+                    setError(taskId, window.PT.httpErr + ': ' + xhr.status);
+                }
+                
+                // 从任务列表移除
+                const idx = uploadTasks.indexOf(taskId);
+                if (idx > -1) uploadTasks.splice(idx, 1);
+            }
+        };
+        
+        xhr.open('POST', 'upload_image.php', true);
+        xhr.send(formData);
+    }
+
+    // 渲染已上传文件
+    function renderFiles() {
+        uploadedFiles.innerHTML = uploadedUrls.map((file, index) => {
+            if (file.isImage) {
+                return `
+                    <div class="uploaded-file-item image-item">
+                        <img src="${file.url}" alt="${file.name}">
+                        <button type="button" class="remove-btn" onclick="removeFile(${index})">×</button>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="uploaded-file-item attachment-item">
+                        <div class="file-icon">${file.icon}</div>
+                        <div class="file-info">
+                            <div class="file-name">${file.name}</div>
+                            <div class="file-size">${file.size}</div>
+                        </div>
+                        <button type="button" class="remove-btn" onclick="removeFile(${index})">×</button>
+                    </div>
+                `;
+            }
+        }).join('');
+        
+        // 更新隐藏表单值
+        imagesInput.value = uploadedUrls.map(f => f.url).join('\n');
+    }
+
+    // 删除文件
+    function removeFile(index) {
+        uploadedUrls.splice(index, 1);
+        renderFiles();
+    }
+
+    // 拖拽上传支持
+    const uploadArea = document.getElementById('uploadArea');
+    
+    uploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.classList.add('dragover');
+    });
+    
+    uploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+    });
+    
+    uploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+        
+        const files = Array.from(e.dataTransfer.files);
+        files.forEach(file => {
+            uploadFile(file);
+        });
+    });
+    
+    // 设置初始文件类型
+    fileInput.accept = typeConfig.image.accept;
+
+    // 板块选择Modal
+    function showBankuaiModal() {
+        document.getElementById('bankuaiModal').classList.add('active');
+        // 标记当前选中的板块
+        const currentId = document.getElementById('bankuaiInput').value;
+        document.querySelectorAll('.bankuai-item').forEach(item => {
+            item.classList.remove('selected');
+            if (item.dataset.id == currentId) {
+                item.classList.add('selected');
+            }
+        });
+    }
+
+    function closeBankuaiModal() {
+        document.getElementById('bankuaiModal').classList.remove('active');
+    }
+
+    // 点击板块项选择
+    document.querySelectorAll('.bankuai-item').forEach(item => {
+        item.addEventListener('click', function() {
+            const id = this.dataset.id;
+            const name = this.dataset.name;
+            
+            // 更新隐藏字段
+            document.getElementById('bankuaiInput').value = id;
+            // 更新显示名称
+            document.getElementById('currentBankuaiName').textContent = name;
+            // 更新徽章颜色
+            document.getElementById('bankuaiBadge').style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            // 关闭Modal
+            closeBankuaiModal();
+        });
+    });
+
+    // 点击Modal背景关闭
+    document.getElementById('bankuaiModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeBankuaiModal();
+        }
+    });
+
+    // ESC键关闭Modal
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeBankuaiModal();
+            closeUbbHelp();
+        }
+    });
+    
+    // UBB快捷工具栏功能
+    const contentTextarea = document.getElementById('content');
+    
+    // 点击UBB按钮插入代码
+    document.querySelectorAll('.ubb-btn[data-ubb]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const ubb = this.dataset.ubb;
+            const placeholder = this.dataset.placeholder || '';
+            const parts = ubb.split('|');
+            
+            let insertText = '';
+            if (parts.length === 2) {
+                // 两端标签格式，如 [b]|[/b]
+                insertText = parts[0] + placeholder + parts[1];
+            } else {
+                // 单标签格式，如 [img]placeholder[/img]
+                insertText = ubb;
+            }
+            
+            insertAtCursor(contentTextarea, insertText);
+        });
+    });
+    
+    // 在光标位置插入文本
+    function insertAtCursor(textarea, text) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const before = textarea.value.substring(0, start);
+        const after = textarea.value.substring(end);
+        
+        textarea.value = before + text + after;
+        
+        // 设置光标位置到中间（标签之间）
+        const newPos = start + text.indexOf('|');
+        if (newPos > start) {
+            textarea.selectionStart = newPos;
+            textarea.selectionEnd = newPos + (placeholder ? placeholder.length : 0);
+        } else {
+            textarea.selectionStart = textarea.selectionEnd = start + text.length;
+        }
+        
+        textarea.focus();
+    }
+    
+    // UBB帮助弹窗
+    function showUbbHelp() {
+        document.getElementById('ubbHelpModal').classList.add('active');
+    }
+    
+    function closeUbbHelp() {
+        document.getElementById('ubbHelpModal').classList.remove('active');
+    }
+    
+    // 点击弹窗背景关闭
+    document.getElementById('ubbHelpModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeUbbHelp();
+        }
+    });
+    
+    // textarea获得焦点时，工具栏高亮
+    contentTextarea.addEventListener('focus', function() {
+        document.querySelector('.ubb-toolbar').classList.add('focused');
+    });
+    
+    contentTextarea.addEventListener('blur', function() {
+        document.querySelector('.ubb-toolbar').classList.remove('focused');
+    });
+    </script>
+    
+    <!-- 返回顶部 -->
+    <button class="back-to-top" id="backToTop" title="返回顶部">↑</button>
+    <script>
+    window.addEventListener('scroll', function() {
+        var btn = document.getElementById('backToTop');
+        if (window.pageYOffset > 300) {
+            btn.classList.add('show');
+        } else {
+            btn.classList.remove('show');
+        }
+    });
+    document.getElementById('backToTop').addEventListener('click', function() {
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    });
+    </script>
+    <style>
+    /* UBB快捷工具栏样式 */
+    .ubb-toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 10px 12px;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: 1px solid #dee2e6;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+    }
+    
+    .ubb-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 34px;
+        height: 32px;
+        padding: 0 10px;
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: #495057;
+        transition: all 0.2s;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    
+    .ubb-btn:hover {
+        border-color: #4dabf7;
+        color: #1971c2;
+        background: linear-gradient(180deg, #e7f5ff 0%, #d0ebff 100%);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transform: translateY(-1px);
+    }
+    
+    .ubb-btn:active {
+        background: linear-gradient(180deg, #d0ebff 0%, #a5d8ff 100%);
+        transform: translateY(0);
+    }
+    
+    .ubb-divider {
+        width: 1px;
+        height: 22px;
+        background: linear-gradient(180deg, transparent, #ced4da, transparent);
+        margin: 0 2px;
+    }
+    
+    .ubb-help-btn {
+        margin-left: auto;
+        background: linear-gradient(180deg, #fff3bf 0%, #ffe066 100%);
+        border-color: #ffd43b;
+        color: #e67700;
+    }
+    
+    .ubb-help-btn:hover {
+        background: linear-gradient(180deg, #ffe066 0%, #fab005 100%);
+        border-color: #fab005;
+        color: #b35c00;
+    }
+    
+    /* UBB帮助弹窗 */
+    .ubb-help-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 10000;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    .ubb-help-modal.active {
+        display: flex;
+    }
+    
+    .ubb-help-content {
+        background: #fff;
+        border-radius: 16px;
+        padding: 28px;
+        max-width: 520px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        position: relative;
+    }
+    
+    .ubb-help-content h3 {
+        margin: 0 0 20px 0;
+        font-size: 20px;
+        color: #333;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .ubb-help-content h3::before {
+        content: "📝";
+        font-size: 24px;
+    }
+    
+    .ubb-help-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        width: 36px;
+        height: 36px;
+        border: none;
+        background: #f8f9fa;
+        border-radius: 50%;
+        font-size: 20px;
+        cursor: pointer;
+        color: #666;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+    
+    .ubb-help-close:hover {
+        background: #e9ecef;
+        color: #333;
+    }
+    
+    .ubb-help-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .ubb-help-table th,
+    .ubb-help-table td {
+        padding: 12px 14px;
+        border: 1px solid #e9ecef;
+        text-align: left;
+    }
+    
+    .ubb-help-table th {
+        background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    .ubb-help-table tr:hover td {
+        background: #f8f9fa;
+    }
+    
+    .ubb-help-table td code {
+        background: #e9ecef;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-family: Consolas, monospace;
+        color: #c7254e;
+        font-size: 13px;
+    }
+    
+    .ubb-help-table td:first-child {
+        width: 100px;
+        font-weight: 500;
+        color: #495057;
+    }
+    
+    .ubb-help-footer {
+        margin-top: 20px;
+        text-align: center;
+        padding-top: 16px;
+        border-top: 1px solid #e9ecef;
+    }
+    
+    .ubb-help-footer .btn {
+        padding: 10px 32px;
+        font-size: 14px;
+    }
+    
+    /* textarea聚焦时工具栏高亮 */
+    .ubb-toolbar.focused {
+        border-color: #4dabf7;
+        background: linear-gradient(135deg, #e7f5ff 0%, #d0ebff 100%);
+    }
+    </style>
+<nav class="mobile-nav">
+    <div class="mobile-nav-inner">
+        <a href="/" class="mobile-nav-item"><span>🏠</span><span>首页</span></a>
+        <a href="/android/" class="mobile-nav-item"><span>🎮</span><span>游戏</span></a>
+        <a href="/bbs/post.php" class="mobile-nav-item active"><span>📝</span><span>发帖</span></a>
+        <a href="/game-creator/" class="mobile-nav-item"><span>🛠️</span><span>做游戏</span></a>
+        <a href="/bbs/search.php" class="mobile-nav-item"><span>🔍</span><span>搜索</span></a>
+        <a href="/bbs/user.php" class="mobile-nav-item"><span>👤</span><span>我的</span></a>
+    </div>
+</nav>
+<div class="mobile-nav-spacer" aria-hidden="true"></div>
+</html>
+

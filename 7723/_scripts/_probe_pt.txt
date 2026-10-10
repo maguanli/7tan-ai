@@ -1,0 +1,17 @@
+PT_CONFIG:
+{"dragTip":"：点击上传或拖拽文件到此处","preparing":"准备上传...","uploading":"上传中...","uploaded":"上传完成","uploadErr":"上传失败","parseErr":"解析响应失败","httpErr":"HTTP错误","sizeLimit":"文件超过大小限制，最大"}
+
+-- upload/url 线索 --
+[upload] dow.PT = {"dragTip":"：点击上传或拖拽文件到此处","preparing":"准备上传...","uploading":"上传中...","uploaded":"上传完成","uploadErr":"上传失败","parseErr":"解析响应失败","httpErr":"HTTP错误","sizeLimit"
+
+-- scripts --
+https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9874557266132949
+
+-- form fields --
+<input type="hidden" name="bankuai" id="bankuaiInput" value="16">
+<input type="text" name="title" id="title" required maxlength="100" placeholder="请输入帖子标题">
+<textarea name="content" id="content" rows="10" required placeholder="请输入帖子内容，支持UBB代码">
+<input type="hidden" name="images" id="imagesInput" value="">
+
+-- enctype/accept --
+type="file"

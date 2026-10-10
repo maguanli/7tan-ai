@@ -30,19 +30,20 @@ CREATE_NO_WINDOW = 0x08000000
 
 
 def _run(args_list, timeout=120):
-    """调用统一入口脚本 desktop_do.py，返回 stdout"""
+    """调用统一入口脚本 desktop_do.py，返回 stdout（支持用户中止：杀进程树）"""
     if not os.path.exists(DO):
         return f'❌ 缺少桌面机器人脚本: {DO}'
     cmd = [sys.executable, DO] + args_list
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True,
-                           encoding='utf-8', errors='replace',
-                           timeout=timeout, cwd=ROOT,
-                           creationflags=CREATE_NO_WINDOW)
-        out = r.stdout or ''
-        if r.returncode != 0:
-            out += '\n[stderr] ' + ((r.stderr or '')[-1500:])
-        return out.strip() or f'（无输出，exit={r.returncode}）'
+        from src.utils.abort_signal import run_with_abort, AbortedError
+        try:
+            rc, so, se = run_with_abort(cmd, cwd=ROOT, timeout=timeout)
+        except AbortedError:
+            return '⏹ 已中止（用户终止任务），桌面操作已强制结束'
+        out = so or ''
+        if rc != 0:
+            out += '\n[stderr] ' + ((se or '')[-1500:])
+        return out.strip() or f'（无输出，exit={rc}）'
     except subprocess.TimeoutExpired:
         return '⏰ 执行超时。请确认目标软件窗口已打开并显示在前台。'
     except Exception as e:

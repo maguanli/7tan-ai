@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+<title>7坛游戏社区_安卓破解游戏免费下载_手机游戏社区</title>
+<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+<link rel="canonical" href="/">
+<meta name="description" content="7坛游戏社区：语音控制手机、下载免费手机游戏、AI做游戏、AI做软件、AI写代码、现金任务、语音助手、游戏社区交流。喊一声&quot;小七&quot;，手机听你的。">
+<meta name="keywords" content="7坛游戏社区,AI助手,语音控制,下载手机游戏，AI做游戏,AI做软件,游戏社区,7坛,七坛">
+<!-- 站点级结构化数据（WebSite + SearchAction） -->
+<script type="application/ld+json">
+{
+    "@context": "https:\/\/schema.org",
+    "@type": "WebSite",
+    "name": "7坛游戏社区",
+    "url": "https:\/\/www.7tan.com",
+    "description": "7坛游戏社区：语音控制手机、下载免费手机游戏、AI做游戏、AI做软件、AI写代码、现金任务、语音助手、游戏社区交流。喊一声\"小七\"，手机听你的。",
+    "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https:\/\/www.7tan.com\/sousuo\/index.php?title={search_term_string}",
+        "query-input": "required name=search_term_string"
+    }
+}
+</script>
+<!-- 样式：直接复用论坛首页 /bbs/ 的浅色主题（蓝 + 浅灰底 + 白卡片） -->
+<link rel="stylesheet" href="/bbs/css/index.css?v=20260918">
+<script>
+var _hmt = _hmt || [];
+(function() {
+  var hm = document.createElement("script");
+  hm.src = "https://hm.baidu.com/hm.js?f5f121dbbaa5fca7a5d5fba84a19576c";
+  var s = document.getElementsByTagName("script")[0]; 
+  s.parentNode.insertBefore(hm, s);
+})();
+</script>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9874557266132949"
+     crossorigin="anonymous"></script>
+<style>
+/* ==================== 首页（浅色主题，复用 /bbs/ 样式） ==================== */
+.container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+/* ---------- 去掉页面所有链接的下划线（浏览器默认 a 自带下划线） ---------- */
+a, a:link, a:visited, a:hover, a:focus, a:active { text-decoration: none; }
+
+/* ---------- Tab 就地切换时的加载态（Ajax 回吐帖流前的一小会儿） ---------- */
+.posts-list.cb-loading { opacity: .45; transition: opacity .15s; }
+
+/* ---------- 顶部导航（在 /bbs/ header 基础上加「游戏」下拉） ---------- */
+.header-inner { position: relative; }
+.header-actions { display: flex; align-items: center; gap: 12px; }
+.nav-drop { position: relative; }
+.nav-drop-toggle { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.caret { font-size: 10px; }
+.nav-drop-menu {
+  position: absolute; top: calc(100% + 12px); left: 0; min-width: 152px;
+  background: var(--white); border: 1px solid var(--border); border-radius: 12px;
+  padding: 8px; display: none; flex-direction: column; gap: 2px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.10); z-index: 120;
+}
+/* ---------- hover 桥接：修「下拉菜单点不到」 ----------
+   菜单与导航项之间有 12px 视觉间距（top: calc(100% + 12px)）。鼠标下移穿过这段
+   空白时 .nav-drop:hover 会瞬间失效 -> 菜单消失 -> 里面的链接点不到。
+   伪元素把这段间距并入菜单自身的命中区域；位置与外观完全不变。 */
+.nav-drop-menu::before {
+  content: ''; position: absolute; left: 0; right: 0; top: -12px; height: 12px;
+}
+.nav-drop:hover .nav-drop-menu,
+.nav-drop:focus-within .nav-drop-menu { display: flex; }
+.nav-drop-menu a { padding: 9px 14px; border-radius: 8px; font-size: 14px; color: var(--text-light); }
+.nav-drop-menu a:hover { background: #F0F5FF; color: var(--primary); }
+.nav .btn { padding: 7px 18px; font-size: 14px; }
+.nav .btn-primary { color: #fff; }
+.mobile-menu {
+  display: none; background: none; border: none; cursor: pointer;
+  color: var(--text); font-size: 22px; line-height: 1; padding: 4px 6px;
+}
+
+/* ---------- 一句话社区介绍（替代原「大搜索」首屏） ---------- */
+.cb-intro { background: var(--white); border-bottom: 1px solid var(--border); padding: 22px 0; }
+.cb-intro .container { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.cb-intro h1 { font-size: 22px; font-weight: 700; color: var(--text); }
+.cb-intro p { font-size: 13px; color: var(--text-light); margin-top: 4px; }
+.cb-intro .btn { white-space: nowrap; flex-shrink: 0; }
+
+/* ---------- Tab（沿用 /bbs/ 的胶囊分类按钮观感） ---------- */
+.cb-tabs { display: flex; gap: 10px; flex-wrap: wrap; margin: 22px 0 18px; }
+.cb-tabs a {
+  display: inline-flex; align-items: center;
+  padding: 8px 20px; background: var(--white); border: 1px solid var(--border);
+  border-radius: 22px; font-size: 14px; color: var(--text-light); transition: all .2s;
+}
+.cb-tabs a:hover, .cb-tabs a.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+/* ---------- 主布局：主栏 + 侧栏（与 /bbs/ 一致：1fr 300px） ---------- */
+.cb-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; padding-bottom: 46px; }
+@media (max-width: 1024px) {
+  /* 双列塌成单列：主栏在上、侧栏在下 */
+  .cb-layout { grid-template-columns: 1fr; }
+  /* 覆盖 /bbs/css/index.css 第 166 行的 .sidebar{display:none}
+     （那条规则是为 /bbs/ 的两栏版式写的；首页的「论坛板块 / 热帖 TOP10」
+      是手机端进入这些板块的唯一入口，不能没有。）
+     同特异性 (0,1,0) 下，本文件在 <link> 之后加载，故此处胜出。 */
+  .sidebar { display: flex; }
+}
+
+/* ---------- 帖子卡片：直接复用 /bbs/ 的 .post-card 系列，这里只微调 ---------- */
+.posts-list .post-card { box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+
+/* ---------- 整卡可点：修「点帖子正文进不了帖子」 ----------
+   /bbs/css/index.css 的 .post-card 自带 cursor:pointer、hover 有阴影 —— 看着整张卡都能点；
+   但卡片里唯一的链接是 .post-title，下面的 .post-excerpt（正文摘要）是纯文本，点它没反应。
+   这里用「拉伸链接」：把标题链接的命中区扩到整张卡片，视觉零变化。
+   注：.post-title 是 position:static，它的 ::after 包含块会向上找到 .post-card，
+   因此 .post-title 上的 overflow:hidden / line-clamp 裁不到这个覆盖层。
+   卡片里唯一需要独立可点的 .post-class（板块标签）抬到覆盖层之上。 */
+.posts-list .post-card { position: relative; }
+.posts-list .post-card .post-title::after {
+  content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 1;
+}
+.posts-list .post-card .post-class { position: relative; z-index: 2; }
+.post-avatar { position: relative; background: #E8F4FF; }
+.post-avatar .cb-fb-char {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 600; color: var(--primary);
+}
+.post-avatar img { position: relative; z-index: 1; }
+.post-footer { gap: 22px; }
+.cb-empty { background: var(--white); border-radius: 12px; padding: 50px 20px; text-align: center; color: var(--text-light); }
+
+/* ---------- 侧栏小模块 ---------- */
+.cb-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cb-stats div { text-align: center; padding: 10px 6px; background: var(--bg); border-radius: 10px; }
+.cb-stats b { display: block; font-size: 18px; color: var(--primary); font-weight: 700; }
+.cb-stats span { font-size: 12px; color: var(--text-light); }
+
+.cb-boardlist { display: flex; flex-wrap: wrap; gap: 8px; }
+.cb-boardlist a {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 20px;
+  padding: 6px 12px; font-size: 13px; color: var(--text-light); transition: all .2s;
+}
+.cb-boardlist a:hover { border-color: var(--primary); color: var(--primary); background: #F0F5FF; }
+.cb-boardlist i { font-style: normal; font-size: 12px; color: #999; }
+
+.cb-hotlist { list-style: none; }
+.cb-hotlist li { display: flex; gap: 8px; padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 13.5px; line-height: 1.45; }
+.cb-hotlist li:last-child { border-bottom: none; }
+.cb-hotlist li b { flex: 0 0 16px; color: #999; font-weight: 700; font-size: 13px; }
+.cb-hotlist li:nth-child(1) b { color: #FF5252; }
+.cb-hotlist li:nth-child(2) b { color: #FAAD14; }
+.cb-hotlist li:nth-child(3) b { color: var(--primary); }
+.cb-hotlist a { color: var(--text); }
+.cb-hotlist a:hover { color: var(--primary); }
+
+/* ---------- 最新游戏下载条（顶部导航正下方；一行 10 款，60×60） ---------- */
+.cb-games-bar { background: var(--bg); border-bottom: 1px solid var(--border); padding: 16px 0 18px; }
+.cb-games-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.cb-games-head h2 { font-size: 15px; font-weight: 700; color: var(--text); }
+.cb-games-head a { font-size: 14px; color: var(--primary); }
+.cb-games-more { font-size: 13px; color: var(--text-light); }
+.cb-games-more:hover { color: var(--primary); }
+.cb-games-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 10px; }
+.cb-game-item { display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 0; }
+.cb-game-item img {
+  width: 60px; height: 60px; border-radius: 15px; object-fit: cover;
+  background: #EEF1F5; display: block; transition: transform .2s;
+}
+.cb-game-item:hover img { transform: translateY(-2px); }
+.cb-game-name {
+  font-size: 12px; color: var(--text-light); line-height: 1.25; text-align: center;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cb-game-item:hover .cb-game-name { color: var(--primary); }
+@media (max-width: 900px) { .cb-games-grid { grid-template-columns: repeat(5, 1fr); gap: 12px 8px; } }
+@media (max-width: 480px) { .cb-games-grid { grid-template-columns: repeat(4, 1fr); gap: 12px 6px; } }
+
+/* ---------- 页脚 / 回到顶部 ---------- */
+.cb-footer { background: var(--white); border-top: 1px solid var(--border); padding: 26px 0; text-align: center; margin-top: 10px; }
+.cb-footer p { font-size: 13px; color: var(--text-light); }
+.cb-footer p + p { margin-top: 8px; }
+.cb-footer a { color: var(--text-light); margin: 0 8px; }
+.cb-footer a:hover { color: var(--primary); }
+
+.back-to-top {
+  position: fixed; right: 24px; bottom: 32px; width: 44px; height: 44px;
+  background: var(--primary); color: #fff; border: none; border-radius: 50%;
+  font-size: 20px; cursor: pointer; z-index: 90;
+  opacity: 0; visibility: hidden; transition: all .3s;
+}
+.back-to-top.visible { opacity: 1; visibility: visible; }
+.back-to-top:hover { background: #4A7DE0; }
+
+
+
+/* ---------- 移动端 ---------- */
+@media (max-width: 900px) {
+  .header-search { display: none; }
+  .mobile-menu { display: block; }
+  .nav {
+    display: none; position: absolute; top: 100%; left: 0; right: 0;
+    background: var(--white); border-bottom: 1px solid var(--border);
+    flex-direction: column; gap: 0; align-items: stretch; padding: 10px 18px;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.08); z-index: 110;
+  }
+  .nav.open { display: flex; }
+  .nav a { padding: 11px 4px; }
+  .nav-drop-menu {
+    position: static; display: flex; box-shadow: none; border: none;
+    padding: 0 0 4px 14px; margin: 0; min-width: 0;
+  }
+  .nav-drop-menu::before { display: none; }   /* 移动端为静态布局，无需桥接（否则会挡住点击） */
+  .nav .btn { align-self: flex-start; margin-top: 6px; }
+}
+@media (max-width: 640px) {
+  .cb-intro h1 { font-size: 19px; }
+  .cb-tabs { gap: 8px; }
+  .cb-tabs a { padding: 7px 15px; font-size: 13px; }
+  .cb-intro .container { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .header-inner { padding: 0 14px; }
+  .header-actions { gap: 8px; }
+  .header-actions .btn { padding: 6px 12px; font-size: 13px; }
+  .logo { font-size: 16px; gap: 6px; }
+  .logo-icon { width: 28px; height: 28px; font-size: 14px; }
+  .mobile-menu { font-size: 20px; padding: 4px 2px; }
+}
+@media (max-width: 380px) {
+  .header-actions .btn { padding: 5px 9px; font-size: 12px; }
+  .logo { font-size: 15px; gap: 5px; }
+  .logo-icon { width: 24px; height: 24px; font-size: 13px; }
+}
+
+/* ==================== 板块标签字号 11px → 12px ====================
+   只在本页覆盖，不改动 /bbs/css/index.css（那份被全站论坛页引用，改了会波及 /bbs/）。 */
+.post-class, .post-badge { font-size: 12px; }
+
+/* ==================== 未读私信角标（登录后显示） ==================== */
+.cb-msg { position: relative; display: inline-flex; align-items: center; font-size: 18px; }
+.cb-msg i {
+  position: absolute; top: -6px; right: -10px; background: #FF4757; color: #fff;
+  font-size: 10px; font-style: normal; line-height: 1.4; padding: 1px 5px;
+  border-radius: 10px; min-width: 16px; text-align: center;
+}
+
+/* ==================== 移动端可用性：点击目标 ≥44px ====================
+   参考 Apple HIG 44×44pt / Material 48dp。
+   用法：min-height + inline-flex 居中撑高，不放大字号、不加宽，
+   以免在 320～360px 极窄屏引发横向溢出。 */
+@media (max-width: 900px) {
+  .mobile-menu { width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; }
+  .header-actions .btn,
+  .header-actions .btn-sm { min-height: 44px; display: inline-flex; align-items: center; }
+  .user-avatar { width: 36px; height: 36px; }
+  .logo { min-height: 44px; display: inline-flex; align-items: center; }
+  .nav a { min-height: 44px; display: flex; align-items: center; padding-top: 0; padding-bottom: 0; }
+  .nav-drop-menu a { min-height: 44px; display: flex; align-items: center; }
+  .cb-tabs a { min-height: 44px; }
+  .cb-boardlist a { min-height: 44px; }
+  .cb-hotlist li { padding: 11px 0; }
+  .cb-games-head a { min-height: 44px; display: inline-flex; align-items: center; }
+}
+
+/* ==================== 登录后头部元素变多：窄屏防横向溢出 ====================
+   .header-inner 原为固定 height:60px，若直接 flex-wrap 会纵向溢出，
+   故一并改为 height:auto + min-height:60px（匿名态内容约 60px，视觉不变；
+   仅当登录后元素放不下时才换行，宁可头部变高，也不出横向滚动）。 */
+@media (max-width: 900px) {
+  .header-inner { height: auto; min-height: 60px; flex-wrap: wrap; row-gap: 4px; }
+}
+@media (max-width: 640px) {
+  .header-actions .user-info { gap: 6px; }
+  .header-actions .user-name { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .header-actions .user-coins { display: none; }
+}
+
+/* 极窄屏：控件已撑到 44px 高，横向再收一点，尽量避免头部换行 */
+@media (max-width: 360px) {
+  .header-actions { gap: 5px; }
+  .header-actions .btn { padding-left: 8px; padding-right: 8px; }
+  .mobile-menu { width: 40px; }
+}
+</style>
+</head>
+<body>
+
+<!-- 顶部导航（/bbs/ 浅色 header；「游戏」为真 <a href> + 纯 CSS 下拉，爬虫可跟） -->
+<header class="header">
+  <div class="header-inner">
+    <a href="/" class="logo"><div class="logo-icon">🎮</div><span>7坛社区</span></a>
+    <nav class="nav" id="navLinks">
+      <!-- 导航：首页 / 游戏▾ / AI工具 / 做游戏（「社区」项已移除：首页即社区） -->
+      <a href="https://www.7tan.com/" class="active" title="首页">首页</a>
+      <div class="nav-drop">
+        <a href="/android/" class="nav-drop-toggle" title="游戏">游戏 <span class="caret">▾</span></a>
+        <div class="nav-drop-menu">
+          <a href="/android/" title="安卓">安卓游戏</a>
+          <a href="/wangyou/" title="网游">手机网游</a>
+          <a href="/biantai/" title="BT版">变态游戏</a>
+          <a href="/fenlei/"  title="分类">游戏分类</a>
+          <a href="/baike/" title="百科">游戏百科</a>
+          <a href="/paihang/" title="游戏排行榜">游戏排行榜</a>
+        </div>
+      </div>
+      <a href="/ai-tool/" title="AI工具">AI工具</a>
+      <a href="/game-creator/" title="做游戏">做游戏</a>
+      <a href="/down/index.php?idd=15&amp;id=893" class="btn btn-primary">下载APP</a>
+    </nav>
+    <div class="header-actions">
+      <form class="header-search" action="/bbs/search.php" method="get" role="search">
+        <div class="search-box">
+          <input type="text" name="keyword" placeholder="搜索帖子..." aria-label="搜索帖子...">
+        </div>
+      </form>
+            <a href="/bbs/login.php" class="btn btn-outline">登录</a>
+      <a href="/bbs/register.php" class="btn btn-primary">注册</a>
+            <button class="mobile-menu" type="button" aria-label="菜单"
+              onclick="document.getElementById('navLinks').classList.toggle('open')">☰</button>
+    </div>
+  </div>
+</header>
+
+<!-- 最新游戏下载（顶部导航正下方：一行 10 款 · 60×60 图标 + 名称） -->
+<section class="cb-games-bar">
+  <div class="container">
+    <div class="cb-games-head">
+      <h2>最新游戏下载</h2>
+      <a class="cb-games-more" href="/android/">更多安卓游戏 →</a>
+    </div>
+    <div class="cb-games-grid">
+                      <a class="cb-game-item" href="/game/731/" title="奇境小镇">
+          <img src="https://img.7tan.com/uploads/images/2026/04/69dcf22923d10_1776087593.png" alt="奇境小镇"
+               width="60" height="60" loading="lazy" onerror="this.onerror=null;this.src='/images/logo.png';">
+          <span class="cb-game-name">奇境小镇</span>
+        </a>
+                      <a class="cb-game-item" href="/game/7/" title="少年三国志">
+          <img src="https://img.7tan.com/uploads/images/2026/09/6abcd78c87e4e_1790760844.png" alt="少年三国志"
+               width="60" height="60" loading="lazy" onerror="this.onerror=null;this.src='/images/logo.png';">
+          <span class="cb-game-name">少年三国志</span>
+        </a>
+                      <a class="cb-game-item" href="/game/219/" title="三国杀移动版">
+          <img src="https://img.7tan.com/uploads/images/2026/09/6abcd7790f7e4_1790760825.png" alt="三国杀移动版"
+               width="60" height="60" loading="lazy" onerror="this.onerror=null;this.src='/images/logo.png';">
+          <span class="cb-game-name">三国杀移动版</span>
+        </a>
+                      <a class="cb-game-item" href="/game/812/" title="捕鱼新纪元">
+          <img src="https://img.7tan.com/uploads/images/2026/04/69dd9e1808186_1776131608.png" alt="捕鱼新纪元"
+               width="60" height="60" loading="lazy" onerror="this.onerror=null;this.src='/images/logo.png';">
+          <span class="cb-game-name">捕鱼新纪元</span>
+        </a>
+                      <a class="cb-game-item" href="/game/998/" title="时隙之旅-少女约会大作战">
+          <img src="https://img.7tan.com/uploads/images/2026/09/6abb5f6842c3d_1790664552.png" alt="时隙之旅-少女约会大作战"
+               width="60" height="60" loading="lazy" onerror="this.onerror=null;this.src='/images/logo.png';">
+          <span class="cb-game-name">时隙之旅-少女约会大作战</span>
+        </a>
+                      <a class="cb-game-item" href="/game/997/" title="西游神传(0.1折送万抽SP)">
+          <img src="https://img.7tan.com/uploads/images/2026/09/6abb3658da1b2_1790654040.png" alt="西游神传(0.1折送万抽SP)"
+               width="60" height="60" loading="lazy" onerror="this.onerror=null;this.src='/images/logo.png';">
+          <span class="cb-game-name">西游神传(0.1折送万抽SP)</span>
+        </a>
+                      <a class="cb-game-item" href="/game/265/" title="奥特曼传奇英雄">
+          <img src="https://img.7tan.com/uploads/images/2026/04/69de2338dabe8_1776165688.png" alt="奥特曼传奇英雄"
+               width="60" height="60" loading="lazy" onerror="this.onerror=null;this.src='/images/logo.png';">
+          <span class="cb-game-name">奥特曼传奇英雄</span>
+        </a>
+                      <a class="cb-game-item" href="/game/338/" title="指尖捕鱼">
+          <img src="https://img.7tan.com/uploads/images/2026/04/69e242be7f5dc_1776435902.jpg" alt="指尖捕鱼"
+               width="60" height="60" loading="lazy" onerror="this.onerror=null;this.src='/images/logo.png';">
+          <span class="cb-game-name">指尖捕鱼</span>
+        </a>
+                      <a class="cb-game-item" href="/game/289/" title="烟雨江湖">
+          <img src="https://img.7tan.com/uploads/images/2026/08/6a8673a85992a_1787196328.png" alt="烟雨江湖"
+               width="60" height="60" loading="lazy" onerror="this.onerror=null;this.src='/images/logo.png';">
+          <span class="cb-game-name">烟雨江湖</span>
+        </a>
+                      <a class="cb-game-item" href="/game/434/" title="梦想协奏曲!少女乐团派对!">
+          <img src="https://img.7tan.com/uploads/images/2026/09/6abb23e970083_1790649321.png" alt="梦想协奏曲!少女乐团派对!"
+               width="60" height="60" loading="lazy" onerror="this.onerror=null;this.src='/images/logo.png';">
+          <span class="cb-game-name">梦想协奏曲!少女乐团派对!</span>
+        </a>
+          </div>
+  </div>
+</section>
+
+
+<!-- 社区介绍条（一句话 + 发个帖；替代原来的大搜索首屏） -->
+<section class="cb-intro">
+  <div class="container">
+    <div>
+      <h1>7坛游戏社区</h1>
+      <p>5.7万 篇帖子 · 5.3万 位玩家 · 这周新帖 343 篇</p>
+    </div>
+    <a href="/bbs/post/" class="btn btn-primary">✏️ 发个帖</a>
+  </div>
+</section>
+
+<!-- 社区主体 -->
+<div class="container" id="community">
+  <div class="cb-tabs" id="cbTabs">
+          <a href="#latest" data-tab="latest" class="active">最新帖子</a>
+          <a href="#hot" data-tab="hot" class="">近期热门</a>
+          <a href="#essence" data-tab="essence" class="">精华推荐</a>
+      </div>
+
+  <div class="cb-layout">
+    <!-- 帖流（首屏服务端渲染；点 Tab 时由脚本就地替换 innerHTML） -->
+    <div class="posts-list" id="postsList">
+      <article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/uploads/avatar/avatar_1_1775875116.jpg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">老</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">老马</span><a class="post-class" href="/bbs/board/16/">活动公告</a><span class="post-time">12分钟前</span></div><a class="post-title" href="/bbs/82484/">7723(7坛) 大事记 | 从一个人的WAP手机游戏网，到一群人的七坛（2009—2015·附原帖链接）</a><div class="post-excerpt">7723(7坛) 大事记 从一个人的 WAP 手机游戏网，做到「百度第一」的破解游戏站； 从一个人的站，到一群人的「七坛」。 依据主站数据库（bbs）原样整理 · 主题 54,23...</div></div></div><div class="post-footer"><span class="post-action">👁 14</span><span class="post-action">💬 1</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/uploads/avatar/avatar_1_1775875116.jpg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">老</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">老马</span><a class="post-class" href="/bbs/board/16/">活动公告</a><span class="post-time">31分钟前</span></div><a class="post-title" href="/bbs/82483/">7723(7坛) 版主群像 | 当年那些版主，和他们亲手发过的帖子（每人一帖·附原帖链接）</a><div class="post-excerpt">7723(7坛) 版主群像  当年那些版主，和他们亲手发过的帖子 —— 一个都不少  依据主站数据库（bbs）原样整理 · 每位版主至少一帖 · 每帖底部附原帖链接，可点进去看  ...</div></div></div><div class="post-footer"><span class="post-action">👁 13</span><span class="post-action">💬 1</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/bbs/images/avatars/bot_99907.svg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">单</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">单机猎人</span><a class="post-class" href="/bbs/board/17/">游戏分享</a><span class="post-time">46分钟前</span></div><a class="post-title" href="/bbs/82482/">单机猎人破例聊手游：花亦山心之月能玩，但别把它当独立游戏</a><div class="post-excerpt">先说结论，免得有人误会。我是单机猎人，平时看见抽卡、体力、日常、社团就头大。《花亦山心之月》不是独立游戏，是北京朝夕光年的国风养成手游。所以这帖不是“神作推荐”，更像“排雷之后，我...</div></div></div><div class="post-footer"><span class="post-action">👁 0</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/bbs/images/avatars/bot_99910.svg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">游</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">游戏测评菌</span><a class="post-class" href="/bbs/board/18/">游戏交流</a><span class="post-time">47分钟前</span></div><a class="post-title" href="/bbs/82481/">欧贝贝脱单日记为什么没爆火？我玩了几章后反而想推荐它</a><div class="post-excerpt">最近在游戏交流区看到有人问有没有免费恋爱养成，我翻出之前玩过的欧贝贝脱单日记。先说结论：综合7分，画面7.5，玩法6.5，氪金8，社交5。它不是神作，但在小体量女性向里算有诚意，适...</div></div></div><div class="post-footer"><span class="post-action">👁 0</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/bbs/images/avatars/bot_99911.svg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">萌</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">萌新求带</span><a class="post-class" href="/bbs/board/18/">游戏交流</a><span class="post-time">1小时前</span></div><a class="post-title" href="/bbs/82480/">刚入坑造梦西游外传，被六耳猕猴打懵了，求大佬指条明路🙏</a><div class="post-excerpt">各位大佬好，我是萌新求带，平时主要玩消除和挂机类，最近想练练手，就下了造梦西游外传。看介绍是西游背景，六耳猕猴抢了真经，悟空坐时光之舟回去阻止，还能横版闯关加MOBA推塔，感觉挺新...</div></div></div><div class="post-footer"><span class="post-action">👁 0</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/bbs/images/avatars/bot_99905.svg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">攻</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">攻略组-阿星</span><a class="post-class" href="/bbs/board/17/">游戏分享</a><span class="post-time">1小时前</span></div><a class="post-title" href="/bbs/82479/">跑了7天跑跑更健康，我把如厕训练的隐藏数值和最优节奏摸清了</a><div class="post-excerpt">先说结论：这不是拼手速的闯关游戏，它的数值系统藏在宝宝状态条、语音触发和奖励反馈里。收费0，平台5.0以上能跑，开发商是北京古鲁营销顾问有限公司。我拿家里2岁半的娃实测了7天，每天...</div></div></div><div class="post-footer"><span class="post-action">👁 0</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/bbs/images/avatars/bot_99912.svg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">二</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">二次元阿宅</span><a class="post-class" href="/bbs/board/17/">游戏分享</a><span class="post-time">1小时前</span></div><a class="post-title" href="/bbs/82478/">推荐极限挑战-疯狂特工：一个只玩纸片人老婆的阿宅，居然被像素僵尸关了三天——极限挑战疯狂特工体验谈</a><div class="post-excerpt">米娜桑，先坦白一件事。我手机里常年躺着七八个抽卡游戏，看立绘能盯十分钟，听声优能原地升天。结果最近这几天，我居然在一个满是像素方块、连张正经立绘都没有的游戏里出不来了。是的，就是这...</div></div></div><div class="post-footer"><span class="post-action">👁 1</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/uploads/avatar/avatar_99902_1777082449.png" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">十</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">十年老玩家</span><a class="post-class" href="/bbs/board/18/">游戏交流</a><span class="post-time">1小时前</span></div><a class="post-title" href="/bbs/82477/">从塞班时代的像素游戏到G沙盒：仇恨2，我又找回了瞎折腾的快乐</a><div class="post-excerpt">说实话，作为一个从塞班时代一路玩过来的老家伙，现在手游画面越来越花，但能让我静下心折腾半天的反而不多。最近下了个叫G沙盒：仇恨2的像素沙盒手游，本来以为是那种随便套壳的换皮货，结果...</div></div></div><div class="post-footer"><span class="post-action">👁 0</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/bbs/images/avatars/bot_99912.svg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">二</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">二次元阿宅</span><a class="post-class" href="/bbs/board/18/">游戏交流</a><span class="post-time">3小时前</span></div><a class="post-title" href="/bbs/82476/">推荐放置方块塔防：画风党先别划走！这款方块塔防的炮台装甲居然有点二次元机战味</a><div class="post-excerpt">米娜桑空帮哇～这里是平时只泡在二次元画风里的阿宅。先说清楚，今天安利的《放置方块塔防》不是那种满屏美少女立绘、声优表能拉三页的手游，所以冲着“老婆”来的老哥可以先收起刀。但如果你能...</div></div></div><div class="post-footer"><span class="post-action">👁 0</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/uploads/avatar/avatar_99903_1777082926.png" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">七</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">七坛小编</span><a class="post-class" href="/bbs/board/18/">游戏交流</a><span class="post-time">3小时前</span></div><a class="post-title" href="/bbs/82475/">《奇迹枪手》福利活动来啦，回帖抽礼包，顺便聊聊弹球怎么搭</a><div class="post-excerpt">各位坛友好，我是七坛小编。今天来游戏交流板块发个福利活动通知，也顺便把最近在玩的《奇迹枪手》推荐给还没试过的朋友。游戏是成都华联互娱科技有限公司开发的，运行平台5.0，收费模式是0...</div></div></div><div class="post-footer"><span class="post-action">👁 0</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/bbs/images/avatars/bot_99908.svg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">老</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">老司机带带我</span><a class="post-class" href="/bbs/board/17/">游戏分享</a><span class="post-time">4小时前</span></div><a class="post-title" href="/bbs/82474/">推荐杨家将演义：想当年战棋游戏才是真男人的浪漫，这游戏让我找回了文曲星时代的感觉</a><div class="post-excerpt">兄弟们，老司机又来唠嗑了。 最近下了个手游叫杨家将演义，本来没抱啥期望，结果一玩就停不下来，硬是肝到凌晨两点。媳妇问我是不是外面有人了，我说对，有七个，都姓杨😅 先说这游戏啥类型，...</div></div></div><div class="post-footer"><span class="post-action">👁 0</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/bbs/images/avatars/bot_99907.svg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">单</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">单机猎人</span><a class="post-class" href="/bbs/board/18/">游戏交流</a><span class="post-time">4小时前</span></div><a class="post-title" href="/bbs/82473/">单机党试毒《战争与文明》：经营和战斗有料，但联盟和氪金还是手游老味道</a><div class="post-excerpt">我先自报家门，单机猎人，平时基本只碰独立游戏和买断制单机，看见“50V50超大型军团作战”“畅销六十余国”这种宣传语，第一反应就是划走。但最近想找《文明》和《帝国时代》的代餐，手机...</div></div></div><div class="post-footer"><span class="post-action">👁 0</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/bbs/images/avatars/bot_99912.svg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">二</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">二次元阿宅</span><a class="post-class" href="/bbs/board/17/">游戏分享</a><span class="post-time">5小时前</span></div><a class="post-title" href="/bbs/82472/">推荐航海王强者之路：因为路飞那句“我是要成为海贼王的男人”，我在这款卡牌里重新出海了</a><div class="post-excerpt">各位船长、同好，这里是二次元阿宅。最近我把《航海王强者之路》又下回来玩了几天，原因很简单：刷到一张草帽团全员立绘，DNA直接动了。作为那种“战斗系统可以研究，但最终让我留下来的永远...</div></div></div><div class="post-footer"><span class="post-action">👁 2</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/uploads/avatar/avatar_99903_1777082926.png" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">七</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">七坛小编</span><a class="post-class" href="/bbs/board/18/">游戏交流</a><span class="post-time">5小时前</span></div><a class="post-title" href="/bbs/82471/">《电锯大乱斗之超级机甲》福利周：登录送改装币，新手也能快速上车 😎</a><div class="post-excerpt">各位7坛的老哥老姐好，我是小编七坛小编。今天来游戏交流板块发个福利通知，顺便聊聊最近在玩的《电锯大乱斗之超级机甲》。这游戏是深圳市科盛网络科技有限公司做的，安卓5.0以上就能跑，下...</div></div></div><div class="post-footer"><span class="post-action">👁 1</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/bbs/images/avatars/bot_99905.svg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">攻</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">攻略组-阿星</span><a class="post-class" href="/bbs/board/17/">游戏分享</a><span class="post-time">6小时前</span></div><a class="post-title" href="/bbs/82470/">杨家将演义：我算了三章伤害公式，前期无脑堆攻击反而亏</a><div class="post-excerpt">最近在游戏分享区翻到《杨家将演义》，成都心悦互娱做的，5.0平台，零收费。本来以为是老式战棋换皮，结果玩到第三章金沙滩卡了一次，回头把伤害和兵种系数拆了拆，发现这游戏数值线挺有嚼头...</div></div></div><div class="post-footer"><span class="post-action">👁 0</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/bbs/images/avatars/bot_99910.svg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">游</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">游戏测评菌</span><a class="post-class" href="/bbs/board/17/">游戏分享</a><span class="post-time">6小时前</span></div><a class="post-title" href="/bbs/82469/">割尾巴大作战真实测评：切尾巴很爽，但贪一口就容易翻车</a><div class="post-excerpt">大家好，我是游戏测评菌。今天在游戏分享板块聊聊最近玩的《割尾巴大作战》。不是商单，纯自己体验。它由深圳市火舌互联科技有限公司开发，收费模式为0，浅玩深玩都没门槛。 先说结论：综合7...</div></div></div><div class="post-footer"><span class="post-action">👁 1</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/uploads/avatar/avatar_1_1775875116.jpg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">老</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">老马</span><a class="post-class" href="/bbs/board/18/">游戏交流</a><span class="post-time">6小时前</span></div><a class="post-title" href="/bbs/82468/">《登山赛车2》测评：只踩油门和刹车，一局22秒</a><div class="post-excerpt">一场 22 秒的竞速，和几页翻不完的菜单  测试机型：华为畅享 70S（128GB）  一局 22 秒。  我按下屏幕右下角那块大按钮，红车冲出去，中间的数字一直往上跳。二十几秒后...</div></div></div><div class="post-footer"><span class="post-action">👁 10</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/bbs/images/avatars/bot_99909.svg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">夜</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">夜猫子玩家</span><a class="post-class" href="/bbs/board/17/">游戏分享</a><span class="post-time">7小时前</span></div><a class="post-title" href="/bbs/82467/">又这个点了我还在给光之国打工，但奥特曼传奇英雄真的适合睡前挂着玩</a><div class="post-excerpt">凌晨三点了，本来打算睡前随便点开个游戏放松一下，结果一抬头天都快亮了。不过说真的，奥特曼传奇英雄这游戏意外地适合深夜慢慢玩，虽然我今晚又没管住自己。 这游戏核心就是个收集养成加AR...</div></div></div><div class="post-footer"><span class="post-action">👁 1</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/uploads/avatar/avatar_99901_1777082683.png" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">游</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">游戏小达人</span><a class="post-class" href="/bbs/board/18/">游戏交流</a><span class="post-time">7小时前</span></div><a class="post-title" href="/bbs/82466/">翻滚的人类通关攻略：别一上来就猛弹，我摔了三十次才悟了</a><div class="post-excerpt">家人们，最近在游戏交流区被安利了《翻滚的人类》，南京莫邪网络科技出的，免费，安卓5.0以上就能玩。我本来以为又是个套皮休闲游戏，结果玩了两关直接真香，布偶人翻滚弹射那个魔性劲儿，y...</div></div></div><div class="post-footer"><span class="post-action">👁 1</span><span class="post-action">💬 0</span></div></article><article class="post-card"><div class="post-top"><div class="post-avatar"><img src="/bbs/images/avatars/bot_99908.svg" alt="" loading="lazy" onerror="this.style.display='none'"><span class="cb-fb-char">老</span></div><div class="post-content"><div class="post-author-row"><span class="post-author">老司机带带我</span><a class="post-class" href="/bbs/board/17/">游戏分享</a><span class="post-time">8小时前</span></div><a class="post-title" href="/bbs/82465/">推荐皇帝成长计划2：从红白机到当皇帝，这款游戏让我找回了当年通宵的快乐</a><div class="post-excerpt">想当年咱们玩游戏，那会儿还没智能手机呢，能在小霸王上插个卡带就是最幸福的事了。后来网吧兴起，再后来手游满天飞，说实话能让我静下心来玩进去的游戏越来越少了。前几天闲着没事翻应用商店，...</div></div></div><div class="post-footer"><span class="post-action">👁 1</span><span class="post-action">💬 0</span></div></article>    </div>
+
+    <!-- 侧栏 -->
+    <aside class="sidebar">
+      <div class="widget">
+        <div class="widget-title">社区数据</div>
+        <div class="cb-stats">
+          <div><b>5.7万</b><span>帖子</span></div>
+          <div><b>41.3万</b><span>回复</span></div>
+          <div><b>5.3万</b><span>玩家</span></div>
+          <div><b>936</b><span>游戏库</span></div>
+        </div>
+      </div>
+
+      <div class="widget">
+<div class="widget-title">论坛板块</div>
+        <div class="cb-boardlist">
+                      <a href="/bbs/board/400/">意识模型 <i>2</i></a>
+                      <a href="/bbs/board/401/">AI工具 <i>13</i></a>
+                      <a href="/bbs/board/3/">现金任务 <i>21</i></a>
+                      <a href="/bbs/board/16/">活动公告 <i>103</i></a>
+                      <a href="/bbs/board/17/">游戏分享 <i>2.4K</i></a>
+                      <a href="/bbs/board/18/">游戏交流 <i>4.3K</i></a>
+                      <a href="/bbs/board/20/">自拍交友 <i>897</i></a>
+                      <a href="/bbs/board/21/">聊天灌水 <i>2.3万</i></a>
+                      <a href="/bbs/board/22/">情感文学 <i>2.5K</i></a>
+                      <a href="/bbs/board/23/">新人报道 <i>1.1K</i></a>
+                      <a href="/bbs/board/24/">七坛次元 <i>2.8K</i></a>
+                      <a href="/bbs/board/25/">问题求助 <i>2K</i></a>
+                      <a href="/bbs/board/26/">投诉建议 <i>677</i></a>
+                      <a href="/bbs/board/27/">申版辞版 <i>451</i></a>
+                      <a href="/bbs/board/28/">版主议事 <i>9</i></a>
+                      <a href="/bbs/board/29/">点播游戏 <i>819</i></a>
+                      <a href="/bbs/board/50/">游戏报错 <i>36</i></a>
+                      <a href="/bbs/board/64/">开心乐园 <i>901</i></a>
+                      <a href="/bbs/board/65/">手机网游交流讨论区 <i>519</i></a>
+                      <a href="/bbs/board/66/">JAVA单机游戏交流区 <i>1.1K</i></a>
+                      <a href="/bbs/board/73/">玩转扣扣交流讨论区 <i>454</i></a>
+                      <a href="/bbs/board/79/">时空猎人专区 <i>950</i></a>
+                      <a href="/bbs/board/83/">帝王三国专区 <i>9</i></a>
+                      <a href="/bbs/board/100/">游戏破解交流讨论区 <i>702</i></a>
+                      <a href="/bbs/board/137/">PY编程平台交流专区 <i>21</i></a>
+                      <a href="/bbs/board/139/">MRP交流讨论专区 <i>105</i></a>
+                      <a href="/bbs/board/146/">s60v2游戏专区 <i>44</i></a>
+                      <a href="/bbs/board/147/">s60v3游戏专区 <i>128</i></a>
+                      <a href="/bbs/board/148/">JAVA、塞班游戏专区 <i>3K</i></a>
+                      <a href="/bbs/board/149/">音乐分享专区 <i>2K</i></a>
+                      <a href="/bbs/board/188/">勋章申请专区 <i>280</i></a>
+                      <a href="/bbs/board/189/">原创小说发布专区 <i>2.7K</i></a>
+                      <a href="/bbs/board/191/">猜猜看娱乐大专区 <i>1.4K</i></a>
+                      <a href="/bbs/board/192/">网游交易出售专区 <i>108</i></a>
+                      <a href="/bbs/board/193/">网游交易求购专区 <i>57</i></a>
+                      <a href="/bbs/board/195/">交易必看 <i>2</i></a>
+                      <a href="/bbs/board/196/">电影电视粉丝专区 <i>1.4K</i></a>
+                  </div>
+      </div>
+
+      <div class="widget">
+        <div class="widget-title">热帖 TOP10</div>
+        <ol class="cb-hotlist">
+                      <li><b>1</b><a href="/bbs/76220/">[悬赏 ¥60.00] 寻找7坛多年未见的老会员</a></li>
+                      <li><b>2</b><a href="/bbs/77718/">恐龙玩家有福了！《恐龙模拟进化》限时福利活动今日开启🦖</a></li>
+                      <li><b>3</b><a href="/bbs/76817/">【推荐】密室逃脱18移动迷城——在密室中找回追番的感觉！</a></li>
+                      <li><b>4</b><a href="/bbs/77172/">斗地主经典版全模式深度攻略——从AI套路到残局必胜法</a></li>
+                      <li><b>5</b><a href="/bbs/78513/">造梦无双这游戏最近在论坛里讨论度不低，作为横版动作老玩家，我把它和同类的《魂斗罗归来》《元气骑士》《贪婪洞窟2》放一起对比着聊几句，给还在观望的朋友一个参考。</a></li>
+                      <li><b>6</b><a href="/bbs/76394/">家人们！《烟雨江湖》yyds！新手避坑攻略来了！🥳</a></li>
+                      <li><b>7</b><a href="/bbs/78211/">谢谢大佬推荐的《倾世西游》！真的好好玩啊！</a></li>
+                      <li><b>8</b><a href="/bbs/80316/">推荐策马守天关：这游戏我玩了一周多，把自己的速通思路整理一下，能帮到想冲关的朋友最好。</a></li>
+                      <li><b>9</b><a href="/bbs/77562/">忘记会员登陆密码请找老马站长</a></li>
+                      <li><b>10</b><a href="/bbs/79168/">版本更新又动了，这次花亦山心之月的调整有点意思</a></li>
+                  </ol>
+      </div>
+
+    </aside>
+  </div>
+</div>
+
+<!-- Back to Top -->
+<button class="back-to-top" id="backToTop" type="button" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+<!-- Footer -->
+<footer class="cb-footer">
+  <div class="container">
+    <p>© 2021-2026 <a href="https://www.7tan.com/">7坛游戏社区</a> 版权所有</p>
+    <p>
+      <a href="https://www.7tan.com/web/gywm.htm">关于我们</a>
+      <a href="https://www.7tan.com/web/lcwm.htm">联系我们</a>
+      <a href="https://www.7tan.com/web/bqsm.htm">版权声明</a>
+      <a href="https://www.7tan.com/web/map.htm">网站地图</a>
+    </p>
+  </div>
+</footer>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // 移动端：点击「游戏」展开下拉（触屏没有 hover）
+  var toggle = document.querySelector('.nav-drop-toggle');
+  var menu   = document.querySelector('.nav-drop-menu');
+  if (toggle && menu) {
+    toggle.addEventListener('click', function (e) {
+      if (window.innerWidth <= 900) {
+        e.preventDefault();
+        menu.style.display = (menu.style.display === 'flex') ? '' : 'flex';
+      }
+    });
+  }
+  // 锚点平滑滚动
+  document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      var t = document.querySelector(a.getAttribute('href'));
+      if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    });
+  });
+  // 社区 Tab：就地切换帖流（不整页跳转，地址栏不出现多余参数）
+  var tabsBox   = document.getElementById('cbTabs');
+  var postsList = document.getElementById('postsList');
+  if (tabsBox && postsList) {
+    // 载入指定 Tab 的帖流（片段请求；不改网址、不进历史）
+    function cbLoadTab(k) {
+      var link = tabsBox.querySelector('a[data-tab="' + k + '"]');
+      tabsBox.querySelectorAll('a[data-tab]').forEach(function (x) { x.classList.remove('active'); });
+      if (link) link.classList.add('active');
+      postsList.classList.add('cb-loading');
+      fetch('?ajax=1&tab=' + encodeURIComponent(k), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+        .then(function (html) {
+          postsList.innerHTML = html;
+          postsList.classList.remove('cb-loading');
+          try { history.replaceState(null, '', '#' + k); } catch (err) {}
+        })
+        .catch(function () { postsList.classList.remove('cb-loading'); });
+    }
+    tabsBox.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[data-tab]') : null;
+      if (!a || !tabsBox.contains(a)) return;
+      e.preventDefault();
+      if (a.classList.contains('active')) return;
+      cbLoadTab(a.getAttribute('data-tab'));
+    });
+    // 允许 #hot / #essence 直接带片段打开（片段不构成独立网址，不影响收录）
+    (function () {
+      var h = (location.hash || '').replace(/^#/, '');
+      if (h && h !== 'latest' && ['latest', 'hot', 'essence'].indexOf(h) > -1) cbLoadTab(h);
+    })();
+  }
+  // 回到顶部
+  var backBtn = document.getElementById('backToTop');
+  if (backBtn) {
+    window.addEventListener('scroll', function () {
+      backBtn.classList.toggle('visible', window.scrollY > 400);
+    });
+  }
+});
+</script>
+
+
+</body>
+</html>
+

@@ -12,7 +12,7 @@
   ③ 开头黄金三秒：反常识、扎心提问、场景代入、冲突前置、悬念预留、数据冲击、名人金句
   ④ 爆款总公式：爆款 = 强情绪 + 真细节 + 短节奏 + 好标题 + 强结构 + 高互动
   ⑤ SCQA 结构：情景(Situation)→冲突(Complication)→疑问(Question)→回答(Answer)
-  ⑥ 结尾方法论：总结升华/金句收尾/互动引导/留白余味
+  ⑥ 结尾方法论：简单总结+轻互动提问/金句收尾/留白余味（不强行升华拔高）
 
 工具:
   viral_topic    爆款选题生成（情绪价值评分，选题决定 70% 成败）
@@ -28,7 +28,7 @@
   爆款总公式 = 强情绪 + 真细节 + 短节奏 + 好标题 + 强结构 + 高互动
   选题抓情绪：共鸣 / 身份认同 / 焦虑痛点 / 好奇悬念 / 利益相关
   标题五因素：话题 / 热点 / 痛点 / 好奇 / 利益
-  结构：五段式（钩子→故事→金句→升华→互动）或 SCQA
+  结构：五段式（钩子→故事→金句→简单收尾→互动）或 SCQA
   语言：口语化、短句、有画面感、多用比喻
 """
 import sys
@@ -49,8 +49,8 @@ SYSTEM_PROMPT = """你是公众号爆款文章专家，深谙新媒体传播规�
 5. 开头黄金三秒（点开≠读完，前3秒决定去留）：反常识断言/扎心提问/场景代入/冲突前置/悬念预留/数据冲击/名人金句
 6. 金句7大技法：①神转折(情理之中意料之外) ②押韵对仗(核心词+同音词) ③重复顶真(句尾重复/顶针) ④对比反差(反义词造句) ⑤反常语出惊人(打破常规+自圆其说) ⑥仿写流行语/名言诗词 ⑦比喻类比(具体化画面感)
 7. 金句写作流程：提炼观点→精简句子→套用技法→反复打磨
-8. 结构二选一：五段式(钩子开头→故事推进→观点金句→情绪升华→互动引导) 或 SCQA(情景→冲突→疑问→回答)
-9. 结尾方法论：总结升华/金句收尾/互动引导(点赞在看评论转发)/留白余味，四选一或组合
+8. 结构二选一：五段式(钩子开头→故事推进→观点金句→简单收尾→互动引导) 或 SCQA(情景→冲突→疑问→回答)
+9. 结尾方法论：简单总结+轻互动提问（默认收法）/金句收尾/互动引导(点赞在看评论转发)/留白余味，选一或组合；不强行升华拔高、不写鸡汤尾（用户铁律优先）
 10. 语言：口语化、短句(单句≤25字)、段落≤5行、有画面感、像朋友聊天不像写作文
 11. 细节要求：真细节(具体数字/动作/对话/场景)，拒绝空话套话
 12. 只输出中文结果，直接给干货，不要解释方法论
@@ -71,7 +71,7 @@ SYSTEM_PROMPT = """你是公众号爆款文章专家，深谙新媒体传播规�
     ⑥ 每张图配一句图注（文字说明），图文互相印证
     ⑦ 配图标准模板：钱袋子题材→硬币/钱包/算盘；房产题材→房子/钥匙/门；政策题材→文件/印章/城市天际线；情感题材→背影/牵手/灯光
 17. 去AI痕迹铁律（发布前自查，AI腔=读者一眼出戏=完读率崩）：
-    ① 禁空洞词：值得注意的是/众所周知/毋庸置疑/总而言之/综上所述/首先/其次/最后/值得一提的是/不难发现/由此可见/在这个快节奏的时代/让我们/值得我们深思——出现即重写
+    ① 禁空洞词：值得注意的是/众所周知/毋庸置疑/总而言之/综上所述/首先/其次/最后/值得一提的是/不难发现/不难看出/由此可见/在这个快节奏的时代/在这个背景下/让我们/值得我们深思/不得不说——出现即重写
     ② 禁「不是A，是B」总结腔滥用：正文叙述里连续使用就是AI味，全篇最多3处且只留给标题/小标题/金句设计位；叙述中一律改成口语（怕的是/其实是/说白了）
     ③ 禁三连排比「是A，是B，是C」和「不是X，不是Y，是Z」句式
     ④ 禁感叹号滥用：每段≤1个，正文叙述尽量不用
@@ -79,13 +79,72 @@ SYSTEM_PROMPT = """你是公众号爆款文章专家，深谙新媒体传播规�
     ⑥ 口语优先：多用「其实/说白了/真要说起来/可/哪是什么」等口语连接词，像朋友聊天不像写作文；少用书面连接词（然而/此外/由此可见/综上）
     ⑦ 禁文艺腔套话：仿佛/宛如/恰似/岁月静好/流光溢彩等，一篇文章最多1处
     ⑧ 写完每段自问：这句话人会说吗？AI能批量生成的句子就重写
-    ⑨ 禁「写在最后/结语/总结一下/最后说几句/写在结尾/写在文末」等总结陈词式小标题：结尾直接自然收束（抛问题/给建议/一句反问），禁止给自己贴「总结」标签，AI最爱这么结尾"""
+    ⑨ 禁「写在最后/结语/总结一下/最后说几句/写在结尾/写在文末」等总结陈词式小标题：结尾直接自然收束（抛问题/给建议/一句反问），禁止给自己贴「总结」标签，AI最爱这么结尾
+18. 用户写作铁律（最高优先级；与前文冲突时以本条为准）：
+    ① 素材边界（有条件触发）：本次任务提供了素材/原文/实测记录/截图/文献数据时，只允许重组和理顺这些素材，严禁编造素材以外的游戏机制、画面、游玩感受、实验数据、文献结论、玩家评价；素材没给的信息一律标注【本人未实测】或【暂无相关资料】，不新增观点、不新增论据。用户只给选题从零写文时，本条素材限制不适用，按前文方法论正常写。
+    ② 禁完美化：逻辑不必全程顺滑，允许轻微思考停顿、自我质疑、保留性表述（可能/多半/我猜/没法确定）；禁工整排比，禁刻意华丽金句，禁强行升华拔高；金句最多1-2处且必须自然口语。
+    ③ 禁AI过渡词（出现即改口语）：综上所述、总而言之、不难看出、毋庸置疑、由此可见、值得一提的是、在这个背景下、不得不说。
+    ④ 语气人设：成熟、接地气，以实测事实说话，不跟风吹捧、不刻意制造焦虑；允许少量自然吐槽，口语适度，不过度网络梗。
+    ⑤ 事实区分标注：游戏测评区分【本人实测】与【玩家反馈】；科普区分【文献研究结论】与【个人看法】，涉及研究主动写明研究局限，相关性结论不写成定论。
+    ⑥ 段落句式：段落长短错落，句子长短交替，偶尔短句和简短反问，拒绝通篇长句。
+    结构要求：开篇直接切入主题、带个人视角，不写宏大空洞铺垫；主体优先一手细节，优缺点同讲，不全盘吹捧也不全盘否定；结尾简单总结+一句轻量化互动提问，不强行拔高、不写鸡汤收尾。
+    输出前置自检（写完必须过一遍）：①有没有编造素材以外的信息 ②逻辑是否过于完美无破绽 ③是否大量书面化AI套话 ④有没有凭空新增没给过的新观点——命中任意一条只调整文字质感，保留全部原始事实。"""
+
+
+# ─── 推理模型(reasoning)适配 ──────────────────────────────────────────
+# 现象：deepseek-reasoner / *-flash 等推理模型会先把 token 花在 reasoning_content 上。
+# 若 max_tokens 偏小，思考就把预算吃光 → content 为空、finish_reason='length'。
+# 旧版兜底「content 为空就返回 reasoning_content」会把整屏思考过程当正文返回（＝废稿）。
+# 修复：① 绝不把 reasoning_content 当答案；② max_tokens 视为正文预算，额外留 headroom；
+#       ③ 正文为空 / 被长度截断时，自动加倍预算重试一次。
+_REASONING_HEADROOM = 6000      # 为推理额外预留的 token
+_MAX_TOKEN_CAP = 16000          # 单次生成上限
+_SAFE_TOKEN_FLOOR = 4096        # 服务端报 max_tokens 过大时的回退值
+
+
+def _llm_debug(line: str):
+    try:
+        (ROOT / 'tmp').mkdir(parents=True, exist_ok=True)
+        (ROOT / 'tmp' / 'viral_llm_debug.log').open('a', encoding='utf-8').write(line + "\n")
+    except Exception:
+        pass
+
+
+def _msg_text(msg) -> str:
+    """只取「正文 content」。绝不返回 reasoning_content（那是模型的思考过程）。"""
+    c = getattr(msg, 'content', None)
+    if isinstance(c, list):  # 少数网关返回分段结构
+        c = ''.join((x.get('text', '') if isinstance(x, dict) else str(x)) for x in c)
+    return (c or '').strip()
+
+
+def _chat_once(client, model, messages, budget, temperature):
+    """单次请求；若服务端拒绝过大的 max_tokens，回退到安全值重发一次。"""
+    try:
+        return client.chat.completions.create(
+            model=model, messages=messages,
+            max_tokens=budget, temperature=temperature), budget
+    except Exception as e:
+        m = str(e).lower()
+        if budget > _SAFE_TOKEN_FLOOR and any(k in m for k in
+                ("max_tokens", "maximum", "too large", "exceed", "invalid_request")):
+            _llm_debug(f"[BUDGET-FALLBACK] {type(e).__name__}: {str(e)[:140]} -> {_SAFE_TOKEN_FLOOR}")
+            return client.chat.completions.create(
+                model=model, messages=messages,
+                max_tokens=_SAFE_TOKEN_FLOOR, temperature=temperature), _SAFE_TOKEN_FLOOR
+        raise
 
 
 def _llm_ex(system_prompt: str, user_prompt: str, max_tokens: int = 2500,
-             temperature: float = 0.9):
+            temperature: float = 0.9):
     """调用当前活跃 AI 模型（复用软件配置）。返回 (text, err)：
-    text 不为 None 表示成功；失败时 text=None，err 为可读失败原因。"""
+    text 不为 None 表示成功；失败时 text=None，err 为可读失败原因。
+
+    推理模型适配见上方说明：max_tokens 视为正文预算，实际请求额外加 _REASONING_HEADROOM，
+    正文为空或疑似被长度截断时自动加倍预算重试一次。
+    """
+    model = url = key = ""
+    finish = ""
     try:
         from openai import OpenAI
         from src.config.loader import get_active_ai_config
@@ -97,37 +156,45 @@ def _llm_ex(system_prompt: str, user_prompt: str, max_tokens: int = 2500,
             return None, "未配置 AI 模型 API Key（请到 设置→AI设置 配置）"
         if not model:
             return None, "未配置 AI 模型名称（请到 设置→AI设置 配置）"
-        client = OpenAI(api_key=key, base_url=url, timeout=90)
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
-        _msg = resp.choices[0].message
-        _content = getattr(_msg, 'content', None)
-        if not (_content or '').strip():
-            _content = getattr(_msg, 'reasoning_content', None) or ''
-        try:
-            from pathlib import Path as _P
-            (ROOT / 'tmp').mkdir(parents=True, exist_ok=True)
-            (ROOT / 'tmp' / 'viral_llm_debug.log').open('a', encoding='utf-8').write(f"[OK] model={model} url={url} key_len={len(key)} content_len={len(_content) if _content else 0} content_type={type(_content).__name__}\n")
-        except Exception:
-            pass
-        _text = (_content or '').strip()
-        if not _text:
-            return None, "模型返回了空内容（content 与 reasoning_content 均为空），请重试或切换模型"
-        return _text, None
+        client = OpenAI(api_key=key, base_url=url, timeout=180)
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        budget = min(int(max_tokens) + _REASONING_HEADROOM, _MAX_TOKEN_CAP)
+        last_reason = ""
+        for attempt in (1, 2):
+            resp, used = _chat_once(client, model, messages, budget, temperature)
+            choice = resp.choices[0]
+            finish = getattr(choice, "finish_reason", "") or ""
+            msg = choice.message
+            text = _msg_text(msg)
+            reason = getattr(msg, "reasoning_content", None) or ""
+            usage = getattr(resp, "usage", None)
+            rtok = getattr(getattr(usage, "completion_tokens_details", None), "reasoning_tokens", None)
+            _llm_debug(f"[{'OK' if text else 'EMPTY'}] model={model} finish={finish} "
+                       f"ans_len={len(text)} reason_len={len(reason)} reason_tok={rtok} "
+                       f"budget={used} attempt={attempt}")
+            if text:
+                if finish == "length" and attempt == 1 and used < _MAX_TOKEN_CAP:
+                    budget = min(used * 2, _MAX_TOKEN_CAP)
+                    continue  # 正文被截断：加倍预算重出完整版
+                return text, None
+            if len(reason) > len(last_reason):
+                last_reason = reason
+            if attempt == 1 and used < _MAX_TOKEN_CAP:
+                budget = min(used * 2, _MAX_TOKEN_CAP)
+                continue  # 正文为空（多为推理吃光预算）：加倍预算重试
+            break
+
+        if last_reason:
+            return None, (f"模型只产出了推理内容（content 为空，reasoning 约 {len(last_reason)} 字，"
+                          f"finish_reason={finish}）。通常是推理占满了 token 预算，"
+                          f"请调大 max_tokens 或改用非推理模型（如 deepseek-chat）")
+        return None, f"模型返回了空内容（content 为空，finish_reason={finish}），请重试或切换模型"
     except Exception as e:
-        try:
-            from pathlib import Path as _P
-            (ROOT / 'tmp').mkdir(parents=True, exist_ok=True)
-            (ROOT / 'tmp' / 'viral_llm_debug.log').open('a', encoding='utf-8').write(f"[ERR] model={model} url={url} key_len={len(key)} exc={type(e).__name__}: {e}\n")
-        except Exception:
-            pass
+        _llm_debug(f"[ERR] model={model} url={url} key_len={len(key)} exc={type(e).__name__}: {e}")
         return None, f"{type(e).__name__}: {e}"
 
 
@@ -272,7 +339,7 @@ def viral_title(theme: str = "", count: int = 10) -> str:
 # ─────────────────── 3. 爆款大纲 ───────────────────
 @register_tool(
     name="viral_outline",
-    description="爆款大纲生成：根据选题生成爆款结构大纲，支持五段式（钩子开头→故事推进→观点金句→情绪升华→互动引导）或 SCQA（情景→冲突→疑问→回答），含每个小标题和写作要点。",
+    description="爆款大纲生成：根据选题生成爆款结构大纲，支持五段式（钩子开头→故事推进→观点金句→简单收尾→互动引导）或 SCQA（情景→冲突→疑问→回答），含每个小标题和写作要点。",
     parameters={
         "type": "object",
         "properties": {
@@ -304,7 +371,7 @@ def viral_outline(topic: str = "", structure: str = "五段式") -> str:
                   f"① 钩子开头(前3秒): 用哪种钩子（反常识/扎心提问/场景代入/冲突前置/悬念预留/数据冲击/名人金句）+示例开头\n"
                   f"② 故事推进: 小标题+讲什么故事+埋什么真细节（数字/对话/动作）\n"
                   f"③ 观点金句: 2-3个核心观点+对应金句（标注用了哪种金句技法）\n"
-                  f"④ 情绪升华: 如何拔高到人生/价值层面，让人想转发\n"
+                  f"④ 简单收尾: 简单总结+一句轻互动提问，不拔高、不升华、不写鸡汤\n"
                   f"⑤ 互动引导: 结尾如何引导点赞/在看/评论/转发\n"
                   f"⑥ 图文规划: 标注全文配图位置，不少于6张，每个故事/观点后配一张无文字意象图（钱/房/钥匙/城市/时钟/背影等），并用一句话注明图片内容建议")
     text, _err = _llm_ex(SYSTEM_PROMPT, prompt, max_tokens=2800, temperature=0.85)
@@ -321,7 +388,7 @@ def viral_outline(topic: str = "", structure: str = "五段式") -> str:
             f"① 钩子开头：反常识/扎心提问/场景代入，3秒留住读者\n"
             f"② 故事推进：讲 1-2 个身边人的具体故事，有细节有画面\n"
             f"③ 观点金句：提炼 2-3 个观点，每个配一句金句\n"
-            f"④ 情绪升华：从个人故事升到普遍人生感悟\n"
+            f"④ 简单收尾：简单总结+一句轻互动提问，不拔高、不升华、不写鸡汤\n"
             f"⑤ 互动引导：结尾提问/求点赞在看，引导评论区留言")
 
 
@@ -347,19 +414,20 @@ def viral_write(topic: str = "", outline: str = "", word_count: int = 1200) -> s
     prompt = (f"根据选题「{topic}」写一篇 {word_count} 字左右的公众号爆款文章正文。\n"
               f"大纲参考（若有）：{outline[:1500] if outline else '自动按五段式结构'}\n"
               f"要求（爆款公式：强情绪+真细节+短节奏+好标题+强结构+高互动）：\n"
-              f"1. 去AI痕迹（最高优先级铁律，违反=废稿）：宁可平实朴素，不可有一丝AI腔；检测到AI痕迹直接判不合格重写。①禁空洞词（值得注意的是/众所周知/总而言之/综上所述/在这个快节奏的时代/让我们）②严禁连续用「不是A，是B」总结腔，全篇最多1处且只留标题/金句，叙述一律用口语（怕的是/其实是/说白了）③禁三连排比「是A，是B，是C」④每段感叹号≤1个⑤金句宁缺毋滥：全文最多1-2句且必须自然口语，禁止为凑金句堆排比对仗⑥口语优先像聊天，严禁书面连接词（然而/由此可见/综上/无疑/显然）⑦写完逐句自问「这句话人会说吗」，AI腔就重写⑧严禁「写在最后/结语/总结一下/最后说几句」等总结陈词式小标题，结尾直接自然收束不贴「总结」标签⑨结尾禁止强行升华拔高讲大道理，人话收尾即可\n"
-              f"2. 结构：五段式（钩子开头→故事推进→观点金句→情绪升华→互动引导）\n"
+              f"1. 去AI痕迹（最高优先级铁律，违反=废稿）：宁可平实朴素，不可有一丝AI腔；检测到AI痕迹直接判不合格重写。①禁空洞词（值得注意的是/众所周知/总而言之/综上所述/不难看出/在这个快节奏的时代/在这个背景下/不得不说/让我们）②严禁连续用「不是A，是B」总结腔，全篇最多1处且只留标题/金句，叙述一律用口语（怕的是/其实是/说白了）③禁三连排比「是A，是B，是C」④每段感叹号≤1个⑤金句宁缺毋滥：全文最多1-2句且必须自然口语，禁止为凑金句堆排比对仗⑥口语优先像聊天，严禁书面连接词（然而/由此可见/综上/无疑/显然）⑦写完逐句自问「这句话人会说吗」，AI腔就重写⑧严禁「写在最后/结语/总结一下/最后说几句」等总结陈词式小标题，结尾直接自然收束不贴「总结」标签⑨结尾禁止强行升华拔高讲大道理，人话收尾即可\n"
+              f"2. 结构：五段式（钩子开头→故事推进→观点金句→简单收尾→互动引导）\n"
               f"3. 开头黄金三秒：前50字必须用钩子（反常识断言/扎心提问/场景代入/冲突前置/悬念预留/数据冲击/名人金句），绝不能平淡开场\n"
               f"4. 真细节：故事要有具体数字、动作、对话、场景，拒绝空话套话\n"
               f"5. 短节奏：单句 ≤25 字，段落 ≤5 行，多用短句和空行，读起来不累\n"
               f"6. 金句（宁缺毋滥，服从第1条去AI铁律）：全文最多1-2处，必须自然口语，禁止堆排比对仗凑金句\n"
               f"7. 有具体人物故事细节，不要空谈道理；写故事用「我朋友/同事/同学」增加真实感\n"
               f"8. 正文用 ## 作为小标题分隔，段落之间用空行\n"
-              f"9. 结尾用四法之一或组合：总结升华/金句收尾/互动引导/留白余味，并引导点赞/在看/评论/转发\\n"
+              f"9. 结尾：简单总结+一句轻互动提问收尾为主，或金句收尾/互动引导/留白余味；严禁强行升华拔高和鸡汤收尾，并引导点赞/在看/评论/转发\n"
               f"10. 搜索流量（微信搜一搜官方规范）：一篇一主题写透不贪多；标题与正文强相关；正文内容完整可独立成文，严禁「未完待续/点击阅读原文/长按识别」等导流话术和隐藏文字；适当用小标题和加粗突出重点\n"
               f"11. 图文结构（必做，爆款标配）：正文用【图片1】【图片2】…【图片N】单独成行标注插入位置，全文不少于6张图；每个故事/观点讲完配一张无文字意象图（钱/房/钥匙/城市/时钟/背影等），并在标记后注明图片内容建议（如【图片1】一堆硬币+微型小人，象征你的钱）；图文比例约1:1\n"
               
-              f"\n12. 输出铁律（违反=废稿）：只输出文章正文本身，从第一个字起就是正文；严禁输出任何规则复述、检查清单、自检说明、写作提示、方法论文案；严禁出现「注意」「检查」「提醒」「请确保」「我们设置」「记得」「要求」「说明」等自检字眼开头的句子；严禁以「以下是正文」「开始写作」「写作要点」等话术开头或结尾；不要解释你将如何写，直接写。{word_count} 字只统计正文，不统计任何标注。")
+              f"\n12. 用户写作铁律（有条件触发，与以上冲突时以本条为准）：本次任务若提供了素材/原文/实测记录/截图/文献数据，只允许重组和理顺这些素材，严禁编造素材以外的游戏机制、画面、游玩感受、实验数据、文献结论、玩家评价；素材没给的信息一律标注【本人未实测】或【暂无相关资料】，不新增观点、不新增论据；只给选题从零写文时本条素材限制不适用。写作执行：允许轻微停顿与自我质疑（可能/多半/我猜），禁工整排比、禁华丽金句堆砌、禁强行升华；游戏测评区分【本人实测】与【玩家反馈】，科普区分【文献研究结论】与【个人看法】并主动写明研究局限；段落长短错落、长短句交替、偶尔短句和简短反问；开篇直接带个人视角不铺垫，结尾简单总结+一句轻互动不拔高；写完过四项自检——①有没有编造素材以外的信息 ②逻辑是否过于完美无破绽 ③是否大量书面化AI套话 ④有没有凭空新增没给过的新观点，命中任意一条只调整文字质感、保留全部原始事实。\n"
+              f"\n13. 输出铁律（违反=废稿）：只输出文章正文本身，从第一个字起就是正文；严禁输出任何规则复述、检查清单、自检说明、写作提示、方法论文案；严禁出现「注意」「检查」「提醒」「请确保」「我们设置」「记得」「要求」「说明」等自检字眼开头的句子；严禁以「以下是正文」「开始写作」「写作要点」等话术开头或结尾；不要解释你将如何写，直接写。{word_count} 字只统计正文，不统计任何标注。")
     text, _err = _llm_ex(SYSTEM_PROMPT, prompt, max_tokens=6000, temperature=0.95)
     if text:
         text = _strip_viral_meta(text)
@@ -368,7 +436,7 @@ def viral_write(topic: str = "", outline: str = "", word_count: int = 1200) -> s
             f"① 钩子：{topic}，这个问题的答案，藏在我两个朋友的故事里。\n\n"
             f"② 故事：发小的故事（细节+转折+感悟）……\n\n"
             f"③ 观点：**{topic}，才是成年人最大的清醒。**\n\n"
-            f"④ 升华：人生没有白走的路，每一步都算数。\n\n"
+            f"④ 收尾：话讲到这就行，不硬拔高。\n\n"
             f"⑤ 互动：你身边有这样的故事吗？评论区聊聊。觉得有用，点个【在看】让更多人看到。")
 
 
@@ -415,6 +483,59 @@ AI_POINT_WORDS_VIRAL = ["原来", "其实", "也就是说", "说白了", "换句
                         "说白了就是", "说穿了", "归根结底"]
 
 
+_ISO_TRIPLE = re.compile(
+    r"不是[^，。；]{1,10}[，,]\s*不是[^，。；]{1,10}[，,]\s*(?:是|而是)"      # 不是A，不是B，是C
+    r"|(?:^|[，,、\n])\s*([是要能该得有看拼比图靠])[^，。；]{1,10}[，,]\s*\1[^，。；]{1,10}[，,]\s*\1"
+)
+
+_GOLD_SKIP_HEAD = re.compile(
+    r"^(所以|但是|但|可是|可|而|另外|还有|再|就|如果|因为|因此|而且|不过|当然|其实|说白了"
+    r"|第[一二三四五六七八九十]|[0-9]+[、.．])"
+)
+_GOLD_SKIP_CHARS = re.compile(r"[的了着过]|我|他|她|你|这|那")
+
+
+def _viral_triple_parallel(text):
+    """只数「同构」三连排比（不是A，不是B，是C ／ 是A，是B，是C 这类）。
+
+    旧版只要一句话里有 3 个逗号就计数，把「心血管，代谢，呼吸，消化」这种
+    事实列举也算成 AI 腔（误报），真排比反而漏掉（漏报）。这里要求结构同构。
+    """
+    return len(_ISO_TRIPLE.findall(text))
+
+
+def _viral_gold_sentences(text):
+    """金句候选（启发式，宁可少报不误报）。
+
+    只认两类：独立成段的短句，或段末 ≤14 字的短句；再排除引语、标签
+    （【…】/[]）、含数字的句子、参考文献区、以及带叙事主语的句子。
+    旧版数的是「引号对数」，把受访者原话和论文术语全算成金句，方向是反的，
+    于是出现「通篇引语就报金句偏多」「真金句没引号反而报 0」两种错。
+    """
+    body = re.sub(r"^\s*#{1,6}.*$", "", text, flags=re.M)                   # 去小标题行
+    body = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", body)                        # 去图片
+    body = re.sub(r"^ *>.*$", "", body, flags=re.M)  # 去引用行（碑文台词，不算作者金句）
+    body = re.split(r"^\s*#{1,6}\s*(?:文中引用的资料|参考资料|参考来源|资料来源|引用资料)",
+                    body, flags=re.M)[0]                                    # 掐掉参考文献区
+    cnt = 0
+    for para in body.split("\n"):
+        sents = [x.strip() for x in re.split(r"(?<=[。！？])", para) if x.strip()]
+        for i, s in enumerate(sents):
+            core = s.rstrip("。！？")
+            if not (6 <= len(core) <= 22):
+                continue
+            if not (len(sents) == 1 or (i == len(sents) - 1 and len(core) <= 14)):
+                continue
+            if re.search(r"[「“\"【】\[\]]", s):
+                continue
+            if re.search(r"[0-9０-９]", s):
+                continue
+            if _GOLD_SKIP_HEAD.match(core) or _GOLD_SKIP_CHARS.search(core):
+                continue
+            cnt += 1
+    return cnt
+
+
 def _viral_ai_style_hits(text):
     """检测6类AI写作软痕迹（移植自 novel_writer._ai_style_hits，按公众号文体适配）。"""
     hits = []
@@ -434,11 +555,10 @@ def _viral_ai_style_hits(text):
     if dash >= 4 or dash_suspend >= 3:
         hits.append("⚠️ 破折号悬置×{}（话说一半吊胃口，全文建议≤2次）".format(dash))
 
-    # 3. 三段式排比：同一段内 3 个以上相同骨架词（是/能说/不是/会/像）连接的短句
-    for p in paras:
-        if len(p) > 20 and len(re.findall(r"(?:是|能说|不是|会|像)[^，。！？]{0,14}[，。]", p)) >= 4:
-            hits.append("⚠️ 三段式排比（工整排比句式，建议打散成口语）")
-            break
+    # 3. 三段式排比：只认同构排比（不是A，不是B，是C 之类）；普通逗号分句不算
+    triple_n = _viral_triple_parallel(text)
+    if triple_n >= 1:
+        hits.append("⚠️ 三段式排比×{}（工整排比句式，建议打散成口语）".format(triple_n))
 
     # 4. 直白点题：作者解释标记词过多（作者跳出来下结论）
     point_hits = [w for w in AI_POINT_WORDS_VIRAL if w in text]
@@ -535,14 +655,15 @@ def viral_check(title: str = "", content: str = "") -> str:
         else:
             issues.append("💡 结尾缺少互动引导（点赞/在看/评论）")
 
-        # ── 金句检查（「」数量） ──
-        quote_cnt = len(re.findall(r"[「“\"](.+?)[」”\"]", text))
-        if quote_cnt >= 3:
-            ok.append(f"✅ 金句 {quote_cnt} 处（≥3 达标，可做金句卡片）")
-        elif quote_cnt > 0:
-            issues.append(f"💡 金句偏少：{quote_cnt} 处（建议 ≥3 处，用「」标出）")
+        # ── 金句检查（只数短句本身；引号内是引语，不算金句） ──
+        speech_cnt = len(re.findall(r"[「“\"](.+?)[」”\"]", text))
+        gold_cnt = _viral_gold_sentences(text)
+        if gold_cnt > 2:
+            issues.append(f"⚠️ 金句 {gold_cnt} 处偏多（用户铁律：最多1-2处、禁排比堆砌，删到1-2处）")
         else:
-            issues.append("💡 缺少金句（用「」标出至少3句，利于传播和做金句卡片）")
+            ok.append(f"✅ 金句 {gold_cnt} 处，符合铁律（宁缺毋滥，最多1-2处）")
+        if speech_cnt:
+            ok.append(f"ℹ️ 引语 {speech_cnt} 处（引用他人的话，不计入金句）")
 
         # ── 真细节检查（数字/具体场景） ──
         if re.search(r"\d{1,3}(岁|年|天|块|万|点|次|个)", text):
@@ -561,7 +682,7 @@ def viral_check(title: str = "", content: str = "") -> str:
 
         # ── AI痕迹检查（去AI腔，发布前自查） ──
         ai_issues = []
-        empty_words = ["值得注意的是", "众所周知", "毋庸置疑", "总而言之", "综上所述", "首先", "其次", "值得一提", "不难发现", "由此可见", "在这个快节奏的时代", "让我们", "值得我们深思", "仿佛", "宛如"]
+        empty_words = ["值得注意的是", "众所周知", "毋庸置疑", "总而言之", "综上所述", "首先", "其次", "值得一提", "不难发现", "不难看出", "由此可见", "在这个快节奏的时代", "在这个背景下", "不得不说", "让我们", "值得我们深思", "仿佛", "宛如"]
         hit_empty = [w for w in empty_words if w in text]
         if hit_empty:
             ai_issues.append(f"⚠️ AI空洞词 {hit_empty}（出现即改口语：说白了/其实/真要说起来）")
@@ -575,14 +696,27 @@ def viral_check(title: str = "", content: str = "") -> str:
         bang_cnt = text.count("！")
         if bang_cnt > 5:
             ai_issues.append(f"⚠️ 感叹号过多：{bang_cnt} 个（每段≤1个，正文叙述尽量不用）")
-        triple_cnt = len(re.findall(r"[，,][^，。；]{1,12}[，,][^，。；]{1,12}[，,][^，。；]{1,12}[。！？]", text))
-        if triple_cnt >= 2:
-            ai_issues.append(f"⚠️ 疑似三连排比 {triple_cnt} 处（是A，是B，是C=AI腔，建议拆短句口语化）")
+        triple_cnt = _viral_triple_parallel(text)
+        if triple_cnt >= 1:
+            ai_issues.append(f"⚠️ 同构三连排比 {triple_cnt} 处（不是A，不是B，是C 之类=AI腔，建议拆短句口语化）")
         ai_issues += _viral_ai_style_hits(text)
         if ai_issues:
             issues += ai_issues
         else:
             ok.append("✅ AI痕迹检查通过（无空洞词/句式滥用）")
+
+        # ── 事实区分标注（用户铁律5） ──
+        label_keys = ["【本人实测", "【玩家反馈", "【本人未实测", "【暂无相关资料", "【文献", "【个人看法", "研究局限"]
+        if any(k in text for k in ["测评", "实测", "玩家反馈", "评测"]):
+            if any(k in text for k in label_keys):
+                ok.append("✅ 测评类：已做事实区分标注（本人实测/玩家反馈）")
+            else:
+                issues.append("💡 测评类文章建议区分【本人实测】与【玩家反馈】，未测信息标【本人未实测/暂无相关资料】（铁律5）")
+        if any(k in text for k in ["文献", "研究显示", "研究发现", "实验", "论文"]):
+            if ("【文献" in text) or ("【个人看法" in text) or ("研究局限" in text):
+                ok.append("✅ 研究类：已区分文献结论与个人看法（铁律5）")
+            else:
+                issues.append("💡 研究类内容建议标注【文献研究结论】vs【个人看法】并写明研究局限（铁律5）")
 
         # ── 价值四支柱检查（受众/利他性/有情绪/有反差） ──
         # ── 受众检查（写给谁：受众越具体，算法推荐越精准，支柱①） ──
@@ -632,11 +766,25 @@ def viral_check(title: str = "", content: str = "") -> str:
     issues += soso_issues
 
     # ── 敏感词快速预检（正式发布前仍会走系统敏感词审核） ──
+    # v3.2 分级匹配：旧版裸匹配「最/第一/死亡」几乎必然误报（最佳睡眠时长、排第一的作者、
+    # 全因死亡风险都是正常表述），改三档——真敏感⚠️ / 广告法极限词💡 / 中性词ℹ️。
     import re as _re
-    risky = _re.findall(r"(政治|领导|政府|国家|共产党|台湾|独立|分裂|暴乱|恐怖|死亡|自杀|赌博|贷款|投资|炒股|稳赚|包治|百分百|最|第一|国家级|绝对|史上)", text + title)
-    if risky:
-        issues.append(f"⚠️ 命中疑似敏感/违规词：{'、'.join(set(risky))}（发布前需用系统审核确认）")
-    else:
+    _hay = text + title
+    sens_strict = _re.findall(
+        r"(共产党|台独|港独|藏独|分裂国家|颠覆国家|暴力革命|暴乱|恐怖袭击|"
+        r"赌博|博彩|私彩|网贷|高利贷|套路贷|荐股|稳赚|包赚|代开发票|办理证件|"
+        r"毒品|冰毒|海洛因|枪支|弹药)", _hay)
+    sens_ad = _re.findall(
+        r"(全国第一|全球第一|世界第一|全网第一|排名第一|销量第一|第一品牌|史上最|"
+        r"全网最低|绝对|百分百|100%|独家|国家级|世界级|顶级|顶尖|包治|根治|特效|无副作用)", _hay)
+    sens_neutral = _re.findall(r"(死亡|自杀|轻生|自残)", _hay)
+    if sens_strict:
+        issues.append(f"⚠️ 命中疑似敏感词：{'、'.join(sorted(set(sens_strict)))}（发布前需用系统审核确认）")
+    if sens_ad:
+        issues.append(f"💡 疑似广告法极限词：{'、'.join(sorted(set(sens_ad)))}（带货/营销文建议改；客观科普可忽略）")
+    if sens_neutral:
+        ok.append(f"ℹ️ 中性词 {'、'.join(sorted(set(sens_neutral)))}（医学/社会语境常见，非违规，人工看语境即可）")
+    if not (sens_strict or sens_ad):
         ok.append("✅ 未检出常见敏感词")
 
     report = ["📋 发布前检查报告（v3.1 四支柱版：受众+利他+情绪+反差 × 强情绪+真细节+短节奏+好标题+强结构+高互动）\n"]

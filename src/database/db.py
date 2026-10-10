@@ -433,6 +433,10 @@ def get_engine(db_path: str = None):
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA foreign_keys=ON")
+            # WAL 自动检查点：每 1000 页回写一次（SQLite 默认值，显式声明防被改）
+            cursor.execute("PRAGMA wal_autocheckpoint=1000")
+            # WAL 文件上限 16MB：检查点后自动截断，防止 WAL 永久停在历史最高水位（曾撑到 185MB）
+            cursor.execute("PRAGMA journal_size_limit=16777216")
             cursor.close()
 
     return _engine

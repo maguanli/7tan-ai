@@ -51,6 +51,7 @@ except Exception:  # pragma: no cover
 M2_AUTOBIO_INTERVAL_TICKS = 25      # 每 N tick 产出一段自传叙事
 M2_CONTEXT_STACK_MAX = 10           # 多轮上下文栈容量
 M2_STAGE_GAP_SUBJ = 30.0            # 心智阶段划分阈值（主观时钟差）
+M2_KEY_MEMORY_MAX = 200             # 关键经历最多保留条数（取最近 N 条，防止无界增长）
 
 
 # ═══════════════ 代词指代 + 多轮上下文栈 ═══════════════
@@ -141,7 +142,7 @@ def assemble_autobiography() -> dict:
     # 1) 按 focus/valence 筛选关键经历（保留 (mem, idx) 元组以便溯源记忆 ID）
     key = [(m, i) for m, i in mems
            if float(m.get("focus", 0.0)) >= 0.3 or abs(float(m.get("valence", 0.0))) >= 0.2]
-    key = key[:20]
+    key = key[-M2_KEY_MEMORY_MAX:]   # 取最近的关键经历（原为最早的 20 条，导致叙事停在早期）
 
     # 2) 划分心智阶段（按主观时钟差）
     stages: List[dict] = []

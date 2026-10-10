@@ -56,7 +56,7 @@ def self_diagnose() -> str:
     # 插件 — 从源码目录读取（持久化）
     plugin_dir = _REAL_ROOT / "data" / "plugins"
     try:
-        with open(plugin_dir / "installed.json") as f:
+        with open(plugin_dir / "installed.json", encoding="utf-8") as f:
             installed = json.load(f)
         results.append(f"🧩 已安装插件: {len(installed.get('plugins', []))} 个 - {', '.join(installed.get('plugins', []))}")
     except Exception as e:
@@ -143,7 +143,7 @@ def create_plugin(plugin_id: str, plugin_name: str, description: str, tools_code
 
             # manifest
             manifest_path = base_root / "data" / "plugins" / "manifest.json"
-            with open(manifest_path, "r") as f:
+            with open(manifest_path, "r", encoding="utf-8") as f:
                 manifest = json.load(f)
             manifest = [p for p in manifest if p["id"] != plugin_id]
             manifest.append({
@@ -152,18 +152,18 @@ def create_plugin(plugin_id: str, plugin_name: str, description: str, tools_code
                 "category": "自定义", "description": description,
                 "tools": tool_names, "icon": icon,
             })
-            with open(manifest_path, "w") as f:
+            with open(manifest_path, "w", encoding="utf-8") as f:
                 json.dump(manifest, f, ensure_ascii=False, indent=2)
 
             # installed
             installed_path = base_root / "data" / "plugins" / "installed.json"
-            with open(installed_path, "r") as f:
+            with open(installed_path, "r", encoding="utf-8") as f:
                 installed = json.load(f)
             plugins_list = installed.get("plugins", [])
             if plugin_id not in plugins_list:
                 plugins_list.append(plugin_id)
             installed["plugins"] = plugins_list
-            with open(installed_path, "w") as f:
+            with open(installed_path, "w", encoding="utf-8") as f:
                 json.dump(installed, f, ensure_ascii=False, indent=2)
 
             written.append(str(base_root))

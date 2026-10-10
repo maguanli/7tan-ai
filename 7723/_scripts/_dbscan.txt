@@ -1,0 +1,3 @@
+56.0KB  D:\7tan\7tanAI\data\desktop_watch.db  -> observations,sqlite_sequence
+49752.0KB  D:\7tan\7tanAI\data\games.db  -> resources,source_sites,conversation_history,task_logs,ai_configs,capabilities,installed_software,memory,prompts,app_settings,site_credentials,ai_vision_config,tan_model_memory
+12.0KB  D:\7tan\7tanAI\data\zhanlizhi.db  -> zhanlizhi,sqlite_sequence

@@ -57,22 +57,20 @@ def _guard_command(command: str) -> tuple:
 
 
 def _run_cmd(cmd: list, cwd: str = None, timeout: int = 120) -> str:
-    """通用命令执行器"""
+    """通用命令执行器（支持用户中止：中止时立即杀掉子进程树）"""
     try:
-        kw = {"capture_output": True, "text": True, "timeout": timeout,
-              "encoding": "utf-8", "errors": "replace"}
-        if cwd:
-            kw["cwd"] = cwd
-        if platform.system() == "Windows":
-            kw["creationflags"] = subprocess.CREATE_NO_WINDOW
-        r = subprocess.run(cmd, **kw)
+        from src.utils.abort_signal import run_with_abort, AbortedError
+        try:
+            rc, so, se = run_with_abort(cmd, cwd=cwd or None, timeout=timeout)
+        except AbortedError:
+            return "⏹ 已中止（用户终止任务），命令已强制结束"
         out = []
-        if r.stdout.strip():
-            out.append(r.stdout.strip())
-        if r.stderr.strip():
-            out.append(f"[stderr]\n{r.stderr.strip()}")
-        if r.returncode != 0:
-            out.append(f"\n⚠️ 退出码: {r.returncode}")
+        if (so or "").strip():
+            out.append(so.strip())
+        if (se or "").strip():
+            out.append(f"[stderr]\n{se.strip()}")
+        if rc != 0:
+            out.append(f"\n⚠️ 退出码: {rc}")
         return "\n".join(out) if out else "(无输出)"
     except subprocess.TimeoutExpired:
         return f"⏱ 命令超时 ({timeout}秒)"

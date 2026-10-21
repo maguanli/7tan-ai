@@ -1,0 +1,50 @@
+镜像 http://www.cnr.cn/ -> C:\Users\ADMINI~1\AppData\Local\Temp\cnr_mirror_xn85vatc
+页面 3 成功 / 0 失败，资源 12 成功 / 0 失败，共 15 个文件
+
+OK  www.cnr.cn\index.html
+   声明=utf-8 utf8解码=成功 U+FFFD=False 汉字=4029 常用字占比=88%
+   片段: '<!DOCTYPE html>\n\n<html lang="en">\n<head><meta content="http://www.cnr.cn/" name="webmirror-source"/>\n<meta content="IE=Edge,chrome=1" http-equiv="X-UA-Compatibl'
+OK  www.cnr.cn\2021\footer@v=1.js
+   声明=(none) utf8解码=成功 U+FFFD=False 汉字=178 常用字占比=94%
+   片段: 'document.writeln("<div id=\\\'footer0820\\\'>");\ndocument.writeln("    <div id=\\\'perny-footer\\\' class=\\\'w1200 clearfix\\\'>");\ndocument.writeln("        <div class=\\\''
+OK  www.cnr.cn\2021\footerheader@v=1.css
+   声明=(none) utf8解码=成功 U+FFFD=False 汉字=0 常用字占比=0%
+   片段: '#perny-main{\n  min-height: calc(100vh - 378px);\n}\n\n#footer0820 .w1200{\n\tmargin: 0 auto;\n\twidth: 1200px;\n}\n\n#footer0820 {\n\tmargin-top: 34px;\n\tpadding: 64px 0 38p'
+OK  www.cnr.cn\2021\gcmxlogo.js
+   声明=(none) utf8解码=成功 U+FFFD=False 汉字=0 常用字占比=0%
+   片段: 'document.writeln("<ul class=\\\'clearfix\\\'>");\ndocument.writeln("\t  <li>");\ndocument.writeln("        <a href=\\\'javascript:void(0)\\\' target=\\\'_self\\\'>");\r\ndocumen'
+OK  www.cnr.cn\2024\javascript\app@v=7.js
+   声明=(none) utf8解码=成功 U+FFFD=False 汉字=241 常用字占比=82%
+   片段: '/*\n * ATTENTION: An "eval-source-map" devtool has been used.\n * This devtool is neither made for production nor for readable output files.\n * It uses "eval()" c'
+OK  www.cnr.cn\2024\javascript\plugins\cradio\cradio.min@v=2.css
+   声明=(none) utf8解码=成功 U+FFFD=False 汉字=0 常用字占比=0%
+   片段: '.voice{background:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAA4CAYAAADXVynvAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAA'
+OK  www.cnr.cn\2024\javascript\plugins\cradio\cradio.min@v=7.js
+   声明=(none) utf8解码=成功 U+FFFD=False 汉字=8 常用字占比=75%
+   片段: '!function(t,e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e():"function"==typeof define&&define.amd?define(e):(t="undefined"!=typeof gl'
+OK  www.cnr.cn\2024\javascript\plugins\iscroll\iscroll.js
+   声明=(none) utf8解码=成功 U+FFFD=False 汉字=0 常用字占比=0%
+   片段: '/*! iScroll v5.2.0-snapshot ~ (c) 2008-2017 Matteo Spinelli ~ http://cubiq.org/license */\n(function (window, document, Math) {\nvar rAF = window.requestAnimation'
+OK  www.cnr.cn\2024\javascript\plugins\swiper2\idangerous.swiper.min@v=2.js
+   声明=(none) utf8解码=成功 U+FFFD=False 汉字=0 常用字占比=0%
+   片段: '/*\n * Swiper 2.7.6\n * Mobile touch slider and framework with hardware accelerated transitions\n *\n * http://www.idangero.us/sliders/swiper/\n *\n * Copyright 2010-'
+OK  www.cnr.cn\2024\javascript\plugins\unleash\jquery.unleash.2@v=2.js
+   声明=(none) utf8解码=成功 U+FFFD=False 汉字=0 常用字占比=0%
+   片段: '/**\r\n * jQuery Unleash v3\r\n *\r\n * Accordion jQuery image slider\r\n *\r\n * Created by Ali Alaa 2014\r\n *\r\n * http://themeforest.net/user/alialaa\r\n *\r\n */\r\n;\r\n(funct'
+OK  www.cnr.cn\2024\stylesheets\app@v=4.css
+   声明=(none) utf8解码=成功 U+FFFD=False 汉字=82 常用字占比=94%
+   片段: '/*!*************************************************************************************************************************************************************'
+OK  www.cnr.cn\bower_components\jquery-1.11.3\dist\jquery.min.js
+   声明=(none) utf8解码=成功 U+FFFD=False 汉字=0 常用字占比=0%
+   片段: '/*! jQuery v1.12.1 | (c) jQuery Foundation | jquery.org/license */\n!function(a,b){"object"==typeof module&&"object"==typeof module.exports?module.exports=a.docu'
+OK  www.cnr.cn\bower_components\typo\typo.css
+   声明=(none) utf8解码=成功 U+FFFD=False 汉字=497 常用字占比=92%
+   片段: '@charset "utf-8";\n\n/* 防止用户自定义背景颜色对网页的影响，添加让用户可以自定义字体 */\nhtml {\n  color: #333;\n  background: #fff;\n  -webkit-text-size-adjust: 100%;\n  -ms-text-size-adjust: 100%'
+OK  www.cnr.cn\erwen\index.html
+   声明=utf-8 utf8解码=成功 U+FFFD=False 汉字=241 常用字占比=91%
+   片段: '<!DOCTYPE html\n  PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "https://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">\n\n<html xmlns="http://www.w3.org/199'
+OK  www.cnr.cn\syk\index.html
+   声明=utf-8 utf8解码=成功 U+FFFD=False 汉字=2449 常用字占比=89%
+   片段: '<!DOCTYPE html>\n\n<html lang="en">\n<head><meta content="http://www.cnr.cn/syk/" name="webmirror-source"/>\n<meta content="width=device-width, initial-scale=0.3, m'
+
+结论: 检查 15 个文本文件，异常 0 个 -> 全部正常

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebMirror · 网页镜像工具</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ 左侧：新建任务 + 任务列表 ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="logo">🪞</span>
+      <div>
+        <h1>WebMirror</h1>
+        <p>整站抓取 · 按原路径保存</p>
+      </div>
+    </div>
+
+    <form id="crawl-form" class="card">
+      <label class="lbl">起始网址 <span class="hint">（可多行，一行一个）</span></label>
+      <textarea id="url" rows="2" placeholder="https://example.com/
+https://example.com/docs/"></textarea>
+
+      <div class="row">
+        <label class="mini">
+          <span>抓取深度</span>
+          <input type="number" id="max_depth" value="3" min="0" max="20">
+        </label>
+        <label class="mini">
+          <span>页面上限</span>
+          <input type="number" id="max_pages" value="300" min="1" max="2000000">
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="mini">
+          <span>并发数</span>
+          <input type="number" id="concurrency" value="8" min="1" max="64">
+        </label>
+        <label class="mini">
+          <span>请求间隔(秒)</span>
+          <input type="number" id="delay" value="0" min="0" step="0.1">
+        </label>
+      </div>
+
+      <details class="adv">
+        <summary>高级选项</summary>
+
+        <label class="chk"><input type="checkbox" id="same_domain" checked>
+          <span>只抓同站页面（页面不跳到外部域名）</span></label>
+
+        <label class="mini wide">
+          <span>静态资源(CSS/JS/图片)抓取范围</span>
+          <select id="asset_scope">
+            <option value="same_site">同主域（含子域名，推荐）</option>
+            <option value="same_host">仅本主机</option>
+            <option value="any">任意主机（含第三方 CDN）</option>
+          </select>
+        </label>
+        <label class="chk"><input type="checkbox" id="include_assets" checked>
+          <span>同时下载图片 / CSS / JS 等资源</span></label>
+        <label class="chk"><input type="checkbox" id="rewrite_links" checked>
+          <span>改写链接为本地路径（离线可点）</span></label>
+        <label class="chk"><input type="checkbox" id="with_host_dir" checked>
+          <span>顶层生成域名目录</span></label>
+        <label class="chk"><input type="checkbox" id="obey_robots">
+          <span>遵守 robots.txt</span></label>
+
+        <label class="mini wide">
+          <span>带 ?参数 的网址如何落盘</span>
+          <select id="param_mode">
+            <option value="dir">转目录：news?page=2 → news/@page=2/index.html</option>
+            <option value="hash">取哈希：news?page=2 → news/@q=ab12cd34/index.html</option>
+            <option value="ignore">忽略参数（可能互相覆盖）</option>
+          </select>
+        </label>
+
+        <label class="mini wide">
+          <span>无扩展名的网址如何落盘</span>
+          <select id="extensionless">
+            <option value="index">目录形式：/about → about/index.html</option>
+            <option value="html">文件形式：/about → about.html</option>
+          </select>
+        </label>
+      </details>
+
+      <div class="pathpreview">
+        <button type="button" id="btn-preview-path" class="ghost">🔍 预览落盘路径</button>
+        <div id="path-preview-out" class="pv"></div>
+      </div>
+
+      <button type="submit" id="btn-start" class="primary">▶ 开始镜像抓取</button>
+    </form>
+
+    <div class="list-head">
+      <span>任务列表</span>
+      <button type="button" id="btn-refresh" class="ghost small">刷新</button>
+    </div>
+    <div id="task-list" class="task-list"></div>
+  </aside>
+
+  <!-- ============ 中间：进度 + 日志 ============ -->
+  <main class="main">
+    <section class="card progress">
+      <div class="prog-head">
+        <div>
+          <h2 id="cur-title">未选择任务</h2>
+          <p id="cur-url" class="muted">在左侧填写网址开始，或点击任务列表查看详情</p>
+        </div>
+        <div class="prog-actions">
+          <span id="cur-status" class="badge">—</span>
+          <button type="button" id="btn-cancel" class="ghost small">停止</button>
+          <button type="button" id="btn-zip" class="ghost small">⬇ 打包下载</button>
+          <button type="button" id="btn-del" class="ghost small danger">删除</button>
+        </div>
+      </div>
+
+      <div class="bar"><div id="bar-fill" class="bar-fill"></div></div>
+
+      <div class="metrics">
+        <div class="metric"><b id="m-pages">0</b><span>页面成功</span></div>
+        <div class="metric"><b id="m-assets">0</b><span>资源成功</span></div>
+        <div class="metric"><b id="m-files">0</b><span>文件总数</span></div>
+        <div class="metric"><b id="m-queue">0</b><span>队列中</span></div>
+        <div class="metric"><b id="m-size">0 MB</b><span>已保存</span></div>
+        <div class="metric hl"><b id="m-speed-recent">0</b><span>实时速度(60s)</span></div>
+        <div class="metric"><b id="m-speed">0</b><span>平均速度</span></div>
+        <div class="metric"><b id="m-time">0s</b><span>耗时</span></div>
+        <div class="metric"><b id="m-err">0</b><span>失败</span></div>
+      </div>
+    </section>
+
+    <section class="card logs">
+      <div class="logs-head">
+        <h3>实时日志</h3>
+        <label class="chk inline"><input type="checkbox" id="auto-scroll" checked><span>自动滚动</span></label>
+      </div>
+      <pre id="log-box" class="log-box">等待任务开始…</pre>
+    </section>
+  </main>
+
+  <!-- ============ 右侧：文件树 + 预览 ============ -->
+  <aside class="files">
+    <section class="card tree-card">
+      <div class="files-head">
+        <h3>已保存文件 <span id="tree-size" class="muted"></span></h3>
+        <button type="button" id="btn-tree" class="ghost small">刷新</button>
+      </div>
+      <div id="tree" class="tree">暂无文件</div>
+    </section>
+
+    <section class="card preview-card">
+      <div class="files-head">
+        <h3 id="preview-title">预览</h3>
+        <span id="preview-meta" class="muted"></span>
+      </div>
+      <div id="preview" class="preview">点击左侧文件查看内容</div>
+    </section>
+  </aside>
+
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,16 +1,16 @@
 {
   "version": 1,
-  "generated_at": "2026-09-16T20:14:11.650946",
+  "generated_at": "2026-10-13T23:39:05.534308",
   "generated_by": "7tan-updater build v5.1.0",
   "algorithm": "sha256",
   "scope": "full",
   "files": {
     "main.py": "ef076fd31e0a7b6b0ed1e218d828fba0e7704f360bfd0c5fe2c08eecf5eefc6a",
-    "src/agent/agent_loop.py": "c446be3b283462ca8a7f1441c284013672ab7c58c93936c655333391aac8df95",
+    "src/agent/agent_loop.py": "129bd0ba68d89f6c6f6ad2e12c7217f7fa1df00067582d3d6fea50cc11254b0f",
     "src/agent/model_manager.py": "559568b2a7049e5b41340ae6d2ddbd15b6dda9f58c5e5835c16cba0a679eafb0",
     "src/agent/context_manager.py": "82ee4508a167ebd72f8c75428b7c3352c80bba8f4251de5d1d9380ebe35ff82a",
     "src/agent/conversation.py": "50cffde39e57672fbdc0a314aafe7d4fd943199a1f7bf45e623ac39d464bbe71",
-    "src/tools/registry.py": "e888efd1ceb55139bcdc9012cc21f563cbac425a302dfb9346e0735696617e64",
+    "src/tools/registry.py": "db50f9af344996e990a920d74a72bcd6e7b7260d0c38d61fe3fa0802ed202259",
     "src/tools/browser_tools.py": "3e55e7609eff12d4e767d7245760fd14115ba686217fbf4ac43cfb2553cf24dc",
     "src/tools/download_tools.py": "0fa7c75e2c66a8714b51b3179daec6dbcae5427669ba0a48a1b4626f1196e947",
     "src/tools/db_tools.py": "6c2697ad51a95daeb1ba36ae0468e9756c3dd10da676ee8ec6b1611b7044d919",
@@ -21,7 +21,7 @@
     "src/tools/publish_tools.py": "a6b5ec00152ac335ac63c41a9a68d322c9bfe0eb246321abfc0c08ed9b52b6c0",
     "src/tools/self_modify_tools.py": "71fb85566fdd7fdd04fb3dabc7cfb810e88c94cbb3abe4a39ca857e552cc7db1",
     "src/tools/monitor_tools.py": "9753b70a25f80e3aa88b451daf55d217a63f2308ecb7593cf8909a1ab8a34ac9",
-    "src/database/db.py": "65239fe51b0d9bb0e2618dce5d3c7fac72239b997a869076c8525097452c779e",
+    "src/database/db.py": "f7d19292cceba6cd71afd85337733b2e907b757b483f2abe351a0871e28a5d70",
     "src/config/loader.py": "9c7c91b77a92355abcfb787ff179a3f91b5acf84406f5564f7e808b83f155c9a",
     "src/pipeline/pipeline.py": "af7339f149c2bd6def523366d589bffc72615dd2430214463ae7d74883fb358a",
     "src/pipeline/task_queue.py": "b7e6ded83618a63b980c177f2a885047b6f4e6d37009d83a4730ff2618353117",
@@ -48,5 +48,5 @@
     "backup/**",
     "*.log"
   ],
-  "manifest_hmac": "65609ea9832e5b43e9064a0dc5121dc48476af7bdb3d9eb0919ab50e3b8f02dd"
+  "manifest_hmac": "f399d0e1bf8f4140257b9c138906d5da63084f88b0cd752782f9487480f3bc1d"
 }

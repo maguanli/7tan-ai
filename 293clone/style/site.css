@@ -1,0 +1,60 @@
+/* 293查询 仿站 · 站点补充样式 */
+body { background: #f5f7fa; }
+a { text-decoration: none; }
+a:hover { text-decoration: none; }
+
+/* 工具页头部 */
+.tool-head { display: flex; align-items: center; padding: 26px 0 8px; }
+.tool-head img { height: 44px; margin-right: 14px; }
+.tool-head h2 { font-size: 1.55rem; margin: 0; color: #333; font-weight: 700; }
+.tool-head p { margin: 4px 0 0; color: #888; font-size: .92rem; }
+
+/* 查询面板 */
+.tool-card {
+  background: #fff; border: 1px solid #e8eef1; border-radius: 8px;
+  padding: 28px 24px; box-shadow: 0 2px 15px 0 rgba(18, 61, 88, .04);
+  margin-bottom: 30px;
+}
+.tool-card .form-control { height: 46px; }
+.tool-card label { color: #555; font-weight: 600; margin-bottom: 6px; }
+.btn-query {
+  background: #3b5999; color: #fff; border: none; padding: 10px 30px;
+  border-radius: 6px; font-weight: 600; cursor: pointer;
+}
+.btn-query:hover { background: #2f4a82; color: #fff; }
+
+/* 结果表 */
+.result { margin-top: 22px; }
+.result table { width: 100%; border-collapse: collapse; }
+.result th {
+  width: 120px; color: #666; font-weight: 600; background: #f7f9fc;
+  padding: 10px 12px; border: 1px solid #eef2f6; text-align: left;
+  vertical-align: top;
+}
+.result td { padding: 10px 12px; border: 1px solid #eef2f6; color: #333; word-break: break-all; }
+
+.alert-tip {
+  background: #fff8ef; border: 1px solid #ffe3c2; color: #a86a2a;
+  border-radius: 6px; padding: 10px 14px; font-size: .9rem; line-height: 1.7;
+}
+.alert-ok { background: #f1fbf3; border-color: #cdeed3; color: #2e7d43; }
+.alert-err { background: #fdf3f3; border-color: #f7d5d5; color: #b04141; }
+
+/* 标签 */
+.tag {
+  display: inline-block; background: #eef5ff; color: #3b5999; border: 1px solid #d6e6ff;
+  border-radius: 4px; padding: 3px 12px; margin: 3px 6px 3px 0; cursor: pointer;
+  font-size: .9rem;
+}
+.tag:hover { background: #3b5999; color: #fff; }
+
+.big-num { font-size: 2.4rem; font-weight: 700; color: #ff7c39; }
+.big-num small { font-size: 1rem; color: #999; font-weight: 400; }
+
+/* 页脚 */
+.site-footer {
+  background: #2b3a55; color: #c7d0de; margin-top: 50px;
+  padding: 26px 0; text-align: center; font-size: .9rem;
+}
+.site-footer p { margin: 4px 0; }
+.site-footer .small { color: #8494ad; font-size: .82rem; }

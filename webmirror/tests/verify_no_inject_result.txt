@@ -1,0 +1,10 @@
+1) 新建任务 id=20261011-071232-8b5e7a
+2) 抓取结束 status=done
+3) HTML = example.com/index.html  本地文件 = D:\7tan\7tanAI\webmirror\downloads\20261011-071232-8b5e7a\example.com\index.html
+4) 是否含注入标记 webmirror-source : False
+5) 本地文件字节数 = 576
+   顶部 200 字 = '<!doctype html><html lang=en><head><meta charset=utf-8><link rel=icon href=data:,><meta name=viewport content="width=device-width,initial-scale=1"><title>Example Domain</title><style>html{color-scheme'
+6) 原站正文保留 = True
+7) <head> 起始片段 = '<head><meta charset=utf-8><link rel=icon href=data:,><meta name=viewport content="width=device-width,initial-scale=1"><t'
+
+结论: ✅ 通过：零注入，正文原样保留

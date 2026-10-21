@@ -1,0 +1,12 @@
+1) 创建任务 OK id=20261011-071234-82af61
+2) 任务结束 status=done 页面=3 资源=4
+3) 文件树 OK，首个 HTML = s.cnr.cn/index_sub.html
+4) /serve HTTP 200
+   Content-Type = text/html; charset=utf-8
+   带 charset=utf-8 = True
+   UTF-8 解码正常(无U+FFFD, 汉字58个) = True
+   正文片段: '<body>\r\n    <div class="wrapper">\r\n        <div class="search-wrapper">\r\n            <div class="search-bg">\r\n          '
+5) /raw(as_text) OK=True 长度=14673
+
+结论: 全部通过
+6) 已清理任务 20261011-071234-82af61

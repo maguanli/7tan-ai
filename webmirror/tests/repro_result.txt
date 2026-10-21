@@ -1,0 +1,29 @@
+ALL PASS
+
+[1a GBK页面] ✅ 正常  127.0.0.1_8795/gbk/page.html
+      声明=utf-8  大小=274B
+      浏览器看到: '.css"></head>\n<body><h1>中文标题：网页镜像</h1>\n<p>中文正文，用于检验编码。</p>\n<script src="../js/app.js"></script></body></html>\n'
+
+[1b GBK-CSS] ✅ 正常  127.0.0.1_8795/css/style.css
+      声明=utf-8  大小=64B
+      浏览器看到: '@charset "utf-8";\n.box::after{content:"中文样式";color:red}\n'
+
+[1c GBK-JS] ✅ 正常  127.0.0.1_8795/js/app.js
+      声明=(跟随文档→utf-8)  大小=32B
+      浏览器看到: 'var msg = "中文脚本提示";\n'
+
+[2 头谎报latin1] ✅ 正常  127.0.0.1_8795/wronghdr/page.html
+      声明=utf-8  大小=155B
+      浏览器看到: '\n<html><head><meta charset="utf-8"><title>T</title></head>\n<body><p>中文正文，服务器头却说自己是 latin-1。</p>\n</body></html>'
+
+[3 无charset声明] ✅ 正常  127.0.0.1_8795/nometa/page.html
+      声明=utf-8  大小=121B
+      浏览器看到: '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>T</title></head><body><p>中文无任何声明</p></body></html>'
+
+[4 http-equiv式] ✅ 正常  127.0.0.1_8795/httpequiv/page.html
+      声明=utf-8  大小=169B
+      浏览器看到: 'nt-Type" content="text/html; charset=utf-8">\n<title>T</title></head><body><p>中文http-equiv 形式</p></body></html>'
+
+[5 无声明+GBK] ✅ 正常  127.0.0.1_8795/gbknometa/page.html
+      声明=utf-8  大小=124B
+      浏览器看到: '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>T</title></head><body><p>中文无声明但是GBK</p></body></html>'

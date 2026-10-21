@@ -1,0 +1,36 @@
+fix(tools): 修复 7723 游戏截图采集不到的问题
+
+根因（实测 7723 详情页 https://www.7723.cn/apps/105010）：
+
+1. get_page_images 的过滤规则用裸关键字 'icon' 判断 favicon，
+   而 7723 的 LOGO 全部存放在 attachments/icons/ 目录下，
+   结果所有 LOGO 被误杀（表现为"采不到图"）。
+2. 截图 URL 形如
+     https://images-50.7723.cn/attachments/jietu/10/xxx.jpg?x-oss-process=style/fq_webp
+   服务端实际返回 WebP 字节（HTTP Content-Type: image/webp，魔数 RIFF/WEBP），
+   但 download_file 按 URL 尾部保存成 .jpg，形成「假 JPEG」，
+   后续按 image/jpeg 上传 OSS 时被判为坏图。
+3. 占位图 img_default.png 未过滤，容易被误当截图。
+
+改动：
+
+- src/tools/browser_bridge.py::get_page_images
+  * 移除裸 'icon' 过滤，改为精确过滤 favicon/sprite/pixel/beacon/analytics
+  * 过滤占位图 img_default / placeholder / blank.gif / lazy.gif / loading.gif
+  * 剥离 x-oss-process=style/fq_webp 与 format,webp 参数，取回原始 JPEG
+  * 新增 is_screenshot / is_logo 标记，按「截图优先 + 面积降序」排序
+  * 过滤 <=2x2 的追踪像素
+
+- src/tools/browser_tools.py::get_page_images
+  * 输出统计截图张数与 LOGO 数量，逐条标注 [截图] / [LOGO/图标]
+  * 末尾给出采集提示，便于 Agent 直接选取
+
+- src/tools/download_tools.py
+  * 新增 _sniff_image_ext / _normalize_image_file
+  * download_file 下载完成后校验真实格式：WebP 内容自动转存为真 JPEG；
+    其他不一致按真实格式修正扩展名，并在返回信息中说明
+
+实测结果（7723 饥饿鲨：世界详情页）：
+  原始 img 33 个 -> 保留 30 个，识别游戏截图 5 张、LOGO/图标 16 个
+  带 webp 参数的 89.5KB WebP -> 自动转存为 383.4KB 真 JPEG
+  干净 jpg 图不受影响

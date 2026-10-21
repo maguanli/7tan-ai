@@ -39,6 +39,76 @@ def get_spider_headers() -> dict:
     }
 
 
+# ===== 图片真实格式校正（2026-10-20）=====
+# 7723 等站点的截图 URL 形如：
+#   https://images-50.7723.cn/attachments/jietu/10/xxx.jpg?x-oss-process=style/fq_webp
+# 服务端实际返回 WebP 字节，但 URL 以 .jpg 结尾，会被存成「假 JPEG」，
+# 后续压缩/上传 OSS（按 image/jpeg 标注）时被判为坏图 → 表现为"采不到截图"。
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".ico", ".avif"}
+
+
+def _sniff_image_ext(head: bytes) -> str:
+    """根据文件头判断真实图片格式，无法判断返回空串"""
+    if head.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if head.startswith(b"GIF87a") or head.startswith(b"GIF89a"):
+        return ".gif"
+    if head.startswith(b"BM"):
+        return ".bmp"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return ".webp"
+    if head[4:8] == b"ftyp" and head[8:12] in (b"avif", b"avis"):
+        return ".avif"
+    return ""
+
+
+def _normalize_image_file(local_path: Path):
+    """校正图片文件：内容与扩展名不一致时修正。
+
+    Returns:
+        (最终文件路径, 说明文字)；无需修正时说明为空串
+    """
+    try:
+        if local_path.suffix.lower() not in _IMAGE_EXTS:
+            return local_path, ""
+        if not local_path.exists() or local_path.stat().st_size > 30 * 1024 * 1024:
+            return local_path, ""
+        with open(local_path, "rb") as f:
+            head = f.read(16)
+        real = _sniff_image_ext(head)
+        cur = local_path.suffix.lower()
+        if not real or real == cur or {real, cur} == {".jpg", ".jpeg"}:
+            return local_path, ""
+
+        # WebP 内容却存成 .jpg/.png → 转存为真正的 JPEG
+        if real == ".webp" and cur in (".jpg", ".jpeg", ".png"):
+            try:
+                from PIL import Image
+                tmp = local_path.with_name(local_path.stem + ".conv.jpg")
+                with Image.open(local_path) as im:
+                    im.load()
+                    rgb = im if im.mode == "RGB" else im.convert("RGB")
+                    rgb.save(tmp, "JPEG", quality=95)
+                tmp.replace(local_path)
+                logger.info(f"🔧 WebP 内容已转存为真 JPEG: {local_path.name}")
+                return local_path, f"🔧 已把 WebP 内容转存为真 JPEG: {local_path.name}"
+            except Exception as e:
+                logger.warning(f"WebP→JPEG 转存失败，改为重命名: {e}")
+
+        # 其他不一致 → 按真实格式改扩展名
+        target = local_path.with_suffix(real)
+        if target.exists():
+            target.unlink()
+        local_path.rename(target)
+        logger.info(f"🔧 扩展名已按真实格式校正: {local_path.name} → {target.name}")
+        return target, f"🔧 扩展名已校正: {local_path.name} → {target.name}"
+    except Exception as e:
+        logger.warning(f"图片格式校正跳过 {local_path.name}: {e}")
+        return local_path, ""
+
+
 @register_tool(
     name="download_file",
     description="下载文件到本地，支持断点续传。返回本地文件路径和 MD5。",
@@ -97,11 +167,17 @@ def download_file(url: str, dest_dir: str = "downloads/packages",
                         f.write(chunk)
                         pbar.update(len(chunk))
 
+        # 图片内容与扩展名不符时自动校正（如 URL 带 webp 参数却存成 .jpg）
+        local_path, img_note = _normalize_image_file(local_path)
+
         md5 = file_md5(local_path)
         size_str = human_readable_size(local_path.stat().st_size)
         logger.info(f"✅ 下载完成: {filename} ({size_str}, MD5: {md5[:16]}...)")
 
-        return f"✅ 下载成功: {local_path}\n  大小: {size_str}\n  MD5: {md5}"
+        msg = f"✅ 下载成功: {local_path}\n  大小: {size_str}\n  MD5: {md5}"
+        if img_note:
+            msg += f"\n  {img_note}"
+        return msg
     except Exception as e:
         return f"❌ 下载失败: {e}"
 

@@ -242,30 +242,66 @@ class BrowserBridge(QObject):
         return self.execute_js("document.title", timeout=2.0)
 
     def get_page_images(self, max_images: int = 50) -> list:
-        """获取页面所有图片 URL 和描述（线程安全）"""
+        """获取页面所有图片 URL 和描述（线程安全）
+
+        2026-10-20 修正：
+        - 旧逻辑用裸关键字 'icon' 过滤，会把 7723 等站点 attachments/icons/ 下的
+          游戏 LOGO 全部误杀（表现为"采不到图"），现改为精确过滤 favicon/sprite/追踪像素
+        - 过滤占位图（img_default / placeholder / blank.gif / lazy.gif）
+        - 自动剥离强制 WebP 的 OSS 处理参数（x-oss-process=style/fq_webp），拿回原始 JPEG
+        - 附加 is_screenshot / is_logo 标记，按「截图优先 + 面积从大到小」排序
+        """
         import json
         js = f"""
         JSON.stringify(Array.from(document.querySelectorAll('img[src]'))
             .map(function(img) {{
+                var src = img.src || img.getAttribute('src') || '';
+                // 剥离 ?x-oss-process=...fq_webp / format,webp 这类强制 WebP 参数
+                var qi = src.indexOf('?');
+                if (qi >= 0) {{
+                    var base = src.slice(0, qi);
+                    var kept = src.slice(qi + 1).split('&').filter(function(p) {{
+                        if (!p) return false;
+                        var kv = p.toLowerCase();
+                        if (kv.indexOf('x-oss-process') === 0 &&
+                            (kv.indexOf('fq_webp') >= 0 || kv.indexOf('format,webp') >= 0)) return false;
+                        return true;
+                    }});
+                    src = kept.length ? base + '?' + kept.join('&') : base;
+                }}
+                var low = src.toLowerCase();
                 return {{
-                    src: img.src,
+                    src: src,
                     alt: (img.alt || '').trim().substring(0, 100),
                     width: img.naturalWidth || img.width || 0,
                     height: img.naturalHeight || img.height || 0,
                     title: (img.title || '').trim().substring(0, 100),
                     className: (img.className || '').trim().substring(0, 100),
+                    is_screenshot: (low.indexOf('/jietu/') >= 0 || low.indexOf('/screenshot') >= 0 || low.indexOf('/shot/') >= 0),
+                    is_logo: (low.indexOf('/icons/') >= 0 || low.indexOf('/icon/') >= 0 || low.indexOf('/logo/') >= 0),
                 }};
             }})
             .filter(function(img) {{
-                // 过滤掉太小/太常见的图标
-                var src = img.src.toLowerCase();
-                var isDataUri = src.startsWith('data:');
-                var isFavicon = src.includes('favicon') || src.includes('icon');
-                var isTracking = src.includes('pixel') || src.includes('beacon') || src.includes('analytics');
-                return !isDataUri && !isFavicon && !isTracking;
+                var src = (img.src || '').toLowerCase();
+                if (!src) return false;
+                if (src.indexOf('data:') === 0) return false;
+                if (src.indexOf('favicon') >= 0) return false;
+                if (src.indexOf('sprite') >= 0 || src.indexOf('pixel') >= 0 ||
+                    src.indexOf('beacon') >= 0 || src.indexOf('analytics') >= 0) return false;
+                if (src.indexOf('img_default') >= 0 || src.indexOf('placeholder') >= 0 ||
+                    src.indexOf('blank.gif') >= 0 || src.indexOf('lazy.gif') >= 0 ||
+                    src.indexOf('loading.gif') >= 0) return false;
+                if (img.width && img.height && img.width <= 2 && img.height <= 2) return false;
+                return true;
+            }})
+            .sort(function(a, b) {{
+                var sa = a.is_screenshot ? 1 : 0, sb = b.is_screenshot ? 1 : 0;
+                if (sa !== sb) return sb - sa;
+                return (b.width * b.height) - (a.width * a.height);
             }})
             .slice(0, {max_images}))
         """
+
         result = self.execute_js(js, timeout=5.0)
         try:
             return json.loads(result)

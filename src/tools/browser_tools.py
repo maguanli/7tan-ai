@@ -376,22 +376,39 @@ def screenshot(filename: str) -> str:
     requires_browser=True,
 )
 def get_page_images(max_images: int = 50) -> str:
-    """获取当前页面所有图片 URL"""
+    """获取当前页面所有图片 URL（自动标注截图 / LOGO）"""
     if _source_view is None:
         return "⚠️ 浏览器未打开，请先浏览网页"
     image_list = _get_bridge().get_page_images(max_images)
     if not image_list:
         return "📸 当前页面无图片"
-    result = f"🖼️ 页面图片 ({len(image_list)}个):\n"
+    shots = [i for i in image_list if i.get("is_screenshot")]
+    logos = [i for i in image_list if i.get("is_logo")]
+    head = f"🖼️ 页面图片 ({len(image_list)}个"
+    if shots:
+        head += f"，其中游戏截图 {len(shots)} 张"
+    if logos:
+        head += f"，LOGO/图标 {len(logos)} 个"
+    result = head + "):\n"
     for img in image_list[:max_images]:
         size_info = f" ({img.get('width','?')}x{img.get('height','?')})" if img.get('width') else ""
         alt = img.get('alt', '') or img.get('title', '') or '(无描述)'
-        cls_hint = ""
-        cls = img.get('className', '').lower()
-        if 'logo' in cls: cls_hint = " [LOGO]"
-        elif 'screenshot' in cls or 'screen' in cls: cls_hint = " [截图]"
-        elif 'gallery' in cls or 'carousel' in cls or 'slide' in cls: cls_hint = " [图集]"
-        result += f"  - {alt}{cls_hint}{size_info}\n    地址: {img.get('src', '')}\n"
+        tag = ""
+        if img.get("is_screenshot"):
+            tag = " [截图]"
+        elif img.get("is_logo"):
+            tag = " [LOGO/图标]"
+        else:
+            cls = (img.get('className', '') or '').lower()
+            if 'logo' in cls:
+                tag = " [LOGO]"
+            elif 'screenshot' in cls or 'screen' in cls:
+                tag = " [截图]"
+            elif 'gallery' in cls or 'carousel' in cls or 'slide' in cls:
+                tag = " [图集]"
+        result += f"  - {alt}{tag}{size_info}\n    地址: {img.get('src', '')}\n"
+    if shots:
+        result += "\n💡 标 [截图] 的直接作为游戏截图下载；标 [LOGO/图标] 取尺寸最大的一张作 LOGO。\n"
     return result
 
 

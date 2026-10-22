@@ -137,3 +137,117 @@ def sanitize_tool_messages(messages: list, label: str = "") -> list:
         )
 
     return out
+
+
+# ============================================================
+# 上下文预算守卫（2026-10-23 新增）
+# ============================================================
+# 事故背景：会话 a5502176 里有一条 assistant 消息正文长达 9,364,943 字符
+# （把记忆库 76529 段经历整篇倾倒），ContextManager 按「条数」截断（保留 50 条）
+# 根本不看体积 → 整条 9.3MB 消息原样发给 API → 请求体约 436 万 tokens，
+# 直接 400「maximum context length is 1048576 tokens」，AI 一路报错无法回复。
+#
+# 本守卫是「体积维度」的最后一道闸：
+#   ① 单条消息硬截断（默认 24000 字符，头 60% + 尾 40% 保留上下文线索）
+#   ② 总量超预算时，保留全部 system + 最近的连续消息，丢弃更旧的消息
+#   ③ 丢弃后再跑一次 sanitize_tool_messages，避免切出孤儿 tool 消息
+# 位置：model_manager.chat() 内（所有 LLM 调用的最终出口）。
+
+import json as _json
+
+DEFAULT_MAX_TOKENS = 300_000          # 单次请求允许的上下文 token 上限
+DEFAULT_MAX_MESSAGE_CHARS = 24_000    # 单条消息正文上限（约 12000 tokens）
+
+
+def _msg_chars(msg) -> int:
+    """估算单条消息的字符数（content + tool_calls 序列化）。"""
+    if not isinstance(msg, dict):
+        return len(str(msg))
+    total = len(msg.get("content") or "")
+    tcs = msg.get("tool_calls")
+    if tcs:
+        try:
+            total += len(_json.dumps(tcs, ensure_ascii=False))
+        except Exception:
+            total += 200 * len(tcs)
+    return total
+
+
+def estimate_messages_tokens(messages: list) -> int:
+    """粗略估算消息列表的 token 数（经验值：约 2 字符 = 1 token）。"""
+    return sum(_msg_chars(m) for m in messages) // 2
+
+
+def truncate_text(text: str, limit: int) -> str:
+    """保留头部 60% + 尾部 40%，中间插入截断标记。"""
+    if limit <= 0 or len(text) <= limit:
+        return text
+    marker = f"\n\n…[内容过长，已截断 {len(text) - limit} 字符]…\n\n"
+    head = int(limit * 0.6)
+    tail = max(0, limit - head - len(marker))
+    return text[:head] + marker + (text[-tail:] if tail else "")
+
+
+def enforce_context_budget(messages: list, max_tokens: int = DEFAULT_MAX_TOKENS,
+                          max_message_chars: int = DEFAULT_MAX_MESSAGE_CHARS,
+                          label: str = "") -> list:
+    """按「体积」裁剪消息，保证请求不超模型上下文上限。
+
+    Args:
+        messages: 原始消息列表（dict 形态）
+        max_tokens: 允许的最大 token 估算值
+        max_message_chars: 单条消息正文上限
+        label: 日志标识
+
+    Returns:
+        List[dict]: 裁剪后的消息列表（未超限时原样返回）
+    """
+    if not messages:
+        return messages
+
+    msgs = [dict(m) if isinstance(m, dict) else m for m in messages]
+
+    # ① 单条硬截断
+    truncated = 0
+    for m in msgs:
+        if not isinstance(m, dict):
+            continue
+        c = m.get("content")
+        if isinstance(c, str) and len(c) > max_message_chars:
+            m["content"] = truncate_text(c, max_message_chars)
+            truncated += 1
+
+    total = estimate_messages_tokens(msgs)
+    if total <= max_tokens and not truncated:
+        return msgs if msgs is not messages else messages
+
+    if total <= max_tokens:
+        tag = f"[{label}]" if label else ""
+        logger.warning(f"✂️ 上下文守卫{tag} 硬截断超长消息 {truncated} 条，估算 {total} tokens")
+        return sanitize_tool_messages(msgs, label=label or "budget")
+
+    # ② 保 system + 最近的连续消息
+    sys_idx = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "system"]
+    sys_set = set(sys_idx)
+    other_idx = [i for i in range(len(msgs)) if i not in sys_set]
+
+    used = sum(_msg_chars(msgs[i]) for i in sys_idx) // 2
+    kept = []
+    for i in reversed(other_idx):
+        t = _msg_chars(msgs[i]) // 2
+        if kept and used + t > max_tokens:
+            break
+        kept.append(i)
+        used += t
+    kept.reverse()
+
+    out = [msgs[i] for i in sorted(sys_set | set(kept))]
+    out = sanitize_tool_messages(out, label=label or "budget")
+
+    tag = f"[{label}]" if label else ""
+    logger.warning(
+        f"✂️ 上下文守卫{tag} 超预算裁剪：{len(messages)} → {len(out)} 条，"
+        f"估算 {total} → {estimate_messages_tokens(out)} tokens"
+        f"（上限 {max_tokens}，硬截断 {truncated} 条）"
+    )
+    return out

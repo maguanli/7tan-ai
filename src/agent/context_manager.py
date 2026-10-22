@@ -8,11 +8,17 @@ class ContextManager:
     """管理 Agent 对话上下文"""
 
     def __init__(self, task: str = "", session_id: str = None,
-                 max_messages: int = 50, max_tokens_estimate: int = 32000):
+                 max_messages: int = 50, max_tokens_estimate: int = 32000,
+                 max_message_chars: int = 24000):
         self.task = task
         self.session_id = session_id
         self.max_messages = max_messages
         self.max_tokens_estimate = max_tokens_estimate
+        # 🔒 2026-10-23 单条消息体积上限：历史里可能存在超长消息
+        #    （如某次把记忆库数万段经历整篇吐进一条 assistant 消息，长度 9.3MB），
+        #    只按「条数」截断会让整条超大消息原样发给 API →
+        #    400 maximum context length（请求 436 万 tokens > 上限 104 万），AI 全程不可用。
+        self.max_message_chars = max_message_chars
         self.history = []
         self._total_tokens = 0
 
@@ -28,8 +34,12 @@ class ContextManager:
                         # 跳过空 assistant 消息（content 为空会导致 API 400: content or tool_calls must be set）
                         if role == "assistant" and not (content or "").strip():
                             continue
+                        content = self._cap(content)
                         self.history.append({"role": role, "content": content})
                         self._total_tokens += len(content) // 2
+                # 🔒 加载后立即按「体积」做一次预算裁剪（原来只在 add_* 时检查，
+                #    纯加载路径（如 WEB 对话直接复用 ctx 历史）完全绕过了裁剪）
+                self._enforce_budget()
                 if self.history:
                     logger.info(f"📚 加载会话历史: {len(self.history)} 条消息")
             except Exception as e:
@@ -37,19 +47,21 @@ class ContextManager:
 
     def add_user_message(self, content: str):
         """添加用户消息"""
+        content = self._cap(content)
         self.history.append({"role": "user", "content": content})
         self._total_tokens += len(content) // 2  # 粗略估算
         self._trim_if_needed()
 
     def add_assistant_message(self, content: str):
         """添加助手消息"""
+        content = self._cap(content)
         self.history.append({"role": "assistant", "content": content})
         self._total_tokens += len(content) // 2
         self._trim_if_needed()
 
     def add_tool_result(self, tool_call_id: str, content: str):
         """添加工具调用结果"""
-        wrapped = f"[TOOL_RESULT]\n{content[:100000]}\n[/TOOL_RESULT]"
+        wrapped = f"[TOOL_RESULT]\n{content[:self.max_message_chars]}\n[/TOOL_RESULT]"
         self.history.append({
             "role": "tool",
             "tool_call_id": tool_call_id,
@@ -57,6 +69,58 @@ class ContextManager:
         })
         self._total_tokens += len(content) // 2
         self._trim_if_needed()
+
+    def _cap(self, content: str) -> str:
+        """单条消息体积硬保护（2026-10-23）：超长正文保留头 60% + 尾 40%。"""
+        try:
+            text = content if isinstance(content, str) else str(content or "")
+        except Exception:
+            return ""
+        limit = int(self.max_message_chars or 0)
+        if limit <= 0 or len(text) <= limit:
+            return text
+        marker = f"\n\n…[消息过长，已截断 {len(text) - limit} 字符]…\n\n"
+        head = int(limit * 0.6)
+        tail = max(0, limit - head - len(marker))
+        logger.warning(f"✂️ 单条消息超长（{len(text)} 字符）→ 截断至 {limit} 字符")
+        return text[:head] + marker + (text[-tail:] if tail else "")
+
+    def _enforce_budget(self):
+        """按「体积」执行预算（2026-10-23）：单条硬截断 → 摘要 → 丢弃最旧消息。
+
+        三道闸缺一不可：
+          ① 单条硬截断——超长消息（如 9MB 的输出）即使只有一条也会撑爆上下文；
+          ② 摘要——条数多但每条不大时，摘要比丢弃更保信息；
+          ③ 丢弃——摘要后仍超限（或条数太少无法摘要）时，从最旧开始丢。
+        """
+        # ① 单条体积硬保护（防御外部直接写 history 绕过 _cap）
+        for m in self.history:
+            c = m.get("content") or ""
+            if isinstance(c, str) and len(c) > self.max_message_chars:
+                m["content"] = self._cap(c)
+
+        self._total_tokens = sum(len(m.get("content") or "") // 2 for m in self.history)
+        if self._total_tokens <= self.max_tokens_estimate:
+            return
+
+        # ② 摘要压缩
+        if len(self.history) >= 10:
+            try:
+                self.summarize()
+            except Exception as e:
+                logger.warning(f"⚠️ 上下文摘要失败: {e}")
+
+        # ③ 从最旧开始丢弃（至少保留最后一条，即当前任务）
+        dropped = 0
+        while self._total_tokens > self.max_tokens_estimate and len(self.history) > 1:
+            self.history.pop(0)
+            dropped += 1
+            self._total_tokens = sum(len(m.get("content") or "") // 2 for m in self.history)
+        if dropped:
+            logger.warning(
+                f"✂️ 上下文超预算，丢弃最旧 {dropped} 条消息"
+                f"（剩余 {len(self.history)} 条，估算 {self._total_tokens} tokens）"
+            )
 
     def get_messages(self) -> list:
         """获取当前消息历史"""
@@ -75,9 +139,18 @@ class ContextManager:
         if len(self.history) < 10:
             return ""
 
-        # 保留最近 5 条消息
-        old_messages = self.history[:-5]
-        recent_messages = self.history[-5:]
+        # 保留最近若干条消息（以 60% 预算为限，避免把超大消息当"最近"留下）
+        _budget = int(self.max_tokens_estimate * 0.6)
+        recent_messages = []
+        _used = 0
+        for _m in reversed(self.history):
+            _t = len(_m.get("content") or "") // 2
+            if recent_messages and _used + _t > _budget:
+                break
+            recent_messages.append({"role": _m.get("role", "user"), "content": self._cap(_m.get("content") or "")})
+            _used += _t
+        recent_messages.reverse()
+        old_messages = self.history[: len(self.history) - len(recent_messages)] if recent_messages else list(self.history)
 
         if model:
             # AI 摘要模式
@@ -171,7 +244,7 @@ class ContextManager:
 
         if self._total_tokens > self.max_tokens_estimate:
             logger.debug(f"📎 Token 估算 {self._total_tokens} > {self.max_tokens_estimate}")
-            self.summarize()
+            self._enforce_budget()
     def __len__(self):
         return len(self.history)
 

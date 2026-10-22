@@ -233,6 +233,52 @@ def _is_http_access_noise(line: str) -> bool:
     return False
 
 
+# —— 意识模型（7Tan 仿生器官框架）周期性实时数据：不进实时控制台 ——
+# 起因：器官心跳每 tick 都会打出自传叙事 / 记忆重放 / 事件总线等状态文本，
+#       与「实时控制台」的用途（看 Agent 在干什么）无关，会持续冲刷有用日志。
+# 影响范围（刻意收窄）：
+#   1) 只挡控制台通道（_LOG_RING + WebSocket 广播），轮询与推送同时生效；
+#   2) logs/app_*.log 日志文件仍完整记录，排查问题不受影响；
+#   3)「意识模型」页面读的是 /api/mind/status 结构化快照，不依赖日志，完全不受影响；
+#   4) WARNING / ERROR / CRITICAL 一律放行，故障不允许被静默吞掉。
+# 想恢复显示：把 _HIDE_MIND_MODEL_IN_CONSOLE 改成 False 即可。
+_HIDE_MIND_MODEL_IN_CONSOLE = True
+
+_MIND_MODEL_NOISE = (
+    '🫀[bus]',                        # 事件总线分发
+    '[EVENT] type=',                  # 事件原文
+    '🗣️[SPEECH]',                     # 言语器官全部输出（自传叙事/广播回声/输出文本）
+    '🧠[replay]',                     # 记忆重放触发
+    '🧠[consolidate]',                # 记忆巩固 / 遗忘过滤
+    '🧠[selfmodel]',                  # 自我模型归纳
+    '🧠[晨间回忆]',                    # 启动回灌
+    '🧠 器官状态已加载',
+    '🫀 器官心跳',
+    '🫀 仿生器官框架已挂载',
+    '🫀 仿生器官已随应用启动挂载',
+)
+
+_MIND_MODEL_ERROR_LEVELS = ('| WARNING', '| ERROR', '| CRITICAL')
+
+
+def _is_mind_model_noise(line: str) -> bool:
+    """意识模型的周期性实时数据是否应从实时控制台过滤。
+
+    放行规则：任何 WARNING/ERROR/CRITICAL 行都不算噪声（眼睛不能捂上）。
+    注：本 sink 的 format 只有 时间 | 级别 | 消息，没有模块名，
+    所以只能按消息特征匹配，不能按 src.agent.bionic_organs 过滤。
+    """
+    if not _HIDE_MIND_MODEL_IN_CONSOLE:
+        return False
+    for lv in _MIND_MODEL_ERROR_LEVELS:
+        if lv in line:
+            return False
+    for p in _MIND_MODEL_NOISE:
+        if p in line:
+            return True
+    return False
+
+
 def _ws_log_sink(message: str) -> None:
     """loguru sink — 写入环形缓冲 + 异步广播给所有 WebSocket 客户端。
 
@@ -244,6 +290,8 @@ def _ws_log_sink(message: str) -> None:
         if not line.strip():
             return
         if _is_http_access_noise(line):
+            return
+        if _is_mind_model_noise(line):
             return
         for np_ in _NOISE_PATTERNS:
             if np_ in line:

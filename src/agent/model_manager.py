@@ -307,8 +307,27 @@ class ModelManager:
             # 🔧 双向修复孤儿 tool 消息（assistant.tool_calls ↔ role=tool 配对），
             #    防止历史被截断 / 任务中止后残留孤儿导致 API 400。
             #    这里是所有 LLM 调用的最终兜底（Agent 循环内已先修一次）。
-            from .message_guard import sanitize_tool_messages
+            from .message_guard import enforce_context_budget, sanitize_tool_messages
             kwargs["messages"] = sanitize_tool_messages(kwargs["messages"], label="model_manager")
+
+            # 🆕 2026-10-23 上下文体积守卫：
+            #   历史里只要有一条超长消息（如 9MB 的"记忆全量倾倒"），按条数截断根本拦不住，
+            #   请求体直接飙到数百万 tokens → API 400 maximum context length，AI 全程报错。
+            #   这里按「体积」再兜一次：单条硬截断 + 超预算丢弃最旧消息。
+            try:
+                _ctx_win = int(getattr(self, "context_window", 128_000) or 128_000)
+                self._ctx_budget = max(8_000, min(int(_ctx_win * 0.7), 300_000))
+                _before = len(kwargs["messages"])
+                kwargs["messages"] = enforce_context_budget(
+                    kwargs["messages"], max_tokens=self._ctx_budget, label="model_manager"
+                )
+                if len(kwargs["messages"]) != _before:
+                    logger.info(
+                        f"✂️ 请求前裁剪消息 {_before} → {len(kwargs['messages'])} 条"
+                        f"（token 预算 {self._ctx_budget}）"
+                    )
+            except Exception as _budget_err:
+                logger.warning(f"⚠️ 上下文预算守卫执行失败（忽略，继续请求）: {_budget_err}")
 
         return self._chat_with_retry(client, **kwargs)
 
@@ -421,6 +440,44 @@ class ModelManager:
         try:
             return self._chat_once(client, **kwargs)
         except Exception as e:
+            _emsg = self._safe_str(e).lower()
+
+            # 🆕 2026-10-23 ① 上下文超限（400 maximum context length / 1261 Prompt exceeds max length）
+            #   → 激进裁剪历史后自动重试一次，避免"AI 直接失败"。
+            if ("maximum context length" in _emsg
+                    or "prompt exceeds max length" in _emsg
+                    or "context_length_exceeded" in _emsg):
+                from .message_guard import enforce_context_budget
+                _msgs = kwargs.get("messages") or []
+                _budget = max(4_000, int(getattr(self, "_ctx_budget", 60_000) * 0.4))
+                _trimmed = enforce_context_budget(
+                    _msgs, max_tokens=_budget, max_message_chars=8_000,
+                    label="ctx_overflow_retry",
+                )
+                logger.warning(
+                    f"♻️ 上下文超限，激进裁剪 {len(_msgs)} → {len(_trimmed)} 条后重试一次"
+                    f"（预算 {_budget} tokens）"
+                )
+                _retry_kwargs = dict(kwargs)
+                _retry_kwargs["messages"] = _trimmed
+                try:
+                    return self._chat_once(client, **_retry_kwargs)
+                except Exception as e2:
+                    raise RuntimeError(
+                        f"对话上下文超出模型上限，已自动裁剪历史后仍失败：{self._safe_str(e2)[:300]}\n"
+                        f"建议：新建一个会话（当前会话历史过长）后重试。"
+                    ) from e2
+
+            # 🆕 2026-10-23 ② 账户余额不足（402）→ 明确提示，不再当成网络问题
+            if ("insufficient" in _emsg
+                    or ("402" in _emsg and "balance" in _emsg)
+                    or "余额" in _emsg):
+                logger.error(f"💳 AI 账户余额不足: {self._safe_str(e)[:200]}")
+                raise RuntimeError(
+                    "AI 账户余额不足（服务商返回 402 Insufficient account balance）。\n"
+                    "请到对应 AI 平台充值，或在 设置→AI模型 中切换到其他可用模型后再试。"
+                ) from e
+
             # 2026-08-14 增强：连接类错误重试耗尽后，自动做一次快速网络诊断，
             # 把干巴巴的 "Connection error" 变成可操作的中文提示。
             is_conn_err = (

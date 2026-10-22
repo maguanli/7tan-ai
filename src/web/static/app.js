@@ -1563,9 +1563,24 @@ function highlightMsgText(escaped) {
   }
   return out;
 }
+/* 意识模型（仿生器官框架）周期性实时数据：不进实时控制台。
+   与后端 server.py::_is_mind_model_noise 保持同一份清单；后端已在入环形缓冲时
+   过滤，这里再拦一层的作用是清掉缓冲里已经存在（重启前产生）的历史行。 */
+const MIND_MODEL_NOISE = [
+  "🫀[bus]", "[EVENT] type=", "🗣️[SPEECH]",
+  "🧠[replay]", "🧠[consolidate]", "🧠[selfmodel]", "🧠[晨间回忆]",
+  "🧠 器官状态已加载", "🫀 器官心跳", "🫀 仿生器官框架已挂载", "🫀 仿生器官已随应用启动挂载",
+];
+function isMindModelNoise(s) {
+  // 故障级别放行，与控制台「不能捂眼睛」的原则一致
+  if (/\|\s*(WARNING|ERROR|CRITICAL)\s*\|/.test(s)) return false;
+  return MIND_MODEL_NOISE.some((p) => s.includes(p));
+}
 function highlightLogLine(raw) {
   const s = stripAnsi(raw == null ? "" : raw);
   if (!s || !s.trim()) return "";
+  // 意识模型实时数据（心跳 tick / 自传叙事 / 记忆重放等）不显示在实时控制台
+  if (isMindModelNoise(s)) return "";
   // 前端保底过滤：uvicorn HTTP 访问日志（轮询/健康检查等）不进实时控制台
   if ((s.includes('GET ') || s.includes('POST ') || s.includes('PUT ')) &&
       s.includes('HTTP/1.1') && s.includes('/api/')) return "";

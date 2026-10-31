@@ -1,0 +1,27 @@
+=== index.html 里的 script 标签 ===
+  <script>
+  <script src="/app.js?v=20260816o">
+
+=== app.js 包裹结构（前 3 行 / 后 5 行）===
+  HEAD| /* ===== 7Tan 网页控制面板 — 前端逻辑（原生 JS，零依赖） ===== */
+  HEAD| "use strict";
+  HEAD| 
+  TAIL|     btn.onclick = () => toggleKeyVis(id, btn);
+  TAIL|     wrap.appendChild(btn);
+  TAIL|   });
+  TAIL| }
+  TAIL| injectKeyVisibility();
+
+=== deleteSession 是否顶层声明 ===
+  缩进=0 个空格 → 顶层(全局可见)
+
+=== 是否被 IIFE / 大括号包裹 ===
+  开头 400 字内出现 IIFE: 否
+
+=== 内联 onclick 出现次数 ===
+  onclick= 共 20 处
+     viewResource(${r.id})
+     deleteResource(${r.id}, '${escapeHtml(r.title.replace(/'/g, 
+     this.closest('#modal').remove()
+     cancelTask('${escapeHtml(String(t.id || t.task_id))}')
+     selectSession('${s.session_id}')

@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "D:\7tan\7tanAI\_anfensi_parse.py", line 4, in <module>
+    html = open(r"D:\7tan\7tanAI\_anfensi_home.html", "rb").read().decode("utf-8", "ignore")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'D:\\7tan\\7tanAI\\_anfensi_home.html'

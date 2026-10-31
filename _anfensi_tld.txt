@@ -1,0 +1,36 @@
+=== anfensi.cn (NS) ===
+服务器:  public1.alidns.com
+Address:  223.5.5.5
+
+=== anfensi.com.cn (NS) ===
+服务器:  public1.alidns.com
+Address:  223.5.5.5
+
+=== anfensi.net (NS) ===
+服务器:  public1.alidns.com
+Address:  223.5.5.5
+anfensi.net	nameserver = mona.ns.cloudflare.com
+anfensi.net	nameserver = dan.ns.cloudflare.com
+
+=== anfensi.com (NS) ===
+服务器:  public1.alidns.com
+Address:  223.5.5.5
+anfensi.com	nameserver = deneb.dnspod.net
+anfensi.com	nameserver = lindsay.dnspod.net
+
+=== anfensi.com MX / TXT ===
+服务器:  public1.alidns.com
+Address:  223.5.5.5
+anfensi.com	canonical name = anfensi.com.wsdvs.com
+wsdvs.com
+	primary name server = dns1.wsdvs.info
+	responsible mail addr = webmaster.glb0.lxdns.com
+	serial  = 1422577239
+	refresh = 10800 (3 hours)
+	retry   = 3600 (1 hour)
+	expire  = 604800 (7 d
+
+=== www.anfensi.com CNAME ===
+服务器:  public1.alidns.com
+Address:  223.5.5.5
+www.anfensi.com	canonical name = www.anfensi.com.wsdvs.com

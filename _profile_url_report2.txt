@@ -1,0 +1,22 @@
+=== A. 无斜杠 vs 带斜杠 ===
+https://www.7tan.com/bbs/user/1            200 md5=ca145f1276e8 len=15798
+    canon=<link rel="canonical" href="/bbs/user/1/">
+https://www.7tan.com/bbs/user/1/           200 md5=ca145f1276e8 len=15798
+    canon=<link rel="canonical" href="/bbs/user/1/">
+
+=== B. Server 头 / Cookie secure ===
+https://www.7tan.com/                            Server=nginx                  SetCookie=PHPSESSID=7cd74b0c07b1cb726519de1e4241e008; path=/; secure; HttpOnly; SameSite=Lax
+https://www.7tan.com/bbs/84008/                  Server=nginx                  SetCookie=PHPSESSID=6c894201e96014419aee5a92ad7f3233; path=/; secure; HttpOnly; SameSite=Lax
+https://www.7tan.com/bbs/user/1/                 Server=nginx                  SetCookie=PHPSESSID=780cf11fc1bd7c69f013a4e08ec7eee1; path=/; secure; HttpOnly; SameSite=Lax
+https://www.7tan.com/bbs/profile.php?id=1        Server=nginx                  SetCookie=PHPSESSID=ae1b0cf8bc7b48ff4da8f98d2a434c9f; path=/; secure; HttpOnly; SameSite=Lax
+https://img.7tan.com/                            Server=nginx                  SetCookie=ADMIN_SESSION=93276bb3d94837c3f1101a12b1c567c5; path=/; HttpOnly; SameSite=Lax
+
+=== C. 帖子页 3 处 author href 所属区块 ===
+author-link      <a href="/bbs/profile.php?id=1" class="author-link">
+username-link    <a href="/bbs/profile.php?id=1" class="username-link">
+am-profile       <a class="am-profile" href="/bbs/profile.php?id=1">
+
+=== D. user 页内的分页 href 全量 ===
+    /bbs/user/1/?page=2
+    /bbs/user/1/?page=3
+    /bbs/user/1/?page=23

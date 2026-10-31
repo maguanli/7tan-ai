@@ -1,0 +1,15 @@
+FILE D:\7tan\srv_router.php  lines=652 chars=11331
+
+=== lines mentioning user/profile/page/router ===
+ 139|             $_GET['page'] = $matches[3];
+ 155|     // /bbs/board/5/page-2/ → 旧格式，301 重定向
+ 157|     if (preg_match('#^board/(\d+)/page-(\d+)/?$#', $bbsUri, $matches)) {
+ 205|     // /bbs/user/123/ → 用户主页
+ 207|     if (preg_match('#^user/(\d+)/?$#', $bbsUri, $matches)) {
+ 211|         $_SERVER['SCRIPT_NAME'] = '/bbs/profile.php';
+ 215|         require $bbsRoot . DIRECTORY_SEPARATOR . 'profile.php';
+ 421|         $_GET['page'] = $matches[1];
+ 479|         $_GET['page'] = $matches[1];
+ 511| $staticPages = [
+ 519|     '/web/map.htm' => '/sitemap_page.php',
+ 525| foreach ($staticPages as $pattern => $target) {

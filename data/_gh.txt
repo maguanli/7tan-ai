@@ -1,0 +1,31 @@
+full_name: deepseek-ai/dsh-superagent-prototype
+description: Towards a More Autonomous Agent System
+created_at: 2026-10-31T09:32:46Z
+updated_at: 2026-10-31T16:47:59Z
+pushed_at: 2026-10-31T12:05:51Z
+stargazers_count: 1410
+forks_count: 107
+open_issues_count: 0
+language: TypeScript
+license: MIT
+default_branch: main
+size: 775
+--- files (18) ---
+.gitignore                               file 46
+LICENSE                                  file 1078
+README.md                                file 2571
+SETUP.md                                 file 7894
+cordis.patch.yml                         file 8398
+docs                                     dir 0
+examples                                 dir 0
+locale                                   dir 0
+package.json                             file 4693
+pnpm-lock.yaml                           file 172084
+prompts                                  dir 0
+scripts                                  dir 0
+skills                                   dir 0
+src                                      dir 0
+tests                                    dir 0
+tsconfig.json                            file 576
+tsdown.config.ts                         file 1392
+vitest.config.ts                         file 237

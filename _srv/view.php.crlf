@@ -1,0 +1,1973 @@
+<?php
+/**
+ * 7坛社区
+ * 深圳市柒贰叁叁网络科技有限公司版权所有
+ */
+
+// UBB扩展组件库（精美页面标签支持）
+require_once __DIR__ . '/ubb_plus.php';
+
+// 预编译正则表达式（避免每次调用重复编译）
+$__ubb_patterns__ = null;
+
+/**
+ * 获取UBB模式（延迟初始化）
+ */
+function getUbbPatterns() {
+    global $__ubb_patterns__;
+    if ($__ubb_patterns__ !== null) {
+        return $__ubb_patterns__;
+    }
+    
+    // 全角转半角映射
+    $fullwidth_map = [
+        '１' => '1', '２' => '2', '３' => '3', '４' => '4', '５' => '5',
+        '６' => '6', '７' => '7', '８' => '8', '９' => '9', '０' => '0',
+        '－' => '-', '％' => '%',
+        '＋' => '+', '＝' => '=', '＊' => '*', '＆' => '&', '～' => '~',
+        '（' => '(', '）' => ')', '［' => '[',
+        '］' => ']', '｛' => '{', '｝' => '}', '＜' => '<', '＞' => '>',
+        '￥' => '¥', '　' => ' ', '’' => "'", '"' => '"'
+    ];
+    
+    // 预编译正则
+    $__ubb_patterns__ = [
+        'fullwidth' => $fullwidth_map,
+        'preg_newline' => '/\\\\\\\\/',
+        'preg_img' => '/\[img\](.*?)\[\/img\]/is',
+        'preg_img2' => '/（img）(.*?)（\/img）/is',
+        'preg_img_en' => '/\(img\)(.*?)\(\/img\)/is',
+        'preg_url' => '/\[url=(.*?)\](.*?)\[\/url\]/is',
+        'preg_url2' => '/\[url\](.*?)\[\/url\]/is',
+        'preg_url_cn' => '/（url=(.*?)）(.*?)（\/url）/is',
+        'preg_url_cn2' => '/（url）(.*?)（\/url）/is',
+        'preg_url_en' => '/\(url=(.*?)\)(.*?)\(\/url\)/is',
+        'preg_url_en2' => '/\(url\)(.*?)\(\/url\)/is',
+        'preg_bold' => '/\[b\](.*?)\[\/b\]/is',
+        'preg_bold2' => '/（b）(.*?)（\/b）/is',
+        'preg_bold_en' => '/\(b\)(.*?)\(\/b\)/is',
+        'preg_italic' => '/\[i\](.*?)\[\/i\]/is',
+        'preg_italic2' => '/（i）(.*?)（\/i）/is',
+        'preg_italic_en' => '/\(i\)(.*?)\(\/i\)/is',
+        'preg_underline' => '/\[u\](.*?)\[\/u\]/is',
+        'preg_underline2' => '/（u）(.*?)（\/u）/is',
+        'preg_underline_en' => '/\(u\)(.*?)\(\/u\)/is',
+        'preg_html_open' => '/<(img|a|div|span|p|br|strong|em|u|b|i)\s+[^>]*>/i',
+        'preg_html_close' => '/<\/[a-z]+>/i',
+        'preg_br' => '/<br\s*\/?>/i',
+        'preg_img_error' => '/<img\s+([^>]*?)>/i',
+        'preg_s' => '/\(s\)(.+?)\(\/s\)/is',
+        'preg_s2' => '/（s）(.*?)（\/s）/is',
+        'preg_strike' => '/\(strike\)(.+?)\(\/strike\)/is',
+        'preg_strike2' => '/（strike）(.*?)（\/strike）/is',
+        'preg_quote' => '/\(quote\)(.+?)\(\/quote\)/is',
+        'preg_quote2' => '/（quote）(.*?)（\/quote）/is',
+        'preg_big' => '/\(big\)(.+?)\(\/big\)/is',
+        'preg_big2' => '/（big）(.*?)（\/big）/is',
+        'preg_small' => '/\(small\)(.+?)\(\/small\)/is',
+        'preg_small2' => '/（small）(.*?)（\/small）/is',
+        'preg_red' => '/\(red\)(.+?)\(\/red\)/is',
+        'preg_red2' => '/（red）(.*?)（\/red）/is',
+        'preg_green' => '/\(green\)(.+?)\(\/green\)/is',
+        'preg_green2' => '/（green）(.*?)（\/green）/is',
+        'preg_blue' => '/\(blue\)(.+?)\(\/blue\)/is',
+        'preg_blue2' => '/（blue）(.*?)（\/blue）/is',
+        'preg_yellow' => '/\(yellow\)(.+?)\(\/yellow\)/is',
+        'preg_yellow2' => '/（yellow）(.*?)（\/yellow）/is',
+        'preg_marquee' => '/\(marquee\)(.+?)\(\/marquee\)/is',
+        'preg_marquee2' => '/（marquee）(.*?)（\/marquee）/is',
+        'preg_reply' => '/（reply）(.*?)（\/reply）/is',
+        // 新增UBB标签
+        'preg_input' => '/\[input=(\d+)\](.*?)\[\/input\]/is',
+        'preg_input_cn' => '/（input=(\d+)）(.*?)（\/input）/is',
+        'preg_call' => '/\[c\](.*?)\[\/c\]/is',
+        'preg_call_cn' => '/（c）(.*?)（\/c）/is',
+        'preg_left' => '/\[left\](.*?)\[\/left\]/is',
+        'preg_left_cn' => '/（left）(.*?)（\/left）/is',
+        'preg_center' => '/\[center\](.*?)\[\/center\]/is',
+        'preg_center_cn' => '/（center）(.*?)（\/center）/is',
+        'preg_right' => '/\[right\](.*?)\[\/right\]/is',
+        'preg_right_cn' => '/（right）(.*?)（\/right）/is',
+    ];
+    
+    return $__ubb_patterns__;
+}
+
+/**
+ * 获取问候语
+ */
+function getGreeting() {
+    $hour = date('G');
+    if ($hour < 6) {
+        return '夜深了，早点休息哦~';
+    } elseif ($hour < 9) {
+        return '早上好！新的一天开始了~';
+    } elseif ($hour < 12) {
+        return '上午好！';
+    } elseif ($hour < 14) {
+        return '中午好！';
+    } elseif ($hour < 18) {
+        return '下午好！';
+    } elseif ($hour < 22) {
+        return '晚上好！';
+    } else {
+        return '夜深了，早点休息哦~';
+    }
+}
+
+/**
+ * 快速UBB解析（预编译正则版）
+ */
+function fast_ubb($text) {
+    if (empty($text)) return '';
+    
+    $patterns = getUbbPatterns();
+    
+    // 全角转半角
+    $text = strtr($text, $patterns['fullwidth']);
+    
+    // 换行标记：处理双反斜杠 + Windows换行 + Unix换行
+    $text = str_replace('\\\\', '<br>', $text);
+    $text = str_replace("\r\n", '<br>', $text);
+    $text = str_replace("\n", '<br>', $text);
+    $text = str_replace("\r", '<br>', $text);
+    
+    // UBB标签
+    $text = preg_replace($patterns['preg_img'], '<a href="$1" target="_blank"><img src="$1" alt="图片" style="max-width:100%;max-height:400px;object-fit:contain;border-radius:8px;" loading="lazy"></a>', $text);
+    $text = preg_replace($patterns['preg_img2'], '<a href="$1" target="_blank"><img src="$1" alt="图片" style="max-width:100%;max-height:400px;object-fit:contain;border-radius:8px;" loading="lazy"></a>', $text);
+    $text = preg_replace($patterns['preg_img_en'], '<a href="$1" target="_blank"><img src="$1" alt="图片" style="max-width:100%;max-height:400px;object-fit:contain;border-radius:8px;" loading="lazy"></a>', $text);
+    $text = preg_replace($patterns['preg_url'], '<a href="$1" target="_blank">$2</a>', $text);
+    $text = preg_replace($patterns['preg_url2'], '<a href="$1" target="_blank">$1</a>', $text);
+    $text = preg_replace($patterns['preg_url_cn'], '<a href="$1" target="_blank">$2</a>', $text);
+    $text = preg_replace($patterns['preg_url_cn2'], '<a href="$1" target="_blank">$1</a>', $text);
+    $text = preg_replace($patterns['preg_url_en'], '<a href="$1" target="_blank">$2</a>', $text);
+    $text = preg_replace($patterns['preg_url_en2'], '<a href="$1" target="_blank">$1</a>', $text);
+    $text = preg_replace($patterns['preg_bold'], '<strong>$1</strong>', $text);
+    $text = preg_replace($patterns['preg_bold2'], '<strong>$1</strong>', $text);
+    $text = preg_replace($patterns['preg_bold_en'], '<strong>$1</strong>', $text);
+    $text = preg_replace($patterns['preg_italic'], '<em>$1</em>', $text);
+    $text = preg_replace($patterns['preg_italic2'], '<em>$1</em>', $text);
+    $text = preg_replace($patterns['preg_italic_en'], '<em>$1</em>', $text);
+    $text = preg_replace($patterns['preg_underline'], '<u>$1</u>', $text);
+    $text = preg_replace($patterns['preg_underline2'], '<u>$1</u>', $text);
+    $text = preg_replace($patterns['preg_underline_en'], '<u>$1</u>', $text);
+    
+    // 其他标签
+    $text = preg_replace($patterns['preg_s'], '<small>$1</small>', $text);
+    $text = preg_replace($patterns['preg_s2'], '<small>$1</small>', $text);
+    $text = preg_replace($patterns['preg_strike'], '<del>$1</del>', $text);
+    $text = preg_replace($patterns['preg_strike2'], '<del>$1</del>', $text);
+    $text = preg_replace($patterns['preg_quote'], '<blockquote style="border-left:3px solid #ccc;padding:5px 10px;margin:10px 0;background:#f9f9f9;">$1</blockquote>', $text);
+    $text = preg_replace($patterns['preg_quote2'], '<blockquote style="border-left:3px solid #ccc;padding:5px 10px;margin:10px 0;background:#f9f9f9;">$1</blockquote>', $text);
+    $text = preg_replace($patterns['preg_big'], '<big>$1</big>', $text);
+    $text = preg_replace($patterns['preg_big2'], '<big>$1</big>', $text);
+    $text = preg_replace($patterns['preg_small'], '<small>$1</small>', $text);
+    $text = preg_replace($patterns['preg_small2'], '<small>$1</small>', $text);
+    $text = preg_replace($patterns['preg_red'], '<span style="color:red;">$1</span>', $text);
+    $text = preg_replace($patterns['preg_red2'], '<span style="color:red;">$1</span>', $text);
+    $text = preg_replace($patterns['preg_green'], '<span style="color:green;">$1</span>', $text);
+    $text = preg_replace($patterns['preg_green2'], '<span style="color:green;">$1</span>', $text);
+    $text = preg_replace($patterns['preg_blue'], '<span style="color:blue;">$1</span>', $text);
+    $text = preg_replace($patterns['preg_blue2'], '<span style="color:blue;">$1</span>', $text);
+    $text = preg_replace($patterns['preg_yellow'], '<span style="color:yellow;">$1</span>', $text);
+    $text = preg_replace($patterns['preg_yellow2'], '<span style="color:yellow;">$1</span>', $text);
+    $text = preg_replace($patterns['preg_marquee'], '<marquee>$1</marquee>', $text);
+    $text = preg_replace($patterns['preg_marquee2'], '<marquee>$1</marquee>', $text);
+    $text = preg_replace($patterns['preg_reply'], '<blockquote style="border-left:3px solid #4CAF50;padding:8px 12px;margin:10px 0;background:#f5f5f5;border-radius:4px;">$1</blockquote>', $text);
+    
+    // 新增UBB标签处理
+    // [input=15]内容[/input] - 输入框
+    $text = preg_replace($patterns['preg_input'], '<input type="text" size="$1" value="$2" class="ubb-input" readonly onclick="this.select()">', $text);
+    $text = preg_replace($patterns['preg_input_cn'], '<input type="text" size="$1" value="$2" class="ubb-input" readonly onclick="this.select()">', $text);
+    
+    // [c]电话号码[/c] - 直接拨打电话
+    $text = preg_replace($patterns['preg_call'], '<a href="tel:$1" class="ubb-tel">📞 $1</a>', $text);
+    $text = preg_replace($patterns['preg_call_cn'], '<a href="tel:$1" class="ubb-tel">📞 $1</a>', $text);
+    
+    // [left]文字[/left] - 居左
+    $text = preg_replace($patterns['preg_left'], '<div style="text-align:left;">$1</div>', $text);
+    $text = preg_replace($patterns['preg_left_cn'], '<div style="text-align:left;">$1</div>', $text);
+    
+    // [center]文字[/center] - 居中
+    $text = preg_replace($patterns['preg_center'], '<div style="text-align:center;">$1</div>', $text);
+    $text = preg_replace($patterns['preg_center_cn'], '<div style="text-align:center;">$1</div>', $text);
+    
+    // [right]文字[/right] - 居右
+    $text = preg_replace($patterns['preg_right'], '<div style="text-align:right;">$1</div>', $text);
+    $text = preg_replace($patterns['preg_right_cn'], '<div style="text-align:right;">$1</div>', $text);
+    
+    // [now] - 当前系统日期时间
+    $text = str_replace('[now]', '<span class="ubb-now">' . date('Y年n月j日 H:i:s') . '</span>', $text);
+    $text = str_replace('（now）', '<span class="ubb-now">' . date('Y年n月j日 H:i:s') . '</span>', $text);
+    
+    // [hellos] - 问候语
+    $text = str_replace('[hellos]', '<span class="ubb-hello">' . getGreeting() . '</span>', $text);
+    $text = str_replace('（hellos）', '<span class="ubb-hello">' . getGreeting() . '</span>', $text);
+    
+    // [hello] - 欢迎语
+    $text = str_replace('[hello]', '<span class="ubb-hello">' . getGreeting() . '</span>', $text);
+    $text = str_replace('（hello）', '<span class="ubb-hello">' . getGreeting() . '</span>', $text);
+    
+    // @提及用户功能
+    $text = preg_replace('/@(\w+)/i', '<span style="color:#1890ff;">@$1</span>', $text);
+    $text = preg_replace('/@\((.+?)\)/i', '<span style="color:#1890ff;">@$1</span>', $text);
+    
+    // 表情标签 [表情名称] 格式 - 转换为表情图片
+    $emoji_map = [
+        '笑' => '/images/20smile-smile.png',
+        '大笑' => '/images/21lol.png',
+        '俏皮' => '/images/19qiaopi.png',
+        '加油' => '/images/08jiayou.png',
+        '鼓鼓掌' => '/images/14guzhang.png',
+        '牛' => '/images/11niubi.png',
+        '怒了' => '/images/24angry.png',
+        '哭泣' => '/images/25weep.png',
+        '好失望' => '/images/18shiwang.png',
+        '滴汗' => '/images/10han.png',
+        '为什么' => '/images/13why.png',
+        '摊手' => '/images/12hand.png',
+        '好逊' => '/images/15xunka.png',
+        '很赞' => '/images/03zan.png',
+        '围观' => '/images/27weiguan.png',
+        '心心' => '/images/36heart.png',
+        '心碎了' => '/images/37heartbreak.png',
+        '献花花' => '/images/38flower.png',
+        '干杯' => '/images/40cheers.png',
+        '能力圈' => '/images/33nengliquan.png',
+        '毛估估' => '/images/06maogugu.png',
+        '护城河' => '/images/28moat.png',
+        '赚大了' => '/images/23earn.png',
+        '亏大了' => '/images/09lose.png',
+        '困顿' => '/images/26sleepy.png',
+        '不说了' => '/images/17shutup.png',
+        '好困惑' => '/images/43kunhuo.png',
+        '想一下' => '/images/44sikao.png',
+        '傲' => '/images/45aoman.png',
+        '赞成' => '/images/05woshou.png',
+        '不赞' => '/images/04bian.png',
+    ];
+    
+    foreach ($emoji_map as $name => $url) {
+        $text = str_replace('[' . $name . ']', '<img src="' . $url . '" alt="' . $name . '" title="' . $name . '" style="width:24px;height:24px;vertical-align:middle;"/>', $text);
+    }
+    
+    // 用户链接格式
+    $text = preg_replace('/☆(.+?)☆\((ID:\d+)\)/i', '<a href="/bbs/user.php?id=$2" style="color:#52c41a;text-decoration:none;">☆$1☆($2)</a>', $text);
+    $text = preg_replace('/(.+?)☆\((ID:\d+)\)/i', '<a href="/bbs/user.php?id=$2" style="color:#52c41a;text-decoration:none;">$1☆($2)</a>', $text);
+    $text = preg_replace('/^☆(.+?)☆\((ID:\d+)\)/i', '<a href="/bbs/user.php?id=$2" style="color:#52c41a;text-decoration:none;">☆$1☆($2)</a>', $text);
+    
+    // 给img标签添加onerror处理
+    $text = preg_replace_callback('/<img\s+([^>]*?)>/i', function($matches) {
+        if (preg_match('/\bonerror\s*=/i', $matches[1])) {
+            return $matches[0];
+        }
+        return '<img ' . $matches[1] . ' onerror="this.onerror=null;this.src=\'/images/blank.png\';this.alt=\'图片已丢失\';">';
+    }, $text);
+    
+    // 给没有协议的链接自动加上 https:// (防止外链被当成相对路径)
+    $text = preg_replace('/<a\s+href="(?!https?:\/\/|\/\/|mailto:|tel:|#|\/|javascript:)([^"]+)"/i', '<a href="https://$1"', $text);
+    
+    // 重写旧7723论坛帖子链接到新URL (view.aspx?id=XXX → /bbs/XXX/)
+    $text = preg_replace(
+        '/<a\s+href="https?:\/\/(?:bbs\.7723\.com\/lts\/view\.aspx?|wap\.7723\.cn\/lts\/view\.asp)\?(?:[^"&]*&)*id=(\d+)[^"]*"/i',
+        '<a href="/bbs/$1/"',
+        $text
+    );
+    
+    // 重写旧7723版块链接到新论坛首页 (index.aspx?idd=XXX → /bbs/)
+    $text = preg_replace(
+        '/<a\s+href="https?:\/\/bbs\.7723\.com\/lts\/index\.aspx?\?[^"]*"/i',
+        '<a href="/bbs/"',
+        $text
+    );
+    
+    // 重写旧7723会员链接到新论坛首页 (/hy/* 无法映射到新系统用户)
+    $text = preg_replace(
+        '/<a\s+href="https?:\/\/(?:bbs\.7723\.com|wap\.7723\.cn)\/hy\/[^"]*"/i',
+        '<a href="/bbs/"',
+        $text
+    );
+    
+    // UBB+ 扩展标签（精美页面组件）
+    $text = ubb_plus($text);
+
+    return $text;
+}
+
+// 引入配置获取数据库函数
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/ai_helper.php';
+
+$pdo = getDB();
+
+// 获取帖子ID
+$topicId = isset($_GET['id']) ? intval($_GET['id']) : 0;
+$action = $_GET['action'] ?? '';
+$sortOrder = isset($_GET['sort']) && $_GET['sort'] === 'desc' ? 'DESC' : 'ASC';
+
+if ($topicId <= 0) {
+    header('Location: /bbs/');
+    exit;
+}
+
+// 兼容旧 GET 收藏链接：不再通过 GET 改状态，统一 301 到规范短链详情页
+if ($action === 'favorite') {
+    header('HTTP/1.1 301 Moved Permanently');
+    header('Location: ' . bbsUrl('topic', $topicId));
+    exit;
+}
+
+// 检查用户是否已登录
+$currentUserId = getCurrentUserId();
+$currentUser = isLoggedIn() ? getUserInfo($currentUserId) : null;
+
+// 处理收藏/取消收藏（仅 POST + CSRF）
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'favorite') {
+    if ($currentUserId <= 0) {
+        header('Location: /bbs/login.php?redirect=' . urlencode(bbsUrl('topic', $topicId)));
+        exit;
+    }
+    bbs_verify_csrf();
+
+    $stmt = $pdo->prepare("SELECT id FROM ll_shouchang WHERE ll_useid = ? AND ll_id = ?");
+    $stmt->execute([$currentUserId, $topicId]);
+    $existing = $stmt->fetch();
+    
+    if ($existing) {
+        $pdo->prepare("DELETE FROM ll_shouchang WHERE id = ?")->execute([$existing['id']]);
+    } else {
+        // [GSC-FIX 2026-10-03] ll_lt 无 ll_logo 列，原语句抛 SQLSTATE[42S22] 1054，收藏功能必报错
+        $stmt = $pdo->prepare("SELECT ll_biaoti FROM ll_lt WHERE id = ? AND (ll_or IS NULL OR ll_or = 0 OR ll_or = 1)");
+        $stmt->execute([$topicId]);
+        $topicInfo = $stmt->fetch();
+        if ($topicInfo) {
+            $stmt = $pdo->prepare("INSERT INTO ll_shouchang (ll_useid, ll_id, ll_idd, ll_biaoti, ll_logo, ll_retime) VALUES (?, ?, 0, ?, ?, NOW())");
+            $stmt->execute([$currentUserId, $topicId, $topicInfo['ll_biaoti'], $topicInfo['ll_logo'] ?? '']);
+        }
+    }
+    header('HTTP/1.1 303 See Other');
+    header('Location: ' . bbsUrl('topic', $topicId));
+    exit;
+}
+
+// ==================== 页面缓存优化（仅未登录用户） ====================
+$cacheDir = __DIR__ . '/../cache/topic/';
+if (!is_dir($cacheDir)) {
+    @mkdir($cacheDir, 0755, true);
+}
+$cacheKey = $topicId . '_' . $sortOrder . '_zh.cache';
+$cacheFile = $cacheDir . $cacheKey;
+$cacheTime = 180; // 缓存3分钟
+$useCache = false;
+
+// 未登录用户优先读取缓存
+if ($currentUserId <= 0 && file_exists($cacheFile) && (time() - filemtime($cacheFile) < $cacheTime)) {
+    $useCache = true;
+}
+
+if ($useCache) {
+    // 浏览量计数：缓存命中路径原来是直接 exit 的，导致浏览量被严重少计。
+    // 只统计真人——本站爬虫流量远大于真人（8 天生成 78 万缓存文件），一律计数会严重虚高。
+    if (!isBotRequest()) {
+        $pdo->prepare("UPDATE ll_lt SET ll_rc = COALESCE(ll_rc, 0) + 1 WHERE id = ?")->execute([$topicId]);
+    }
+    // 快速路径：直接返回缓存页面
+    readfile($cacheFile);
+    exit;
+}
+// ==================== 缓存逻辑结束 ====================
+
+// 完整加载帖子数据（优化：不使用事务，直接更新浏览量）
+$pdo->prepare("UPDATE ll_lt SET ll_rc = COALESCE(ll_rc, 0) + 1 WHERE id = ?")->execute([$topicId]);
+
+$stmt = $pdo->prepare("
+    SELECT t.*, c.ll_title as bankuai_name, u.ll_n_name as author_nick, u.ll_img as author_avatar, u.ll_name as author_name
+    FROM ll_lt t
+    LEFT JOIN ll_class c ON t.ll_idd = c.id
+    LEFT JOIN ll_useregs u ON t.ll_useid = u.id
+    WHERE t.id = ? AND (t.ll_or IS NULL OR t.ll_or = 0 OR t.ll_or = 1)
+");
+$stmt->execute([$topicId]);
+$topic = $stmt->fetch();
+
+if (!$topic) {
+    http_response_code(404);
+    require __DIR__ . '/../404.php';
+    exit;
+}
+
+// 现金任务关联（板块3=现金任务）
+$cashTask = null;
+$cashTaskApplied = false;
+if ((int)$topic['ll_idd'] === 3 && $currentUserId > 0) {
+    $ctStmt = $pdo->prepare("SELECT * FROM ll_cash_tasks WHERE bbs_post_id = ?");
+    $ctStmt->execute([$topicId]);
+    $cashTask = $ctStmt->fetch();
+    if ($cashTask) {
+        // 检查当前用户是否已申请
+        $appStmt = $pdo->prepare("SELECT id FROM ll_cash_task_applications WHERE task_id = ? AND user_id = ?");
+        $appStmt->execute([$cashTask['id'], $currentUserId]);
+        $cashTaskApplied = $appStmt->fetch() !== false;
+    }
+}
+// 未登录用户也要查询任务信息（用于显示状态）
+if ($cashTask === null && (int)$topic['ll_idd'] === 3) {
+    $ctStmt = $pdo->prepare("SELECT * FROM ll_cash_tasks WHERE bbs_post_id = ?");
+    $ctStmt->execute([$topicId]);
+    $cashTask = $ctStmt->fetch();
+}
+
+// 检查当前用户是否有编辑权限（楼主或版主）- 优化：合并查询
+$canEditTopic = false;
+$isAuthor = false; // 初始化，避免未定义变量
+$isTopicAuthor = false; // 初始化，避免未定义变量
+if ($currentUserId > 0) {
+    // 楼主可以编辑自己的帖子
+    $isAuthor = ($currentUserId == $topic['ll_useid']);
+    
+    // 版主可以管理该板块的帖子（版主对自己帖子也有版主权限）
+    $isModerator = false;
+    $stmt = $pdo->prepare("SELECT id FROM ll_ltbz WHERE ll_useid = ? AND ll_idd = ? LIMIT 1");
+    $stmt->execute([$currentUserId, $topic['ll_idd']]);
+    if ($stmt->fetch()) {
+        $isModerator = true;
+    }
+    
+    $canEditTopic = $isAuthor || $isModerator;
+    $isTopicAuthor = $isAuthor; // 楼主标识，用于置顶回复
+}
+
+// 回复列表 - 只查询一级回复（父回复）
+$page = 1;
+$pageSize = 20;
+$offset = ($page - 1) * $pageSize;
+
+// 只统计一级回复数量
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM ll_lthf WHERE ll_id = ? AND (ll_father_id = 0 OR ll_father_id IS NULL)");
+$stmt->execute([$topicId]);
+$totalReplies = $stmt->fetchColumn();
+$totalPages = max(1, ceil($totalReplies / $pageSize));
+
+// 查询一级回复（PDO不支持 LIMIT/OFFSET 参数绑定，需直接拼接）
+// 置顶回复优先显示 - 兼容两种置顶方式: ll_ding=1 或 ll_time2='2100-10-10 12:12:12'
+$stmt = $pdo->prepare("
+    SELECT h.*, u.ll_n_name, u.ll_img, u.ll_dj,
+           (CASE WHEN h.ll_ding = 1 OR h.ll_time2 = '2100-10-10 12:12:12' THEN 1 ELSE 0 END) as is_pinned
+    FROM ll_lthf h
+    LEFT JOIN ll_useregs u ON h.ll_useid = u.id
+    WHERE h.ll_id = ? AND (h.ll_father_id = 0 OR h.ll_father_id IS NULL)
+    ORDER BY is_pinned DESC, h.id {$sortOrder}
+    LIMIT {$pageSize} OFFSET {$offset}
+");
+$stmt->execute([$topicId]);
+$replies = $stmt->fetchAll();
+
+// 优化：一次性查询所有子回复（替代 N+1 查询）
+$parentIds = array_column($replies, 'id');
+$childrenMap = [];
+if (!empty($parentIds)) {
+    $placeholders = implode(',', array_fill(0, count($parentIds), '?'));
+    $stmt = $pdo->prepare("
+        SELECT h.*, u.ll_n_name, u.ll_img, u.ll_dj
+        FROM ll_lthf h
+        LEFT JOIN ll_useregs u ON h.ll_useid = u.id
+        WHERE h.ll_father_id IN ({$placeholders})
+        ORDER BY h.id ASC
+    ");
+    $stmt->execute($parentIds);
+    $allChildren = $stmt->fetchAll();
+    
+    // 按父ID分组
+    foreach ($allChildren as $child) {
+        $childrenMap[$child['ll_father_id']][] = $child;
+    }
+}
+
+// 附加子回复到每个父回复
+foreach ($replies as &$reply) {
+    $reply['children'] = $childrenMap[$reply['id']] ?? [];
+}
+unset($reply);
+
+// 收藏和点赞状态
+$isFavorited = false;
+$topicZaned = false;
+$replyZanedMap = [];
+$topicZanCount = (int)($topic['ll_zan'] ?? 0);
+
+if ($currentUserId > 0) {
+    // 收集所有回复ID（包括子回复）
+    $replyIds = array_column($replies, 'id');
+    foreach ($replies as $reply) {
+        if (!empty($reply['children'])) {
+            $childIds = array_column($reply['children'], 'id');
+            $replyIds = array_merge($replyIds, $childIds);
+        }
+    }
+    $allTargetIds = array_merge([$topicId], $replyIds);
+    
+    if (!empty($allTargetIds)) {
+        $placeholders = implode(',', array_fill(0, count($allTargetIds), '?'));
+        $stmt = $pdo->prepare("
+            SELECT ll_type, ll_targetid FROM ll_zan 
+            WHERE ll_useid = ? AND ll_targetid IN ({$placeholders})
+        ");
+        $stmt->execute(array_merge([$currentUserId], $allTargetIds));
+        $zanRows = $stmt->fetchAll();
+        
+        foreach ($zanRows as $row) {
+            if ($row['ll_type'] === 'topic' && $row['ll_targetid'] == $topicId) {
+                $topicZaned = true;
+            } elseif ($row['ll_type'] === 'reply') {
+                $replyZanedMap[$row['ll_targetid']] = true;
+            }
+        }
+    }
+    
+    $stmt = $pdo->prepare("SELECT id FROM ll_shouchang WHERE ll_useid = ? AND ll_id = ?");
+    $stmt->execute([$currentUserId, $topicId]);
+    $isFavorited = $stmt->fetch() !== false;
+}
+
+// 开启输出缓冲用于缓存
+if ($currentUserId <= 0) {
+    ob_start();
+}
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <base href="/bbs/">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?php echo e(toHalfWidth($topic['ll_biaoti'])); ?> - 7坛游戏社区</title>
+    <link rel="canonical" href="<?= htmlspecialchars(SITE_URL . '/bbs/' . $topic['id'] . '/', ENT_QUOTES) ?>">
+    <?php
+    // SEO meta
+    $topicTitle = toHalfWidth($topic['ll_biaoti']);
+    $__descRaw = trim(strip_tags(preg_replace('/\[(?:img|url|b|i|u|s|quote|color|size|center|left|right|red|green|blue|yellow|big|small|marquee|strike|input|c)[^\]]*\].*\[\/(?:img|url|b|i|u|s|quote|color|size|center|left|right|red|green|blue|yellow|big|small|marquee|strike|input|c)\]/isU', '', $topic['ll_text'] ?? '')));
+    $__descRaw = preg_replace('/\((?:img|url)\)(.*?)\(\/(?:img|url)\)/is', '', $__descRaw);
+    // UBB+ 新标签：移除标签本体、保留文字（摘要/分享卡片更干净）
+    $__descRaw = preg_replace('/\[\/?(?:hl|title|subtitle|caption|note|warn|tip|card|badge|btn|fold|table|tr|td|th|code|divider|hr)[^\]]*\]/i', ' ', $__descRaw);
+    $__descRaw = preg_replace('/\[[^\]]{0,60}\]/s', ' ', $__descRaw); // 兜底：清除残余方括号标记
+    $__descRaw = trim(preg_replace('/\s+/u', ' ', $__descRaw));
+    $topicDesc = mb_substr($__descRaw, 0, 160, 'UTF-8');
+    // [GSC-FIX 2026-10-03] DiscussionForumPosting 必须含 text/image/video 至少一项。
+    // 原 image 分支读 $topic['ll_logo']，但 ll_lt 表无此列（该列在 ll_class 上）→ 恒为空；
+    // 且从未输出 text → Search Console 报「应指定 text、image 或 video」。
+    $topicText = mb_substr($__descRaw, 0, 2000, 'UTF-8');
+    $topicImage = '';
+    // 图片：正文 [img]…[/img] 或 [img=宽]…[/img]（本站新图均为 https://img.7tan.com/uploads/...）
+    // 注：老附件 ll_url 指向的 pic/*.gif 已 404，故不采用，避免输出不可达图片 URL。
+    if (preg_match('/\[img[^\]]*\]([^\[]+?)\[\/img\]/i', (string)($topic['ll_text'] ?? ''), $__im)) {
+        $__u = trim($__im[1]);
+        if (preg_match('~^https?://~i', $__u)) {
+            $topicImage = $__u;
+        } elseif ($__u !== '') {
+            $topicImage = 'https://img.7tan.com/' . ltrim($__u, '/');
+        }
+    }
+    // 兜底：正文为空时用标题，确保 text/image/video 至少一项非空
+    if ($topicText === '') { $topicText = $topicTitle; }
+    $topicUrl = SITE_URL . bbsUrl('topic', $topicId);
+    // 2.1（2026-10-30）：帖子无正文配图时用站内默认分享图，否则微信/QQ 卡片出灰块
+    // 2.1b（2026-10-30）：正文里的图绝大多数是编辑器粘进来的原生 <img> HTML，
+    // 不是 [img] UBB。上面那条正则永远命不中，导致 og:image 全站落到 logo 兜底。
+    // 这里补一条 HTML <img src> 兜底，只在 UBB 没取到时生效。
+    if ($topicImage === '' && preg_match('/<img\b[^>]*\bsrc\s*=\s*["\']([^"\']+)["\']/i', (string)($topic['ll_text'] ?? ''), $__im2)) {
+        $__u2 = trim(html_entity_decode($__im2[1], ENT_QUOTES, 'UTF-8'));
+        if (preg_match('~^https?://~i', $__u2)) {
+            $topicImage = $__u2;
+        } elseif ($__u2 !== '' && stripos($__u2, 'data:') !== 0) {
+            $topicImage = 'https://img.7tan.com/' . ltrim($__u2, '/');
+        }
+    }
+    $__shareImage = ($topicImage !== '') ? $topicImage : 'https://www.7tan.com/images/og-1200x630.png';
+    $topicDate = explode(' ', $topic['ll_time1'])[0];
+    $bankuaiName = toHalfWidth($topic['bankuai_name'] ?? '');
+    ?>
+    <meta name="description" content="<?php echo htmlspecialchars($topicDesc, ENT_QUOTES); ?>">
+    <meta name="keywords" content="<?php echo htmlspecialchars($topicTitle . ',' . $bankuaiName . ',' . '游戏论坛,7坛社区', ENT_QUOTES); ?>">
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+    <meta name="applicable-device" content="pc,mobile">
+    <!-- Open Graph -->
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="<?php echo htmlspecialchars($topicTitle, ENT_QUOTES); ?>">
+    <meta property="og:description" content="<?php echo htmlspecialchars($topicDesc, ENT_QUOTES); ?>">
+    <meta property="og:site_name" content="7坛游戏社区">
+    <meta property="og:url" content="<?php echo htmlspecialchars($topicUrl, ENT_QUOTES); ?>">
+    <meta property="og:image" content="<?php echo htmlspecialchars($__shareImage, ENT_QUOTES); ?>">
+    <meta property="article:published_time" content="<?php echo $topicDate; ?>">
+    <?php if ($bankuaiName): ?>
+    <meta property="article:section" content="<?php echo htmlspecialchars($bankuaiName, ENT_QUOTES); ?>">
+    <?php endif; ?>
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<?php echo htmlspecialchars($topicTitle, ENT_QUOTES); ?>">
+    <meta name="twitter:description" content="<?php echo htmlspecialchars($topicDesc, ENT_QUOTES); ?>">
+    <meta name="twitter:image" content="<?php echo htmlspecialchars($__shareImage, ENT_QUOTES); ?>">
+    <!-- JSON-LD 结构化数据 -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "DiscussionForumPosting",
+        "headline": <?php echo json_encode($topicTitle, JSON_UNESCAPED_UNICODE); ?>,
+        "description": <?php echo json_encode($topicDesc, JSON_UNESCAPED_UNICODE); ?>,
+        "text": <?php echo json_encode($topicText, JSON_UNESCAPED_UNICODE); ?>,
+        <?php if ($topicImage): ?>
+        "image": <?php echo json_encode($topicImage); ?>,
+        <?php endif; ?>
+        "author": {
+            "@type": "Person",
+            "name": <?php echo json_encode($topic['author_nick'] ?? '匿名', JSON_UNESCAPED_UNICODE); ?>
+        },
+        "datePublished": <?php echo json_encode($topicDate); ?>,
+        "url": <?php echo json_encode($topicUrl); ?>,
+        "commentCount": <?php echo (int)$totalReplies; ?>,
+        "interactionStatistic": {
+            "@type": "InteractionCounter",
+            "interactionType": "https://schema.org/CommentAction",
+            "userInteractionCount": <?php echo (int)$totalReplies; ?>
+        },
+        "mainEntityOfPage": <?php echo json_encode($topicUrl); ?>
+    }
+    </script>
+    <!-- 面包屑 JSON-LD -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "首页",
+                "item": "https://www.7tan.com/"
+            },
+            <?php if ($bankuaiName): ?>
+            {
+                "@type": "ListItem",
+                "position": 2,
+                "name": <?php echo json_encode($bankuaiName, JSON_UNESCAPED_UNICODE); ?>,
+                "item": "https://www.7tan.com/bbs/board/<?php echo (int)($topic['ll_idd']); ?>/"
+            },
+            {
+                "@type": "ListItem",
+                "position": 3,
+                "name": <?php echo json_encode($topicTitle, JSON_UNESCAPED_UNICODE); ?>
+            }
+            <?php else: ?>
+            {
+                "@type": "ListItem",
+                "position": 2,
+                "name": <?php echo json_encode($topicTitle, JSON_UNESCAPED_UNICODE); ?>
+            }
+            <?php endif; ?>
+        ]
+    }
+    </script>
+    <?php if (isset($_GET['debug'])): ?>
+    <meta name="debug" content="Generated in <?php echo round((microtime(true) - $_SERVER['REQUEST_TIME_FLOAT']) * 1000); ?>ms">
+    <?php endif; ?>
+    <link rel="stylesheet" href="<?php echo $baseUrl; ?>css/style.css">
+    <link rel="stylesheet" href="<?php echo $baseUrl; ?>css/mobile-nav.css?v=20260919">
+    <link rel="stylesheet" href="<?php echo $baseUrl; ?>css/view.css">
+    <link rel="stylesheet" href="<?php echo $baseUrl; ?>css/ubb_plus.css?v=20260917">
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script>
+var _hmt = _hmt || [];
+(function() {
+  var hm = document.createElement("script");
+  hm.src = "https://hm.baidu.com/hm.js?f5f121dbbaa5fca7a5d5fba84a19576c";
+  var s = document.getElementsByTagName("script")[0]; 
+  s.parentNode.insertBefore(hm, s);
+})();
+</script>
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9874557266132949" crossorigin="anonymous"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <a href="/" class="logo">
+                    <span class="logo-icon">🎮</span>
+                    <span class="logo-text">7坛游戏社区</span>
+                </a>
+                <nav class="nav">
+                    <a href="https://www.7tan.com/">首页</a>
+                    <a href="/android/">游戏</a>
+                    <a href="/baike/">百科</a>
+                    <a href="/ai/">AI聊天</a>
+                    <a href="/task/">现金任务</a>
+                    <a href="https://www.7tan.com/ai-tool/">AI工具</a>
+                    <?php if ($currentUser): ?>
+                        <a href="/bbs/user.php"><?php echo e($currentUser['ll_n_name'] ?: $currentUser['ll_name']); ?></a>
+                        <a href="/bbs/logout.php">退出</a>
+                    <?php else: ?>
+                        <a href="/bbs/login.php">登录</a>
+                    <?php endif; ?>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <div class="breadcrumb">
+                <a href="/">首页</a>
+                <span class="separator">></span>
+                <a href="/bbs/board/<?php echo $topic['ll_idd']; ?>/"><?php echo e($topic['bankuai_name'] ?: '默认版块'); ?></a>
+                <span class="separator">></span>
+                <span class="current">帖子详情</span>
+            </div>
+
+            <div class="topic-view">
+                <!-- 帖子主体 -->
+                <div class="topic-main">
+                    <div class="topic-header">
+                        <h1>
+                            <?php if ($topic['ll_ding']): ?><span class="tag tag-top">置顶</span><?php endif; ?>
+                            <?php if ($topic['ll_jing'] || $topic['ll_jh']): ?><span class="tag tag-jing">精华</span><?php endif; ?>
+                            <?php if ($topic['ll_lock']): ?><span class="tag tag-lock">锁定</span><?php endif; ?>
+                            <?php if ($topic['ll_hide']): ?><span class="tag tag-hide">已隐藏</span><?php endif; ?>
+                            <?php echo e(toHalfWidth($topic['ll_biaoti'])); ?>
+                        </h1>
+                        <div class="topic-meta">
+                            <span class="author">楼主: <?php echo e($topic['author_nick'] ?: $topic['ll_name']); ?></span>
+                            <span class="views">浏览: <?php echo (int)($topic['ll_rc'] ?? 0); ?></span>
+                            <span class="replies">回复: <span id="replyCount"><?php echo $totalReplies; ?></span></span>
+                            <span class="time">发布于: <?php echo $topic['ll_time1']; ?></span>
+                        </div>
+                    </div>
+
+                    <!-- 楼主帖子 -->
+                    <div class="post main-post">
+                        <div class="post-author">
+                            <?php 
+                            $authorAvatar = $topic['author_avatar'] ?? '';
+                            $authorName = $topic['author_nick'] ?: ($topic['author_name'] ?: '用户');
+                            $firstChar = mb_substr($authorName, 0, 1);
+                            $authorId = $topic['ll_useid'] ?? 0;
+                            ?>
+                            <a href="/bbs/profile.php?id=<?php echo $authorId; ?>" class="author-link">
+                                <?php if ($authorAvatar): ?>
+                                <img src="<?php echo e($authorAvatar); ?>" alt="" class="avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <?php endif; ?>
+                                <div class="avatar-fallback" style="<?php echo $authorAvatar ? 'display:none;' : ''; ?> width:48px; height:48px; border-radius:50%; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); align-items:center; justify-content:center; color:#fff; font-size:18px; font-weight:bold; flex-shrink:0;">
+                                    <?php echo e($firstChar); ?>
+                                </div>
+                            </a>
+                            <div class="author-info">
+                                <a href="/bbs/profile.php?id=<?php echo $authorId; ?>" class="username-link"><?php echo e($topic['author_nick'] ?: $topic['ll_name']); ?></a>
+                                <?php if ($currentUser && $currentUserId != $authorId): ?>
+                                <a href="/bbs/message.php?to=<?php echo $authorId; ?>" class="msg-btn" title="发私信">私信</a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <div class="post-content">
+                            <?php echo safe_output(fast_ubb($topic['ll_text'])); ?>
+                            <?php if (!empty($topic['ll_textb'])): ?>
+                            <div class="post-extra">
+                                <?php echo safe_output(fast_ubb($topic['ll_textb'])); ?>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                        
+                        <?php 
+                        // 解析附件列表
+                        $attachments = [];
+                        $furlField = !empty($topic['ll_url']) ? $topic['ll_url'] : $topic['ll_furl'];
+                        if (!empty($furlField)) {
+                            // 兼容旧格式: |描述|文件路径|大小|描述|文件路径|大小| (管道分隔的三元组)
+                            if (strpos($furlField, '|') === 0) {
+                                $parts = array_values(array_filter(explode('|', $furlField), function($v) { return $v !== ''; }));
+                                $lines = [];
+                                for ($i = 0; $i + 2 < count($parts); $i += 3) {
+                                    $path = trim($parts[$i + 1]); // 中间是文件路径
+                                    if (!empty($path) && strpos($path, '/') !== false) {
+                                        $lines[] = $path;
+                                    }
+                                }
+                            } elseif ($decoded = json_decode($furlField, true)) {
+                                // 兼容 JSON 数组格式 (如 ["https://..."])
+                                $lines = is_array($decoded) ? $decoded : [];
+                            } else {
+                                $lines = explode("\n", trim($furlField));
+                            }
+                            foreach ($lines as $line) {
+                                $line = trim($line);
+                                if (!empty($line)) {
+                                    // 去掉可能重复的 /bbs/ 前缀
+                                    $line = preg_replace('#^/bbs/#', '', $line);
+                                    // 添加 /bbs/ 前缀（如果还没有）
+                                    // 新上传路径 uploads/ 不需要加 /bbs/ 前缀（文件在 D:/workspace/7tan/uploads/）
+                                    if (strpos($line, '/bbs/') !== 0 && strpos($line, 'http') !== 0 && strpos($line, 'uploads/') !== 0) {
+                                        $line = '/bbs/' . $line;
+                                    }
+                                    $attachments[] = $line;
+                                }
+                            }
+                        }
+                        
+                        if (!empty($attachments)): 
+                            // 分类附件
+                            $images = [];
+                            $audios = [];
+                            $videos = [];
+                            $files = [];
+                            
+                            foreach ($attachments as $att) {
+                                $ext = strtolower(pathinfo($att, PATHINFO_EXTENSION));
+                                if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'])) {
+                                    $images[] = $att;
+                                } elseif (in_array($ext, ['mp3', 'wav', 'flac', 'aac', 'ogg', 'wma', 'm4a'])) {
+                                    $audios[] = $att;
+                                } elseif (in_array($ext, ['mp4', 'avi', 'mov', 'mkv', 'flv', 'wmv', 'webm', '3gp'])) {
+                                    $videos[] = $att;
+                                } else {
+                                    $files[] = $att;
+                                }
+                            }
+                        ?>
+                        
+                        <!-- 附件展示区域 -->
+                        <div class="attachments-area">
+                            <?php if (!empty($images)): ?>
+                            <!-- 图片网格 -->
+                            <div class="attachment-images">
+                                <div class="attachment-title">
+                                    <span class="att-icon">📷</span> 图片 (<span id="imageCount"><?php echo count($images); ?></span>)
+                                </div>
+                                <div class="image-grid" id="imageGrid">
+                                    <?php foreach ($images as $idx => $img): ?>
+                                    <div class="image-item" onclick="showImagePreview(<?php echo $idx; ?>)">
+                                        <img src="<?php echo e($img); ?>" alt="<?php echo '图片' . ($idx + 1); ?>" loading="lazy" decoding="async" 
+                                             onerror="this.parentNode.innerHTML='<div class=\'img-error\'><span>📷</span><small>加载失败</small></div>';">
+                                    </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+                            
+                            <?php if (!empty($audios)): ?>
+                            <!-- 音频播放器 -->
+                            <div class="attachment-audios">
+                                <div class="attachment-title">
+                                    <span class="att-icon">🎵</span> 音频 (<span id="audioCount"><?php echo count($audios); ?></span>)
+                                </div>
+                                <?php foreach ($audios as $idx => $audio): 
+                                    $audioName = basename($audio);
+                                ?>
+                                <div class="audio-player">
+                                    <div class="audio-info">
+                                        <span class="audio-icon">🎵</span>
+                                        <span class="audio-name"><?php echo e($audioName); ?></span>
+                                    </div>
+                                    <audio controlsList="download" controls>
+                                        <source src="<?php echo e($audio); ?>" type="audio/<?php echo pathinfo($audio, PATHINFO_EXTENSION); ?>">
+                                        您的浏览器不支持音频播放
+                                    </audio>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php endif; ?>
+                            
+                            <?php if (!empty($videos)): ?>
+                            <!-- 视频播放器 -->
+                            <div class="attachment-videos">
+                                <div class="attachment-title">
+                                    <span class="att-icon">🎬</span> 视频 (<span id="videoCount"><?php echo count($videos); ?></span>)
+                                </div>
+                                <?php foreach ($videos as $idx => $video): 
+                                    $videoName = basename($video);
+                                    $videoExt = pathinfo($video, PATHINFO_EXTENSION);
+                                ?>
+                                <div class="video-player">
+                                    <div class="video-info">
+                                        <span class="video-icon">🎬</span>
+                                        <span class="video-name"><?php echo e($videoName); ?></span>
+                                    </div>
+                                    <video controls playsinline preload="metadata">
+                                        <source src="<?php echo e($video); ?>" type="video/<?php echo $videoExt; ?>">
+                                        您的浏览器不支持视频播放
+                                    </video>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php endif; ?>
+                            
+                            <?php if (!empty($files)): ?>
+                            <!-- 其他附件 -->
+                            <div class="attachment-files">
+                                <div class="attachment-title">
+                                    <span class="att-icon">📎</span> 附件 (<span id="fileCount"><?php echo count($files); ?></span>)
+                                </div>
+                                <div class="file-list">
+                                    <?php foreach ($files as $file): 
+                                        $fileName = basename($file);
+                                        $fileExt = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+                                        $fileIcon = '📄';
+                                        if (in_array($fileExt, ['zip', 'rar', '7z', 'tar', 'gz'])) $fileIcon = '📦';
+                                        if (in_array($fileExt, ['apk', 'ipa'])) $fileIcon = '📱';
+                                        if (in_array($fileExt, ['pdf'])) $fileIcon = '📕';
+                                        if (in_array($fileExt, ['doc', 'docx'])) $fileIcon = '📘';
+                                        if (in_array($fileExt, ['xls', 'xlsx'])) $fileIcon = '📗';
+                                    ?>
+                                    <a href="<?php echo e($file); ?>" class="file-item" download="<?php echo e($fileName); ?>">
+                                        <span class="file-icon"><?php echo $fileIcon; ?></span>
+                                        <span class="file-name"><?php echo e($fileName); ?></span>
+                                        <span class="file-download">下载</span>
+                                    </a>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                        
+                        <!-- 图片预览弹窗 -->
+                        <div class="image-preview-modal" id="imagePreviewModal">
+                            <span class="preview-close" onclick="closeImagePreview()">&times;</span>
+                            <span class="preview-prev" onclick="prevImage()">&#10094;</span>
+                            <img class="preview-image" id="previewImage" src="" alt="预览">
+                            <span class="preview-next" onclick="nextImage()">&#10095;</span>
+                            <div class="preview-counter" id="previewCounter"></div>
+                        </div>
+                        <?php endif; ?>
+                        <div class="post-actions topic-actions">
+                            <?php if ($currentUser): ?>
+                            <a href="javascript:void(0);" class="btn btn-reply" onclick="openReplyBox(1, 0)">回复</a>
+                            <?php else: ?>
+                            <a href="/bbs/login.php?redirect=<?php echo urlencode(bbsUrl('topic', $topicId)); ?>" class="btn btn-reply" rel="nofollow">回复</a>
+                            <?php endif; ?>
+
+                            <?php // 现金任务接单按钮 ?>
+                            <?php if ($cashTask): ?>
+                                <?php
+                                $canApply = false;
+                                $applyDisabled = '';
+                                $applyText = '接单';
+                                if (!$currentUser) {
+                                    $applyText = '登录后接单';
+                                } elseif ((int)$cashTask['user_id'] === $currentUserId) {
+                                    $applyText = '这是我的任务';
+                                } elseif ($cashTaskApplied) {
+                                    $applyText = '已申请 ✓';
+                                } elseif ((int)$cashTask['accepted_count'] >= (int)$cashTask['max_solvers']) {
+                                    $applyText = '名额已满';
+                                } elseif (!in_array((int)$cashTask['status'], [1, 2])) {
+                                    $applyText = '已截止';
+                                } else {
+                                    $canApply = true;
+                                    $bountyPer = floor($cashTask['total_bounty'] / $cashTask['max_solvers']);
+                                    $applyText = '💰 ' . '接单' . ' (¥' . number_format($bountyPer / 100, 2) . '/' . '人' . ')';
+                                }
+                                ?>
+                                <?php if ($canApply): ?>
+                                <a href="javascript:void(0);" class="btn btn-apply" id="btnApplyTask" onclick="applyCashTask(<?php echo $topicId; ?>, <?php echo $cashTask['id']; ?>)"><?php echo $applyText; ?></a>
+                                <?php else: ?>
+                                <span class="btn btn-apply disabled"><?php echo $applyText; ?></span>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                            
+                            <?php if ($canEditTopic): ?>
+                            <a href="/bbs/edit.php?id=<?php echo $topicId; ?>" class="btn btn-edit">
+                                <span>✏️</span> 编辑
+                            </a>
+                            <?php endif; ?>
+                            
+                            <?php if ($isModerator): ?>
+                            <!-- 版主操作按钮 -->
+                            <div class="mod-actions">
+                                <span class="mod-label">版主:</span>
+                                <a href="javascript:void(0);" class="mod-btn mod-ding<?php echo $topic['ll_ding'] ? ' active' : ''; ?>" 
+                                   onclick="toggleTopicAction(<?php echo $topicId; ?>, 'ding')" 
+                                   title="<?php echo $topic['ll_ding'] ? '取消置顶' : '置顶帖子'; ?>">
+                                    <?php echo $topic['ll_ding'] ? '❎'.'取消置顶' : '📌'.'置顶'; ?>
+                                </a>
+                                <a href="javascript:void(0);" class="mod-btn mod-jing<?php echo ($topic['ll_jing'] || $topic['ll_jh']) ? ' active' : ''; ?>" 
+                                   onclick="toggleTopicAction(<?php echo $topicId; ?>, 'jing')" 
+                                   title="<?php echo ($topic['ll_jing'] || $topic['ll_jh']) ? '取消精华' : '加精'; ?>">
+                                    <?php echo ($topic['ll_jing'] || $topic['ll_jh']) ? '❎'.'取消精华' : '⭐'.'加精'; ?>
+                                </a>
+                                <a href="javascript:void(0);" class="mod-btn mod-lock<?php echo $topic['ll_lock'] ? ' active' : ''; ?>" 
+                                   onclick="toggleTopicAction(<?php echo $topicId; ?>, 'lock')" 
+                                   title="<?php echo $topic['ll_lock'] ? '解锁帖子' : '锁定帖子'; ?>">
+                                    <?php echo $topic['ll_lock'] ? '🔓'.'解锁' : '🔒'.'锁定'; ?>
+                                </a>
+                                <a href="javascript:void(0);" class="mod-btn mod-hide<?php echo $topic['ll_hide'] ? ' active' : ''; ?>" 
+                                   onclick="toggleTopicAction(<?php echo $topicId; ?>, 'hide')" 
+                                   title="<?php echo $topic['ll_hide'] ? '显示帖子' : '隐藏帖子'; ?>">
+                                    <?php echo $topic['ll_hide'] ? '👁️'.'显示' : '🚫'.'隐藏'; ?>
+                                </a>
+                            </div>
+                            <?php endif; ?>
+                            
+                            <a href="javascript:void(0);" class="action-btn<?php echo $topicZaned ? ' zaned' : ''; ?>" id="topicZanBtn" onclick="toggleZan('topic', <?php echo $topicId; ?>)">
+                                <span id="topicZanIcon"><?php echo $topicZaned ? '💚' : '🤍'; ?></span>
+                                <span id="topicZanCount"><?php echo $topicZanCount; ?></span>
+                            </a>
+                            
+                            <a href="javascript:void(0);" class="action-btn" onclick="showShareModal()">
+                                <span>📤</span> 分享
+                            </a>
+                            
+                            <?php if ($currentUserId <= 0): ?>
+                            <a href="/bbs/login.php?redirect=<?php echo urlencode(bbsUrl('topic', $topicId)); ?>" class="btn btn-favorite" rel="nofollow">收藏</a>
+                            <?php else: ?>
+                            <form method="post" action="<?php echo bbsUrl('topic', $topicId); ?>" style="display:inline;margin:0;" onsubmit="return confirm('<?php echo $isFavorited ? '确定取消收藏？' : '确定收藏？'; ?>');">
+                                <?php echo bbs_csrf_field(); ?>
+                                <input type="hidden" name="action" value="favorite">
+                                <button type="submit" class="btn btn-favorite<?php echo $isFavorited ? ' active' : ''; ?>" style="font-family:inherit;"><?php echo $isFavorited ? '已收藏 ✓' : '收藏'; ?></button>
+                            </form>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <!-- 回复列表 -->
+                    <div class="replies-section">
+                        <div class="replies-header">
+                            <h3>回复 (<span id="totalReplies"><?php echo $totalReplies; ?></span>)</h3>
+                            <div class="sort-options">
+                                <a href="javascript:void(0);" class="sort-toggle<?php echo $sortOrder === 'ASC' ? ' sort-active' : ''; ?>" data-sort="asc" onclick="changeSort('asc')">正序</a>
+                                <a href="javascript:void(0);" class="sort-toggle<?php echo $sortOrder === 'DESC' ? ' sort-active' : ''; ?>" data-sort="desc" onclick="changeSort('desc')">倒序</a>
+                            </div>
+                        </div>
+                        <div id="repliesContainer">
+                            <?php foreach ($replies as $index => $reply): ?>
+                            <?php 
+                            $isAiReply = (isset($reply['ll_ai']) && $reply['ll_ai'] == 1);
+                            $isAi1 = ($reply['ll_useid'] == AI_USER_ID);
+                            $isAi2 = ($reply['ll_useid'] == AI2_USER_ID);
+                            $aiImg = $reply['ll_img'] ?: '/images/logo.png';
+                            
+                            // 计算楼层号
+                            if ($sortOrder === 'ASC') {
+                                $floorNum = $index + 2; // 正序：2, 3, 4...
+                            } else {
+                                $floorNum = $totalReplies - $index; // 倒序：最大, 最大-1...
+                            }
+                            
+                            // 检查是否已点赞
+                            $replyZaned = isset($replyZanedMap[$reply['id']]);
+                            $replyZanCount = (int)($reply['ll_zan'] ?? 0);
+                            
+                            // 置顶状态 - 兼容两种方式: ll_ding=1 或 ll_time2='2100-10-10 12:12:12'
+                            $isPinned = !empty($reply['ll_ding']) || $reply['ll_time2'] === '2100-10-10 12:12:12';
+                            ?>
+                            <div class="post reply-post<?php echo $isAiReply ? ' ai-post' : ''; ?><?php echo $isPinned ? ' pinned' : ''; ?>" id="reply-<?php echo $reply['id']; ?>">
+                                <div class="post-header">
+                                    <div class="post-author">
+                                        <?php $replyUserId = $reply['ll_useid'] ?? 0; ?>
+                                        <a href="/bbs/profile.php?id=<?php echo $replyUserId; ?>" class="author-link">
+                                            <img src="<?php echo e($reply['ll_img'] ?: ''); ?>" alt="" class="avatar" loading="lazy" decoding="async" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                            <div class="avatar-fallback" style="display:none; width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); align-items:center; justify-content:center; color:#fff; font-size:16px; font-weight:bold; flex-shrink:0;">
+                                                <?php echo mb_substr($reply['ll_n_name'] ?: $reply['ll_name'], 0, 1); ?>
+                                            </div>
+                                        </a>
+                                        <div class="author-info">
+                                            <a href="/bbs/profile.php?id=<?php echo $replyUserId; ?>" class="username-link"><?php echo e($reply['ll_n_name'] ?: $reply['ll_name']); ?></a>
+                                            <span class="floor"><?php echo $floorNum; ?>楼</span>
+                                            <?php if ($isPinned): ?>
+                                            <span class="pinned-badge">置顶</span>
+                                            <?php endif; ?>
+                                            <?php if ($currentUser && $currentUserId != $replyUserId && !$isAiReply): ?>
+                                            <a href="/bbs/message.php?to=<?php echo $replyUserId; ?>" class="msg-btn-sm" title="发私信">私信</a>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <?php if ($isTopicAuthor || $currentUser): ?>
+                                    <div class="reply-actions">
+                                        <?php if ($currentUser): ?>
+                                        <a href="javascript:void(0);" class="reply-link" onclick="openReplyBox(<?php echo $floorNum; ?>, <?php echo $reply['id']; ?>)">回复</a>
+                                        <?php else: ?>
+                                        <a href="/bbs/login.php?redirect=<?php echo urlencode(bbsUrl('topic', $topicId) . '#reply-' . $reply['id']); ?>" class="reply-link" rel="nofollow">回复</a>
+                                        <?php endif; ?>
+                                        <?php if ($isTopicAuthor): ?>
+                                        <a href="javascript:void(0);" class="pin-btn<?php echo $isPinned ? ' pinned' : ''; ?>" onclick="togglePin(<?php echo $reply['id']; ?>, <?php echo $isPinned ? '0' : '1'; ?>, this)" title="<?php echo $isPinned ? '取消置顶' : '置顶此回复'; ?>">
+                                            <span class="pin-text"><?php echo $isPinned ? '❎'.'取消' : '📌'.'置顶'; ?></span>
+                                        </a>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="post-content">
+                                    <?php echo safe_output(fast_ubb($reply['ll_text'])); ?>
+                                    <?php if (!empty($reply['ll_furl'])): ?>
+                                    <?php 
+                                        $replyImg = trim($reply['ll_furl']);
+                                        // 确保路径格式正确
+                                        if (strpos($replyImg, 'http') === 0) {
+                                            // 已经是完整URL，保持不变
+                                        } elseif (strpos($replyImg, '/bbs/') === 0) {
+                                            // 已经是 /bbs/ 开头，保持不变
+                                        } else {
+                                            // 其他情况，加上 /bbs/ 前缀
+                                            $replyImg = '/bbs/' . ltrim($replyImg, '/');
+                                        }
+                                    ?>
+                                    <div class="reply-images">
+                                        <img src="<?php echo e($replyImg); ?>" alt="附件图片" class="reply-image" loading="lazy" decoding="async" onclick="showImage(this.src)">
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="post-footer">
+                                    <span class="time"><?php echo $reply['ll_time']; ?></span>
+                                    <?php if ($currentUser): ?>
+                                    <a href="javascript:void(0);" class="action-btn reply-zan-btn<?php echo $replyZaned ? ' zaned' : ''; ?>" onclick="toggleZan('reply', <?php echo $reply['id']; ?>, this)">
+                                        <span class="zan-icon"><?php echo $replyZaned ? '💚' : '🤍'; ?></span>
+                                        <span class="zan-count"><?php echo $replyZanCount; ?></span>
+                                    </a>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            
+                            <!-- 子回复容器 - 使用独立wrapper隔离布局 -->
+                            <?php 
+                            $childCount = !empty($reply['children']) ? count($reply['children']) : 0;
+                            $childThreshold = 3; // 超过此数量才折叠
+                            if ($childCount > 0): 
+                            ?>
+                            <div class="sub-replies-wrapper">
+                                <?php if ($childCount > $childThreshold): ?>
+                                <div class="replies-toggle">
+                                    <a href="javascript:void(0);" class="toggle-replies-btn" onclick="toggleReplies(<?php echo $reply['id']; ?>)">
+                                        <span class="toggle-icon">▼</span> 查看<?php echo $childCount; ?>条回复
+                                    </a>
+                                </div>
+                                <div class="sub-replies" id="sub-replies-<?php echo $reply['id']; ?>" style="display:none;">
+                                <?php else: ?>
+                                <div class="sub-replies" id="sub-replies-<?php echo $reply['id']; ?>">
+                                <?php endif; ?>
+                                    <?php 
+                                    $childFloor = 1;
+                                    foreach ($reply['children'] as $child): 
+                                        $childIsAiReply = !empty($child['ll_ai']);
+                                        $childZaned = isset($replyZanedMap[$child['id']]);
+                                        $childZanCount = (int)($child['ll_zan'] ?? 0);
+                                        $childUserId = $child['ll_useid'] ?? 0;
+                                    ?>
+                                    <div class="post reply-post sub-reply<?php echo $childIsAiReply ? ' ai-post' : ''; ?>" id="reply-<?php echo $child['id']; ?>">
+                                        <div class="post-header">
+                                            <div class="post-author">
+                                                <a href="/bbs/profile.php?id=<?php echo $childUserId; ?>" class="author-link">
+                                                    <img src="<?php echo e($child['ll_img'] ?: ''); ?>" alt="" class="avatar avatar-sm" loading="lazy" decoding="async" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                    <div class="avatar-fallback" style="display:none; width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); align-items:center; justify-content:center; color:#fff; font-size:14px; font-weight:bold; flex-shrink:0;">
+                                                        <?php echo mb_substr($child['ll_n_name'] ?: $child['ll_name'], 0, 1); ?>
+                                                    </div>
+                                                </a>
+                                                <div class="author-info">
+                                                    <a href="/bbs/profile.php?id=<?php echo $childUserId; ?>" class="username-link"><?php echo e($child['ll_n_name'] ?: $child['ll_name']); ?></a>
+                                                    <span class="floor sub-floor"><?php echo $floorNum; ?>-<?php echo $childFloor; ?>楼</span>
+                                                    <?php if ($currentUser && $currentUserId != $childUserId && !$childIsAiReply): ?>
+                                                    <a href="/bbs/message.php?to=<?php echo $childUserId; ?>" class="msg-btn-sm" title="发私信">私信</a>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="post-content">
+                                            <?php echo safe_output(fast_ubb($child['ll_text'])); ?>
+                                            <?php if (!empty($child['ll_furl'])): ?>
+                                            <?php 
+                                                $childImg = trim($child['ll_furl']);
+                                                if (strpos($childImg, 'http') !== 0 && strpos($childImg, '/bbs/') !== 0) {
+                                                    $childImg = '/bbs/' . ltrim($childImg, '/');
+                                                }
+                                            ?>
+                                            <div class="reply-images">
+                                                <img src="<?php echo e($childImg); ?>" alt="附件图片" class="reply-image" loading="lazy" decoding="async" onclick="showImage(this.src)">
+                                            </div>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="post-footer">
+                                            <span class="time"><?php echo $child['ll_time']; ?></span>
+                                            <?php if ($currentUser): ?>
+                                            <a href="javascript:void(0);" class="action-btn reply-zan-btn<?php echo $childZaned ? ' zaned' : ''; ?>" onclick="toggleZan('reply', <?php echo $child['id']; ?>, this)">
+                                                <span class="zan-icon"><?php echo $childZaned ? '💚' : '🤍'; ?></span>
+                                                <span class="zan-count"><?php echo $childZanCount; ?></span>
+                                            </a>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <?php 
+                                    $childFloor++;
+                                    endforeach; 
+                                    ?>
+                                </div>
+                            </div>
+                            <?php endif; // $childCount > 0 ?>
+                            
+                            <?php endforeach; ?>
+                        </div>
+                        
+                        <!-- 加载状态 -->
+                        <div id="loadMoreStatus">
+                            <?php if ($totalReplies > $pageSize): ?>
+                            <div class="load-more-btn" onclick="loadMoreReplies()">
+                                <span class="spinner"></span>
+                                加载更多回复
+                            </div>
+                            <?php else: ?>
+                            <div class="no-more">— 已加载全部回复 —</div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <?php
+                    /* [AUTHOR-MORE 2026-10-30] 作者的其他文章：位于回复列表之后、回复框之前 */
+                    $amList  = array();
+                    $amUid   = (int)($topic['ll_useid'] ?? 0);
+                    $amBoard = (int)($topic['ll_idd'] ?? 0);
+                    if ($amUid > 0) {
+                        try {
+                            $amSql = "SELECT t.id, t.ll_biaoti, t.ll_idd, IFNULL(t.ll_rc, 0) AS views,
+                                             DATE_FORMAT(t.ll_time1, '%Y-%m-%d') AS d,
+                                             c.ll_title AS board_name
+                                        FROM ll_lt t
+                                        LEFT JOIN ll_class c ON t.ll_idd = c.id
+                                       WHERE t.ll_useid = ? AND t.id <> ? AND IFNULL(t.ll_or, 0) = 0
+                                       ORDER BY (t.ll_idd = " . $amBoard . ") DESC, t.id DESC
+                                       LIMIT 6";
+                            $amStmt = $pdo->prepare($amSql);
+                            $amStmt->execute(array($amUid, (int)$topicId));
+                            $amList = $amStmt->fetchAll(PDO::FETCH_ASSOC);
+                        } catch (Exception $amEx) {
+                            $amList = array();
+                        }
+                    }
+                    if (count($amList) > 0):
+                        $amName = trim((string)(($topic['author_nick'] ?? '') ?: ($topic['ll_name'] ?? '')));
+                        if ($amName === '') { $amName = '楼主'; }
+                    ?>
+                    <style>
+                    .author-more{margin:28px 0 6px;background:#fff;border:1px solid #e8eaf0;border-radius:12px}
+                    .author-more .am-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;border-bottom:1px solid #f0f1f5;background:linear-gradient(135deg,#f7f8ff 0%,#fdf7ff 100%);border-radius:12px 12px 0 0}
+                    .author-more .am-title{margin:0;font-size:16px;font-weight:600;color:#2b2f3a;line-height:1.4}
+                    .author-more .am-title em{font-style:normal;color:#667eea}
+                    .author-more .am-profile{font-size:13px;color:#667eea;text-decoration:none;white-space:nowrap}
+                    .author-more .am-profile:hover{text-decoration:underline}
+                    .author-more .am-list{list-style:none;margin:0;padding:6px 10px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:2px}
+                    .author-more .am-item{padding:8px 6px;border-radius:8px;transition:background .2s}
+                    .author-more .am-item:hover{background:#f7f8ff}
+                    .author-more .am-link{color:#2b2f3a;font-size:14px;line-height:1.55;text-decoration:none;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+                    .author-more .am-link:hover{color:#667eea}
+                    .author-more .am-meta{margin-top:5px;font-size:12px;color:#9aa0ae;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+                    .author-more .am-board{color:#667eea;background:#eef0ff;border-radius:4px;padding:1px 6px}
+                    .author-more .am-dot{color:#d0d3dc}
+                    @media(max-width:640px){.author-more{margin:20px 0 4px}.author-more .am-list{grid-template-columns:1fr;padding:4px 8px 10px}}
+                    </style>
+                    <section class="author-more" aria-label="作者的其他文章">
+                        <div class="am-head">
+                            <h3 class="am-title"><em><?php echo e($amName); ?></em> 的其他文章</h3>
+                            <a class="am-profile" href="/bbs/profile.php?id=<?php echo $amUid; ?>">作者主页</a>
+                        </div>
+                        <ul class="am-list">
+                            <?php foreach ($amList as $am): ?>
+                            <li class="am-item">
+                                <a class="am-link" href="<?php echo e(bbsUrl('topic', $am['id'])); ?>"><?php echo e($am['ll_biaoti']); ?></a>
+                                <div class="am-meta">
+                                    <?php if (!empty($am['board_name'])): ?>
+                                    <span class="am-board"><?php echo e($am['board_name']); ?></span>
+                                    <span class="am-dot">·</span>
+                                    <?php endif; ?>
+                                    <span class="am-date"><?php echo e($am['d']); ?></span>
+                                    <span class="am-dot">·</span>
+                                    <span class="am-views"><?php echo (int)$am['views']; ?> 次浏览</span>
+                                </div>
+                            </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </section>
+                    <?php endif; ?>
+
+                    <!-- 回复框 -->
+                    <?php if (!$topic['ll_lock']): ?>
+                    <div class="reply-box">
+                        <h3>发表回复</h3>
+                        <?php if ($currentUser): ?>
+                        <form action="/bbs/reply.php" method="post" id="replyForm">
+                            <input type="hidden" name="topic_id" value="<?php echo $topicId; ?>">
+                            <input type="hidden" name="attach_url" id="attachUrl" value="">
+                            <input type="hidden" name="attach_name" id="attachName" value="">
+                            <div id="aiSuggestions" class="ai-suggestions">
+                                <h4>🤖 AI回复建议</h4>
+                                <div id="suggestionList"></div>
+                            </div>
+                            <textarea name="content" id="replyContent" rows="5" placeholder="请输入回复内容... 支持输入[表情名称]添加表情，如[笑][加油]" required></textarea>
+                            <div class="form-actions">
+                                <div class="upload-actions">
+                                    <!-- 表情按钮 -->
+                                    <div class="comment-icon">
+                                        <div class="cicon"></div>
+                                        <div class="modal-tooltip" style="display:none;">
+                                            <div class="tooltip">
+                                                <span data-emoji="[笑]"><img src="/images/20smile-smile.png" alt="笑" title="笑"></span>
+                                                <span data-emoji="[大笑]"><img src="/images/21lol.png" alt="大笑" title="大笑"></span>
+                                                <span data-emoji="[俏皮]"><img src="/images/19qiaopi.png" alt="俏皮" title="俏皮"></span>
+                                                <span data-emoji="[加油]"><img src="/images/08jiayou.png" alt="加油" title="加油"></span>
+                                                <span data-emoji="[鼓鼓掌]"><img src="/images/14guzhang.png" alt="鼓鼓掌" title="鼓鼓掌"></span>
+                                                <span data-emoji="[牛]"><img src="/images/11niubi.png" alt="牛" title="牛"></span>
+                                                <span data-emoji="[怒了]"><img src="/images/24angry.png" alt="怒了" title="怒了"></span>
+                                                <span data-emoji="[哭泣]"><img src="/images/25weep.png" alt="哭泣" title="哭泣"></span>
+                                                <span data-emoji="[好失望]"><img src="/images/18shiwang.png" alt="好失望" title="好失望"></span>
+                                                <span data-emoji="[滴汗]"><img src="/images/10han.png" alt="滴汗" title="滴汗"></span>
+                                                <span data-emoji="[为什么]"><img src="/images/13why.png" alt="为什么" title="为什么"></span>
+                                                <span data-emoji="[摊手]"><img src="/images/12hand.png" alt="摊手" title="摊手"></span>
+                                                <span data-emoji="[好逊]"><img src="/images/15xunka.png" alt="好逊" title="好逊"></span>
+                                                <span data-emoji="[很赞]"><img src="/images/03zan.png" alt="很赞" title="很赞"></span>
+                                                <span data-emoji="[围观]"><img src="/images/27weiguan.png" alt="围观" title="围观"></span>
+                                                <span data-emoji="[心心]"><img src="/images/36heart.png" alt="心心" title="心心"></span>
+                                                <span data-emoji="[心碎了]"><img src="/images/37heartbreak.png" alt="心碎了" title="心碎了"></span>
+                                                <span data-emoji="[献花花]"><img src="/images/38flower.png" alt="献花花" title="献花花"></span>
+                                                <span data-emoji="[干杯]"><img src="/images/40cheers.png" alt="干杯" title="干杯"></span>
+                                                <span data-emoji="[能力圈]"><img src="/images/33nengliquan.png" alt="能力圈" title="能力圈"></span>
+                                                <span data-emoji="[毛估估]"><img src="/images/06maogugu.png" alt="毛估估" title="毛估估"></span>
+                                                <span data-emoji="[护城河]"><img src="/images/28moat.png" alt="护城河" title="护城河"></span>
+                                                <span data-emoji="[赚大了]"><img src="/images/23earn.png" alt="赚大了" title="赚大了"></span>
+                                                <span data-emoji="[亏大了]"><img src="/images/09lose.png" alt="亏大了" title="亏大了"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <label class="upload-btn" for="imageInput" title="上传图片">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                            <polyline points="21 15 16 10 5 21"></polyline>
+                                        </svg>
+                                        <span>图片</span>
+                                    </label>
+                                    <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="handleImageUpload(this)">
+                                    <div id="imagePreview" class="image-preview"></div>
+                                    <button type="button" class="share-game-btn" onclick="openShareGameModal()">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="18" cy="5" r="3"></circle>
+                                            <circle cx="6" cy="12" r="3"></circle>
+                                            <circle cx="18" cy="19" r="3"></circle>
+                                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                                            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                                        </svg>
+                                        <span>分享游戏</span>
+                                    </button>
+                                </div>
+                                <div class="action-btns">
+                                    <button type="button" id="aiHintBtn" class="ai-reply-hint" onclick="getAISuggestion()">
+                                        <span>💡</span> AI建议
+                                    </button>
+                                    <button type="submit" class="btn btn-primary">提交回复</button>
+                                </div>
+                            </div>
+                        </form>
+                        <?php else: ?>
+                        <div class="login-tip">
+                            <p>登录后方可回复</p>
+                            <a href="/bbs/login.php?redirect=<?php echo urlencode(bbsUrl('topic', $topicId)); ?>" class="btn btn-primary" rel="nofollow">登录</a>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                    <?php else: ?>
+                    <div class="locked-tip">本帖已被锁定，无法回复</div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2009 <a href="/" title="7坛游戏社区" class="footer-brand">7坛游戏社区</a> All Rights Reserved</p>
+            <?php include __DIR__ . '/_footer_seo.php'; ?>
+        </div>
+    </footer>
+
+<?php
+// ==================== 缓存写入（仅未登录用户） ====================
+// 注意：第221-223行已经为未登录用户开启了ob_start()，这里不再重复开启
+if ($currentUserId <= 0) {
+    // 输出缓冲已经在第221-223行开启，这里直接准备缓存内容
+}
+?>
+    <!-- 浮动回复框 - 锁定时隐藏 -->
+    <?php if (!$topic['ll_lock']): ?>
+    <div id="floatReplyBox" class="float-reply-box" style="display:none;">
+        <div class="float-reply-header">
+            <span id="replyTarget">回复楼主</span>
+            <a href="javascript:void(0);" class="close-btn" onclick="closeReplyBox()">×</a>
+        </div>
+        <div class="float-reply-body">
+            <textarea id="floatReplyContent" placeholder="请输入回复内容... 支持输入[表情名称]添加表情" rows="4"></textarea>
+            <!-- 工具栏：表情 + 上传 + 分享 -->
+            <div class="float-toolbar">
+                <!-- 表情按钮 -->
+                <div class="comment-icon">
+                    <div class="cicon"></div>
+                    <div class="modal-tooltip" style="display:none;">
+                        <div class="tooltip">
+                            <span data-emoji="[笑]"><img src="/images/20smile-smile.png" alt="笑" title="笑"></span>
+                            <span data-emoji="[大笑]"><img src="/images/21lol.png" alt="大笑" title="大笑"></span>
+                            <span data-emoji="[俏皮]"><img src="/images/19qiaopi.png" alt="俏皮" title="俏皮"></span>
+                            <span data-emoji="[加油]"><img src="/images/08jiayou.png" alt="加油" title="加油"></span>
+                            <span data-emoji="[鼓鼓掌]"><img src="/images/14guzhang.png" alt="鼓鼓掌" title="鼓鼓掌"></span>
+                            <span data-emoji="[牛]"><img src="/images/11niubi.png" alt="牛" title="牛"></span>
+                            <span data-emoji="[怒了]"><img src="/images/24angry.png" alt="怒了" title="怒了"></span>
+                            <span data-emoji="[哭泣]"><img src="/images/25weep.png" alt="哭泣" title="哭泣"></span>
+                            <span data-emoji="[好失望]"><img src="/images/18shiwang.png" alt="好失望" title="好失望"></span>
+                            <span data-emoji="[滴汗]"><img src="/images/10han.png" alt="滴汗" title="滴汗"></span>
+                            <span data-emoji="[为什么]"><img src="/images/13why.png" alt="为什么" title="为什么"></span>
+                            <span data-emoji="[摊手]"><img src="/images/12hand.png" alt="摊手" title="摊手"></span>
+                            <span data-emoji="[好逊]"><img src="/images/15xunka.png" alt="好逊" title="好逊"></span>
+                            <span data-emoji="[很赞]"><img src="/images/03zan.png" alt="很赞" title="很赞"></span>
+                            <span data-emoji="[围观]"><img src="/images/27weiguan.png" alt="围观" title="围观"></span>
+                            <span data-emoji="[心心]"><img src="/images/36heart.png" alt="心心" title="心心"></span>
+                            <span data-emoji="[心碎了]"><img src="/images/37heartbreak.png" alt="心碎了" title="心碎了"></span>
+                            <span data-emoji="[献花花]"><img src="/images/38flower.png" alt="献花花" title="献花花"></span>
+                            <span data-emoji="[干杯]"><img src="/images/40cheers.png" alt="干杯" title="干杯"></span>
+                            <span data-emoji="[能力圈]"><img src="/images/33nengliquan.png" alt="能力圈" title="能力圈"></span>
+                            <span data-emoji="[毛估估]"><img src="/images/06maogugu.png" alt="毛估估" title="毛估估"></span>
+                            <span data-emoji="[护城河]"><img src="/images/28moat.png" alt="护城河" title="护城河"></span>
+                            <span data-emoji="[赚大了]"><img src="/images/23earn.png" alt="赚大了" title="赚大了"></span>
+                            <span data-emoji="[亏大了]"><img src="/images/09lose.png" alt="亏大了" title="亏大了"></span>
+                        </div>
+                    </div>
+                </div>
+                <!-- 上传按钮 -->
+                <label class="upload-btn-sm" for="floatImageInput" title="上传图片">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                </label>
+                <input type="file" id="floatImageInput" accept="image/*" style="display:none" onchange="handleFloatImageUpload(this)">
+                <div id="floatImagePreview" class="image-preview-sm"></div>
+                <!-- 分享按钮 -->
+                <button type="button" class="share-game-btn-sm" onclick="openShareGameModal('float')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="18" cy="5" r="3"></circle>
+                        <circle cx="6" cy="12" r="3"></circle>
+                        <circle cx="18" cy="19" r="3"></circle>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                    </svg>
+                </button>
+            </div>
+            <input type="hidden" id="floatAttachUrl" value="">
+        </div>
+        <div class="float-reply-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeReplyBox()">取消</button>
+            <button type="button" class="btn btn-primary" onclick="submitReply()">提交</button>
+        </div>
+    </div>
+    <?php endif; // end !topic['ll_lock'] for floatReplyBox ?>
+    <div id="floatReplyMask" class="float-reply-mask" style="display:none;" onclick="closeReplyBox()"></div>
+
+    <!-- 分享游戏弹窗 -->
+    <div id="shareGameModal" class="share-game-modal" style="display:none;">
+        <div class="share-game-content">
+            <div class="share-game-header">
+                <h3>分享游戏/帖子</h3>
+                <a href="javascript:void(0);" class="close-share-game" onclick="closeShareGameModal()">×</a>
+            </div>
+            <div class="share-game-tabs">
+                <button class="tab-btn active" data-type="game" onclick="switchShareTab('game')">游戏</button>
+                <button class="tab-btn" data-type="topic" onclick="switchShareTab('topic')">帖子</button>
+            </div>
+            <div class="share-game-search">
+                <input type="text" id="shareSearchInput" placeholder="搜索游戏/帖子..." onkeyup="handleShareSearch(event)">
+                <button type="button" onclick="doShareSearch()">搜索</button>
+            </div>
+            <div class="share-game-results" id="shareGameResults">
+                <div class="search-tip">输入关键词搜索游戏或帖子</div>
+            </div>
+        </div>
+    </div>
+    <div id="shareGameMask" class="share-game-mask" style="display:none;" onclick="closeShareGameModal()"></div>
+
+    <!-- 分享弹窗 -->
+    <div id="shareModal" class="share-modal" style="display:none;">
+        <div class="share-content">
+            <h3>分享到</h3>
+            <div class="share-links">
+                <a href="javascript:void(0);" class="share-link" onclick="shareToWeixin()">
+                    <span class="share-icon">💚</span>
+                    <span>微信</span>
+                </a>
+                <a href="javascript:void(0);" class="share-link" onclick="shareToWeibo()">
+                    <span class="share-icon">🔴</span>
+                    <span>微博</span>
+                </a>
+                <a href="javascript:void(0);" class="share-link" onclick="shareToQQ()">
+                    <span class="share-icon">💬</span>
+                    <span>QQ</span>
+                </a>
+                <a href="javascript:void(0);" class="share-link" onclick="copyLink()">
+                    <span class="share-icon">🔗</span>
+                    <span>复制链接</span>
+                </a>
+            </div>
+            <button class="share-close" onclick="hideShareModal()">取消</button>
+        </div>
+    </div>
+
+    <script>
+    // ==================== view.php 专用 JS ====================
+
+    // ========== 浮动回复框功能 ==========
+    let currentFloor = 0;
+    let currentReplyToId = 0;
+
+    function openReplyBox(floor, replyToId) {
+        currentFloor = floor;
+        currentReplyToId = replyToId;
+        const targetLabel = replyToId > 0 ? '回复 ' + floor + '楼' : '回复楼主';
+        document.getElementById('replyTarget').textContent = targetLabel;
+        document.getElementById('floatReplyContent').value = '';
+        document.getElementById('floatReplyBox').style.display = 'block';
+        document.getElementById('floatReplyMask').style.display = 'block';
+        document.getElementById('floatReplyContent').focus();
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeReplyBox() {
+        document.getElementById('floatReplyBox').style.display = 'none';
+        document.getElementById('floatReplyMask').style.display = 'none';
+        document.body.style.overflow = '';
+        document.getElementById('floatAttachUrl').value = '';
+        document.getElementById('floatImagePreview').innerHTML = '';
+    }
+
+    // ========== 图片上传处理（底部回复框） ==========
+    async function handleImageUpload(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const preview = document.getElementById('imagePreview');
+        preview.innerHTML = '<div class="upload-loading">上传中...</div>';
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const response = await fetch('<?php echo "/bbs/upload.php"; ?>', { method: 'POST', body: formData });
+            const result = await response.json();
+            if (result.code === 200) {
+                document.getElementById('attachUrl').value = result.fileurl;
+                preview.innerHTML = '<div class="preview-item"><img src="' + result.fileurl + '" alt="预览"><span class="remove-btn" onclick="removeImage()">×</span></div>';
+            } else { alert(result.msg || '上传失败'); preview.innerHTML = ''; }
+        } catch (error) { console.error('上传失败:', error); alert('上传失败，请重试'); preview.innerHTML = ''; }
+        input.value = '';
+    }
+
+    function removeImage() {
+        document.getElementById('attachUrl').value = '';
+        document.getElementById('imagePreview').innerHTML = '';
+    }
+
+    // ========== 图片上传处理（浮动回复框） ==========
+    async function handleFloatImageUpload(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const preview = document.getElementById('floatImagePreview');
+        preview.innerHTML = '<div class="upload-loading-sm">...</div>';
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const response = await fetch('<?php echo "/bbs/upload.php"; ?>', { method: 'POST', body: formData });
+            const result = await response.json();
+            if (result.code === 200) {
+                document.getElementById('floatAttachUrl').value = result.fileurl;
+                preview.innerHTML = '<div class="preview-item-sm"><img src="' + result.fileurl + '" alt="预览"><span class="remove-btn-sm" onclick="removeFloatImage()">×</span></div>';
+            } else { alert(result.msg || '上传失败'); preview.innerHTML = ''; }
+        } catch (error) { console.error('上传失败:', error); preview.innerHTML = ''; }
+        input.value = '';
+    }
+
+    function removeFloatImage() {
+        document.getElementById('floatAttachUrl').value = '';
+        document.getElementById('floatImagePreview').innerHTML = '';
+    }
+
+    // ========== 表情相关函数 ==========
+    function insertEmoji(emoji, textareaId) {
+        const textarea = document.getElementById(textareaId);
+        if (!textarea) return;
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = textarea.value;
+        textarea.value = text.substring(0, start) + emoji + text.substring(end);
+        textarea.selectionStart = textarea.selectionEnd = start + emoji.length;
+        textarea.focus();
+        $('.modal-tooltip').fadeOut();
+    }
+
+    $(function(){
+        $(document).on("click", ".comment-icon", function(event){ $(this).find('.modal-tooltip').fadeIn(); event.stopPropagation(); });
+        $(document).on("click", ".modal-tooltip span", function(event){
+            event.stopPropagation(); event.preventDefault();
+            var emoji = $(this).data('emoji'); if (!emoji) return;
+            var replyBox = $(this).closest('.float-reply-box, .reply-box');
+            if (replyBox.length) { var textarea = replyBox.find('textarea'); if (textarea.length) { insertEmoji(emoji, textarea.attr('id')); return; } }
+            insertEmoji(emoji, 'replyContent');
+        });
+        $('body').on("click", function(event){ if (!$(event.target).closest('.modal-tooltip, .comment-icon').length) { $('.modal-tooltip').fadeOut(); } });
+    });
+
+    // ========== 提交回复 ==========
+    async function submitReply() {
+        const content = document.getElementById('floatReplyContent').value.trim();
+        if (!content) { alert('请输入回复内容'); return; }
+        const formData = new FormData();
+        formData.append('topic_id', topicId);
+        formData.append('content', content);
+        formData.append('floor', currentFloor);
+        formData.append('parent_id', currentReplyToId);
+        const attachUrl = document.getElementById('floatAttachUrl').value;
+        if (attachUrl) { formData.append('attach_url', attachUrl); }
+        try {
+            const response = await fetch('<?php echo "/bbs/reply.php"; ?>', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: formData });
+            const result = await response.json();
+            if (result.code === 200) { closeReplyBox(); window.location.reload(); }
+            else { alert(result.msg || '提交失败'); }
+        } catch (error) { console.error('提交失败:', error); alert('提交失败，请重试'); }
+    }
+
+    // ========== 排序切换 ==========
+    function changeSort(sort) { if (sort === currentSort) return; window.location.href = '<?php echo "/bbs/"; ?>' + topicId + '/?sort=' + sort; }
+
+    // ========== 加载更多回复 ==========
+    async function loadMoreReplies() {
+        if (isLoading) return;
+        if (currentPage >= totalPages) { document.getElementById('loadMoreStatus').innerHTML = '<div class="no-more">— 已加载全部回复 —</div>'; return; }
+        isLoading = true;
+        const statusDiv = document.getElementById('loadMoreStatus');
+        statusDiv.innerHTML = '<div class="loading-more"><span class="spinner"></span>加载中...</div>';
+        try {
+            const formData = new FormData();
+            formData.append('topic_id', topicId); formData.append('page', currentPage + 1); formData.append('sort', currentSort);
+            const response = await fetch('<?php echo "/bbs/load_replies.php"; ?>', { method: 'POST', body: formData });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const result = await response.json();
+            if (result.code === 200 && result.data && result.data.length > 0) {
+                const container = document.getElementById('repliesContainer');
+                result.data.forEach(reply => {
+                    const aiClass = reply.is_ai ? ' ai-post' : '';
+                    const isChild = reply.type === 'child';
+                    const floorClass = isChild ? ' sub-floor' : '';
+                    const subRepliesClass = isChild ? ' sub-reply' : '';
+                    const zanClass = reply.zaned ? ' zaned' : '';
+                    const zanIcon = reply.zaned ? '💚' : '🤍';
+                    let html = '<div class="post reply-post' + aiClass + subRepliesClass + '" id="reply-' + reply.id + '"><div class="post-header"><div class="post-author">' +
+                        (reply.avatar ? '<img src="' + reply.avatar + '" alt="" class="avatar' + (isChild ? ' avatar-sm' : '') + '" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';">' : '') +
+                        '<div class="avatar-fallback" style="' + (reply.avatar ? 'display:none;' : 'display:flex;') + ' width:' + (isChild ? '32px' : '40px') + '; height:' + (isChild ? '32px' : '40px') + '; border-radius:50%; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); align-items:center; justify-content:center; color:#fff; font-size:' + (isChild ? '14px' : '16px') + '; font-weight:bold; flex-shrink:0;">' + reply.username.charAt(0) + '</div>' +
+                        '<div class="author-info"><span class="username">' + reply.username + '</span><span class="floor' + floorClass + '">' + reply.floor_display + '</span></div></div>' +
+                        (reply.can_reply ? '<a href="javascript:void(0);" class="reply-link" onclick="openReplyBox(' + reply.floor_num + ', ' + reply.id + ')">回复</a>' : '') +
+                        '</div><div class="post-content">' + reply.content + (reply.image ? '<div class="reply-images"><img src="' + reply.image + '" alt="附件图片" class="reply-image" onclick="showImage(this.src)"></div>' : '') + '</div><div class="post-footer"><span class="time">' + reply.time + '</span>' +
+                        '<a href="javascript:void(0);" class="action-btn reply-zan-btn' + zanClass + '" onclick="toggleZan(\'reply\', ' + reply.id + ', this)"><span class="zan-icon">' + zanIcon + '</span><span class="zan-count">' + reply.zan_count + '</span></a></div></div>';
+                    container.insertAdjacentHTML('beforeend', html);
+                });
+                currentPage++;
+                if (currentPage >= totalPages) { document.getElementById('loadMoreStatus').innerHTML = '<div class="no-more">— 已加载全部回复 —</div>'; }
+                else { document.getElementById('loadMoreStatus').innerHTML = ''; }
+            } else { document.getElementById('loadMoreStatus').innerHTML = '<div class="no-more">— 已加载全部回复 —</div>'; currentPage = totalPages; }
+        } catch (error) { console.error('加载失败:', error); statusDiv.innerHTML = '<div class="loading-more" style="color:#e74c3c;">加载失败，请滚动重试</div>'; }
+        isLoading = false;
+    }
+
+    function checkAndLoadMore() {
+        if (currentPage >= totalPages) { document.getElementById('loadMoreStatus').innerHTML = '<div class="no-more">— 已加载全部回复 —</div>'; return; }
+        const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+        const scrollTop = Math.max(document.documentElement.scrollTop, document.body.scrollTop);
+        const clientHeight = document.documentElement.clientHeight;
+        if (scrollTop + clientHeight >= scrollHeight - 200) { if (!isLoading) loadMoreReplies(); }
+    }
+    let scrollTimer = null;
+    window.addEventListener('scroll', function() { if (scrollTimer) clearTimeout(scrollTimer); scrollTimer = setTimeout(checkAndLoadMore, 100); });
+
+    // ========== 展开/折叠子回复 ==========
+    function toggleReplies(replyId) {
+        const repliesDiv = document.getElementById('sub-replies-' + replyId);
+        const toggleBtn = repliesDiv ? repliesDiv.previousElementSibling.querySelector('.toggle-replies-btn') : null;
+        if (!repliesDiv) return;
+        const isHidden = repliesDiv.style.display === 'none' || repliesDiv.style.display === '';
+        if (isHidden) { repliesDiv.style.display = 'block'; if (toggleBtn) toggleBtn.innerHTML = '<span class="toggle-icon">▲</span> 收起回复'; }
+        else { repliesDiv.style.display = 'none'; if (toggleBtn) toggleBtn.innerHTML = '<span class="toggle-icon">▼</span> 查看' + repliesDiv.children.length + '条回复'; }
+    }
+
+    // ========== 点赞功能 ==========
+    async function toggleZan(type, id, btnElement) {
+        try {
+            const formData = new FormData();
+            formData.append('type', type); formData.append('id', id);
+            const response = await fetch('<?php echo "/bbs/zan.php"; ?>', { method: 'POST', body: formData });
+            const result = await response.json();
+            if (result.code === 200) {
+                if (type === 'topic') {
+                    const zanBtn = document.getElementById('topicZanBtn');
+                    const zanIcon = document.getElementById('topicZanIcon');
+                    const zanCount = document.getElementById('topicZanCount');
+                    if (result.zaned) { zanBtn.classList.add('zaned'); zanIcon.textContent = '💚'; } else { zanBtn.classList.remove('zaned'); zanIcon.textContent = '🤍'; }
+                    zanCount.textContent = result.zan_count;
+                } else if (btnElement) {
+                    const zanIcon = btnElement.querySelector('.zan-icon');
+                    const zanCount = btnElement.querySelector('.zan-count');
+                    if (result.zaned) { btnElement.classList.add('zaned'); zanIcon.textContent = '💚'; } else { btnElement.classList.remove('zaned'); zanIcon.textContent = '🤍'; }
+                    zanCount.textContent = result.zan_count;
+                }
+            } else if (result.code === 401) { alert('请先登录'); window.location.href = 'login.php?redirect=' + encodeURIComponent(window.location.pathname + '?id=' + topicId); }
+            else { alert(result.msg || '操作失败'); }
+        } catch (error) { console.error('点赞失败:', error); alert('操作失败，请重试'); }
+    }
+
+    // ========== 现金任务接单 ==========
+    async function applyCashTask(bbsPostId, taskId) {
+        const btn = document.getElementById('btnApplyTask');
+        if (!btn) return;
+        btn.textContent = '处理中...';
+        btn.style.pointerEvents = 'none';
+        try {
+            const formData = new FormData();
+            formData.append('bbs_post_id', bbsPostId);
+            formData.append('task_id', taskId);
+            const response = await fetch('<?php echo "/bbs/task_apply.php"; ?>', {
+                method: 'POST',
+                body: formData,
+                credentials: 'include'
+            });
+            // 检查 HTTP 状态
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+            // 检查 Content-Type 是否为 JSON
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                const text = await response.text();
+                throw new Error('非JSON响应: ' + text.substring(0, 200));
+            }
+            const result = await response.json();
+            if (result.code === 0) {
+                btn.textContent = '已申请 ✓';
+                btn.classList.add('applied');
+                btn.style.pointerEvents = 'none';
+                alert('接单成功！请等待金主确认。');
+            } else if (result.code === 401) {
+                alert('请先登录');
+                window.location.href = '<?php echo "/bbs/login.php"; ?>?redirect=' + encodeURIComponent(window.location.pathname + '?id=' + topicId);
+            } else if (result.code === 424) {
+                if (confirm('参与现金任务需先完成实名认证，是否现在前往认证？')) {
+                    window.location.href = '<?php echo "/bbs/user.php"; ?>?tab=verify';
+                }
+                btn.textContent = '💰 接单';
+                btn.style.pointerEvents = 'auto';
+            } else {
+                alert(result.msg || '接单失败，请稍后重试');
+                btn.textContent = '💰 接单';
+                btn.style.pointerEvents = 'auto';
+            }
+        } catch (error) {
+            console.error('接单失败:', error);
+            alert('接单失败: ' + (error.message || '请稍后重试'));
+            btn.textContent = '💰 接单';
+            btn.style.pointerEvents = 'auto';
+        }
+    }
+
+    // ========== 置顶回复功能 ==========
+    async function togglePin(replyId, action, btnElement) {
+        try {
+            const formData = new FormData();
+            formData.append('reply_id', replyId); formData.append('action', action);
+            const response = await fetch('<?php echo "/bbs/pin.php"; ?>', { method: 'POST', body: formData, credentials: 'include' });
+            if (!response.ok) throw new Error('HTTP错误: ' + response.status);
+            const result = await response.json();
+            if (result.code === 200) {
+                const replyPost = document.getElementById('reply-' + replyId);
+                if (result.ding == 1) {
+                    if (replyPost) replyPost.classList.add('pinned');
+                    if (btnElement) { btnElement.classList.add('pinned'); const pinText = btnElement.querySelector('.pin-text'); if (pinText) pinText.textContent = '❎取消'; btnElement.title = '点击取消置顶'; btnElement.setAttribute('onclick', 'togglePin(' + replyId + ', 0, this)'); }
+                    const floorSpan = document.querySelector('#reply-' + replyId + ' .floor');
+                    if (floorSpan && !floorSpan.nextElementSibling?.classList.contains('pinned-badge')) { const badge = document.createElement('span'); badge.className = 'pinned-badge'; badge.textContent = '置顶'; floorSpan.insertAdjacentElement('afterend', badge); }
+                } else {
+                    if (replyPost) replyPost.classList.remove('pinned');
+                    if (btnElement) { btnElement.classList.remove('pinned'); const pinText = btnElement.querySelector('.pin-text'); if (pinText) pinText.textContent = '📌置顶'; btnElement.title = '点击置顶'; btnElement.setAttribute('onclick', 'togglePin(' + replyId + ', 1, this)'); }
+                    const badge = document.querySelector('#reply-' + replyId + ' .pinned-badge'); if (badge) badge.remove();
+                }
+            } else if (result.code === 403) { alert(result.msg || '只有楼主才能置顶回复'); }
+            else if (result.code === 401) { alert('请先登录'); window.location.href = 'login.php?redirect=' + encodeURIComponent(window.location.pathname + '?id=' + topicId); }
+            else { alert(result.msg || '操作失败，请刷新重试'); }
+        } catch (error) { console.error('置顶失败:', error); alert('操作失败: ' + error.message); }
+    }
+
+    // ========== 版主操作 ==========
+    async function toggleTopicAction(topicId, action) {
+        try {
+            const formData = new FormData();
+            formData.append('topic_id', topicId); formData.append('action', action);
+            const response = await fetch('<?php echo "/bbs/topic_action_debug.php"; ?>', { method: 'POST', body: formData, credentials: 'include' });
+            if (!response.ok) throw new Error('HTTP错误: ' + response.status);
+            const result = await response.json();
+            if (result.code === 200) {
+                const isActive = result.value == 1;
+                if (action === 'jing') { const btn = document.querySelector('.mod-jing'); if (btn) { btn.classList.toggle('active', isActive); btn.innerHTML = isActive ? '❎取消精华' : '⭐加精'; } }
+                else if (action === 'ding') { const btn = document.querySelector('.mod-ding'); if (btn) { btn.classList.toggle('active', result.value == 1); btn.innerHTML = result.value == 1 ? '❎取消置顶' : '📌置顶'; } updateTopicTag('ding', result.value == 1); }
+                else if (action === 'lock') { const btn = document.querySelector('.mod-lock'); if (btn) { btn.classList.toggle('active', result.value == 1); btn.innerHTML = result.value == 1 ? '🔓解锁' : '🔒锁定'; } updateTopicTag('lock', result.value == 1); const replyBtns = document.querySelectorAll('.btn-reply'); replyBtns.forEach(b => b.style.display = result.value == 1 ? 'none' : ''); if (result.value == 1) showLockTip(); else hideLockTip(); }
+                else if (action === 'hide') { const btn = document.querySelector('.mod-hide'); if (btn) { btn.classList.toggle('active', result.value == 1); btn.innerHTML = result.value == 1 ? '👁️显示' : '🚫隐藏'; } updateTopicTag('hide', result.value == 1); updateHiddenNotice(result.value == 1); }
+            } else if (result.code === 403) { alert(result.msg || '无权限'); }
+            else if (result.code === 401) { alert('请先登录'); }
+            else { alert(result.msg || '操作失败'); }
+        } catch (error) { console.error('版主操作失败:', error); alert('操作失败: ' + error.message); }
+    }
+
+    function updateTopicTag(tag, show) {
+        const topicHeader = document.querySelector('.topic-header h1'); if (!topicHeader) return;
+        const tagMap = { ding: ['tag-top', '置顶'], jing: ['tag-jing', '精华'], lock: ['tag-lock', '锁定'], hide: ['tag-hide', '已隐藏'] };
+        const info = tagMap[tag]; if (!info) return;
+        let tagEl = topicHeader.querySelector('.' + info[0]);
+        if (show && !tagEl) { const span = document.createElement('span'); span.className = 'tag ' + info[0]; span.textContent = info[1]; topicHeader.insertBefore(span, topicHeader.firstChild); }
+        else if (!show && tagEl) { tagEl.remove(); }
+    }
+
+    function showLockTip() {
+        const repliesSection = document.querySelector('.replies-section');
+        if (repliesSection && !document.querySelector('.lock-tip')) { const tip = document.createElement('div'); tip.className = 'lock-tip'; tip.style.cssText = 'background:#f8d7da;color:#721c24;padding:15px 20px;border-radius:8px;margin-bottom:20px;text-align:center;'; tip.innerHTML = '🔒 本帖已被锁定，禁止回复'; repliesSection.insertBefore(tip, repliesSection.firstChild); }
+    }
+    function hideLockTip() { const tip = document.querySelector('.lock-tip'); if (tip) tip.remove(); }
+    function updateHiddenNotice(isHidden) {
+        const topicView = document.querySelector('.topic-view'); if (!topicView) return;
+        const existingNotice = document.querySelector('.hidden-topic-notice'); if (existingNotice) existingNotice.remove();
+        if (isHidden) { const notice = document.createElement('div'); notice.className = 'hidden-topic-notice'; notice.innerHTML = '<strong>🚫 此帖已被版主隐藏</strong><br>内容包含违规信息已被屏蔽'; topicView.insertBefore(notice, topicView.firstChild); const mainPost = document.querySelector('.main-post'); if (mainPost) { const contentDiv = mainPost.querySelector('.post-content'); if (contentDiv) { contentDiv.style.filter = 'blur(8px)'; contentDiv.style.userSelect = 'none'; contentDiv.style.pointerEvents = 'none'; } } }
+        else { const mainPost = document.querySelector('.main-post'); if (mainPost) { const contentDiv = mainPost.querySelector('.post-content'); if (contentDiv) { contentDiv.style.filter = ''; contentDiv.style.userSelect = ''; contentDiv.style.pointerEvents = ''; } } }
+    }
+
+    // ========== 分享弹窗 ==========
+    function showShareModal() { document.getElementById('shareModal').classList.add('show'); }
+    function hideShareModal() { document.getElementById('shareModal').classList.remove('show'); }
+    function getShareUrl() { return window.location.href; }
+    function shareToWeixin() { if (navigator.clipboard) { navigator.clipboard.writeText(getShareUrl()).then(() => { alert('链接已复制，可粘贴到微信分享'); }); } else { copyLink(); } hideShareModal(); }
+    function copyLink() { if (navigator.clipboard) { navigator.clipboard.writeText(getShareUrl()).then(() => { alert('链接已复制到剪贴板'); }).catch(() => { prompt('请复制以下链接:', getShareUrl()); }); } else { prompt('请复制以下链接:', getShareUrl()); } hideShareModal(); }
+
+    // ========== 分享游戏功能 ==========
+    let shareSearchType = 'game';
+    let currentReplyBox = 'main';
+    function openShareGameModal(replyBox) { currentReplyBox = replyBox || 'main'; document.getElementById('shareGameModal').style.display = 'block'; document.getElementById('shareGameMask').style.display = 'block'; document.getElementById('shareSearchInput').value = ''; document.getElementById('shareGameResults').innerHTML = '<div class="search-tip">输入关键词搜索游戏或帖子</div>'; document.getElementById('shareSearchInput').focus(); }
+    function closeShareGameModal() { document.getElementById('shareGameModal').style.display = 'none'; document.getElementById('shareGameMask').style.display = 'none'; }
+    function switchShareTab(type) { shareSearchType = type; document.querySelectorAll('.share-game-tabs .tab-btn').forEach(btn => { btn.classList.toggle('active', btn.dataset.type === type); }); const keyword = document.getElementById('shareSearchInput').value.trim(); if (keyword) doShareSearch(); }
+    function handleShareSearch(event) { if (event.key === 'Enter') doShareSearch(); }
+    async function doShareSearch() {
+        const keyword = document.getElementById('shareSearchInput').value.trim(); if (!keyword) { alert('请输入搜索关键词'); return; }
+        const resultsDiv = document.getElementById('shareGameResults'); resultsDiv.innerHTML = '<div class="search-tip">🔍 搜索中...</div>';
+        try {
+            const response = await fetch('<?php echo "/bbs/share_search.php"; ?>?ac=' + shareSearchType + '&keyword=' + encodeURIComponent(keyword), { credentials: 'include' });
+            const result = await response.json();
+            if (result.code === 401) { resultsDiv.innerHTML = '<div class="search-tip">请先登录后再使用分享功能</div>'; return; }
+            if (result.code === 200 && result.data.length > 0) {
+                let html = '';
+                result.data.forEach(item => {
+                    const shareText = item.share_text.replace(/<br\s*\/?>/gi, '\n');
+                    if (item.type === 'game') { html += '<div class="share-item" onclick="insertShareGame(this.dataset.text)" data-text="' + encodeURIComponent(shareText) + '"><img src="' + (item.logo || '/images/default-game.png') + '" alt="" class="share-item-img" onerror="this.src=\'/images/default-game.png\'"><div class="share-item-info"><div class="share-item-title">🎮 ' + escapeHtml(item.title) + '</div><div class="share-item-desc">' + escapeHtml(item.category) + '</div></div></div>'; }
+                    else { html += '<div class="share-item" onclick="insertShareGame(this.dataset.text)" data-text="' + encodeURIComponent(shareText) + '"><div class="share-item-icon">📝</div><div class="share-item-info"><div class="share-item-title">📝 ' + escapeHtml(item.title) + '</div><div class="share-item-desc">来自 ' + escapeHtml(item.category) + ' · 回复 ' + item.reply_count + '</div></div></div>'; }
+                });
+                resultsDiv.innerHTML = html;
+            } else { resultsDiv.innerHTML = '<div class="search-tip">没有找到相关结果</div>'; }
+        } catch (error) { console.error('搜索失败:', error); resultsDiv.innerHTML = '<div class="search-tip">搜索失败，请确保已登录后重试</div>'; }
+    }
+    function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str; return div.innerHTML.replace(/'/g, "\\'"); }
+    function insertShareGame(encodedText) {
+        const shareText = decodeURIComponent(encodedText);
+        if (currentReplyBox === 'float') { const textarea = document.getElementById('floatReplyContent'); textarea.value = (textarea.value ? textarea.value + '\n\n' : '') + shareText; }
+        else { const textarea = document.getElementById('replyContent'); textarea.value = (textarea.value ? textarea.value + '\n\n' : '') + shareText; }
+        closeShareGameModal();
+    }
+
+    // ========== AI辅助回复 ==========
+    async function getAISuggestion() {
+        const btn = document.getElementById('aiHintBtn'); const suggestionsDiv = document.getElementById('aiSuggestions'); const suggestionList = document.getElementById('suggestionList');
+        btn.classList.add('loading'); btn.innerHTML = '<span>⏳</span> AI生成中...';
+        try {
+            const formData = new FormData(); formData.append('title', topicTitle); formData.append('content', topicContent);
+            const response = await fetch('<?php echo "/bbs/ai_suggest.php"; ?>', { method: 'POST', body: formData });
+            const result = await response.json();
+            if (result.code === 200 && result.data) {
+                const suggestions = result.data.split('\n').filter(s => s.trim()); suggestionList.innerHTML = '';
+                if (suggestions.length > 0) { suggestions.forEach(suggestion => { const div = document.createElement('div'); div.className = 'ai-suggestion-item'; div.textContent = suggestion; div.onclick = function() { document.getElementById('replyContent').value = suggestion; suggestionsDiv.classList.remove('show'); }; suggestionList.appendChild(div); }); suggestionsDiv.classList.add('show'); }
+                else { alert('暂无建议，可以直接回复哦~'); }
+            } else { alert(result.msg || '获取建议失败'); }
+        } catch (error) { console.error('AI建议错误:', error); alert('获取AI建议失败，请稍后重试'); }
+        btn.classList.remove('loading'); btn.innerHTML = '<span>💡</span> AI建议';
+    }
+
+    // ========== 附件预览功能 ==========
+    function showImagePreview(index) { if (allImages.length === 0) return; currentImageIndex = index; updatePreviewImage(); document.getElementById('imagePreviewModal').classList.add('show'); document.body.style.overflow = 'hidden'; }
+    function closeImagePreview() { document.getElementById('imagePreviewModal').classList.remove('show'); document.body.style.overflow = ''; }
+    function showImage(src) { const modal = document.getElementById('imagePreviewModal'); const img = modal.querySelector('.preview-image'); if (img) { img.src = src; modal.classList.add('show'); document.body.style.overflow = 'hidden'; } }
+    function updatePreviewImage() { document.getElementById('previewImage').src = allImages[currentImageIndex]; document.getElementById('previewCounter').textContent = (currentImageIndex + 1) + ' / ' + allImages.length; }
+    function prevImage() { currentImageIndex = (currentImageIndex - 1 + allImages.length) % allImages.length; updatePreviewImage(); }
+    function nextImage() { currentImageIndex = (currentImageIndex + 1) % allImages.length; updatePreviewImage(); }
+    document.addEventListener('keydown', function(e) { if (!document.getElementById('imagePreviewModal').classList.contains('show')) return; if (e.key === 'Escape') closeImagePreview(); if (e.key === 'ArrowLeft') prevImage(); if (e.key === 'ArrowRight') nextImage(); });
+
+    // ========== 页面初始化 ==========
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.post-content img, .reply-content img').forEach(function(img) {
+            if (img.parentElement && img.parentElement.getAttribute('data-emoji')) return;
+            if (img.width <= 30 && img.height <= 30) return;
+            img.style.maxWidth = '100%'; img.style.maxHeight = '400px'; img.style.objectFit = 'contain'; img.style.borderRadius = '8px'; img.style.cursor = 'pointer';
+            img.onerror = function() { this.style.display = 'none'; var placeholder = document.createElement('div'); placeholder.style.cssText = 'width:100%; height:60px; background:linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%); border-radius:8px; display:flex; align-items:center; justify-content:center; color:#999; font-size:12px; margin:10px 0;'; placeholder.innerHTML = '<span>📷 图片加载失败</span>'; this.parentNode.insertBefore(placeholder, this); };
+        });
+        document.getElementById('imagePreviewModal').addEventListener('click', function(e) { if (e.target === this) closeImagePreview(); });
+        document.getElementById('shareGameModal').addEventListener('click', function(e) { if (e.target === this) closeShareGameModal(); });
+        document.getElementById('shareModal').addEventListener('click', function(e) { if (e.target === this) hideShareModal(); });
+    });
+
+    </script>
+    <script>
+    // PHP变量初始化
+    const topicId = <?php echo $topicId; ?>;
+    const totalReplies = <?php echo $totalReplies; ?>;
+    const totalPages = <?php echo $totalPages; ?>;
+    const pageSize = <?php echo $pageSize; ?>;
+    const isLocked = <?php echo !empty($topic['ll_lock']) ? 'true' : 'false'; ?>;
+    const isHidden = <?php echo !empty($topic['ll_hide']) ? 'true' : 'false'; ?>;
+    let currentPage = 1;
+    let currentSort = '<?php echo strtolower($sortOrder); ?>';
+    let isLoading = false;
+    const topicTitle = <?php echo json_encode(toHalfWidth($topic['ll_biaoti'])); ?>;
+    const topicContent = <?php echo json_encode(strip_tags($topic['ll_text'])); ?>;
+    const allImages = <?php echo json_encode($images ?? []); ?>;
+    let currentImageIndex = 0;
+
+    // 初始状态检查
+    if (isLocked) showLockTip();
+    if (isHidden) updateHiddenNotice(true);
+
+    // shareToWeibo 需要 PHP 变量
+    function shareToWeibo() {
+        const title = <?php echo json_encode(toHalfWidth($topic['ll_biaoti'])); ?>;
+        const url = getShareUrl();
+        const weiboUrl = 'http://service.weibo.com/share/share.php?title=' + encodeURIComponent(title) + '&url=' + encodeURIComponent(url);
+        window.open(weiboUrl, '_blank');
+        hideShareModal();
+    }
+
+    // shareToQQ 需要 PHP 变量
+    function shareToQQ() {
+        const title = <?php echo json_encode(toHalfWidth($topic['ll_biaoti'])); ?>;
+        const url = getShareUrl();
+        const qqUrl = 'http://connect.qq.com/widget/shareqq/index.html?url=' + encodeURIComponent(url) + '&title=' + encodeURIComponent(title);
+        window.open(qqUrl, '_blank');
+        hideShareModal();
+    }
+    </script>
+
+    
+    <!-- 返回顶部 -->
+    <button class="back-to-top" id="backToTop" title="返回顶部">↑</button>
+    <script src="<?php echo $baseUrl; ?>js/common.js"></script>
+<?php $mobileNavActive = 'list'; include __DIR__ . '/mobile_nav.php'; ?>
+</body>
+</html>
+
+<?php
+// ==================== 写入页面缓存（仅未登录用户） ====================
+if ($currentUserId <= 0) {
+    $html = ob_get_contents();
+    if (!empty($html)) {
+        $__tmp = $cacheFile . '.' . getmypid() . '.tmp'; @file_put_contents($__tmp, $html); @rename($__tmp, $cacheFile);
+    }
+    ob_end_flush();
+}
+?>
+

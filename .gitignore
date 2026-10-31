@@ -233,3 +233,22 @@ data/auth/
 
 # 带时间戳的备份文件（已有 *.bak，此处覆盖 .bak_YYYYmmdd_HHMMSS 形式）
 *.bak_*
+
+# ===== 20261025 清理后新增 =====
+# 根目录诊断产物文本（.py 已有 /_diag*.py 规则）
+/_diag*.txt
+/_g*.py
+/_g[0-9]*.py
+# 临时工作区（审计脚本、清点结果都放这里）
+/_scratch/
+/_final_report.json
+/_backup_db.py
+/_clean_*.py
+
+# ===== 验收截图与备份快照（体积大，不入库）=====
+data/_backup/
+data/pager_shots/
+data/profile_shots/
+data/_bjh_img/
+data/gzh_render/
+data/camera_vision/

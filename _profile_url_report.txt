@@ -1,0 +1,93 @@
+=== 1. 帖子页 84008 中 profile.php 出现位置 ===
+at 8312 : ...         <div class="post main-post">                          <div class="post-author">                                                          <a href="/bbs/profile.php?id=1" class="author-link">                                                                  <i...
+at 9114 : ...                 </div>                              </a>                              <div class="author-info">                                  <a href="/bbs/profile.php?id=1" class="username-link">老马</a>                                                            ...
+at 24175 : ...   <div class="am-head">                              <h3 class="am-title"><em>老马</em> 的其他文章</h3>                              <a class="am-profile" href="/bbs/profile.php?id=1">作者主页</a>                          </div>                          <ul class="am-list">  ...
+
+=== 2. robots.txt (2029 bytes) ===
+# =====================================================================
+#  robots.txt — 7坛游戏社区
+#  站点：https://www.7tan.com
+#  最后更新：2026-10-09
+# =====================================================================
+#  · 全站为单一简体中文；多语言版本已下线，
+#    /en/ /zh-tw/ /ja/ /ko/ /es/ /fr/ /de/ /ru/ /pt/ /vi/ /th/ /id/ /ar/
+#    等语言前缀由服务端一律返回 410 Gone（永久移除）。
+#    故意不在此 Disallow：robots 屏蔽只会让搜索引擎把这些 URL
+#    冻结在“被屏蔽”状态，反而清不干净。
+#  · 未列出的路径默认可抓取；仅屏蔽下列内部目录与无收录价值的页面。
+#  ⚠️ 同一 User-agent 组内的规则须连续书写、中间不留空行，
+#     且不写 Allow: /（部分解析器“先匹配先返回”，会因此吞掉后面的 Disallow）。
+# =====================================================================
+
+User-agent: *
+# 内部程序目录（非公开内容，避免占用抓取配额）
+Disallow: /admin/
+Disallow: /api/
+Disallow: /backups/
+Disallow: /cache/
+Disallow: /config/
+Disallow: /cron/
+Disallow: /data/
+Disallow: /lib/
+Disallow: /logs/
+Disallow: /tools/
+Disallow: /.git/
+Disallow: /__pycache__/
+# 下载跳转接口（本身无独立内容，正式页面为 /game/<id>/）
+Disallow: /down/
+Disallow: /down_ios/
+Disallow: /down_baidu/
+Disallow: /down_qita/
+# 站内搜索结果页（内容重复、质量低，不收录）
+Disallow: /sousuo/
+Disallow: /bbs/search.php
+# 登录 / 注册等会话页
+Disallow: /login.php
+Disallow: /bbs/login.php
+Disallow: /bbs/register.php
+# 含会话 ID 的动态 URL
+Disallow: /*?PHPSESSID=
+# 已下线的多语言前缀：此处不 Disallow —— 改由服务端返回 410 Gone，
+# 让搜索引擎抓取后立即永久移除（若 Disallow，则 410 永远发不出去）。
+
+# 站点地图
+Sitemap: https://www.7tan.com/sitemap.xml
+Sitemap: https://www.7tan.com/sitemap_pages.xml
+
+
+=== 3. /bbs/user/ 路径形态 ===
+https://www.7tan.com/bbs/user/1/                     200  len=15798   title=老马 - 7坛游戏社区
+https://www.7tan.com/bbs/user/1/2/                   HTTP 404
+https://www.7tan.com/bbs/user/99999999/              HTTP 404
+https://www.7tan.com/bbs/user/abc/                   HTTP 404
+https://www.7tan.com/bbs/user/1                      200  len=15798   title=老马 - 7坛游戏社区
+
+=== 4. 响应头 ===
+https://www.7tan.com/bbs/profile.php?id=1
+    Server: nginx
+    Date: Fri, 30 Oct 2026 00:45:15 GMT
+    Content-Type: text/html; charset=UTF-8
+    Connection: close
+    Set-Cookie: PHPSESSID=46c3d32c478e5c8ad4034f654e6d41fc; path=/; secure; HttpOnly; SameSite=Lax
+    Expires: Thu, 19 Nov 1981 08:52:00 GMT
+    Cache-Control: no-store, no-cache, must-revalidate
+    Pragma: no-cache
+    X-Content-Type-Options: nosniff
+    X-Frame-Options: SAMEORIGIN
+    Referrer-Policy: strict-origin-when-cross-origin
+    Permissions-Policy: camera=(), microphone=(), geolocation=()
+    Strict-Transport-Security: max-age=300
+https://www.7tan.com/bbs/user/1/
+    Server: nginx
+    Date: Fri, 30 Oct 2026 00:45:16 GMT
+    Content-Type: text/html; charset=UTF-8
+    Connection: close
+    Set-Cookie: PHPSESSID=25e3eab8f55847e7c22f1ba34faab69b; path=/; secure; HttpOnly; SameSite=Lax
+    Expires: Thu, 19 Nov 1981 08:52:00 GMT
+    Cache-Control: no-store, no-cache, must-revalidate
+    Pragma: no-cache
+    X-Content-Type-Options: nosniff
+    X-Frame-Options: SAMEORIGIN
+    Referrer-Policy: strict-origin-when-cross-origin
+    Permissions-Policy: camera=(), microphone=(), geolocation=()
+    Strict-Transport-Security: max-age=300

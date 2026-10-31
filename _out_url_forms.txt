@@ -1,0 +1,84 @@
+{
+  "board18": {
+    "status": 200,
+    "len": 75418,
+    "profile_php": [],
+    "user_clean": []
+  },
+  "post84008": {
+    "status": 200,
+    "len": 96862,
+    "profile_php": [
+      "/bbs/profile.php?id=1"
+    ],
+    "user_clean": []
+  },
+  "home": {
+    "status": 200,
+    "len": 43644,
+    "profile_php": [],
+    "user_clean": []
+  },
+  "profile99908": {
+    "status": 200,
+    "len": 14249,
+    "profile_php": [],
+    "user_clean": [
+      "/bbs/user/99908/",
+      "/bbs/user/99908/?page=2",
+      "/bbs/user/99908/?page=27",
+      "/bbs/user/99908/?page=3"
+    ]
+  },
+  "user99908": {
+    "status": 200,
+    "len": 14249,
+    "profile_php": [],
+    "user_clean": [
+      "/bbs/user/99908/",
+      "/bbs/user/99908/?page=2",
+      "/bbs/user/99908/?page=27",
+      "/bbs/user/99908/?page=3"
+    ]
+  },
+  "pretty_tests": {
+    "https://www.7tan.com/bbs/user/99908/2/": {
+      "status": 404,
+      "len": 2727,
+      "title": "404 - 页面走丢了 - 7坛游戏社区"
+    },
+    "https://www.7tan.com/bbs/user/99908_2/": {
+      "status": 404,
+      "len": 2727,
+      "title": "404 - 页面走丢了 - 7坛游戏社区"
+    },
+    "https://www.7tan.com/bbs/user/99908/page/2/": {
+      "status": 404,
+      "len": 2727,
+      "title": "404 - 页面走丢了 - 7坛游戏社区"
+    },
+    "https://www.7tan.com/bbs/user/99908/p2/": {
+      "status": 404,
+      "len": 2727,
+      "title": "404 - 页面走丢了 - 7坛游戏社区"
+    },
+    "https://www.7tan.com/bbs/user/99908?page=2": {
+      "status": 200,
+      "len": 14481,
+      "title": "老司机带带我 第2页 - 7坛游戏社区"
+    }
+  },
+  "sitemap_user": {
+    "sitemap_zh_1.xml": {
+      "status": 200,
+      "len": 1956575,
+      "user_urls": 0
+    },
+    "sitemap_pages.xml": {
+      "status": 200,
+      "len": 21203,
+      "user_urls": 0
+    }
+  },
+  "robots": "# =====================================================================\r\n#  robots.txt — 7坛游戏社区\r\n#  站点：https://www.7tan.com\r\n#  最后更新：2026-10-09\r\n# =====================================================================\r\n#  · 全站为单一简体中文；多语言版本已下线，\r\n#    /en/ /zh-tw/ /ja/ /ko/ /es/ /fr/ /de/ /ru/ /pt/ /vi/ /th/ /id/ /ar/\r\n#    等语言前缀由服务端一律返回 410 Gone（永久移除）。\r\n#    故意不在此 Disallow：robots 屏蔽只会让搜索引擎把这些 URL\r\n#    冻结在“被屏蔽”状态，反而清不干净。\r\n#  · 未列出的路径默认可抓取；仅屏蔽下列内部目录与无收录价值的页面。\r\n#  ⚠️ 同一 User-agent 组内的规则须连续书写、中间不留空行，\r\n#     且不写 Allow: /（部分解析器“先匹配先返回”，会因此吞掉后面的 Disallow）。\r\n# =====================================================================\r\n\r\nUser-agent: *\r\n# 内部程序目录（非公开内容，避免占用抓取配额）\r\nDisallow: /admin/\r\nDisallow: /api/\r\nDisallow: /backups/\r\nDisallow: /cache/\r\nDisallow: /config/\r\nDisallow: /cron/\r\nDisallow: /data/\r\nDisallow: /lib/\r\nDisallow: /logs/\r\nDisallow: /tools/\r\nDisallow: /.git/\r\nDisallow: /__pycache__/\r\n# 下载跳转接口（本身无独立内容，正式页面为 /game/<id>/）\r\nDisallow: /down/\r\nDisallow: /down_ios/\r\nDisallow: /down_baidu/\r\nDisallow: /down_qita/\r\n# 站内搜索结果页（内容重复、质量低，不收录）\r\nDisallow: /sousuo/\r\nDisallow: /bbs/search.php\r\n# 登录 / 注册等会话页\r\nDisallow: /login.php\r\nDisallow: /bbs/login.php\r\nDisallow: /bbs/register.php\r\n# 含会话 ID 的动态 URL\r\nDisallow: /*?PHPSESSID=\r\n# 已下线的多语言前缀：此处不 Disallow —— 改由服务端返回 410 Gone，\r\n# 让搜索引擎抓取后立即永久移除（若 Disallow，则 410 永远发不出去）。\r\n\r\n# 站点地图\r\nSitemap: https://www.7tan.com/sitemap.xml\r\nSitemap: https://www.7tan.com/sitemap_pages.xml\r\n"
+}

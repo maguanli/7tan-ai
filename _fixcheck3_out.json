@@ -1,0 +1,130 @@
+{
+ "footer_pages": {
+  "/web/gywm.htm": {
+   "status": 200,
+   "bytes": 5160,
+   "h1": 1,
+   "plain_len": 392,
+   "has_privacy_word": false,
+   "head": "关于我们 - 7坛游戏社区 | 平台介绍、联系方式与版权说明 7坛游戏社区 首页 安卓 网游 BT版 分类 百科 排行榜 AI工具 版号查询 关于我们 7坛游戏社区是专业的手机游戏下载平台。 我们致力于为广大游戏玩家提供最新、最全、最优质的"
+  },
+  "/web/lcwm.htm": {
+   "status": 200,
+   "bytes": 4842,
+   "h1": 1,
+   "plain_len": 289,
+   "has_privacy_word": false,
+   "head": "联系我们 - 7坛游戏社区 | 商务合作、意见反馈与客服邮箱 7坛游戏社区 首页 安卓 网游 BT版 分类 百科 排行榜 AI工具 版号查询 联系我们 如果您在使用过程中遇到任何问题，欢迎随时联系我们。 联系方式 邮箱：773178032@"
+  },
+  "/web/bqsm.htm": {
+   "status": 200,
+   "bytes": 5659,
+   "h1": 1,
+   "plain_len": 529,
+   "has_privacy_word": true,
+   "head": "版权声明 - 7坛游戏社区 | 内容来源、侵权处理与免责说明 7坛游戏社区 首页 安卓 网游 BT版 分类 百科 排行榜 AI工具 版号查询 版权声明 7坛游戏社区是专业的手机游戏下载平台。 一、资源来源 本站所有游戏和资料文章均为游戏作者"
+  },
+  "/web/": {
+   "status": 404,
+   "bytes": 2842,
+   "h1": 0,
+   "plain_len": 71,
+   "has_privacy_word": false,
+   "head": "404 - 页面走丢了 - 7坛游戏社区 😵 404 页面走丢了 您访问的页面不存在或已被删除请检查地址是否正确，或返回首页继续浏览 返回首页"
+  },
+  "/web/yszc.htm": {
+   "status": 404,
+   "bytes": 2842,
+   "h1": 0,
+   "plain_len": 71,
+   "has_privacy_word": false,
+   "head": "404 - 页面走丢了 - 7坛游戏社区 😵 404 页面走丢了 您访问的页面不存在或已被删除请检查地址是否正确，或返回首页继续浏览 返回首页"
+  },
+  "/web/privacy.htm": {
+   "status": 404,
+   "bytes": 2842,
+   "h1": 0,
+   "plain_len": 71,
+   "has_privacy_word": false,
+   "head": "404 - 页面走丢了 - 7坛游戏社区 😵 404 页面走丢了 您访问的页面不存在或已被删除请检查地址是否正确，或返回首页继续浏览 返回首页"
+  },
+  "/privacy.htm": {
+   "status": 404,
+   "bytes": 2842,
+   "h1": 0,
+   "plain_len": 71,
+   "has_privacy_word": false,
+   "head": "404 - 页面走丢了 - 7坛游戏社区 😵 404 页面走丢了 您访问的页面不存在或已被删除请检查地址是否正确，或返回首页继续浏览 返回首页"
+  }
+ },
+ "redirect_chain": [
+  {
+   "url": "http://7tan.com/",
+   "status": 301,
+   "location": "https://www.7tan.com/"
+  },
+  {
+   "url": "https://www.7tan.com/",
+   "status": 200,
+   "location": null
+  }
+ ],
+ "ttfb": {
+  "home": [
+   {
+    "ttfb": 132.2,
+    "bytes": 51586,
+    "cache": "no-store, no-cache, must-revalidate"
+   },
+   {
+    "ttfb": 199.5,
+    "bytes": 51586,
+    "cache": "no-store, no-cache, must-revalidate"
+   }
+  ],
+  "game": [
+   {
+    "ttfb": 252.3,
+    "bytes": 80981,
+    "cache": "no-store, no-cache, must-revalidate"
+   },
+   {
+    "ttfb": 202.2,
+    "bytes": 80981,
+    "cache": "no-store, no-cache, must-revalidate"
+   }
+  ],
+  "post": [
+   {
+    "ttfb": 1145.0,
+    "bytes": 78406,
+    "cache": "no-store, no-cache, must-revalidate"
+   },
+   {
+    "ttfb": 201.9,
+    "bytes": 78406,
+    "cache": "no-store, no-cache, must-revalidate"
+   }
+  ],
+  "board": [
+   {
+    "ttfb": 267.3,
+    "bytes": 79234,
+    "cache": "no-store, no-cache, must-revalidate"
+   },
+   {
+    "ttfb": 283.9,
+    "bytes": 79234,
+    "cache": "no-store, no-cache, must-revalidate"
+   }
+  ]
+ },
+ "home_has_privacy": false,
+ "home_has_agreement": false,
+ "home_footer_links": [],
+ "ads_hint": {
+  "googlesyndication": 1,
+  "adsbygoogle": 1,
+  "hm.baidu": 1
+ }
+}

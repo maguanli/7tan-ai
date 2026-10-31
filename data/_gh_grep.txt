@@ -1,0 +1,12 @@
+=== docs/007-architecture.md chars 70497 ===
+   Worker         6
+   Feishu         21
+   GitHub         17
+=== docs/000-philosophy.md chars 3251 ===
+   Feishu         1
+   GitHub         1
+=== docs/003-execution.md chars 17388 ===
+   Worker         3
+   Feishu         7
+   GitHub         15
+   email          1

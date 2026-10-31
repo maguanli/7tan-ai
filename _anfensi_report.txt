@@ -1,0 +1,41 @@
+HTTP 头:
+HTTP/1.1 200 OK
+Date: Sat, 31 Oct 2026 05:13:31 GMT
+Content-Type: text/html
+Content-Length: 223957
+Connection: close
+Last-Modified: Fri, 30 Oct 2026 03:58:54 GMT
+Accept-Ranges: bytes
+ETag: "f1447bfb2268dd1:0"
+Server: Microsoft-IIS/7.5
+X-Powered-By: ASP.NET
+Access-Control-Allow-Headers: Content-Type,api_key,Authorization
+access-control-allow-methods: POST
+Access-Control-Allow-Origin: *
+x-via: 1.1 anxin94:1 (Cdn Cache Server V2.0), 1.1 PS-FOC-010Lm95:1 (Cdn Cache Server V2.0), 1.1 PS-CSX-01R30206:3 (Cdn Cache Server V2.0)
+x-ws-request-id: 6ae578fb_PS-CSX-01R30206_56902-1600
+Age: 23
+
+body 字节数: 223957
+按 utf-8 解码：汉字 246 个
+按 gb18030 解码：汉字 19347 个
+
+TITLE: 安粉丝网-好玩的手游推荐-热门手机游戏下载-安卓软件下载
+DESC: 安粉丝网为用户发现更多最新最热门的手机游戏和软件，本站拥有海量的安卓手游资源和正版应用app下载，全部免费提供，绝对安全可靠，更有每日最新和热门排行榜等你来关注，了解全网热门！
+页面声明编码: gb2312
+
+关键词 安粉丝 : 11 次
+关键词 关停 : 0 次
+关键词 关闭 : 0 次
+关键词 维护 : 0 次
+关键词 迁移 : 0 次
+关键词 公告 : 0 次
+关键词 停机 : 0 次
+关键词 暂停 : 0 次
+关键词 关站 : 0 次
+关键词 已停止 : 0 次
+
+页面里的日期串 Top10: [('2026-10-30', 1)]
+
+a 标签数: 1421
+站内相对链接样例: ['//sc.anfensi.com/pc/statics/css/anfensi.css', '/zuixin/', '/catalog.html', '/top/wangyou.html', '/k/qiannvyouhun/', '/k/busiyimigong/', '/k/renzhebixusi/', '/k/jhfyl/']

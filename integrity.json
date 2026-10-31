@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "generated_at": "2026-11-01T02:40:22.370495",
+  "generated_at": "2026-11-01T03:49:34.187716",
   "generated_by": "7tan-updater build v5.1.0",
   "algorithm": "sha256",
-  "scope": "full",
+  "scope": "core",
   "files": {
     "main.py": "ef076fd31e0a7b6b0ed1e218d828fba0e7704f360bfd0c5fe2c08eecf5eefc6a",
     "src/agent/agent_loop.py": "129bd0ba68d89f6c6f6ad2e12c7217f7fa1df00067582d3d6fea50cc11254b0f",
@@ -11,7 +11,7 @@
     "src/agent/context_manager.py": "f7b4b2cdbac8b0f634a1ae43ea178a46dde04a55cc94119aa7cd9bb045982b63",
     "src/agent/conversation.py": "50cffde39e57672fbdc0a314aafe7d4fd943199a1f7bf45e623ac39d464bbe71",
     "src/tools/registry.py": "db50f9af344996e990a920d74a72bcd6e7b7260d0c38d61fe3fa0802ed202259",
-    "src/tools/browser_tools.py": "d9b54224d9aaa6889b45631c22176063f30224f36117cc57c6c64bbb0189897d",
+    "src/tools/browser_tools.py": "862c35539c724fd1b749ff6dedb241be6191c5ecec15dc07187d13d88fd6db9a",
     "src/tools/download_tools.py": "65cc2974cb4476af007361278182c114fd60d791428626f3118abde36f9942d0",
     "src/tools/db_tools.py": "6c2697ad51a95daeb1ba36ae0468e9756c3dd10da676ee8ec6b1611b7044d919",
     "src/tools/content_tools.py": "d2a0be85a125396916240c3324bb3c86d0fc22bd8123ece440af980df45953e5",
@@ -35,12 +35,7 @@
     "src/utils/logger.py": "3e6c683099864d0cffc5a06c91635decb6d5519c3d7a0a181e4cc86a69ea6f6b",
     "src/utils/helpers.py": "adb0b32bc662b12c26271aef064caf6e3ce1b8c5bed1d9f63653997cec4dd83f",
     "src/utils/retry.py": "2af28db6a260ca0f0a1614d48cb61e2a88d73c2084a59d18edb6bc5803e4da2d",
-    "src/utils/crypto.py": "713788ca606a9c5a632e75090df9461285028bf5d320e8a2b73d2ee49d71b1d1",
-    "src\\agent\\model_manager.py": "736d4bd72a7307d8358af9b469c9a5bd216e6ac3f6d8a314bd104b42dd310556",
-    "src\\agent\\context_manager.py": "f7b4b2cdbac8b0f634a1ae43ea178a46dde04a55cc94119aa7cd9bb045982b63",
-    "src\\tools\\browser_tools.py": "d9b54224d9aaa6889b45631c22176063f30224f36117cc57c6c64bbb0189897d",
-    "src\\tools\\download_tools.py": "65cc2974cb4476af007361278182c114fd60d791428626f3118abde36f9942d0",
-    "src\\web\\server.py": "5f2a47d01e9b4512168400d78933549c348167006a67d5a6ecd854deb1380f13"
+    "src/utils/crypto.py": "713788ca606a9c5a632e75090df9461285028bf5d320e8a2b73d2ee49d71b1d1"
   },
   "exclude_patterns": [
     "*.pyc",
@@ -53,5 +48,5 @@
     "backup/**",
     "*.log"
   ],
-  "manifest_hmac": "8b650118d1b5dac6b57217b8c3286c4f2559ebdf173f5e0c503dffe21dc61563"
+  "manifest_hmac": "91c57fc3ff5b8687ec05179988bfe3fb62c83b6c40c52269e6113f59bd398ddc"
 }

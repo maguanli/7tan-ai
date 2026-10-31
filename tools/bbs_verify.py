@@ -495,9 +495,17 @@ def main(argv=None):
 
     # ---- 8. 板块与作者
     if exp.get('board'):
-        rep.check(meta['board_name'] == exp['board'], '板块正确',
+        # 期望值可以是板块名（'游戏交流'）或板块 id（18）；脚本里通常是数字 id
+        _want = str(exp['board']).strip()
+        if _want.isdigit():
+            _ok = str(meta.get('board_id')) == _want
+            _label = '板块正确(id=%s)' % _want
+        else:
+            _ok = meta.get('board_name') == _want
+            _label = '板块正确'
+        rep.check(_ok, _label,
                   '%s (%s)' % (meta['board_name'], meta['board_id']),
-                  '页面=%r  期望=%r' % (meta['board_name'], exp['board']))
+                  '页面=%r(id=%s)  期望=%r' % (meta['board_name'], meta['board_id'], _want))
     elif meta['board_name']:
         rep.ok('板块', '%s (%s)' % (meta['board_name'], meta['board_id']))
     else:

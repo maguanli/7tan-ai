@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import threading
 import time
 import uuid
@@ -105,6 +106,71 @@ def _pick_tools(allow_self_modify: bool):
     return picked, dropped
 
 
+def _push_scope(root, label: str, task: str):
+    """压入命令作用域帧；返回帧对象。压不进去不阻断派工，但会告警（不静默）。"""
+    try:
+        from src.utils import cmd_scope
+        return cmd_scope.push(root, label=label, strict=True, hint=(task or "")[:120])
+    except Exception as e:
+        logger.warning(
+            f"spawn_worker 无法压入命令作用域（{type(e).__name__}: {e}），"
+            f"本次 Worker 的命令不受 cwd 限制——结果里会提示。"
+        )
+        return None
+
+
+def _make_worktree(repo_root: Path, worker_id: str):
+    """给代码类 Worker 开一个独立 git worktree（不污染主工作区）。
+
+    返回 (worktree路径, 分支名, 错误信息)。创建失败时前两项为 None。
+
+    为什么需要它：Worker 直接在主工作区里改代码，一旦跑偏（改错文件、删了不该删的），
+    人回来面对的就是一个脏工作区，无法一眼看出「哪些是 Worker 改的」。
+    worktree 把这些改动物理隔离到一个目录 + 一个独立分支，diff 一目了然，
+    不要就 `git worktree remove` 扔掉，要就 merge。
+    """
+    # 放在仓库【外面】的兄弟目录：仓库内无论怎么 .gitignore 都会留下痕迹
+    # （.worktrees/ 未忽略 → 出现 "?? .worktrees/"；新建 .gitignore → 出现 "?? .gitignore"）。
+    # 自检里两种都真踩到过，所以干脆零足迹。
+    wt = repo_root.parent / f"{repo_root.name}-worktrees" / worker_id
+    branch = f"ticket/{worker_id}"
+    try:
+        wt.parent.mkdir(parents=True, exist_ok=True)
+        r = subprocess.run(
+            ["git", "-C", str(repo_root), "worktree", "add", str(wt), "-b", branch],
+            capture_output=True, text=True, timeout=180,
+        )
+    except Exception as e:
+        return None, None, f"{type(e).__name__}: {e}"
+    if r.returncode != 0:
+        return None, None, ((r.stderr or r.stdout or "").strip()[:400] or f"git rc={r.returncode}")
+    return wt, branch, ""
+
+
+def _worktree_diff(wt: Path) -> dict:
+    """收集 worktree 里的改动概况，供回传报告用。"""
+    out = {"dirty": "", "stat": ""}
+    for key, args in (("dirty", ["status", "--short"]), ("stat", ["diff", "--stat"])):
+        try:
+            r = subprocess.run(["git", "-C", str(wt)] + args,
+                               capture_output=True, text=True, timeout=60)
+            out[key] = (r.stdout or "").strip()
+        except Exception:
+            pass
+    return out
+
+
+def _pop_scope(frame) -> None:
+    """弹出命令作用域帧（恢复外层宽松语义）。"""
+    if frame is None:
+        return
+    try:
+        from src.utils import cmd_scope
+        cmd_scope.pop(frame)
+    except Exception as e:
+        logger.warning(f"spawn_worker 弹出命令作用域失败: {e}")
+
+
 def _rel(p: Path) -> str:
     try:
         return str(p.relative_to(_ROOT)).replace("\\", "/")
@@ -173,6 +239,16 @@ DEFAULT_WORKER_PROMPT = """你是一个被派工的子 Agent（Worker）。你�
                 "description": "是否把 self_modify_*（改自身配置/重建/重启）下放给 Worker。默认 False——无人值守时这些是不可逆操作。",
                 "default": False,
             },
+            "cwd_root": {
+                "type": "string",
+                "description": "Worker 的工作根目录，同时是命令作用域的边界。默认=项目根。Worker 期间 run_command 的 cwd 若落到这个目录之外，会被直接拒绝执行（不是降级，是拒绝）。要让它改别的仓库或目录，把这里指过去，而不是放开限制。",
+                "default": "",
+            },
+            "use_worktree": {
+                "type": "boolean",
+                "description": "代码类任务建议开 True：给 Worker 建独立 git worktree + ticket/xxx 分支，改动物理隔离，不污染主工作区；结束后回传改动清单。",
+                "default": False,
+            },
             "system_prompt": {
                 "type": "string",
                 "description": "Worker 的角色提示词，留空用内置的通用派工提示。",
@@ -184,11 +260,21 @@ DEFAULT_WORKER_PROMPT = """你是一个被派工的子 Agent（Worker）。你�
     category="agent",
 )
 def spawn_worker(task: str, max_iterations: int = 200, timeout_seconds: int = 1800,
-                 allow_self_modify: bool = False, system_prompt: str = "") -> str:
+                 allow_self_modify: bool = False, system_prompt: str = "",
+                 cwd_root: str = "", use_worktree: bool = False) -> str:
     """串行派一个 Worker 干活，返回结构化报告。"""
     task = (task or "").strip()
     if not task:
         return "❌ spawn_worker: task 不能为空"
+
+    # ── 工作根目录：既是 Worker 的落脚点，也是命令作用域的边界 ──
+    root_raw = (cwd_root or "").strip()
+    try:
+        root = Path(root_raw).resolve() if root_raw else _ROOT.resolve()
+    except Exception as e:
+        return f"❌ spawn_worker: cwd_root 无法解析（{type(e).__name__}: {e}）"
+    if not root.is_dir():
+        return f"❌ spawn_worker: 工作根目录不存在：{root}"
 
     # 串行闸门：忙则立即返回，不阻塞主对话
     if not _RUN_LOCK.acquire(blocking=False):
@@ -215,28 +301,97 @@ def spawn_worker(task: str, max_iterations: int = 200, timeout_seconds: int = 18
     started = time.time()
     result = {}
     error = None
+    scope_frame = None
+    wt_branch = ""
+    wt_diff = {}
     try:
         from src.agent.agent_loop import run_agent_loop
 
-        result = run_agent_loop(
-            task=task,
-            tools=tools,                      # 显式传：不传会退回 276 个全量
-            session_id=worker_id,             # 独立会话，不污染主对话
-            system_prompt=(system_prompt or DEFAULT_WORKER_PROMPT),
-            max_iterations=max_iterations,
-            abort_event=abort_event,          # 独立信号，互不连坐
-        ) or {}
+        # tools=[] 会让 run_agent_loop 静默退回全量工具集（含自伤类），必须挡住
+        if not tools:
+            raise RuntimeError(
+                "下放工具集为空：run_agent_loop 会静默退回全量工具（含自伤类），拒绝执行"
+            )
+
+        # 代码类任务：先开独立 worktree，再把工作目录与作用域都切过去
+        if use_worktree:
+            wt, wt_branch, wt_err = _make_worktree(root, worker_id)
+            if wt is None:
+                raise RuntimeError(f"创建 git worktree 失败：{wt_err}")
+            root = wt
+
+        # 压入命令作用域：Worker 期间命令只能在 root 内启动，越界直接拒绝
+        scope_frame = _push_scope(root, worker_id, task)
+        # 绑定执行上下文：worker_id 随 contextvar 走，agent_optimizer 提交池任务时
+        # 用 copy_context 带过去，池线程也能认出「我是哪个 Worker」——
+        # 资源租约靠它判断持有人说，cmd_scope 靠它拿到作用域帧。
+        _ctx_tok, _prev_owner = None, None
+        try:
+            from src.utils import exec_context as _ec
+            _ctx_obj, _ctx_tok, _prev_owner = _ec.bind(
+                str(root), label=worker_id, worker_id=worker_id
+            )
+        except Exception as e:
+            logger.warning(f"spawn_worker 无法绑定执行上下文（{type(e).__name__}: {e}）")
+        try:
+            result = run_agent_loop(
+                task=task,
+                tools=tools,                      # 显式传：空列表会退回全量
+                session_id=worker_id,             # 独立会话，不污染主对话
+                system_prompt=(system_prompt or DEFAULT_WORKER_PROMPT),
+                max_iterations=max_iterations,
+                abort_event=abort_event,          # 独立信号，互不连坐
+            ) or {}
+        finally:
+            if _ctx_tok is not None:
+                try:
+                    from src.utils import exec_context as _ec
+                    _ec.unbind(_ctx_tok, _prev_owner)
+                except Exception as e:
+                    logger.warning(f"spawn_worker 解除执行上下文失败: {e}")
+            _pop_scope(scope_frame)
+
+        if use_worktree:
+            wt_diff = _worktree_diff(root)
     except Exception as e:
         error = f"{type(e).__name__}: {e}"
         logger.error(f"spawn_worker {worker_id} 异常: {error}")
     finally:
         timer.cancel()
         elapsed = round(time.time() - started, 1)
+        # 回收本 Worker 持有的全部资源租约（浏览器/桌面/文件/git）。
+        # 不回收的话，一次异常退出就会把浏览器永久占住，下一个 Worker 一直等。
+        freed_leases = []
+        try:
+            from src.utils import resource_lease as _rl
+            freed_leases = _rl.release_all(worker_id)
+            if freed_leases:
+                logger.info(f"spawn_worker {worker_id} 释放资源租约: {freed_leases}")
+        except Exception as e:
+            logger.warning(f"spawn_worker 释放资源租约失败: {e}")
+
+        # 清掉本 Worker 的浏览器操作目标记录（browser_tools 按 owner 分键存）。
+        # 不清的话每派一个 Worker 就往表里留一条，虽然只有几个字节，
+        # 但没有理由是长跑进程里只增不减。
+        try:
+            from src.tools import browser_tools as _bt
+            _bt.reset_active_context(worker_id)
+        except Exception as e:
+            logger.warning(f"spawn_worker 清理浏览器上下文失败: {e}")
         _STATE.update({"running": False, "worker_id": None, "started_at": None, "task_head": None})
         _RUN_LOCK.release()
 
     success = bool(result.get("success"))
     text = str(result.get("result") or "")
+
+    # worktree 改动清单（代码类 Worker 的交付物证明）
+    wt_note = ""
+    if use_worktree:
+        wt_note = (
+            f"\n## worktree\n- path: {_rel(root)}\n- branch: {wt_branch}\n"
+            f"- 改动文件：\n```\n{wt_diff.get('dirty') or '(无改动)'}\n```\n"
+            f"- diffstat：\n```\n{wt_diff.get('stat') or '(无改动)'}\n```\n"
+        )
 
     # 完整报告落盘，只把摘要回灌主上下文（省 token）
     full_path = None
@@ -244,7 +399,7 @@ def spawn_worker(task: str, max_iterations: int = 200, timeout_seconds: int = 18
         _FULL_DIR.mkdir(parents=True, exist_ok=True)
         fp = _FULL_DIR / f"{worker_id}.md"
         fp.write_text(
-            f"# Worker {worker_id}\n\n## 任务\n{task}\n\n## 结果\n{text}\n\n"
+            f"# Worker {worker_id}\n\n## 任务\n{task}\n\n## 结果\n{text}\n{wt_note}\n"
             f"## 元信息\n- success: {success}\n- iterations: {result.get('iterations')}\n"
             f"- cost: {result.get('cost')}\n- tokens: {result.get('total_tokens')}\n"
             f"- elapsed: {elapsed}s\n- aborted: {abort_event.is_set()}\n- error: {error}\n",
@@ -266,6 +421,10 @@ def spawn_worker(task: str, max_iterations: int = 200, timeout_seconds: int = 18
         "error": error,
         "tools": len(tools),
         "dropped": dropped,
+        "cwd_root": _rel(root),
+        "scope_enforced": scope_frame is not None,
+        "worktree": _rel(root) if use_worktree else None,
+        "branch": wt_branch or None,
         "task": task[:500],
         "report": _rel(full_path) if full_path else None,
     }
@@ -279,8 +438,16 @@ def spawn_worker(task: str, max_iterations: int = 200, timeout_seconds: int = 18
     ]
     if abort_event.is_set():
         head.append("⚠️ 已超时中止，下面是中止前已有的结果")
+    head.append(f"工作根目录 {_rel(root)}（命令越界会被拒绝）")
+    if use_worktree:
+        _dirty = [l for l in (wt_diff.get("dirty") or "").splitlines() if l.strip()]
+        head.append(f"worktree {_rel(root)}  分支 {wt_branch}  改动 {len(_dirty)} 个文件")
+        if not _dirty:
+            head.append("⚠️ worktree 里没有任何改动——Worker 可能没真正动手")
     if error:
         head.append(f"⚠️ 异常：{error}")
+    if scope_frame is None and not error:
+        head.append("⚠️ 命令作用域未能压入，本次 Worker 的 cwd 未受限制")
     if dropped:
         head.append(f"（未下放：{', '.join(dropped)}）")
     if full_path:

@@ -2,6 +2,7 @@
 Agent 高级优化模块 — 并行执行 / file_replace引导 / 增量测试 / 工作区注入 / 历史过滤 / 上下文压缩
 """
 import concurrent.futures
+import contextvars
 import json
 import os
 import re
@@ -165,7 +166,11 @@ def execute_tools_parallel(tool_calls: list[dict], execute_fn) -> list[dict]:
                 if _is_aborted():
                     results_map[tc.get("id", "")] = f"⏹ 已中止（用户终止任务），未执行: {name}"
                     continue
-                future = pool.submit(_safe_execute, execute_fn, name, args)
+                # 2026-11-01：带上上下文快照。否则池线程里 cmd_scope 的
+                # 作用域帧、exec_context 的 worker_id 全部丢失 —— 实测会导致
+                # 越界命令被放行（tools/probe_parallel_scope.py）。
+                _ctx = contextvars.copy_context()
+                future = pool.submit(_ctx.run, _safe_execute, execute_fn, name, args)
                 future_to_tc[future] = tc
             try:
                 for future in concurrent.futures.as_completed(future_to_tc, timeout=TOOL_WATCHDOG_TIMEOUT):
@@ -248,7 +253,10 @@ def _execute_with_watchdog(execute_fn, name: str, args: dict, timeout: int = TOO
     进程退出不阻塞），但主流程立刻返回，agent 循环继续，杜绝"工具卡死 15 分钟"。
     """
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="tool_watchdog")
-    future = pool.submit(_safe_execute, execute_fn, name, args)
+    # 2026-11-01：必须带上下文。单工具串行路径也走这个池，不带的话
+    # cmd_scope 的作用域帧在这里丢光，cwd 围栏等于没装（实测已复现）。
+    _ctx = contextvars.copy_context()
+    future = pool.submit(_ctx.run, _safe_execute, execute_fn, name, args)
     try:
         # 🔔 用户中止感知：轮询中止信号，命中后立即返回，不等工具跑完
         from ..utils.abort_signal import is_aborted as _is_aborted

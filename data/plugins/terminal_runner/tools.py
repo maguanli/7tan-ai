@@ -9,6 +9,7 @@ from src.tools.registry import register_tool
 import subprocess
 import os
 import platform
+import time
 
 
 # ─────────────────────────────────────────────────────────────
@@ -56,26 +57,100 @@ def _guard_command(command: str) -> tuple:
     return True, ""
 
 
-def _run_cmd(cmd: list, cwd: str = None, timeout: int = 120) -> str:
-    """通用命令执行器（支持用户中止：中止时立即杀掉子进程树）"""
+def _scope_api():
+    """取命令作用域模块；不可用时返回 None（调用方需显式提示，不能静默降级）。"""
+    try:
+        from src.utils import cmd_scope
+        return cmd_scope
+    except Exception:
+        return None
+
+
+def _resolve_or_error(cwd, tool: str = "run_command"):
+    """解析 cwd 并按作用域校验，返回 (绝对路径, 拒绝原因)。"""
+    api = _scope_api()
+    if api is None:
+        return Path(cwd or "."), None
+    try:
+        return api.resolve_cwd(cwd), None
+    except api.ScopeViolation as e:
+        return None, str(e)
+
+
+def _audit(*args, **kwargs) -> dict:
+    """写审计记录；模块不可用或写失败时返回带 _written=False 的记录，不吞掉。"""
+    api = _scope_api()
+    if api is None:
+        return {"_written": False, "_write_error": "cmd_scope 模块不可用"}
+    try:
+        return api.audit(*args, **kwargs)
+    except Exception as e:
+        return {"_written": False, "_write_error": f"{type(e).__name__}: {e}"}
+
+
+def _run_cmd(cmd: list, cwd: str = None, timeout: int = 120, raw: str = None,
+             tool: str = "run_command", resolved_cwd=None) -> str:
+    """通用命令执行器：cwd 过作用域校验 → 执行 → 全量审计落盘。
+
+    两道围栏都在这里落地：
+      ① cwd 越界（严格作用域下）直接拒绝，不执行、不降级；
+      ② 无论成功/失败/超时/中止，都会写一条审计到 data/logs/cmd_audit.jsonl。
+    """
+    api = _scope_api()
+    display = raw if raw is not None else " ".join(str(x) for x in cmd)
+
+    if resolved_cwd is None:
+        target, refuse = _resolve_or_error(cwd, tool)
+        if refuse:
+            _audit(tool, display, cwd, None, rc=None, duration_ms=0, error=refuse)
+            return (f"🚫 已拒绝执行（工作目录越界）: {refuse}\n"
+                    f"作用域外不得启动命令。若确实需要在别处执行，应让派工方把作用域的根目录指到该处。")
+        resolved_cwd = target
+
+    started = time.time()
+    rc, so, se = None, "", ""
+    note, err, aborted_flag = "", "", False
+
     try:
         from src.utils.abort_signal import run_with_abort, AbortedError
         try:
-            rc, so, se = run_with_abort(cmd, cwd=cwd or None, timeout=timeout)
+            rc, so, se = run_with_abort(cmd, cwd=str(resolved_cwd) if resolved_cwd else None,
+                                        timeout=timeout)
         except AbortedError:
-            return "⏹ 已中止（用户终止任务），命令已强制结束"
-        out = []
-        if (so or "").strip():
-            out.append(so.strip())
-        if (se or "").strip():
-            out.append(f"[stderr]\n{se.strip()}")
-        if rc != 0:
-            out.append(f"\n⚠️ 退出码: {rc}")
-        return "\n".join(out) if out else "(无输出)"
+            aborted_flag = True
+            note = "⏹ 已中止（用户终止任务），命令已强制结束"
+        else:
+            out = []
+            if (so or "").strip():
+                out.append(so.strip())
+            if (se or "").strip():
+                out.append(f"[stderr]\n{se.strip()}")
+            if rc != 0:
+                out.append(f"\n⚠️ 退出码: {rc}")
+            note = "\n".join(out) if out else "(无输出)"
     except subprocess.TimeoutExpired:
-        return f"⏱ 命令超时 ({timeout}秒)"
+        err = f"timeout {timeout}s"
+        note = f"⏱ 命令超时 ({timeout}秒)"
     except Exception as e:
-        return f"❌ 执行失败: {e}"
+        err = f"{type(e).__name__}: {e}"
+        note = f"❌ 执行失败: {e}"
+    finally:
+        dur = round((time.time() - started) * 1000, 1)
+        rec = _audit(tool, display, cwd, resolved_cwd, rc=rc, duration_ms=dur,
+                     stdout=so or "", stderr=se or "", timeout=timeout,
+                     aborted=aborted_flag, error=err)
+        if not rec.get("_written"):
+            note += f"\n⚠️ 审计写入失败（{rec.get('_write_error')}）——本条命令未留痕"
+
+    if api is not None:
+        sc = api.current()
+        if sc is not None:
+            esc = api.detect_escape(display, sc.root)
+            if esc["suspicious"]:
+                hits = (esc["outside_paths"] + esc["cd_up"])[:3]
+                note += f"\n⚠️ 命令疑似触碰作用域外路径 {hits}（已记入审计）"
+
+    return note
 
 
 @register_tool(
@@ -96,6 +171,9 @@ def run_command(command: str, cwd: str = ".", timeout: int = 120) -> str:
     """执行 shell 命令（带命令护栏，拒绝非命令文本）"""
     ok, reason = _guard_command(command)
     if not ok:
+        # 被护栏拦下的命令同样留痕：事后能看出「谁想执行什么、为什么没执行」
+        _audit("run_command", command, cwd, None, rc=None, duration_ms=0,
+               error=f"guard_refused: {reason}", extra={"refused": True})
         return (f"🚫 已拒绝执行（命令护栏）: {reason}\n"
                 f"请只传入真正的 shell 命令（如 dir / python script.py / git status），"
                 f"不要把对话内容、文档、表格或说明文字当作命令执行。")
@@ -103,7 +181,7 @@ def run_command(command: str, cwd: str = ".", timeout: int = 120) -> str:
         cmd = ["cmd", "/c", command]
     else:
         cmd = ["bash", "-c", command]
-    return _run_cmd(cmd, cwd=cwd, timeout=timeout)
+    return _run_cmd(cmd, cwd=cwd, timeout=timeout, raw=command)
 
 
 @register_tool(
@@ -218,3 +296,62 @@ def check_env() -> str:
         except Exception:
             pass
     return "\n".join(checks) if checks else "未检测到开发工具"
+
+
+# ─────────────────────────────────────────────────────────────
+# 🔍 命令审计检索：事后可查
+# ─────────────────────────────────────────────────────────────
+@register_tool(
+    name="cmd_audit_query",
+    description=(
+        "检索命令审计流水（data/logs/cmd_audit.jsonl）。每条通过工具执行的 shell 命令都会落盘："
+        "时间、作用域（interactive=人在场 / worker=无人值守）、cwd、命令原文、退出码、耗时、输出摘要、"
+        "是否触碰作用域外路径。用于事后追查「谁在什么时候执行了什么、结果如何」。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "limit": {"type": "integer", "description": "返回最近多少条，默认 20", "default": 20},
+            "keyword": {"type": "string", "description": "按命令/输出/工具名关键词过滤", "default": ""},
+            "scope": {"type": "string", "description": "按作用域过滤，如 worker / interactive / w-xxxx", "default": ""},
+            "only_failed": {"type": "boolean", "description": "只看失败（退出码非 0 或有错误）", "default": False},
+            "only_escape": {"type": "boolean", "description": "只看疑似触碰作用域外路径的命令", "default": False},
+        },
+        "required": [],
+    },
+    category="terminal",
+)
+def cmd_audit_query(limit: int = 20, keyword: str = "", scope: str = "",
+                    only_failed: bool = False, only_escape: bool = False) -> str:
+    """检索命令审计流水"""
+    api = _scope_api()
+    if api is None:
+        return "❌ cmd_scope 模块不可用，无法读取审计流水"
+
+    rows = api.query(limit=limit, keyword=keyword, scope=scope,
+                     only_failed=only_failed, only_escape=only_escape)
+    path = api.audit_path()
+    if not rows:
+        return f"📭 没有匹配的审计记录（文件：{path}）"
+
+    out = [f"📜 命令审计流水（{path}）  命中 {len(rows)} 条，最近的在前："]
+    for r in rows:
+        flag = "✅" if r.get("rc") == 0 else ("⏱" if r.get("timeout") and r.get("rc") is None else "⚠️")
+        if r.get("error"):
+            flag = "❌"
+        sc = r.get("scope") or "?"
+        ms = r.get("duration_ms")
+        dur = f"{ms}ms" if ms is not None else "?"
+        cmdline = str(r.get("command") or "").replace("\n", " ⏎ ")
+        if len(cmdline) > 130:
+            cmdline = cmdline[:130] + "…"
+        out.append(f"  {flag} {r.get('ts')}  [{sc}]  rc={r.get('rc')}  {dur}  {r.get('tool')}")
+        out.append(f"      {cmdline}")
+        if r.get("cwd"):
+            out.append(f"      cwd: {r.get('cwd')}")
+        if r.get("error"):
+            out.append(f"      err: {str(r.get('error'))[:160]}")
+        if r.get("escape"):
+            hits = (r.get("outside") or [])[:3]
+            out.append(f"      ⚠️ 作用域外线索: {hits}")
+    return "\n".join(out)

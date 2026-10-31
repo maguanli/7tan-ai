@@ -38,14 +38,48 @@ def _kill_tree(proc):
             pass
 
 
-def _run_cmd_safe(cmd, cwd=None, timeout=120, shell=False):
-    """安全执行命令：Popen + 进程组隔离 + 超时强制杀进程树。
+def _audit_cmd(tool, display, cwd, cwd_resolved, rc, started, stdout, stderr, error=""):
+    """写一条命令审计；失败时返回一句告警（不静默吞掉）。"""
+    try:
+        from src.utils import cmd_scope as _cs
+    except Exception as e:
+        return f"\n[审计不可用: {type(e).__name__}]"
+    try:
+        rec = _cs.audit(tool, str(display), str(cwd or ""), cwd_resolved, rc=rc,
+                        duration_ms=round((time.time() - started) * 1000, 1),
+                        stdout=stdout or "", stderr=stderr or "", error=error)
+        if not rec.get("_written"):
+            return f"\n[审计写入失败: {rec.get('_write_error')}]"
+    except Exception as e:
+        return f"\n[审计异常: {type(e).__name__}: {e}]"
+    return ""
+
+
+def _run_cmd_safe(cmd, cwd=None, timeout=120, shell=False, tool="remote_deployer"):
+    """安全执行命令：Popen + 进程组隔离 + 超时强制杀进程树 + 全量审计。
 
     - Windows: CREATE_NEW_PROCESS_GROUP + CREATE_NO_WINDOW
     - 超时后 taskkill /T /F 杀掉全部子进程，绝不残留挂起进程
     - timeout 上限 MAX_TOOL_TIMEOUT，防止调用方误传超大值
+    - 执行前 cwd 过命令作用域校验（无人值守时越界直接拒绝）
+    - 无论成功/失败/超时，都写一条审计到 data/logs/cmd_audit.jsonl
     """
     timeout = min(max(int(timeout or 120), 1), MAX_TOOL_TIMEOUT)
+    display = cmd if isinstance(cmd, str) else " ".join(str(x) for x in cmd)
+    started = time.time()
+
+    # ① 作用域校验：cwd 越界直接拒绝，不执行
+    if cwd:
+        try:
+            from src.utils import cmd_scope as _cs
+            try:
+                cwd = str(_cs.resolve_cwd(cwd))
+            except _cs.ScopeViolation as e:
+                _audit_cmd(tool, display, cwd, None, -1, started, "", "", error=f"cwd 越界: {e}")
+                return "", f"🚫 已拒绝执行（工作目录越界）: {e}", -1
+        except ImportError:
+            pass
+
     flags = 0
     if _WIN:
         flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
@@ -57,20 +91,28 @@ def _run_cmd_safe(cmd, cwd=None, timeout=120, shell=False):
             creationflags=flags,
         )
     except FileNotFoundError:
-        return "", "Shell 不可用或命令未找到", -1
+        warn = _audit_cmd(tool, display, cwd, cwd, -1, started, "", "", error="filenotfound")
+        return "", "Shell 不可用或命令未找到" + warn, -1
     except OSError as e:
-        return "", f"系统错误: {e}", -1
+        warn = _audit_cmd(tool, display, cwd, cwd, -1, started, "", "", error=f"OSError: {e}")
+        return "", f"系统错误: {e}" + warn, -1
 
+    err = ""
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
-        return (stdout or ""), (stderr or ""), proc.returncode
+        rc = proc.returncode
     except subprocess.TimeoutExpired:
         _kill_tree(proc)
         try:
             stdout, stderr = proc.communicate(timeout=5)
         except Exception:
             stdout, stderr = "", ""
-        return (stdout or ""), f"⏱ 命令超时（{timeout}s），已强制终止整个进程树", -1
+        stderr = f"⏱ 命令超时（{timeout}s），已强制终止整个进程树"
+        rc = -1
+        err = f"timeout {timeout}s"
+
+    warn = _audit_cmd(tool, display, cwd, cwd, rc, started, stdout, stderr, error=err)
+    return (stdout or ""), ((stderr or "") + warn), rc
 
 
 def _ssh_base_cmd(port: int = 22) -> list:
@@ -283,7 +325,8 @@ def run_shell_script(script: str, cwd: str = "", timeout: int = 120) -> dict:
     """执行 shell 脚本（支持多行），自动验证工作目录有效性"""
     resolved_cwd = _resolve_cwd(cwd)
     
-    stdout, stderr, rc = _run_cmd_safe(script, cwd=resolved_cwd, timeout=timeout, shell=True)
+    stdout, stderr, rc = _run_cmd_safe(script, cwd=resolved_cwd, timeout=timeout,
+                                      shell=True, tool="run_shell_script")
     return {
         "success": rc == 0,
         "exit_code": rc,

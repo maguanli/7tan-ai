@@ -3,8 +3,9 @@
 通过 BrowserBridge 实现线程安全的跨线程浏览器操作
 AI Agent 工作线程 → Bridge (BlockingQueuedConnection) → Qt 主线程
 """
-import time
 import json
+import threading
+import time
 from pathlib import Path
 
 import requests
@@ -14,16 +15,59 @@ from .registry import register_tool
 # 全局 WebEngine 视图引用 — 支持源站 + 管理后台双窗口
 _source_view = None   # 主窗口浏览器（源网站）
 _admin_view = None    # 管理后台浏览器（独立窗口）
-_active_ctx = "source"  # 当前操作目标
 _switch_ui_callback = None  # UI 回调：ChatBrowserSplitPage.switch_browser
+
+# ── 当前操作目标（原 _active_ctx）──────────────────────────────────────
+# 2026-11-01 修正：原来是单个模块级字符串，谁最后 set 谁生效。
+# 实测（tools/concurrency_probe.py）：Worker A 设 "source"、Worker B 切成
+# "admin" 之后，A 的【下一次】操作读到的是 "admin" —— 它操作了错误的窗口，
+# 而且不报错。
+#
+# 现在按 owner 分键存。owner 来自 exec_context：Worker 是自己的 id，
+# 主 Agent 是 "main"。主 Agent 与 Worker 交替使用浏览器时互不覆盖。
+#
+# 为什么不用 ContextVar 单独承载：工具在 ThreadPoolExecutor 里执行，
+# copy_context() 只把上下文【复制进去】；在池线程里 set 的 ContextVar
+# 出了这次调用就没了。而 _active_ctx 恰恰是跨调用残留的状态 ——
+# "先切换 → 下一次点击"会读回旧值（source），比现在更糟。
+# 所以用「按 owner 分键的共享表 + 锁」：既跨调用留存，又按执行者隔离。
+_active_ctx = "source"        # 仅作 UI 回显与无上下文时的兜底，不参与判定
+_ctx_by_owner = {}            # owner -> "source" | "admin"
+_ctx_lock = threading.Lock()
+
+
+def _ctx_owner() -> str:
+    """当前执行者：Worker 返回自己的 id，主 Agent 返回 'main'。"""
+    try:
+        from ..utils.exec_context import owner as _owner
+        return _owner()
+    except Exception:
+        return "main"
+
+
+def get_active_context() -> str:
+    """读取【当前执行者】的操作目标（admin / source）。"""
+    o = _ctx_owner()
+    with _ctx_lock:
+        return _ctx_by_owner.get(o, "source")
 
 
 def set_active_context(ctx: str):
-    """设置当前操作的浏览器上下文，触发 UI 切换"""
-    global _active_ctx, _switch_ui_callback
-    _active_ctx = ctx
+    """设置【当前执行者】的操作目标，并触发 UI 切换。"""
+    global _active_ctx
+    o = _ctx_owner()
+    with _ctx_lock:
+        _ctx_by_owner[o] = ctx
+        _active_ctx = ctx          # 仅用于 UI 回显
     if _switch_ui_callback:
         _switch_ui_callback(ctx)
+
+
+def reset_active_context(owner: str = "") -> None:
+    """清理某执行者的记录（Worker 结束时调，避免表无限增长）。"""
+    o = owner or _ctx_owner()
+    with _ctx_lock:
+        _ctx_by_owner.pop(o, None)
 
 
 def register_web_view(view, role: str = "source"):
@@ -63,8 +107,8 @@ def _open_new_window_in_view(view, request):
 
 
 def _get_active_view():
-    global _source_view, _admin_view, _active_ctx
-    if _active_ctx == "admin" and _admin_view is not None:
+    global _source_view, _admin_view
+    if get_active_context() == "admin" and _admin_view is not None:
         return _admin_view
     return _source_view
 
@@ -72,8 +116,7 @@ def _get_active_view():
 def _get_bridge():
     """获取当前活跃浏览器的 Bridge 实例（线程安全）"""
     from .browser_bridge import get_bridge, get_admin_bridge
-    global _active_ctx
-    if _active_ctx == "admin":
+    if get_active_context() == "admin":
         bridge = get_admin_bridge()
         if bridge is None:
             bridge = get_bridge()  # fallback

@@ -46,6 +46,7 @@
     "novel_writer",
     "longtou_zhenfa",
     "gzh_render",
-    "desktop_watch"
+    "desktop_watch",
+    "agent_spawner"
   ]
 }

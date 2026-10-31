@@ -187,6 +187,9 @@ data/m1_knowledge_cursor.json
 data/gzh_render/
 data/articles/
 
+# 子 Agent 派工运行记录（Worker 报告、耗时、成本流水，运行时生成）
+data/spawn_worker/
+
 # ===== 临时/诊断脚本与运行时垃圾（防止再次误提交）=====
 # 机器指纹缓存（敏感，与 token.dat 同级，必须忽略）
 data/auth/

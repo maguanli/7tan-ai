@@ -775,5 +775,19 @@
       "desktop_watch_status"
     ],
     "icon": "👁"
+  },
+  {
+    "id": "agent_spawner",
+    "name": "子Agent派工",
+    "version": "1.0.0",
+    "author": "7tanAI Team",
+    "type": "custom",
+    "category": "AI",
+    "description": "AI 指挥 AI：主 Agent 派 Worker 独立完成子任务并拿回报告（串行版）。Worker 有独立 session、独立中止信号、独立预算；默认不下放自伤类工具。",
+    "tools": [
+      "spawn_worker",
+      "spawn_status"
+    ],
+    "icon": "🤖"
   }
 ]

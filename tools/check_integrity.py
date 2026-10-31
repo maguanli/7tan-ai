@@ -49,8 +49,16 @@ def main():
         if not args.file:
             print("ERROR: update needs --file")
             sys.exit(1)
-        checker.update_file_hash(args.file)
-        print("[OK] hash updated: %s" % args.file)
+        # 路径必须归一化为正斜杠：清单键统一用 'src/xxx.py' 形式。
+        # 2026-11-01 修复：此前直接传 Windows 反斜杠路径，
+        # update_file_hash 会新增一条 'src\\xxx.py' 键，原正斜杠键保持旧值，
+        # 清单出现重复条目且校验仍报 MODIFIED。
+        rel = args.file.strip().strip('"').strip("'").strip()
+        rel = rel.replace("\\", "/")
+        while rel.startswith("./"):
+            rel = rel[2:]
+        checker.update_file_hash(rel)
+        print("[OK] hash updated: %s" % rel)
 
 
 if __name__ == "__main__":

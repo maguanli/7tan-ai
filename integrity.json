@@ -1,18 +1,18 @@
 {
   "version": 1,
-  "generated_at": "2026-10-13T23:39:05.534308",
+  "generated_at": "2026-11-01T02:40:22.370495",
   "generated_by": "7tan-updater build v5.1.0",
   "algorithm": "sha256",
   "scope": "full",
   "files": {
     "main.py": "ef076fd31e0a7b6b0ed1e218d828fba0e7704f360bfd0c5fe2c08eecf5eefc6a",
     "src/agent/agent_loop.py": "129bd0ba68d89f6c6f6ad2e12c7217f7fa1df00067582d3d6fea50cc11254b0f",
-    "src/agent/model_manager.py": "559568b2a7049e5b41340ae6d2ddbd15b6dda9f58c5e5835c16cba0a679eafb0",
-    "src/agent/context_manager.py": "82ee4508a167ebd72f8c75428b7c3352c80bba8f4251de5d1d9380ebe35ff82a",
+    "src/agent/model_manager.py": "736d4bd72a7307d8358af9b469c9a5bd216e6ac3f6d8a314bd104b42dd310556",
+    "src/agent/context_manager.py": "f7b4b2cdbac8b0f634a1ae43ea178a46dde04a55cc94119aa7cd9bb045982b63",
     "src/agent/conversation.py": "50cffde39e57672fbdc0a314aafe7d4fd943199a1f7bf45e623ac39d464bbe71",
     "src/tools/registry.py": "db50f9af344996e990a920d74a72bcd6e7b7260d0c38d61fe3fa0802ed202259",
-    "src/tools/browser_tools.py": "3e55e7609eff12d4e767d7245760fd14115ba686217fbf4ac43cfb2553cf24dc",
-    "src/tools/download_tools.py": "0fa7c75e2c66a8714b51b3179daec6dbcae5427669ba0a48a1b4626f1196e947",
+    "src/tools/browser_tools.py": "d9b54224d9aaa6889b45631c22176063f30224f36117cc57c6c64bbb0189897d",
+    "src/tools/download_tools.py": "65cc2974cb4476af007361278182c114fd60d791428626f3118abde36f9942d0",
     "src/tools/db_tools.py": "6c2697ad51a95daeb1ba36ae0468e9756c3dd10da676ee8ec6b1611b7044d919",
     "src/tools/content_tools.py": "d2a0be85a125396916240c3324bb3c86d0fc22bd8123ece440af980df45953e5",
     "src/tools/oss_tools.py": "3b04a6dd119bfbc5d9f36daaf5c15ca4df39e044ccd975a3cfcdebbb74bd5e66",
@@ -28,14 +28,19 @@
     "src/scheduler/scheduler.py": "64aea0de60a4f0bb37da655a195aa1c7b14de3767903bfabf675f5f04dfa9fbc",
     "src/scheduler/jobs.py": "81c4f6bc8c33e89fb09f30eb7858f9fd885d06656e3a93efa8d37cf3f65c9ea3",
     "src/scheduler/daemon.py": "58995939cae8c8f74c64b5a201b418c8aa306a9f062299be2d8907640c0942fd",
-    "src/web/server.py": "25fec03af25ca098a660b925640f668fa0902d313632cad08a7b49735f7fe147",
+    "src/web/server.py": "5f2a47d01e9b4512168400d78933549c348167006a67d5a6ecd854deb1380f13",
     "src/web/ws.py": "767e16b7122bbcdbf8550270b7b7cbc3371720f2353b37f66d8a8b778b745b0a",
     "src/cli.py": "511c3d9794d63016ee73634a3384ada5ec0d62a1de41be7034403628b6e75701",
     "src/security/manifest_template.py": "a3b1ddf9914fe3e10e21c9eb04baef4f815614d7e4c44644d956b4289e09cffd",
     "src/utils/logger.py": "3e6c683099864d0cffc5a06c91635decb6d5519c3d7a0a181e4cc86a69ea6f6b",
     "src/utils/helpers.py": "adb0b32bc662b12c26271aef064caf6e3ce1b8c5bed1d9f63653997cec4dd83f",
     "src/utils/retry.py": "2af28db6a260ca0f0a1614d48cb61e2a88d73c2084a59d18edb6bc5803e4da2d",
-    "src/utils/crypto.py": "713788ca606a9c5a632e75090df9461285028bf5d320e8a2b73d2ee49d71b1d1"
+    "src/utils/crypto.py": "713788ca606a9c5a632e75090df9461285028bf5d320e8a2b73d2ee49d71b1d1",
+    "src\\agent\\model_manager.py": "736d4bd72a7307d8358af9b469c9a5bd216e6ac3f6d8a314bd104b42dd310556",
+    "src\\agent\\context_manager.py": "f7b4b2cdbac8b0f634a1ae43ea178a46dde04a55cc94119aa7cd9bb045982b63",
+    "src\\tools\\browser_tools.py": "d9b54224d9aaa6889b45631c22176063f30224f36117cc57c6c64bbb0189897d",
+    "src\\tools\\download_tools.py": "65cc2974cb4476af007361278182c114fd60d791428626f3118abde36f9942d0",
+    "src\\web\\server.py": "5f2a47d01e9b4512168400d78933549c348167006a67d5a6ecd854deb1380f13"
   },
   "exclude_patterns": [
     "*.pyc",
@@ -48,5 +53,5 @@
     "backup/**",
     "*.log"
   ],
-  "manifest_hmac": "f399d0e1bf8f4140257b9c138906d5da63084f88b0cd752782f9487480f3bc1d"
+  "manifest_hmac": "8b650118d1b5dac6b57217b8c3286c4f2559ebdf173f5e0c503dffe21dc61563"
 }

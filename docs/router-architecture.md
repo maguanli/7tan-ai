@@ -140,7 +140,7 @@ thread.start()
 
 含义：同时 5 条消息 = 5 个线程各可跑满 1000 轮。
 
-### 3.3 abort 信号是全局单例，并发会互相误杀
+### 3.3 abort 信号是全局单例，并发会互相误杀（2026-11-01 已修复，见 12.3）
 
 `abort_signal.py:119-129`：
 
@@ -154,6 +154,8 @@ def is_aborted():
 `_signals` 是模块级列表，**不是 thread-local / contextvar**。注释里也自认"作为全局终止信号"。
 
 含义：Worker A 被中止，Worker B 的工具层调 `is_aborted()` 也返回 True。**这是 P1 的硬前置。**
+
+> 2026-11-01 已修复：改为按作用域（默认线程）分组 + 栈顶语义，详见 12.3。
 
 ### 3.4 tools 参数能覆盖（但这条口子只给一个例外用）
 
@@ -314,7 +316,7 @@ v3 写过"276 个工具平铺在一个对话里，选错工具是必然的"。�
 ### P1 准入闸 + 无人值守剔除自伤类（只接定时任务）
 
 - 定时任务改走 Router → `TaskQueue.submit_function`
-- **先解决 3.3 全局 abort**（改 `contextvars.ContextVar`）
+- ~~先解决 3.3 全局 abort~~ ✅ 2026-11-01 已完成（见 12.3；实际改法是按线程作用域分组 + 栈顶语义，没有用 ContextVar）
 - **无人值守时剔除 self_modify 类**（见 5.2）：定时任务本来就没人看着，这一步风险最低
 - 这一步收益最大、风险最低：定时任务无人值守，出问题一眼能看出来
 - 其余六个入口不动
@@ -487,6 +489,80 @@ type 只用来「加」：code 类可上调到 300 / 3600s
 
 ---
 
+## 十二、第一批已落地（2026-11-01）
+
+### 12.1 完整性清单：5 条哈希过期，已更新（顺手修了工具自身的 bug）
+
+`verify_integrity` 报 5 条 modified，但都是正常提交（`3f83968` 7723 截图采集 / `bf348d7` 超长历史消息撑爆上下文），不是篡改。清单 `generated_at` 是 2026-10-13，落后于这 5 个文件的改动时间（10-21 至 10-23）。
+
+修的过程中发现 `tools/check_integrity.py update` 有个真 bug：路径没归一化。`update --file src\agent\x.py` 会**新增一条反斜杠键**，原正斜杠键保持旧值——清单从 31 条变成 36 条，校验仍然报错，而且会一直报下去。已改为先 strip 引号、再把反斜杠归一化为正斜杠。
+
+现在：`healthy: True | tampered: 0`。
+
+> 遗留：清单里仍有 5 条反斜杠孤儿键。清理它们会破坏 `manifest_hmac`（`update_file_hash` 内部会重签，手改 JSON 不会），暂时留着——它们不参与校验，无害。
+
+### 12.2 子 Agent 派工插件：`data/plugins/agent_spawner/`（串行版）
+
+两个工具：`spawn_worker(task, max_iterations, timeout_seconds, allow_self_modify, system_prompt)`、`spawn_status(recent)`。
+
+| 点 | 做法 | 为什么 |
+|---|---|---|
+| 并发 | `threading.Lock` 非阻塞，忙则立即返回 | 浏览器/桌面是进程级独占资源，两个 Worker 会互相切页面、抢输入 |
+| 工具面 | 全量下放，只减自身 + 减自伤类 | 不做领域裁剪（见 5.1） |
+| 自伤判定 | 按 `category == self_modify`，**不是按名字前缀** | `self_rebuild` / `self_update_prompt` / `sandbox_execute` 名字不带 `self_modify_` 前缀，只看前缀会漏掉 |
+| 会话 | 独立 `session_id` | 不污染主对话上下文 |
+| 中止 | 独立 `_WorkerAbort(Event)` | 配合 12.3 的栈顶语义 |
+| 预算 | 默认 200 轮 / 1800s，硬上限 500 / 7200s | `run_agent_loop` 默认 1000 轮太长 |
+| 回传 | 摘要 4000 字符 + 全文落 `data/spawn_worker/reports/` | 不把 Worker 全部日志灌回主上下文 |
+
+实测（3 次派工均成功）：
+
+```
+w-1101024316  ✅ 2 轮  8.1s  ¥0.011  → 正确答出 check_integrity.py 只有 1 个 def
+w-1101024447  ✅ 2 轮  7.6s  ¥0.010  → 正确答出该文件第一行是三个双引号
+```
+
+下放工具数：仅内置工具时 36 个；满插件环境（50 插件 / 276 工具）下应为 270 左右。**【未核】满插件环境的实际数字与描述总长度。**
+
+### 12.3 abort 信号：改为按作用域隔离（P1 硬前置，已完成）
+
+改的是 `src/utils/abort_signal.py`——它**不在**完整性清单内，所以改动不破坏校验；`src/agent/agent_loop.py` 在清单内，这次一行没碰。
+
+改法：`_signals` 从「一个 list」改成「dict[scope] -> list」，scope 默认取当前线程 ident；`is_aborted()` 只判**第一个非空作用域的栈顶信号**，不再做全域扫描。
+
+修掉两个真故障：
+
+1. **并发连坐**：A 中止，B 的工具层也以为该停，B 会半路莫名其妙退出，日志上看起来像它自己要停。
+2. **嵌套污染（更隐蔽）**：主 Agent 派 Worker，两者同线程同步执行。Worker 超时把自己的信号置位后，主 Agent 接下来调用的**每个**工具都会看到 `is_aborted()=True`——用户看到的现象是「派了个子任务，结果我自己也被终止了」。
+
+栈顶语义实测（`tools/_test_abort_scope.py`，19 项全过）：
+
+```
+Worker 注册    → 栈 [sig_main, sig_w]，只看 sig_w
+Worker 超时 set→ 只影响 sig_w，主 Agent 不受影响     PASS
+Worker 注销    → 栈 [sig_main]，主 Agent 恢复原判定    PASS
+跨线程 A / B   → A 中止不影响 B                      PASS
+run_with_abort → 长命令 0.9s 内杀掉进程树             PASS
+正常命令        → rc=0，不受影响                       PASS
+```
+
+集成验证：派工前 `scope_stats={6612:{count:1}}`，派工后仍是 `{6612:{count:1}}`（Worker 的信号已注销），主 Agent 未被判定中止；注销后回到 `{}`。
+
+⚠️ 这次不需要 rebuild（源码运行，`dist` 里只有 7tan-editor），但**当前进程仍加载着旧的 abort_signal 模块，重启后才生效**；插件同样要重启才会被 `load_all_installed` 拾取。
+
+### 12.4 距离「AI 指挥 AI 并发干活」还差什么
+
+| 缺口 | 现状 | 影响 |
+|---|---|---|
+| 浏览器 / 桌面进程级单例 | 无锁（`browser_tools.py:15`） | **并发上限的真正来源**：能并行的只有不碰浏览器、不碰桌面的活 |
+| 流式入口裸线程 | `agent_loop.py:1119` 无条件 `Thread().start()`，绕过 TaskQueue | 5 条消息 = 5 个线程各跑满 1000 轮 |
+| `tools=[]` 陷阱 | 传空列表会退回全量 276 个 | 想给 Worker 一个干净工具面做不到，必须显式传具体列表 |
+| 无 git worktree | 所有 Worker 指向同一仓库 | 两个 Worker 同时改同一文件就是事故（见 9.2） |
+
+结论：**串行闭环已经跑通并有实证；并发还差两件事——给独占资源加锁、给 code 类 Worker 配 worktree。**
+
+---
+
 ## 附：核查依据
 
 ```
@@ -505,7 +581,7 @@ D:\7tan\7tanAI\
   data/plugins/                 50 个插件，276 个工具（编码 86 / 内容 85 / 运维 36）
   src/tools/registry.py         10,122 B，Tool 含 category/dangerous/pro_only
   src/agent/agent_loop.py       42,769 B，3 处 daemon 线程，max_iterations 默认 1000
-  src/agent/abort_signal.py     全局 _signals 列表，非 thread-local
+  src/utils/abort_signal.py     原为全局 _signals 列表，2026-11-01 改为按作用域分组
   src/pipeline/task_queue.py    单例，TaskPriority / max_concurrent
   src/web/routes/api_chat.py:401 / :289
   src/scheduler/jobs.py:43 / :124

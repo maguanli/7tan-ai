@@ -537,6 +537,58 @@ class BrowserBridge(QObject):
         """滚动到页面底部（触发懒加载）"""
         self.execute_js("window.scrollTo(0, document.body.scrollHeight);", timeout=1.0)
 
+    # ===== 动态多视图：每个执行者一个独立 QWebEngineView =====
+    # 2026-11-01 加的。理由：浏览器不是「一个资源」，是多份 —— 每个
+    # QWebEngineView 是独立渲染进程。之前把 browser 当单例排队，等于让
+    # 用源站的 Worker 和管理后台的 Worker 互相等，纯属人为串行。
+
+    @pyqtSlot(str, str)
+    def _create_owner_view_impl(self, req_id: str, owner: str):
+        """在 GUI 线程创建一个属于 owner 的视图（默认隐藏）。"""
+        view, err = None, ""
+        try:
+            from PyQt6.QtWebEngineWidgets import QWebEngineView
+            view = QWebEngineView()
+            view.setWindowTitle(f"🤖 Worker {owner}")
+            view.resize(1200, 800)
+            # 与 register_web_view 保持同一套 newWindow 处理，否则点击
+            # window.open 类按钮会被 QWebEngineView 静默丢弃。
+            try:
+                from .browser_tools import _open_new_window_in_view
+                view.page().setNewWindowRequestedHandler(
+                    lambda req, v=view: _open_new_window_in_view(v, req)
+                )
+            except Exception as _e:
+                logger.warning(f"[多视图] newWindow 挂接失败: {_e}")
+            if _show_owner_windows():
+                view.show()
+            bridge = BrowserBridge(view)
+            with _owner_lock:
+                _owner_view[owner] = view
+                _owner_bridge[owner] = bridge
+            logger.info(f"🪟 [多视图] 已为 {owner} 创建独立视图")
+        except Exception as e:
+            view, err = None, f"{type(e).__name__}: {e}"
+            logger.error(f"🪟 [多视图] 创建失败 [{owner}]: {err}")
+        with _owner_lock:
+            _spawn_results[req_id] = (view, err)
+
+    @pyqtSlot(str)
+    def _destroy_owner_view_impl(self, owner: str):
+        """在 GUI 线程销毁 owner 的视图。"""
+        with _owner_lock:
+            view = _owner_view.pop(owner, None)
+            _owner_bridge.pop(owner, None)
+        if view is None:
+            return
+        try:
+            view.stop()
+            view.setParent(None)
+            view.deleteLater()
+            logger.info(f"🪟 [多视图] 已销毁 {owner} 的视图")
+        except RuntimeError:
+            pass   # 已被 Qt 销毁
+
     @property
     def is_available(self) -> bool:
         """浏览器是否可用"""
@@ -579,6 +631,152 @@ def unregister_bridge():
     _bridge = None
     _admin_bridge = None
     logger.info("🔌 BrowserBridge 已释放")
+
+
+# ── 按执行者（owner）索引的独立视图注册表 ─────────────────────────────
+# 之前的 _bridge / _admin_bridge 是「两个固定槽位」，并发度写死 2。
+# 这里改成 owner -> view/bridge，Worker 各自开各自的一份，互不顶页面。
+_owner_view = {}          # owner -> QWebEngineView（必须存 Python 引用，否则被 GC）
+_owner_bridge = {}        # owner -> BrowserBridge
+_owner_lock = threading.RLock()
+_spawn_results = {}       # req_id -> (view, error)，跨线程回传创建结果
+
+
+def _show_owner_windows() -> bool:
+    """是否把 Worker 视图显示成窗口（默认隐藏：隐藏视图同样能加载页面、跑 JS）。"""
+    try:
+        from ..config.loader import load_config
+        cfg = load_config() or {}
+        return bool(((cfg.get("browser") or {}).get("show_worker_windows")) or False)
+    except Exception:
+        return False
+
+
+def _max_owner_views() -> int:
+    """同时存在的 Worker 视图上限（每个约 150~300MB，别无限开）。"""
+    try:
+        from ..config.loader import load_config
+        cfg = load_config() or {}
+        return int(((cfg.get("browser") or {}).get("max_worker_views")) or 4)
+    except Exception:
+        return 4
+
+
+def _on_gui_thread() -> bool:
+    try:
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtCore import QThread
+        app = QApplication.instance()
+        return app is not None and QThread.currentThread() is app.thread()
+    except Exception:
+        return False
+
+
+def _gui_anchor():
+    """拿到一个活在 GUI 线程的 QObject 作为调度锚点。"""
+    return _bridge or _admin_bridge
+
+
+def can_spawn_views() -> bool:
+    """能否开独立视图：需要有 GUI 线程锚点 + QApplication。"""
+    return _gui_anchor() is not None and not _app_missing()
+
+
+def _app_missing() -> bool:
+    try:
+        from PyQt6.QtWidgets import QApplication
+        return QApplication.instance() is None
+    except Exception:
+        return True
+
+
+def spawn_owner_view(owner: str, timeout: float = 20.0):
+    """为 owner 创建一个独立视图。返回 (view, error)。必须在浏览器已启动后用。"""
+    import uuid
+    owner = str(owner or "main")
+    with _owner_lock:
+        if owner in _owner_view:
+            return _owner_view[owner], ""
+        if len(_owner_view) >= _max_owner_views():
+            return None, f"独立视图已达上限 {_max_owner_views()}（config: browser.max_worker_views）"
+
+    anchor = _gui_anchor()
+    if anchor is None:
+        return None, "浏览器未启动（没有 GUI 线程锚点）"
+
+    # 已在 GUI 线程：直接调，别用 BlockingQueuedConnection（同线程会死锁）
+    if _on_gui_thread():
+        req_id = uuid.uuid4().hex
+        anchor._create_owner_view_impl(req_id, owner)
+        with _owner_lock:
+            return _spawn_results.pop(req_id, (None, "未收到创建结果"))
+
+    from PyQt6.QtCore import QMetaObject, Qt, Q_ARG
+    req_id = uuid.uuid4().hex
+    try:
+        QMetaObject.invokeMethod(
+            anchor, "_create_owner_view_impl",
+            Qt.ConnectionType.BlockingQueuedConnection,
+            Q_ARG(str, req_id), Q_ARG(str, owner),
+        )
+    except Exception as e:
+        return None, f"调度到 GUI 线程失败: {type(e).__name__}: {e}"
+    with _owner_lock:
+        return _spawn_results.pop(req_id, (None, "未收到创建结果（GUI 线程未响应）"))
+
+
+def destroy_owner_view(owner: str) -> bool:
+    """销毁 owner 的视图（GUI 线程执行）。返回是否确有视图被销毁。"""
+    owner = str(owner or "")
+    with _owner_lock:
+        if owner not in _owner_view:
+            return False
+    anchor = _gui_anchor()
+    if anchor is None:
+        with _owner_lock:
+            _owner_view.pop(owner, None)
+            _owner_bridge.pop(owner, None)
+        return True
+    if _on_gui_thread():
+        anchor._destroy_owner_view_impl(owner)
+        return True
+    from PyQt6.QtCore import QMetaObject, Qt, Q_ARG
+    try:
+        QMetaObject.invokeMethod(
+            anchor, "_destroy_owner_view_impl",
+            Qt.ConnectionType.BlockingQueuedConnection,
+            Q_ARG(str, owner),
+        )
+        return True
+    except Exception as e:
+        logger.warning(f"🪟 [多视图] 销毁 {owner} 失败: {e}")
+        with _owner_lock:
+            _owner_view.pop(owner, None)
+            _owner_bridge.pop(owner, None)
+        return True
+
+
+def get_bridge_for(owner: str):
+    """取 owner 的独立 Bridge；没有则 None。"""
+    with _owner_lock:
+        return _owner_bridge.get(str(owner or ""))
+
+
+def get_view_for(owner: str):
+    with _owner_lock:
+        return _owner_view.get(str(owner or ""))
+
+
+def owner_views() -> dict:
+    """诊断：当前有哪些独立视图（owner -> 当前 URL）。"""
+    out = {}
+    with _owner_lock:
+        for o, v in _owner_view.items():
+            try:
+                out[o] = str(v.url().toString()) if v is not None else "(已销毁)"
+            except RuntimeError:
+                out[o] = "(已销毁)"
+    return out
 
 
 def _fallback_system_screenshot(filepath: str) -> bool:

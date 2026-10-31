@@ -507,7 +507,7 @@ type 只用来「加」：code 类可上调到 300 / 3600s
 
 | 点 | 做法 | 为什么 |
 |---|---|---|
-| 并发 | `threading.Lock` 非阻塞，忙则立即返回 | 浏览器/桌面是进程级独占资源，两个 Worker 会互相切页面、抢输入 |
+| 并发 | `_RUN_LOCK` 非阻塞，忙则立即返回 | Worker 本身仍串行派发（简单可控）；但**浏览器已不是争用点**，见 12.5 —— 每个 Worker 现开独立 `QWebEngineView`，桌面/相机才是真正独占的 |
 | 工具面 | 全量下放，只减自身 + 减自伤类 | 不做领域裁剪（见 5.1） |
 | 自伤判定 | 按 `category == self_modify`，**不是按名字前缀** | `self_rebuild` / `self_update_prompt` / `sandbox_execute` 名字不带 `self_modify_` 前缀，只看前缀会漏掉 |
 | 会话 | 独立 `session_id` | 不污染主对话上下文 |
@@ -556,12 +556,43 @@ run_with_abort → 长命令 0.9s 内杀掉进程树             PASS
 
 | 缺口 | 现状 | 影响 |
 |---|---|---|
-| 浏览器 / 桌面进程级单例 | 无锁（`browser_tools.py:15`） | **并发上限的真正来源**：能并行的只有不碰浏览器、不碰桌面的活 |
+| ~~浏览器进程级单例~~ | ✅ 已解决（12.5）：每个 Worker 独立 `QWebEngineView` | —— |
+| ~~无 git worktree~~ | ✅ 已解决：`spawn_worker(use_worktree=True)` 开 `ticket/<id>` 分支，工作目录+作用域一起切过去 | —— |
+| 桌面 / 相机 | 仍为进程级独占（`desktop_bot` 插件内 0 锁；鼠标键盘只有一套） | **这是现在真正的并发上限**：并行度取决于有多少活不碰鼠标键盘 |
 | 流式入口裸线程 | `agent_loop.py:1119` 无条件 `Thread().start()`，绕过 TaskQueue | 5 条消息 = 5 个线程各跑满 1000 轮 |
 | `tools=[]` 陷阱 | 传空列表会退回全量 254 个 | 想给 Worker 一个干净工具面做不到，必须显式传具体列表 |
-| 无 git worktree | 所有 Worker 指向同一仓库 | 两个 Worker 同时改同一文件就是事故（见 9.2） |
 
-结论：**串行闭环已经跑通并有实证；并发还差两件事——给独占资源加锁、给 code 类 Worker 配 worktree。**
+结论：**串行闭环已跑通；浏览器维度的并行已经打通（三视图并发实测 2.07s）；剩下的天花板是鼠标键盘。**
+
+### 12.5 浏览器不是单例：每个 Worker 一个独立视图
+
+起因是一个判断错误：之前把 `browser` 当「一个资源」排队，于是用源站的 Worker 和管理后台的 Worker 互相等。
+实际上 `QWebEngineView` 每个都是**独立渲染进程**，天生可并行。
+
+| 层 | 做法 |
+|---|---|
+| 视图 | `browser_bridge.spawn_owner_view(owner)` 在 GUI 线程 new 一个 `QWebEngineView`（默认隐藏；隐藏视图同样能加载页面、跑 JS） |
+| 桥接 | `_owner_view` / `_owner_bridge` 按 owner 分表，替代原来的 `_source_view` / `_admin_view` 两个固定槽位 |
+| 租约 | `browser_tools.lease_key()`：有独立视图 → `browser:own:<worker>`（谁都不跟谁抢）；开不出视图 → `browser:role:<source|admin>`（v2 兜底，同角色互斥） |
+| 回收 | `spawn_worker` 结束时 `release_owner_view(worker_id)` 销毁视图（每个 150~300MB，不销毁就是泄漏） |
+| 上限 | `config: browser.max_worker_views`（默认 4），超限退回共享视图 |
+| 观感 | `config: browser.show_worker_windows`（默认 false）可让 Worker 窗口可见 |
+
+实测（`tools/multiview_probe.py`）：
+
+```
+逻辑层 18 项：租约键按 owner 分、视图只创建一次、结束销毁、主 Agent 不被分视图、上限生效
+真实层 13 项：3 个 QWebEngineView 三线程并发导航
+  总耗时 2.07s（每个 ~2.05s，串行要 6s+）
+  三个视图各读回自己的内容：w-p1-DATA / w-p2-DATA / w-p3-DATA，无一串窗
+```
+
+写这段时踩到并修掉的两个自身错误：
+
+1. **插入代码时把 `@property` 抢走了。** `is_available` 原本是 property，我的插入点正好在它上方，结果 `@property` 落到了新方法 `_create_owner_view_impl` 上 —— 访问属性就触发调用，报 `missing 2 required positional arguments`。
+2. **测试脚本没启动事件循环。** `navigate` 用 `BlockingQueuedConnection`，主线程不在 `app.exec()` 里就永远等不到，三个线程干等 180 秒后结果全空——差一点把「测试写错」当成「并行失败」报出去。
+
+另：`page().setNewWindowRequestedHandler` 在当前 PyQt6 版本里不存在（`QWebEnginePage` 无此属性），共享视图那边同样一直是静默失败状态。**这是既有缺陷，不是本次引入**，但意味着 `window.open` 类按钮（微信公众平台打开草稿）目前没有专门处理。
 
 ---
 

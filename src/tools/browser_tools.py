@@ -106,16 +106,104 @@ def _open_new_window_in_view(view, request):
         pass
 
 
+def ensure_owner_view(owner: str = ""):
+    """确保该执行者有自己的独立视图。拿不到返回 None（调用方退回共享视图）。
+
+    2026-11-01：之前并发单位是「浏览器」这一个名字，源站 Worker 和后台 Worker
+    要互相排队 —— 这是错的。QWebEngineView 每个都是独立渲染进程，天生可并行。
+    现在按 owner 各开一份，浏览器不再是争用点。
+    """
+    o = owner or _ctx_owner()
+    if o == "main":
+        return None                      # 主 Agent 用界面上那两个窗口，不另开
+    try:
+        from .browser_bridge import get_bridge_for, spawn_owner_view
+    except Exception:
+        return None
+    b = get_bridge_for(o)
+    if b is not None:
+        return b
+    view, err = spawn_owner_view(o)
+    if view is None:
+        logger.warning(f"🪟 无法为 {o} 开独立视图，退回共享视图：{err}")
+        return None
+    return get_bridge_for(o)
+
+
+def release_owner_view(owner: str = "") -> bool:
+    """Worker 结束时销毁它的独立视图（每个约 150~300MB，不销毁就是泄漏）。"""
+    o = owner or _ctx_owner()
+    if not o or o == "main":
+        return False
+    try:
+        from .browser_bridge import destroy_owner_view
+        return destroy_owner_view(o)
+    except Exception as e:
+        logger.warning(f"🪟 销毁 {o} 的视图失败: {e}")
+        return False
+
+
+def lease_key() -> str:
+    """这次浏览器操作该按哪个键排队。
+
+    有独立视图 → 按 owner 分键，谁都不跟谁抢（并发度 = Worker 数）。
+    没有独立视图（无 GUI 线程 / 关闭了多视图 / 超过上限）→
+        退回按【视图角色】分键，源站与后台仍可并行，同角色互斥。
+        这是 v2 的行为，保留作为兜底。
+    """
+    o = _ctx_owner()
+    if o != "main":
+        try:
+            from .browser_bridge import can_spawn_views
+            if can_spawn_views():
+                return f"browser:own:{o}"
+        except Exception:
+            pass
+    return f"browser:role:{get_active_context()}"
+
+
+def view_status() -> dict:
+    """诊断：当前的视图分配情况。"""
+    out = {"shared": {"source": _source_view is not None,
+                      "admin": _admin_view is not None},
+           "owner_views": {}, "ctx_by_owner": dict(_ctx_by_owner)}
+    try:
+        from .browser_bridge import owner_views, can_spawn_views
+        out["owner_views"] = owner_views()
+        out["can_spawn"] = can_spawn_views()
+    except Exception as e:
+        out["owner_views"] = f"不可用: {e}"
+    return out
+
+
 def _get_active_view():
     global _source_view, _admin_view
+    o = _ctx_owner()
+    if o != "main":
+        try:
+            from .browser_bridge import get_view_for
+            v = get_view_for(o)
+            if v is not None:
+                return v
+        except Exception:
+            pass
     if get_active_context() == "admin" and _admin_view is not None:
         return _admin_view
     return _source_view
 
 
 def _get_bridge():
-    """获取当前活跃浏览器的 Bridge 实例（线程安全）"""
+    """获取当前执行者该用的 Bridge。
+
+    Worker → 优先用自己的独立视图（没有就现开一个）。
+    主 Agent / 开不出视图时 → 退回界面上那两个共享窗口。
+    """
     from .browser_bridge import get_bridge, get_admin_bridge
+    o = _ctx_owner()
+    if o != "main":
+        b = ensure_owner_view(o)
+        if b is not None:
+            return b
     if get_active_context() == "admin":
         bridge = get_admin_bridge()
         if bridge is None:
@@ -632,7 +720,7 @@ def close_browser():
 )
 def browser_exec_js(js: str) -> str:
     """执行 JS（线程安全）"""
-    if _source_view is None and _admin_view is None:
+    if _source_view is None and _admin_view is None and _ctx_owner() == "main":
         return "⚠️ 浏览器未打开"
     bridge = _get_bridge()
     if bridge is None:
@@ -657,7 +745,7 @@ def browser_exec_js(js: str) -> str:
 )
 def browser_set_value(selector: str, value: str) -> str:
     """设置输入框值（React 兼容，使用原生 setter + 事件触发）"""
-    if _source_view is None and _admin_view is None:
+    if _source_view is None and _admin_view is None and _ctx_owner() == "main":
         return "⚠️ 浏览器未打开"
     bridge = _get_bridge()
     if bridge is None:
@@ -678,3 +766,14 @@ def browser_set_value(selector: str, value: str) -> str:
 """
     result = bridge.execute_js(js, timeout=10.0)
     return result or "(空结果)"
+
+
+@register_tool(
+    name="browser_view_status",
+    description="查看浏览器视图分配：界面上两个共享视图 + 各 Worker 的独立视图。排查「页面被顶掉/操作错窗口」时用。",
+    parameters={"type": "object", "properties": {}, "required": []},
+    category="system",
+)
+def browser_view_status() -> str:
+    """诊断：当前谁在用哪个视图。"""
+    return json.dumps(view_status(), ensure_ascii=False, indent=2)

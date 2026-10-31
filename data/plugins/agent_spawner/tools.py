@@ -376,6 +376,9 @@ def spawn_worker(task: str, max_iterations: int = 200, timeout_seconds: int = 18
         try:
             from src.tools import browser_tools as _bt
             _bt.reset_active_context(worker_id)
+            # 销毁该 Worker 的独立浏览器视图（每个约 150~300MB，不销毁就是泄漏）
+            if _bt.release_owner_view(worker_id):
+                logger.info(f"spawn_worker {worker_id} 已销毁独立浏览器视图")
         except Exception as e:
             logger.warning(f"spawn_worker 清理浏览器上下文失败: {e}")
         _STATE.update({"running": False, "worker_id": None, "started_at": None, "task_head": None})

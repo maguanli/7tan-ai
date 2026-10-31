@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-11-01T03:49:34.187716",
+  "generated_at": "2026-11-01T04:05:54.760787",
   "generated_by": "7tan-updater build v5.1.0",
   "algorithm": "sha256",
   "scope": "core",
@@ -11,7 +11,7 @@
     "src/agent/context_manager.py": "f7b4b2cdbac8b0f634a1ae43ea178a46dde04a55cc94119aa7cd9bb045982b63",
     "src/agent/conversation.py": "50cffde39e57672fbdc0a314aafe7d4fd943199a1f7bf45e623ac39d464bbe71",
     "src/tools/registry.py": "db50f9af344996e990a920d74a72bcd6e7b7260d0c38d61fe3fa0802ed202259",
-    "src/tools/browser_tools.py": "862c35539c724fd1b749ff6dedb241be6191c5ecec15dc07187d13d88fd6db9a",
+    "src/tools/browser_tools.py": "7bc8fb8ccdad7d3e39e93415f48640b6ed80113d555a25bae775445e6a0a2d24",
     "src/tools/download_tools.py": "65cc2974cb4476af007361278182c114fd60d791428626f3118abde36f9942d0",
     "src/tools/db_tools.py": "6c2697ad51a95daeb1ba36ae0468e9756c3dd10da676ee8ec6b1611b7044d919",
     "src/tools/content_tools.py": "d2a0be85a125396916240c3324bb3c86d0fc22bd8123ece440af980df45953e5",
@@ -48,5 +48,5 @@
     "backup/**",
     "*.log"
   ],
-  "manifest_hmac": "91c57fc3ff5b8687ec05179988bfe3fb62c83b6c40c52269e6113f59bd398ddc"
+  "manifest_hmac": "8284f1140596a7c369c176383beba514f26f6b82f6e5eaa54b88ace5f07a009b"
 }

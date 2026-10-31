@@ -79,10 +79,19 @@ def resource_of(name: str, args: dict):
     if not name:
         return None, False
 
-    # 1) 按注册表 category 判（browser / desktop / camera 这类独占硬件）
+    # 1) 按注册表 category 判
     tool = TOOL_REGISTRY.get(name)
     cat = getattr(tool, "category", "") or ""
     if cat in _STICKY_CATEGORIES:
+        # 浏览器不是「一个资源」：每个 QWebEngineView 是独立渲染进程。
+        # 有独立视图时按 owner 分键（谁都不跟谁抢）；开不出视图才退回按
+        # 视图角色分键（源站 / 后台互斥，v2 的兜底行为）。
+        if cat == "browser":
+            try:
+                from ..tools import browser_tools as _bt
+                return _bt.lease_key(), True
+            except Exception:
+                return "browser", True
         return cat, True
 
     # 2) 插件类工具按名字前缀判（desktop_bot / camera_bot 不在 registry.category 里）

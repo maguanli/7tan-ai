@@ -1,7 +1,9 @@
-# 7Tan 双层调度改造方案 v3
+# 7Tan 双层调度改造方案 v3.1
 
 > 依据：DeepSeek Harness Team《Super-agent 设计探索》+ 开源原型源码（本地副本 `D:\7tan\research\dsh-superagent\`，216 文件 / 2,601,300 字节 / MIT）
 > 本文只写方案，不含代码改动。所有结论来自对两套代码的实际核查，未核到的一律标【未核】。
+> v3.1 修订：作废 v3 的「按领域分工具子集」，改为全量保留 + 只锁自伤类（见 5.1 / 5.2）。其余章节未动。
+> 被否决的想法集中记在第十一节，免得以后又提一遍。
 
 ---
 
@@ -39,6 +41,9 @@ doc_generator 3  perf_tools 3  template_generator 3  file_replacer 1
 - 危险工具面存在：`self_modify_config` / `self_rebuild` / `self_restart` / `self_update_prompt` / `run_command` / `ssh_execute` / `rsync_deploy`
 
 **推论：Ticket 必须是"任务单元 + 领域类型"，不是"一篇文章"。** 第五、九节据此重写。
+
+> 这张领域表只用来说明两件事：① 7tanAI 不是"写文章的工具"；② Ticket 必须能装不同类型的活。
+> **它不能用来决定"给不给工具"。** 工具按领域互不可见是错的，理由见 5.1。
 
 ---
 
@@ -150,7 +155,7 @@ def is_aborted():
 
 含义：Worker A 被中止，Worker B 的工具层调 `is_aborted()` 也返回 True。**这是 P1 的硬前置。**
 
-### 3.4 tools 参数能覆盖，preset 拆分不用改 registry
+### 3.4 tools 参数能覆盖（但这条口子只给一个例外用）
 
 `agent_loop.py`：`tools = tools or []`，传了子集就用子集。`src/tools/registry.py`（10,122 字节）的 `Tool` 已带元数据：
 
@@ -159,7 +164,7 @@ name / description / parameters / function
 category / dangerous / requires_browser / requires_db / pro_only
 ```
 
-**含义：可以在调用处传工具子集，实现 preset 隔离，`registry.py` 一行不用改。`dangerous` 这个字段现成可用，但仓里目前只有 `category == "self_modify"` 一处按它分流。**
+**含义：技术上可以在调用处传工具子集，`registry.py` 一行不用改。但"能传"不等于"该按领域传"—— 这条口子只用于 5.2 那一个例外。`dangerous` 字段现成可用，仓里目前只有 `category == "self_modify"` 一处按它分流。**
 
 ### 3.5 现有组件
 
@@ -189,7 +194,7 @@ category / dangerous / requires_browser / requires_db / pro_only
 | Worker Session | `ticket-<id>` | 复用 ConversationHistory |
 | Worker 工作目录 | **`git worktree` 每 ticket 一个**（仅 code 类） | `.worktrees/ticket-<id>` |
 | Worker 槽位 | `TaskQueue.max_concurrent` + 人优先额外 1 槽 | `submit_function` |
-| Worker 工具面 | 按 ticket.type 传工具子集 | `run_agent_loop(tools=[...])` |
+| Worker 工具面 | **全量可用**；仅无人值守时剔除 self_modify 类（见 5.2） | `run_agent_loop(tools=全部 − 自伤类)` |
 | Watchdog | 心跳表 + 超时标记（不自动重启） | heartbeats 表 |
 
 ---
@@ -199,50 +204,101 @@ category / dangerous / requires_browser / requires_db / pro_only
 ```
 输入事件
   Qt / Web / cron / polling
-        │
-        ▼
+                 │
+                 ▼
   ┌────────────────────────────────────────────┐
-  │ Router（单例，跑在插件线程里）               │
+  │ Router（单例，跑在插件线程里）             │
   │                                            │
-  │ 0. 归一化 → Trigger                         │
-  │ 1. gate：规则表（零 token）                  │
-  │      ├ 命中接受 → 建 ticket / 复用 ticket    │
-  │      ├ 命中拒绝 → 记 decision，丢弃           │
-  │      └ 判不出   → 2                         │
-  │ 2. assessment：一次 LLM 调用（分类器）        │
-  │ 3. 归属：有存活 ticket → Fast Path 直通       │
-  │ 4. 定类型：code / content / ops / desktop     │
-  │ 5. 分派：TaskQueue.submit_function           │
-  │ 6. 写 decisions（含 observe 的"本来会"）      │
-  └───────────────┬────────────────────────────┘
-                  │
-  ┌───────────────▼────────────────────────────┐
-  │ Worker（N ≤ max_concurrent）                │
-  │  session_id = ticket-<id>                   │
-  │  tools      = 按 type 的工具子集             │
-  │  workdir    = .worktrees/ticket-<id>（code） │
-  │  每轮写 heartbeat                            │
-  │  收尾过完成判定器（按 type 选，见 9.1）       │
-  └───────────────┬────────────────────────────┘
-                  │
-        ┌─────────▼─────────┐
-        │ data/router.db    │
-        │ triggers/tickets  │
-        │ decisions/heartbeats │
-        └───────────────────┘
+  │ 0. 归一化 → Trigger                        │
+  │ 1. gate：规则表（零 token）                │
+  │      ├ 命中接受 → 建 ticket / 复用 ticket  │
+  │      ├ 命中拒绝 → 记 decision，丢弃        │
+  │      └ 判不出   → 走 2                     │
+  │ 2. assessment：一次 LLM 调用（分类器）     │
+  │ 3. 归属：有存活 ticket → Fast Path 直通    │
+  │ 4. 定类型：code/content/ops/desktop        │
+  │ 5. 分派：TaskQueue.submit_function         │
+  │ 6. 写 decisions（含 observe 的"本来会"）   │
+  └──────────────┬─────────────────────────────┘
+                 │
+  ┌──────────────▼─────────────────────────────┐
+  │ Worker（N ≤ max_concurrent）               │
+  │  session_id = ticket-<id>                  │
+  │  tools      = 全量（无人值守减自伤类）     │
+  │  workdir    = .worktrees/ticket-<id>       │
+  │  每轮写 heartbeat                          │
+  │  收尾过完成判定器（按 type 选，见 9.1）    │
+  └──────────────┬─────────────────────────────┘
+                 │
+        ┌────────▼────────────┐
+        │ data/router.db     │
+        │ triggers / tickets │
+        │ decisions          │
+        │ heartbeats         │
+        └─────────────────────┘
 ```
 
-### 5.1 按类型分工具面（这是 Router 的第一价值）
+### 5.1 工具面：全量保留，只锁自伤（v3.1 修正）
 
-| 类型 | 工具面 | 大致数量 |
+v3 这里写的是"按 ticket.type 传工具子集，code 给 86 个、content 给 85 个，互相不可见"。
+
+**这条是错的，作废。** 错在把"分派消息"和"裁剪工具"当成了一件事。
+
+Router 是在收到消息那一刻判类型。可一个任务要用什么工具，往往干到一半才知道：写一篇测评要下载包、OCR 截图、查库、排版、发帖、验收；修一个 bug 要读网页文档、跑测试、改文件、提交、写变更说明。两边都会踩到对方的领域。
+
+真按领域裁，会出三个问题：
+
+| 问题 | 后果 |
+|---|---|
+| 判错无法补救 | 判成 content 就拿不到 `git_*`，它不会绕路，直接卡住说"没有这个工具" |
+| 中途跨领域 | 要重新提交、重新判定、丢上下文 |
+| 能力上限被写死 | 一次规整的分类，永久削掉一类活 |
+
+原型按角色分（router preset 只装路由工具、worker preset 只装执行工具）是站得住的，因为两边职责天然不重叠。把"角色"换成"领域"，是从一个正交的划分硬拧成另一个。
+
+#### 5.1.1 那要不要管工具太多？先量
+
+静态解析 50 个插件的 `register_tool` 调用（`tools/tool_schema_size.py`，可重复运行）：
+
+```
+description 条数      222（下界，部分注册写法未覆盖）
+description 总字符     11,609
+平均每条              52.3 字符
+字段最多的插件        desktop_bot 16 条 / 1,583 字符
+```
+
+按这个量级，276 个工具的 schema 塞进上下文是几千 token 的事，不构成主要成本。**为了省这点 token 去砍能力，账不划算。**
+
+【未核】权威数字得调 `registry.get_all_tools()` 后 `json.dumps` 量一次。静态解析漏掉嵌套和变量拼接的写法，所以 11,609 是下界。
+
+#### 5.1.2 真嫌长，用不减能力的办法
+
+| 办法 | 说明 | 是否减能力 |
 |---|---|---|
-| code | git_* / code_* / refactor / diff / lsp / test / build / terminal / dependency / perf / debug / ide | 86 |
-| content | gzh_* / viral_* / novel / auto_images / translate / tts / publish_guard / article_ckpt | 85 |
-| ops | docker / k8s / ssh / scp / rsync / deploy / health / terminal | 36 |
-| desktop | desktop_* / camera_* / ocr / adb_* | 25 |
-| research | web_search / browse / http_client / deep_analysis / db_explorer | 17 |
+| 渐进披露 | 全量可用，先给名字 + 一句话，要哪个再取完整参数 | 否 |
+| 分组检索 | 领域标签只用于"帮我找"，不用于"不给你" | 否 |
+| prompt 软引导 | "这类任务通常用这几个"，是建议不是白名单 | 否 |
 
-**276 个工具平铺在一个对话里，选错工具是必然的。** 收窄到 86 或 85，本身就是收益，不必等 Router 全做完。
+三条都不动能力。硬锁只有下面这一个。
+
+### 5.2 唯一的硬例外：无人值守时剔除自伤类
+
+`self_modify_config` / `self_rebuild` / `self_restart` / `self_update_prompt` / `run_command` 给无人值守 Worker，是自杀按钮 —— 它能趁没人看着改自己配置、重建自己、重启自己，而现场证据随重启一起没。
+
+判据不是"领域"，是**有没有人在场**：
+
+```
+mode == interactive（Qt / Web，人在对话里）   → 全量，含 self_modify
+mode == unattended（cron / 轮询 / 流水线）    → 全量 − self_modify 类
+```
+
+可回滚：人在场时全放。这条不叫削减能力，叫不让不可逆的操作离开人的视线。
+
+### 5.3 先量再改：工具选择失败要有证据
+
+v3 写过"276 个工具平铺在一个对话里，选错工具是必然的"。这话是我自己的判断，**手上没有任何工具选择失败的记录**。
+
+量法（只读，不改行为）：翻现有会话记录，统计每轮调了哪些工具、有没有近似工具反复试错、有没有"该用 A 却用了 B"。有数据再决定动不动工具面，不动就先按 5.1 全量跑。
 
 ---
 
@@ -255,11 +311,11 @@ category / dangerous / requires_browser / requires_db / pro_only
 - 日报：多少条会被拒、多少条会合并到同一 ticket、多少条判不出、类型分布对不对
 - 验收：跑一周，拿 decisions 表跟人核对规则准不准
 
-### P1 准入闸 + 类型分工具面（只接定时任务）
+### P1 准入闸 + 无人值守剔除自伤类（只接定时任务）
 
 - 定时任务改走 Router → `TaskQueue.submit_function`
 - **先解决 3.3 全局 abort**（改 `contextvars.ContextVar`）
-- **同时落地 5.1 的工具子集**：即使是定时任务，也按 type 传 tools
+- **无人值守时剔除 self_modify 类**（见 5.2）：定时任务本来就没人看着，这一步风险最低
 - 这一步收益最大、风险最低：定时任务无人值守，出问题一眼能看出来
 - 其余六个入口不动
 
@@ -353,7 +409,7 @@ Worker 执行  → 只在该 worktree 内 run_command / file_replace
 
 不这么做，P1 一开并发就会踩到。**这条优先级高于 Router 本身。**
 
-### 9.3 self_modify 类工具必须锁在人工会话里
+### 9.3 self_modify 类工具必须锁在人工会话里（同 5.2）
 
 `registry.py` 的 `Tool` 有 `dangerous` 字段，但仓里目前只有 `category == "self_modify"` 一处按它分流。
 
@@ -363,7 +419,6 @@ Worker 执行  → 只在该 worktree 内 run_command / file_replace
 
 ```
 self_modify 类  → 只在 mode == "interactive"（Qt / Web 有人看着）时可给
-ops 类         → code/ops ticket 可给，content ticket 不给
 ```
 
 文章里没有这一层，因为原型没有"Agent 改自己"这个概念。7tanAI 有，所以必须有。
@@ -381,19 +436,21 @@ python -m router.replay --rules new.yaml
 
 **这让 gate 规则可以演进，而不用靠感觉。** 我上一轮给 dsh-workspace 写的 `bbs_verify` 自检思路（正向+反向都测）可以搬过来。
 
-### 9.5 工具预算按 type 分级
+### 9.5 工具预算：默认统一，type 只能往上加
 
-`max_iterations=1000` 是全局一把尺子，但不同活差别很大：
+`max_iterations=1000` 是全局一把尺子，两小时（`loop_timeout: 7200`）也偏长。
 
-| type | 工具调用上限 | 时长上限 |
-|---|---|---|
-| code | 300 | 3600s |
-| content | 200 | 1800s |
-| ops | 100 | 900s |
-| desktop | 80 | 600s |
-| research | 150 | 1800s |
+但 v3 那种"按 type 给不同预算"有个跟 5.1 一样的毛病：**type 判错就把预算砍错了**，而且砍错了它不会报错，只会中途停在半路。
 
-超了强制收尾并写"预算耗尽"，不静默截断。
+改法：
+
+```
+默认        工具调用 200 / 时长 1800s（统一）
+type 只用来「加」：code 类可上调到 300 / 3600s
+不许往下调：任何 type 都不得低于默认值
+```
+
+超了强制收尾并写"预算耗尽"，不静默截断；允许 Worker 在中途报"还在推进"申请一次延期，记进 decisions 供复盘。
 
 ---
 
@@ -413,6 +470,20 @@ python -m router.replay --rules new.yaml
 1. 从 P0 起步？（shadow 行为零变化）
 2. 允许写 `data/router.db` 吗？（P0 一周约几百 KB）
 3. P1 只接定时任务，其余入口不动 —— 同意还是要求一次全接？
+
+---
+
+## 十一、被否决的方案（记在这，免得以后又提一遍）
+
+原型 `docs/007-architecture.md` 里有一张"被否决的概念"表，比架构图更能看懂他们在防什么。照着记我们自己的：
+
+| 被否决的想法 | 否决理由 |
+|---|---|
+| 按领域分工具子集，互不可见（v3 的 5.1） | 见 5.1。判错即废、中途跨领域要重来、为一个正交划分硬拧；省下的 token 只有几千 |
+| 用完整 agent loop 当 Router | 见 8.1。判"该不该接"跑一轮 loop，成本是收益好几倍 |
+| 自动重启卡住的 Worker | 见 8.3。证据随重启一起消失 |
+| 现在上投机执行 | 见 8.4。连 decisions 表都还没有 |
+| 把 Ticket 定义成"一篇文章" | 见第零节。编码类工具占 31%，等于把最大的那块活拒之门外 |
 
 ---
 

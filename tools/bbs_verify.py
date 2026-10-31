@@ -540,18 +540,54 @@ def main(argv=None):
             except Exception:
                 return 0, False
 
+        try:
+            myid = int(pid)
+        except Exception:
+            myid = 0
+
+        def ids_in(u):
+            """抓页面，返回 (http状态, 本贴是否出现, 页面里出现的最大帖 id)"""
+            try:
+                s_, t_ = fetch_text(u, timeout=args.timeout)
+                nums = [int(x) for x in re.findall(r'/bbs/(\d+)/', t_)]
+                return s_, (needle in t_), (max(nums) if nums else 0)
+            except Exception:
+                return 0, False, 0
+
         if meta['board_id']:
             bu = '%s/bbs/board/%s/' % (BASE, meta['board_id'])
-            s, found = in_page(bu)
-            rep.check(found, 'board 列表收录',
-                      '/bbs/board/%s/ 已含本贴' % meta['board_id'],
-                      '/bbs/board/%s/ 未含本贴（HTTP %s）' % (meta['board_id'], s))
+            s, found, mx = ids_in(bu)
+            detail = '/bbs/board/%s/ 已含本贴' % meta['board_id']
+            if not found and mx > myid:
+                base_bu = bu.rstrip('/')
+                for pg in (2, 3):
+                    s2, f2, mx2 = ids_in('%s_%d/' % (base_bu, pg))
+                    mx = max(mx, mx2)
+                    if f2:
+                        found, detail = True, '第 %d 页含本贴' % pg
+                        break
+            if found:
+                rep.check(True, 'board 列表收录', detail, '')
+            elif mx > myid:
+                rep.skip('board 列表收录',
+                         '已滚出前 3 页（本贴 %d，列表最新 %d），非缓存问题'
+                         % (myid, mx))
+            else:
+                rep.check(False, 'board 列表收录', '',
+                          '/bbs/board/%s/ 未含本贴，且无更新帖（HTTP %s）'
+                          % (meta['board_id'], s))
         else:
             rep.skip('board 列表收录', '未知板块 id')
 
-        s, found = in_page(BASE + '/')
-        rep.check(found, '首页收录', '首页已含本贴',
-                  '首页未含本贴（HTTP %s，检查 home 缓存是否清理）' % s)
+        s, found, mx = ids_in(BASE + '/')
+        if found:
+            rep.check(True, '首页收录', '首页已含本贴', '')
+        elif mx > myid:
+            rep.skip('首页收录',
+                     '已被 #%d 顶下首页（本贴 %d），非缓存问题' % (mx, myid))
+        else:
+            rep.check(False, '首页收录', '',
+                      '首页未含本贴且无更新帖（HTTP %s，检查 home 缓存是否清理）' % s)
 
         if meta['author_uid']:
             au = '%s/bbs/user/%s/' % (BASE, meta['author_uid'])

@@ -15,6 +15,7 @@
                仅当检测到明文时才更新备份，保证备份永远是最新真实版（幂等安全）
     - --restore 从 tools/_secrets_backup/ 恢复真实配置（本地开发始终可用）
 """
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -64,13 +65,57 @@ def yaml_files():
     return [p for p in CONFIG_DIR.glob("*.y*ml") if p.is_file()]
 
 
+def json_files():
+    return [p for p in CONFIG_DIR.glob("*.json") if p.is_file()]
+
+
+# deploy.json 中需要脱敏的凭据字段路径（点号分隔）
+JSON_SECRET_PATHS = [("server", "password"), ("github", "token")]
+
+
+def _walk_secret_node(data: dict, path: tuple):
+    """按路径取父 dict（JSON_SECRET_PATHS 的长度固定为 2）"""
+    node = data
+    for key in path[:-1]:
+        node = node.get(key) if isinstance(node, dict) else None
+        if not isinstance(node, dict):
+            return None
+    return node if isinstance(node, dict) else None
+
+
+def sanitize_json() -> int:
+    """清洗 config/*.json：把已知凭据字段置空；返回置空处数"""
+    total = 0
+    for p in json_files():
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"[WARN] {p.name}: JSON 解析失败，未脱敏（{e}）")
+            continue
+        changed = 0
+        for path in JSON_SECRET_PATHS:
+            node = _walk_secret_node(data, path)
+            if node and node.get(path[-1]):
+                node[path[-1]] = ""
+                changed += 1
+        if changed:
+            BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(p, BACKUP_DIR / (p.name + ".bak"))
+            p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"[清洗] {p.name}: 置空 {changed} 个凭据字段")
+            total += changed
+        else:
+            print(f"[OK]   {p.name}: 无明文凭据")
+    return total
+
+
 def sanitize(env: dict) -> int:
-    """清洗 config/*.yaml：含明文则先备份再替换；返回替换处数"""
+    """清洗 config/*.yaml + config/*.json：含明文则先备份再替换；返回替换处数"""
     mapping = build_reverse_map(env)
+    total = 0
     if not mapping:
         print("[SKIP] .env 中没有可脱敏的真实密钥")
-        return 0
-    total = 0
+        return total + sanitize_json()
     for p in yaml_files():
         text = p.read_text(encoding="utf-8")
         new, hits = text, 0
@@ -86,6 +131,7 @@ def sanitize(env: dict) -> int:
             total += hits
         else:
             print(f"[OK]   {p.name}: 无明文密钥")
+    total += sanitize_json()
     return total
 
 
@@ -104,7 +150,7 @@ def restore() -> int:
 
 
 def check(env: dict) -> list:
-    """返回 [(文件名, 密钥前12位)] 明文残留列表"""
+    """返回 [(文件名, 残留位置)] 明文残留列表"""
     mapping = build_reverse_map(env)
     bad = []
     for p in yaml_files():
@@ -112,6 +158,15 @@ def check(env: dict) -> list:
         for real in mapping:
             if real in text:
                 bad.append((p.name, real[:12] + "..."))
+    for p in json_files():
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for path in JSON_SECRET_PATHS:
+            node = _walk_secret_node(data, path)
+            if node and node.get(path[-1]):
+                bad.append((p.name, ".".join(path)))
     return bad
 
 
@@ -124,7 +179,7 @@ def main():
     if args[0] == "--apply":
         print("== sanitize --apply ==")
         t = sanitize(env)
-        print(f"[完成] 共替换 {t} 处明文密钥；config/*.yaml 现为占位符版（发布安全）")
+        print(f"[完成] 共处理 {t} 处明文密钥；config/*.yaml 为占位符版，config/*.json 凭据已置空（发布安全）")
         sys.exit(0)
     elif args[0] == "--restore":
         print("== sanitize --restore ==")

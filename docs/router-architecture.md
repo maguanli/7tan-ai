@@ -522,7 +522,9 @@ w-1101024316  ✅ 2 轮  8.1s  ¥0.011  → 正确答出 check_integrity.py 只�
 w-1101024447  ✅ 2 轮  7.6s  ¥0.010  → 正确答出该文件第一行是三个双引号
 ```
 
-下放工具数：仅内置工具时 36 个；满插件环境（50 插件 / 276 工具）下应为 270 左右。**【未核】满插件环境的实际数字与描述总长度。**
+下放工具数（2026-11-01 实测）：加载全部 48 个插件后 `TOOL_REGISTRY` = **254** 个（此前文档写的 276 是旧数）；下放 Worker **244** 个，剔除 10 个 = 自伤 8（`self_modify_config` / `sandbox_execute` / `self_rebuild` / `self_update_prompt` / `verify_integrity` / `self_restart` / `self_fix_sandbox` / `create_plugin`）+ 自身 2。
+
+⚡ **Worker 的工具 schema ≈ 88,291 字符 ≈ 2.9 万 tokens**——这是 Worker 每轮请求的固定开销。5.1 里说「按领域裁剪省下的 token 只有几千」，指的是【裁剪能省的量】；而全量基数本身是 2.9 万，两个数不矛盾，但别把后者当成前者的反驳。实测一次 2 轮派工花 ¥0.011，说明这个量级目前可以接受。
 
 ### 12.3 abort 信号：改为按作用域隔离（P1 硬前置，已完成）
 
@@ -556,7 +558,7 @@ run_with_abort → 长命令 0.9s 内杀掉进程树             PASS
 |---|---|---|
 | 浏览器 / 桌面进程级单例 | 无锁（`browser_tools.py:15`） | **并发上限的真正来源**：能并行的只有不碰浏览器、不碰桌面的活 |
 | 流式入口裸线程 | `agent_loop.py:1119` 无条件 `Thread().start()`，绕过 TaskQueue | 5 条消息 = 5 个线程各跑满 1000 轮 |
-| `tools=[]` 陷阱 | 传空列表会退回全量 276 个 | 想给 Worker 一个干净工具面做不到，必须显式传具体列表 |
+| `tools=[]` 陷阱 | 传空列表会退回全量 254 个 | 想给 Worker 一个干净工具面做不到，必须显式传具体列表 |
 | 无 git worktree | 所有 Worker 指向同一仓库 | 两个 Worker 同时改同一文件就是事故（见 9.2） |
 
 结论：**串行闭环已经跑通并有实证；并发还差两件事——给独占资源加锁、给 code 类 Worker 配 worktree。**
@@ -578,7 +580,7 @@ D:\7tan\research\dsh-superagent\
   src/executor/dsh.ts           47KB，Worker 执行器（每 Ticket 一目录）
 
 D:\7tan\7tanAI\
-  data/plugins/                 50 个插件，276 个工具（编码 86 / 内容 85 / 运维 36）
+  data/plugins/                 48 个插件/已装，254 个工具（2026-11-01 实测；文档旧数 276 不准）
   src/tools/registry.py         10,122 B，Tool 含 category/dangerous/pro_only
   src/agent/agent_loop.py       42,769 B，3 处 daemon 线程，max_iterations 默认 1000
   src/utils/abort_signal.py     原为全局 _signals 列表，2026-11-01 改为按作用域分组

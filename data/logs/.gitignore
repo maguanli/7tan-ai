@@ -1,0 +1,4 @@
+# 并发实测记录（结构 + 进程链证据），保留结构便于复现
+data/logs/concurrency_live.jsonl
+data/logs/concurrency_live.lock
+data/logs/conc_probe.lock

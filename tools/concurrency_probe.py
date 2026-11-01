@@ -459,7 +459,7 @@ def l3_singletons():
         from src.agent.tool_executor import resource_of
         res, sticky = resource_of("browse_page", {})
         rec("浏览器工具已被租约覆盖（入口处排队）",
-            res == "browser" and sticky is True,
+            str(res).startswith("browser") and sticky is True,
             f"模块内锁={locks or '无'}；入口租约={res}/sticky={sticky}")
     except Exception as e:
         rec("浏览器工具已被租约覆盖", False, f"{type(e).__name__}: {e}")

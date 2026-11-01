@@ -28,10 +28,12 @@ PLAN = [
     (ROOT + r"\website\updates\index.html", posixpath.join(RD, "index.html"), "index.html"),
     (ROOT + r"\website\manual.html", RM, "manual.html"),
 ]
+# (url, 必须出现的词, 必须不出现的词)
+FORBIDDEN = ["7723 平台", "7723 截图", "WebP 内容", "截图采集"]
 HTTP_CHECK = [
-    (BASE + "/updates/version.json", ["7723", "WebP", "误杀"]),
-    (BASE + "/updates/index.html", ["7723", "WebP", "误杀"]),
-    (BASE + "/manual.html", ["说明书 v1.0.23", "7723", "WebP"]),
+    (BASE + "/updates/version.json", ["1.0.23"], FORBIDDEN),
+    (BASE + "/updates/index.html", ["1.0.23"], FORBIDDEN),
+    (BASE + "/manual.html", ["说明书 v1.0.23"], FORBIDDEN),
 ]
 
 
@@ -130,7 +132,7 @@ sftp.close()
 ssh.close()
 
 # ---------- 4) HTTP 复核 ----------
-for url, needles in HTTP_CHECK:
+for url, required, forbidden in HTTP_CHECK:
     u = url + ("&" if "?" in url else "?") + "_t=%d" % int(time.time())
     try:
         req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0", "Cache-Control": "no-cache"})
@@ -139,9 +141,16 @@ for url, needles in HTTP_CHECK:
     except Exception as e:
         chk("HTTP " + url, False, repr(e))
         continue
-    miss = [n for n in needles if n not in body]
-    chk("HTTP " + url, not miss,
-        ("缺失 " + "、".join(miss)) if miss else ("%d 字，命中 %d 项" % (len(body), len(needles))))
+    miss = [n for n in required if n not in body]
+    hit = [n for n in forbidden if n in body]
+    detail = []
+    if miss:
+        detail.append("缺失 " + "、".join(miss))
+    if hit:
+        detail.append("残留 " + "、".join(hit))
+    if not detail:
+        detail.append("%d 字，必备项 %d 个全中，禁项 %d 个全无" % (len(body), len(required), len(forbidden)))
+    chk("HTTP " + url, not miss and not hit, "；".join(detail))
 
 print("\n".join(ok))
 if bad:

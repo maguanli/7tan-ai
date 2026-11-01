@@ -249,9 +249,10 @@ def cmd_check(cfg, args):
             print("      %-10s %-28s assets=%d published=%s" % (
                 r["tag_name"], (r.get("name") or "")[:28], len(r.get("assets") or []),
                 (r.get("published_at") or "")[:10]))
-        want = "v" + args.version
-        hit = [r for r in rels if r["tag_name"] == want]
-        print("    %s 已存在: %s" % (want, bool(hit)))
+        if args.version:
+            want = "v" + args.version
+            hit = [r for r in rels if r["tag_name"] == want]
+            print("    %s 已存在: %s" % (want, bool(hit)))
         if rels:
             print("    最新一条: %s（releases 页首条）" % rels[0]["tag_name"])
 

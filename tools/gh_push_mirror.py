@@ -115,7 +115,9 @@ def main() -> int:
 
     if not main_only:
         print("\n== 4. 推送分支 %s ==" % BRANCH)
-        rc, out, dur = run(["git", "push", "gh", "HEAD:refs/heads/%s" % BRANCH],
+        # 用 --force：filter-repo 每次重建都会重写提交，加上 amend/rebase 后
+        # 远端分支可能与新镜像无共同祖先，普通推送会被拒（实测 rc=1）。
+        rc, out, dur = run(["git", "push", "gh", "HEAD:refs/heads/%s" % BRANCH, "--force"],
                            cwd=MIRROR, timeout=2400)
         print("   rc=%d  %.1fs" % (rc, dur))
         print("   " + out.strip()[-400:].replace("\n", "\n   "))

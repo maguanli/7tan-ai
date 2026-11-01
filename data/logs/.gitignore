@@ -1,4 +1,7 @@
-# 并发实测记录（结构 + 进程链证据），保留结构便于复现
-data/logs/concurrency_live.jsonl
-data/logs/concurrency_live.lock
-data/logs/conc_probe.lock
+# 并发实测的运行产物（每次跑都不一样，不入库；工具本身在 tools/ 下已跟踪）
+concurrency_live.jsonl
+concurrency_live.lock
+conc_probe.jsonl
+conc_probe.lock
+probe_out.txt
+push_out.txt

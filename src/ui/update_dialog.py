@@ -116,6 +116,9 @@ class UpdateDialog(QDialog):
 
         self._notes = QLabel(notes)
         self._notes.setWordWrap(True)
+        # 长说明（747 字）若不限宽，QLabel 会把弹窗横向撑到 1000px 以上，
+        # 在 1024 宽屏幕上几乎顶满且行太长难读；限宽后改为竖向换行。
+        self._notes.setMaximumWidth(520)
         self._notes.setStyleSheet(
             f"background: {THEME['bg_input']}; border: 1px solid {THEME['border']};"
             f"border-radius: 8px; padding: 10px; font-size: 12px; color: {THEME['text_secondary']};"

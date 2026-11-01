@@ -84,7 +84,8 @@ def check_local() -> tuple[int, int]:
             print(f"[MISS] {rel}")
             bad += 1
             continue
-        text = io.open(p, encoding="utf-8", errors="ignore").read()
+        # newline='' 保留 CRLF：否则文本模式会把 \r\n 折成 \n，与线上原文字数对不上
+        text = io.open(p, encoding="utf-8", errors="ignore", newline="").read()
         hits = scan_text(rel, text)
         if hits:
             bad += 1

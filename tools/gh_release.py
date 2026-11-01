@@ -371,11 +371,37 @@ def cmd_upload(cfg, args):
 
         if name in existing:
             e = existing[name]
-            print("       已存在 %d B，跳过" % e["size"])
-            if e["size"] != size:
-                print("       !! 大小不一致（本地 %d），需要先删远程再传" % size)
+            same = (e["size"] == size)
+            if same and name.endswith(".sig"):
+                # .sig 固定 346 字节：大小相同不代表内容相同（包一换签名就变），必须逐字节比对
+                try:
+                    dl = e.get("browser_download_url")
+                    with urllib.request.urlopen(
+                            urllib.request.Request(dl, headers={"User-Agent": "7tan-release-tool"}),
+                            timeout=30) as rr:
+                        remote_bytes = rr.read()
+                    with open(path, "rb") as lf:
+                        same = (remote_bytes == lf.read())
+                    if not same:
+                        print("       远程签名与本地不一致（大小同 %d B，内容不同）" % e["size"])
+                except Exception as _e:
+                    print("       远程签名比对失败（%r），按不一致处理" % (_e,))
+                    same = False
+            if same:
+                print("       已存在且内容一致 %d B，跳过" % e["size"])
+                continue
+            print("       已存在但大小不同（远程 %d / 本地 %d）" % (e["size"], size))
+            if not args.execute:
+                print("       [dry-run] 将先删除远程旧附件，再重传")
                 rc = 1
-            continue
+                continue
+            dp = "/repos/%s/%s/releases/assets/%s" % (cfg["owner"], cfg["repo"], e["id"])
+            dst, _dbody = api(cfg, dp, method="DELETE")
+            if dst not in (200, 204):
+                print("       !! 删除远程旧附件失败 HTTP %d" % dst)
+                rc = 1
+                continue
+            print("       已删除远程旧附件（asset id=%s）" % e.get("id"))
 
         if a["is_zip"]:
             print("       本地 md5 计算中…")

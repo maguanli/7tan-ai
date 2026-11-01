@@ -16,7 +16,7 @@ ROOT = Path(r'D:\7tan\7tanAI')
 SRV = json.loads((ROOT / 'config' / 'deploy.json').read_text(encoding='utf-8'))['server']
 PHP = r'D:\php\php-8.2.27\php.exe'
 UPDATES = 'D:/workspace/7tan/updates'
-APPSIZE = 419870967
+APPSIZE = 419870044
 VER = '1.0.23'
 
 LOG_LOCK = threading.Lock()
